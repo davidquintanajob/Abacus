@@ -33,9 +33,15 @@ yarn-error.*
 # local env files
 .env*.local
 
+# local config files
+src/config.js
+
 # typescript
 *.tsbuildinfo
 
 # generated native folders
 /ios
 /android
+
+# backend
+Abacus-backend/

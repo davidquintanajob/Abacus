@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>abacus - Iniciar Sesión</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@600;700&amp;family=Inter:wght@400;500&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-tertiary-fixed-variant": "#00497d",
+            "on-tertiary-container": "#61a6ed",
+            "error": "#ba1a1a",
+            "surface-container-low": "#eff4ff",
+            "on-error-container": "#93000a",
+            "tertiary-container": "#003a64",
+            "on-tertiary-fixed": "#001d36",
+            "surface-container": "#e5eeff",
+            "surface-tint": "#36618c",
+            "on-secondary-container": "#6d1d00",
+            "on-primary-fixed": "#001d35",
+            "primary": "#002440",
+            "tertiary-fixed-dim": "#9ecaff",
+            "tertiary": "#002441",
+            "background": "#0b1c30",
+            "on-tertiary": "#ffffff",
+            "on-primary-fixed-variant": "#1a4973",
+            "on-primary": "#ffffff",
+            "on-primary-container": "#7ba5d3",
+            "surface-variant": "#d3e4fe",
+            "primary-fixed": "#d0e4ff",
+            "tertiary-fixed": "#d1e4ff",
+            "on-surface-variant": "#42474e",
+            "error-container": "#ffdad6",
+            "on-background": "#f8f9ff",
+            "surface-dim": "#cbdbf5",
+            "surface": "#f8f9ff",
+            "surface-container-highest": "#d3e4fe",
+            "on-secondary-fixed": "#3a0b00",
+            "primary-container": "#003a63",
+            "inverse-surface": "#213145",
+            "on-secondary-fixed-variant": "#842500",
+            "secondary": "#a53c17",
+            "secondary-container": "#fe7e53",
+            "outline-variant": "#c2c7cf",
+            "on-secondary": "#ffffff",
+            "outline": "#72777f",
+            "inverse-on-surface": "#eaf1ff",
+            "secondary-fixed-dim": "#ffb59e",
+            "inverse-primary": "#a0cafb",
+            "surface-container-high": "#dce9ff",
+            "secondary-fixed": "#ffdbd0",
+            "on-surface": "#f8f9ff",
+            "primary-fixed-dim": "#a0cafb",
+            "on-error": "#ffffff",
+            "surface-bright": "#f8f9ff",
+            "surface-container-lowest": "#ffffff"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "md": "16px",
+            "xs": "4px",
+            "gutter": "12px",
+            "container-margin": "16px",
+            "sm": "8px",
+            "lg": "24px",
+            "base": "4px",
+            "xl": "40px"
+          },
+          "fontFamily": {
+            "label-caps": ["JetBrains Mono"],
+            "data-point": ["JetBrains Mono"],
+            "headline-lg": ["Hanken Grotesk"],
+            "display": ["Hanken Grotesk"],
+            "headline-lg-mobile": ["Hanken Grotesk"],
+            "body-md": ["Inter"]
+          },
+          "fontSize": {
+            "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+            "data-point": ["14px", {"lineHeight": "20px", "fontWeight": "600"}],
+            "headline-lg": ["32px", {"lineHeight": "40px", "fontWeight": "600"}],
+            "display": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+            "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+            "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    
+    .abacus-track {
+      width: 1px;
+      height: 100%;
+      background: #42474e;
+      position: relative;
+    }
+    
+    .abacus-bead {
+      width: 16px;
+      height: 8px;
+      border-radius: 4px;
+      position: absolute;
+      left: -7.5px;
+      transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    body {
+      min-height: 100dvh;
+      background-color: #0b1c30;
+    }
+    
+    .logo-glow {
+      filter: drop-shadow(0 0 10px rgba(160, 202, 251, 0.3));
+    }
+  </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-md overflow-hidden">
+<!-- Background Decorative Element (Abacus Metaphor) -->
+<div class="fixed inset-0 pointer-events-none z-0 opacity-20 flex justify-around px-xl">
+<div class="abacus-track">
+<div class="abacus-bead bg-primary-fixed-dim" style="top: 20%; transform: translateY(-6px);"></div>
+<div class="abacus-bead bg-primary-fixed-dim" style="top: 25%; transform: translateY(-12px);"></div>
+<div class="abacus-bead bg-primary-fixed-dim" style="top: 60%; transform: translateY(10px);"></div>
+</div>
+<div class="abacus-track">
+<div class="abacus-bead bg-primary-fixed-dim" style="top: 40%; transform: translateY(-13px);"></div>
+<div class="abacus-bead bg-primary-fixed-dim" style="top: 45%; transform: translateY(17px);"></div>
+<div class="abacus-bead bg-primary-fixed-dim" style="top: 50%; transform: translateY(-16px);"></div>
+</div>
+<div class="abacus-track">
+<div class="abacus-bead bg-secondary-container" style="top: 10%; transform: translateY(-17px);"></div>
+<div class="abacus-bead bg-primary-fixed-dim" style="top: 70%; transform: translateY(-5px);"></div>
+<div class="abacus-bead bg-primary-fixed-dim" style="top: 75%; transform: translateY(1px);"></div>
+</div>
+</div>
+<!-- Main Canvas -->
+<main class="flex-grow flex flex-col items-center justify-center px-container-margin relative z-10 w-full max-w-md mx-auto">
+<!-- Branding Section -->
+<div class="mb-xl text-center space-y-md">
+<div class="flex justify-center mb-md">
+<div class="w-full flex justify-center">
+<img alt="abacus" class="h-20 w-20 object-contain logo-glow rounded-xl" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDKN5rCLukDYSuORq4-DB-Z1uyhNPejl7kBNvZNOmq0To2RN4_hxrNz0ZTZnQEl03E5VfrTZyRvO4NgMuk7JCujjwZ5gpPKB306xsE8yvbzaK_WACEi2Zga7WDWZFcAZyUBtTpliQPBVxRPsTdDc74tS7CC1Xj_9GCD6kjktKaHkN-icdn33iz_PslZ__csRKD8ypTHPjSn7G6XDpo0qxsE5J9QmrYLyoqxpe0Jw-taDsJ4PNUYlc7dMOBc3NRQ6cT8fqXE740Il5QV"/>
+</div>
+</div>
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile text-primary-fixed-dim tracking-tight">abacus</h1>
+<p class="font-body-md text-outline-variant opacity-80">Gestión financiera de alta precisión.</p>
+</div>
+<!-- Login Card -->
+<div class="w-full bg-inverse-surface border border-outline rounded-xl p-lg shadow-xl transition-all duration-300">
+<form class="space-y-lg">
+<!-- Username Field -->
+<div class="space-y-xs">
+<label class="font-label-caps text-label-caps text-outline uppercase tracking-widest ml-xs" for="username">
+            Identidad de Usuario
+          </label>
+<div class="relative group">
+<input class="w-full h-12 bg-[#0b1c30] border border-outline rounded px-md font-body-md text-white focus:ring-0 focus:border-primary-fixed-dim transition-all outline-none" id="username" placeholder="Ingrese ID único" type="text"/>
+<span class="absolute right-md top-1/2 -translate-y-1/2 material-symbols-outlined text-outline-variant text-[20px]">
+              account_circle
+            </span>
+</div>
+</div>
+<!-- Password Field -->
+<div class="space-y-xs">
+<div class="flex justify-between items-center px-xs">
+<label class="font-label-caps text-label-caps text-outline uppercase tracking-widest" for="password">
+              Llave de Acceso
+            </label>
+<a class="font-label-caps text-label-caps text-on-tertiary-container hover:underline" href="#">Restablecer</a>
+</div>
+<div class="relative group">
+<input class="w-full h-12 bg-[#0b1c30] border border-outline rounded px-md font-body-md text-white focus:ring-0 focus:border-primary-fixed-dim transition-all outline-none" id="password" placeholder="••••••••" type="password"/>
+<button class="absolute right-md top-1/2 -translate-y-1/2 text-outline-variant hover:text-primary-fixed-dim transition-colors" type="button">
+<span class="material-symbols-outlined text-[20px]">visibility</span>
+</button>
+</div>
+</div>
+<!-- Login Button -->
+<button class="w-full h-12 bg-primary-fixed-dim text-on-primary-fixed font-label-caps text-label-caps uppercase tracking-widest rounded-lg flex items-center justify-center gap-sm hover:brightness-110 active:scale-95 transition-all duration-200 shadow-md" type="submit">
+          Autorizar Acceso
+          <span class="material-symbols-outlined text-[18px]">lock_open</span>
+</button>
+</form>
+<!-- Divider -->
+<div class="flex items-center gap-md my-lg">
+<div class="h-[1px] flex-grow bg-outline opacity-30"></div>
+<span class="font-label-caps text-label-caps text-outline">O AUTENTICAR CON</span>
+<div class="h-[1px] flex-grow bg-outline opacity-30"></div>
+</div>
+<!-- Biometric / Alternative Login -->
+<div class="grid grid-cols-2 gap-md">
+<button class="h-12 border border-outline rounded flex items-center justify-center gap-sm font-label-caps text-label-caps text-on-surface hover:bg-[#0b1c30] transition-colors active:scale-95">
+<span class="material-symbols-outlined text-secondary-fixed-dim">fingerprint</span>
+          Biometría
+        </button>
+<button class="h-12 border border-outline rounded flex items-center justify-center gap-sm font-label-caps text-label-caps text-on-surface hover:bg-[#0b1c30] transition-colors active:scale-95">
+<span class="material-symbols-outlined text-tertiary-fixed-dim">key</span>
+          SSO
+        </button>
+</div>
+</div>
+<!-- Footer Links -->
+<div class="mt-lg text-center space-y-md">
+<p class="font-body-md text-outline text-sm">
+        ¿Nuevo usuario? <a class="text-secondary-fixed-dim font-bold hover:underline" href="#">Inicializar Cuenta</a>
+</p>
+<div class="flex items-center justify-center gap-lg opacity-60">
+<span class="font-label-caps text-label-caps text-[10px] uppercase text-outline">Cumplimiento v1.0.4</span>
+<span class="font-label-caps text-label-caps text-[10px] uppercase text-outline">Encriptado</span>
+<span class="font-label-caps text-label-caps text-[10px] uppercase text-outline">Listo para Auditoría</span>
+</div>
+</div>
+</main>
+<div class="fixed bottom-lg left-1/2 -translate-x-1/2 z-50 pointer-events-none" id="toast-layer"></div>
+<script>
+    // Micro-interaction for beads
+    document.addEventListener('DOMContentLoaded', () => {
+      const beads = document.querySelectorAll('.abacus-bead');
+      
+      const animateBeads = () => {
+        beads.forEach(bead => {
+          const move = Math.floor(Math.random() * 40) - 20;
+          bead.style.transform = `translateY(${move}px)`;
+        });
+      };
+
+      setInterval(animateBeads, 3000);
+      animateBeads();
+      
+      // Simple Login Interaction in Spanish
+      const form = document.querySelector('form');
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const btn = form.querySelector('button[type="submit"]');
+        btn.innerHTML = '<span class="material-symbols-outlined animate-spin">refresh</span> Verificando...';
+        btn.classList.add('opacity-80', 'pointer-events-none');
+        
+        setTimeout(() => {
+          btn.innerHTML = '<span class="material-symbols-outlined">check_circle</span> Autorizado';
+          btn.classList.remove('bg-primary-fixed-dim', 'text-on-primary-fixed');
+          btn.classList.add('bg-on-tertiary-container', 'text-on-tertiary');
+        }, 1500);
+      });
+    });
+  </script>
+</body></html>
