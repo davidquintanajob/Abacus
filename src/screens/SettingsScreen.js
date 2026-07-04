@@ -1,21 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, SafeAreaView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, SafeAreaView, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView as RNSafeArea } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { Header } from '../components/layout/Header';
 import { Card } from '../components/common/Card';
+import { Toast } from '../components/common/Toast';
+import { useToast } from '../hooks/useToast';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import api from '../services/api';
+import { useResponsive } from '../hooks/useResponsive';
+import { API_CONFIG } from '../config';
 
 const SettingsContent = () => {
   const navigation = useNavigation();
   const { colors, isDark } = useTheme();
+  const responsive = useResponsive();
   const [serverIP, setServerIP] = useState('');
   const [isCopied, setIsCopied] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const { toast, showToast, hideToast } = useToast();
 
   const isDarkMode = isDark === true || isDark === 'true';
 
@@ -26,12 +32,17 @@ const SettingsContent = () => {
 
   const loadServerIP = async () => {
     try {
-      const savedIP = await SecureStore.getItemAsync('serverIP');
-      if (savedIP) {
-        setServerIP(savedIP);
+      const savedURL = await SecureStore.getItemAsync('serverIP');
+      if (savedURL) {
+        setServerIP(savedURL);
+      } else {
+        // Fallback a config.js si no hay valor guardado
+        setServerIP(API_CONFIG.API_BASE_URL || '');
       }
     } catch (error) {
-      console.error('Error loading server IP:', error);
+      console.error('Error loading server URL:', error);
+      // Fallback a config.js en caso de error
+      setServerIP(API_CONFIG.API_BASE_URL || '');
     }
   };
 
@@ -42,83 +53,86 @@ const SettingsContent = () => {
 
   const handleSave = async () => {
     if (!serverIP.trim()) {
-      Alert.alert('Error', 'Por favor ingrese una IP válida');
+      showToast({ type: 'warning', message: 'Por favor ingrese una URL válida' });
       return;
     }
 
     try {
       await SecureStore.setItemAsync('serverIP', serverIP.trim());
-      Alert.alert('Éxito', 'IP del servidor guardada correctamente');
+      showToast({ type: 'success', message: 'URL del servidor guardada correctamente' });
     } catch (error) {
-      Alert.alert('Error', 'No se pudo guardar la IP del servidor');
-      console.error('Error saving server IP:', error);
+      showToast({ type: 'error', message: 'No se pudo guardar la URL del servidor' });
+      console.error('Error saving server URL:', error);
     }
   };
 
   const handleTestConnection = async () => {
     if (!serverIP.trim()) {
-      Alert.alert('Error', 'Por favor ingrese una IP válida');
+      showToast({ type: 'warning', message: 'Por favor ingrese una URL válida' });
       return;
     }
 
     setIsTestingConnection(true);
 
     try {
-      // Primero guardar temporalmente la IP para la prueba
       await SecureStore.setItemAsync('serverIP', serverIP.trim());
-      
-      // Hacer una petición de prueba al endpoint de documentación (siempre disponible)
       const response = await api.get('/api-docs', { timeout: 5000 });
-      
       setIsTestingConnection(false);
-      
-      // Si responde (aunque sea 404 o cualquier código), el servidor está activo
-      Alert.alert(
-        'Conexión Exitosa',
-        `El servidor en ${serverIP} está respondiendo correctamente.`,
-        [{ text: 'OK' }]
-      );
+      showToast({
+        type: 'success',
+        message: `El servidor en ${serverIP} está respondiendo correctamente.`,
+      });
     } catch (error) {
       setIsTestingConnection(false);
-      
-      // Si el error es por CORS o el endpoint no existe pero el servidor responde, es éxito
+
       if (error.response) {
-        // El servidor respondió pero con un error (ej: 404, 500)
-        Alert.alert(
-          'Conexión Exitosa',
-          `El servidor en ${serverIP} está activo y respondiendo.`,
-          [{ text: 'OK' }]
-        );
+        showToast({
+          type: 'success',
+          message: `El servidor en ${serverIP} está activo y respondiendo.`,
+          code: error.response.status,
+        });
       } else if (error.code === 'ECONNREFUSED' || error.message === 'Network Error') {
-        Alert.alert(
-          'Error de Conexión',
-          `No se pudo conectar al servidor en ${serverIP}.\n\nVerifique que:\n- El servidor esté corriendo\n- La IP sea correcta\n- El puerto 4000 esté abierto`,
-          [{ text: 'OK' }]
-        );
+        showToast({
+          type: 'error',
+          message: `No se pudo conectar al servidor en ${serverIP}. Verifique que esté corriendo y la URL sea correcta.`,
+          code: error.code ?? null,
+        });
       } else if (error.code === 'ETIMEDOUT') {
-        Alert.alert(
-          'Tiempo de Espera Agotado',
-          `El servidor en ${serverIP} no respondió a tiempo.\n\nVerifique su conexión de red.`,
-          [{ text: 'OK' }]
-        );
+        showToast({
+          type: 'warning',
+          message: `El servidor en ${serverIP} no respondió a tiempo. Verifique su conexión de red.`,
+          code: 'ETIMEDOUT',
+        });
       } else {
-        Alert.alert(
-          'Error de Conexión',
-          `No se pudo conectar al servidor: ${error.message}`,
-          [{ text: 'OK' }]
-        );
+        showToast({
+          type: 'error',
+          message: `No se pudo conectar al servidor: ${error.message}`,
+          code: error.code ?? null,
+        });
       }
     }
   };
 
+  const styles = createStyles(responsive);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+
+      <Toast
+        visible={toast.visible}
+        type={toast.type}
+        message={toast.message}
+        code={toast.code}
+        duration={toast.duration}
+        onHide={hideToast}
+        toastKey={toast.key}
+      />
       
       <Header 
         onMenuPress={() => {}}
         isDark={isDarkMode}
-        title="abacus"
+        title="Abacus"
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
       />
@@ -144,7 +158,7 @@ const SettingsContent = () => {
             <View style={styles.inputContainer}>
               <View style={styles.inputLabelContainer}>
                 <Text style={[styles.inputLabel, { color: colors.outline }]}>
-                  IP DEL SERVIDOR
+                  URL DE LA API
                 </Text>
               </View>
               
@@ -153,9 +167,10 @@ const SettingsContent = () => {
                   style={[styles.input, { color: colors.onSurface }]}
                   value={serverIP}
                   onChangeText={setServerIP}
-                  placeholder="192.168.1.100"
+                  placeholder="http://192.168.1.100:4000"
                   placeholderTextColor={colors.outline}
-                  keyboardType="numeric"
+                  autoCapitalize="none"
+                  autoCorrect={false}
                 />
                 <TouchableOpacity 
                   onPress={handleCopy}
@@ -164,14 +179,14 @@ const SettingsContent = () => {
                 >
                   <Ionicons 
                     name={isCopied ? "checkmark" : "copy-outline"} 
-                    size={20} 
+                    size={responsive.responsiveWidth(20)} 
                     color={colors.primary} 
                   />
                 </TouchableOpacity>
               </View>
               
               <Text style={[styles.helperText, { color: colors.outline }]}>
-                Ingrese la IP estática o el nombre de host de su servidor de datos principal.
+                Ingrese la URL completa de la API del servidor (ej: http://192.168.1.100:4000).
               </Text>
             </View>
           </Card>
@@ -239,41 +254,41 @@ export const SettingsScreen = () => {
   return <SettingsContent />;
 };
 
-const styles = StyleSheet.create({
+const createStyles = (responsive) => StyleSheet.create({
   container: {
     flex: 1,
   },
   content: {
     flex: 1,
-    marginTop: 56,
+    marginTop: responsive.headerHeight,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingHorizontal: responsive.horizontalPadding,
+    paddingBottom: responsive.responsivePadding(40),
   },
   headerSection: {
-    marginBottom: 32,
+    marginBottom: responsive.responsiveMargin(32),
     paddingTop: 8,
   },
   title: {
-    fontSize: 28,
+    fontSize: responsive.fontSizes.h1,
     fontWeight: '700',
     fontFamily: 'Hanken Grotesk',
-    lineHeight: 36,
+    lineHeight: responsive.fontSizes.h1 * 1.3,
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 15,
+    fontSize: responsive.fontSizes.bodyLarge,
     fontWeight: '400',
     fontFamily: 'Inter',
-    lineHeight: 22,
+    lineHeight: responsive.fontSizes.bodyLarge * 1.5,
   },
   cardContainer: {
-    marginBottom: 24,
+    marginBottom: responsive.responsiveMargin(24),
   },
   ipCard: {
     borderRadius: 16,
-    padding: 24,
+    padding: responsive.cardPadding,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -281,13 +296,13 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   inputContainer: {
-    gap: 16,
+    gap: responsive.responsiveMargin(16),
   },
   inputLabelContainer: {
     marginBottom: 4,
   },
   inputLabel: {
-    fontSize: 12,
+    fontSize: responsive.fontSizes.caption,
     fontWeight: '600',
     fontFamily: 'JetBrains Mono',
     letterSpacing: 0.1,
@@ -298,12 +313,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 12,
     borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: responsive.responsivePadding(16),
+    paddingVertical: responsive.responsivePadding(14),
   },
   input: {
     flex: 1,
-    fontSize: 16,
+    fontSize: responsive.fontSizes.bodyLarge,
     fontWeight: '500',
     fontFamily: 'Inter',
   },
@@ -312,15 +327,15 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   helperText: {
-    fontSize: 13,
+    fontSize: responsive.fontSizes.body,
     fontWeight: '400',
     fontFamily: 'Inter',
-    lineHeight: 18,
+    lineHeight: responsive.fontSizes.body * 1.4,
   },
   buttonContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 40,
+    flexDirection: responsive.isSmall ? 'column' : 'row',
+    gap: responsive.gridGap,
+    marginBottom: responsive.responsiveMargin(40),
   },
   button: {
     flex: 1,
@@ -340,14 +355,14 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   buttonText: {
-    fontSize: 14,
+    fontSize: responsive.fontSizes.body,
     fontWeight: '600',
     fontFamily: 'Hanken Grotesk',
-    lineHeight: 20,
+    lineHeight: responsive.fontSizes.body * 1.4,
   },
   equalizerContainer: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: responsive.responsiveMargin(24),
   },
   equalizer: {
     flexDirection: 'row',
@@ -364,7 +379,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   footerText: {
-    fontSize: 11,
+    fontSize: responsive.fontSizes.caption,
     fontWeight: '500',
     fontFamily: 'JetBrains Mono',
     letterSpacing: 0.1,

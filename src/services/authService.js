@@ -21,7 +21,9 @@ export const login = async (nombre_usuario, contrasenna) => {
                         error.response?.data?.message || 
                         error.message ||
                         'Error al iniciar sesión';
-    throw new Error(errorMessage);
+    const err = new Error(errorMessage);
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
   }
 };
 

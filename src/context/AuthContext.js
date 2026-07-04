@@ -35,7 +35,11 @@ export const AuthProvider = ({ children }) => {
       setToken(newToken);
       return { success: true };
     } catch (error) {
-      return { success: false, error: error.message };
+      return {
+        success: false,
+        error: error.message,
+        code: error.code ?? null,
+      };
     }
   };
 

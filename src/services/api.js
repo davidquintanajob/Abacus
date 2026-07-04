@@ -2,14 +2,15 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { API_CONFIG } from '../config';
+import { navigationRef } from '../navigationRef';
 
 // Función para obtener la URL base de la API
 const getApiBaseUrl = async () => {
   try {
-    // Primero intentar leer la IP configurada por el usuario en Settings
-    const userConfiguredIP = await SecureStore.getItemAsync('serverIP');
-    if (userConfiguredIP) {
-      return `http://${userConfiguredIP}:4000`;
+    // Primero intentar leer la URL configurada por el usuario en Settings
+    const userConfiguredURL = await SecureStore.getItemAsync('serverIP');
+    if (userConfiguredURL) {
+      return userConfiguredURL;
     }
   } catch (error) {
     console.error('Error reading serverIP from SecureStore:', error);
@@ -62,11 +63,23 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 403) {
-      // Token inválido o expirado
+    const requestUrl = error.config?.url || '';
+    const isLoginRequest = requestUrl.includes('/usuario/login');
+
+    // Solo redirigir a Login por 401/403 si NO es el intento de login en sí.
+    // Un 401 en /login significa credenciales incorrectas — el screen lo maneja.
+    // Un 401 en cualquier otra ruta significa token expirado o inválido.
+    if (!isLoginRequest && (error.response?.status === 401 || error.response?.status === 403)) {
       await SecureStore.deleteItemAsync('token');
       await SecureStore.deleteItemAsync('refreshToken');
       await SecureStore.deleteItemAsync('user');
+      
+      if (navigationRef.isReady()) {
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: 'Login' }],
+        });
+      }
     }
     return Promise.reject(error);
   }
