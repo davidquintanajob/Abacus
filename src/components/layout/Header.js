@@ -78,13 +78,15 @@ export const Header = ({
             <Ionicons name="settings-outline" size={responsive.responsiveWidth(24)} color={colors.primary} />
           </TouchableOpacity>
         )}
-        <TouchableOpacity 
-          onPress={onProfilePress}
-          style={styles.iconButton}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="person-outline" size={responsive.responsiveWidth(24)} color={colors.primary} />
-        </TouchableOpacity>
+        {onProfilePress && (
+          <TouchableOpacity 
+            onPress={onProfilePress}
+            style={styles.iconButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="person-outline" size={responsive.responsiveWidth(24)} color={colors.primary} />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );

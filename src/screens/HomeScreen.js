@@ -32,6 +32,10 @@ const HomeContent = () => {
     console.log('Notificaciones');
   };
 
+  const handleProfilePress = () => {
+    navigation.navigate('UserProfile');
+  };
+
   useEffect(() => {
     const hour = new Date().getHours();
     if (hour < 12) setGreeting('Buenos días');
@@ -113,6 +117,7 @@ const HomeContent = () => {
         onThemePress={toggleTheme}
         onSettingsPress={handleSettingsPress}
         onNotificationsPress={handleNotificationsPress}
+        onProfilePress={handleProfilePress}
         isDark={isDarkMode}
         title="Abacus"
       />

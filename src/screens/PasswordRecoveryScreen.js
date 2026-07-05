@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Platform, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -18,25 +18,49 @@ const PasswordRecoveryContent = () => {
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
 
   const handleCallSupport = async () => {
-    const phoneNumber = '5356242671';
-    const url = `tel:${phoneNumber}`;
+    const phoneNumber = '+5356242671';
     
-    try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-      } else {
-        showToast({
-          type: 'warning',
-          message: 'Para llamar al soporte técnico (+53 56242671), abra manualmente la app de teléfono y marque: +53 56242671',
-        });
-      }
-    } catch (error) {
+    if (!phoneNumber) {
       showToast({
         type: 'error',
-        message: 'Para llamar al soporte técnico (+53 56242671), abra manualmente la app de teléfono y marque: +53 56242671',
+        message: 'Teléfono no disponible',
       });
-      console.error(error);
+      return;
+    }
+
+    if (Platform.OS === 'web') {
+      showToast({
+        type: 'warning',
+        message: 'Llamadas no están soportadas en la versión web.',
+      });
+      return;
+    }
+
+    const normalized = String(phoneNumber).replace(/[^0-9+]/g, '');
+    const url = `tel:${normalized}`;
+
+    try {
+      // Intentar abrir directamente: en algunos entornos de desarrollo
+      // canOpenURL puede devolver false aunque openURL funcione en un dispositivo real.
+      await Linking.openURL(url);
+      return;
+    } catch (err) {
+      console.warn('makePhoneCall failed to open URL', err);
+      // Intentar canOpenURL como fallback informativo
+      try {
+        const supported = await Linking.canOpenURL(url);
+        console.log('makePhoneCall supported after error:', supported);
+        if (supported) {
+          await Linking.openURL(url);
+          return;
+        }
+      } catch (e2) {
+        console.warn('canOpenURL failed', e2);
+      }
+      showToast({
+        type: 'error',
+        message: 'No se puede abrir la app de llamadas en este dispositivo. Para llamar al soporte técnico (+53 56242671), abra manualmente la app de teléfono.',
+      });
     }
   };
 
