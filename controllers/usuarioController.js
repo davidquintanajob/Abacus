@@ -5,7 +5,7 @@ const { roles } = require("../models/usuario");
 const jwt = require("jsonwebtoken");
 const { throwError } = require("../helpers/errorLauncher");
 
-// Función auxiliar para responder errores
+// Función auxiliar para responder errores (igual que antes)
 const handleError = (res, error) => {
   const status = error.status || 500;
   const message = error.message || "Error interno del servidor";
@@ -13,7 +13,6 @@ const handleError = (res, error) => {
   if (!Array.isArray(errors) || errors.length === 0) {
     errors = [message];
   }
-  // Asegurar que cada error sea string
   errors = errors.map(e => typeof e === 'string' ? e : String(e));
   res.status(status).json({ errors });
 };
@@ -32,7 +31,17 @@ const getUsuarioById = async (req, res) => {
 // POST /usuario (crear)
 const createUsuario = async (req, res) => {
   try {
-    const { nombre_natural, nombre_usuario, contrasenna, rol, salario_diario, activo, telefono, direccion } = req.body;
+    const { 
+      nombre_natural, 
+      nombre_usuario, 
+      contrasenna, 
+      rol, 
+      salario_diario, 
+      activo, 
+      telefono, 
+      direccion,
+      id_tienda   // Nuevo campo
+    } = req.body;
     const errors = [];
 
     // Validaciones
@@ -40,6 +49,7 @@ const createUsuario = async (req, res) => {
     if (!nombre_usuario) errors.push("nombre_usuario es requerido");
     if (!contrasenna) errors.push("contrasenna es requerida");
     if (!rol) errors.push("rol es requerido");
+    if (!id_tienda) errors.push("id_tienda es requerido");
 
     if (nombre_natural && (nombre_natural.length < 3 || nombre_natural.length > 50)) {
       errors.push("nombre_natural debe tener entre 3 y 50 caracteres");
@@ -55,6 +65,10 @@ const createUsuario = async (req, res) => {
     }
     if (salario_diario !== undefined && (isNaN(salario_diario) || salario_diario < 0)) {
       errors.push("salario_diario debe ser un número positivo");
+    }
+    // Validación básica de id_tienda (numérico)
+    if (id_tienda && isNaN(parseInt(id_tienda))) {
+      errors.push("id_tienda debe ser un número entero");
     }
 
     if (errors.length > 0) {
@@ -73,19 +87,13 @@ const createUsuario = async (req, res) => {
       activo: activo !== undefined ? activo : true,
       telefono,
       direccion,
+      id_tienda: parseInt(id_tienda)
     };
 
     const newUsuario = await usuarioService.createUsuario(usuarioData);
     res.status(201).json({
       message: "Usuario creado exitosamente",
-      data: {
-        id_usuario: newUsuario.id_usuario,
-        nombre_natural: newUsuario.nombre_natural,
-        nombre_usuario: newUsuario.nombre_usuario,
-        rol: newUsuario.rol,
-        activo: newUsuario.activo,
-        salario_diario: newUsuario.salario_diario,
-      },
+      data: newUsuario // Devuelve el objeto completo con tienda incluida
     });
   } catch (error) {
     handleError(res, error);
@@ -96,7 +104,17 @@ const createUsuario = async (req, res) => {
 const updateUsuario = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nombre_natural, nombre_usuario, contrasenna, rol, salario_diario, activo, telefono, direccion } = req.body;
+    const { 
+      nombre_natural, 
+      nombre_usuario, 
+      contrasenna, 
+      rol, 
+      salario_diario, 
+      activo, 
+      telefono, 
+      direccion,
+      id_tienda
+    } = req.body;
     const errors = [];
 
     if (Object.keys(req.body).length === 0) {
@@ -119,6 +137,11 @@ const updateUsuario = async (req, res) => {
     if (salario_diario !== undefined && (isNaN(salario_diario) || salario_diario < 0)) {
       errors.push("salario_diario debe ser un número positivo");
     }
+    if (id_tienda !== undefined) {
+      if (!id_tienda || isNaN(parseInt(id_tienda))) {
+        errors.push("id_tienda debe ser un número entero válido");
+      }
+    }
 
     if (errors.length > 0) {
       throwError("Datos inválidos", 400, errors);
@@ -132,6 +155,7 @@ const updateUsuario = async (req, res) => {
     if (activo !== undefined) userData.activo = activo;
     if (telefono !== undefined) userData.telefono = telefono;
     if (direccion !== undefined) userData.direccion = direccion;
+    if (id_tienda !== undefined) userData.id_tienda = parseInt(id_tienda);
 
     if (contrasenna) {
       userData.contrasenna = await bcrypt.hash(contrasenna, 10);
@@ -140,14 +164,14 @@ const updateUsuario = async (req, res) => {
     const usuarioActualizado = await usuarioService.updateUsuario(id, userData);
     res.status(200).json({
       message: "Usuario actualizado correctamente",
-      data: usuarioActualizado,
+      data: usuarioActualizado
     });
   } catch (error) {
     handleError(res, error);
   }
 };
 
-// DELETE /usuario/:id
+// DELETE /usuario/:id (sin cambios)
 const deleteUsuario = async (req, res) => {
   try {
     const { id } = req.params;
@@ -163,8 +187,7 @@ const filterUsuarios = async (req, res) => {
   try {
     const { limit, page, ...filters } = req.query;
 
-    // Establecer valores por defecto: limit = 10, page = 1
-    let limitNum = parseInt(limit, 10) || 10; // Si no viene, usamos 10
+    let limitNum = parseInt(limit, 10) || 10;
     if (isNaN(limitNum) || limitNum < 1) {
       throwError("El parámetro 'limit' debe ser un número entero positivo", 400);
     }
@@ -174,8 +197,8 @@ const filterUsuarios = async (req, res) => {
       throwError("El parámetro 'page' debe ser un número entero positivo", 400);
     }
 
-    // Construir objeto de filtros (solo los campos permitidos)
-    const allowedFilters = ["nombre_natural", "nombre_usuario", "rol", "activo"];
+    // Filtros permitidos (incluimos id_tienda)
+    const allowedFilters = ["nombre_natural", "nombre_usuario", "rol", "activo", "id_tienda"];
     const filterCriteria = {};
     for (const key of allowedFilters) {
       if (filters[key] !== undefined) {
@@ -192,9 +215,16 @@ const filterUsuarios = async (req, res) => {
       }
     }
 
-    const offset = (pageNum - 1) * limitNum;
+    // Convertir id_tienda a número si viene
+    if (filterCriteria.id_tienda !== undefined) {
+      const id = parseInt(filterCriteria.id_tienda, 10);
+      if (isNaN(id)) {
+        throwError("El filtro 'id_tienda' debe ser un número entero", 400);
+      }
+      filterCriteria.id_tienda = id;
+    }
 
-    // Llamar al servicio con los parámetros de paginación
+    const offset = (pageNum - 1) * limitNum;
     const { rows: usuarios, count: total } = await usuarioService.filterUsuarios(
       filterCriteria,
       limitNum,
@@ -203,7 +233,6 @@ const filterUsuarios = async (req, res) => {
 
     const totalPages = Math.ceil(total / limitNum);
 
-    // Construir la respuesta con paginación siempre
     const response = {
       data: usuarios,
       pagination: {
@@ -220,31 +249,7 @@ const filterUsuarios = async (req, res) => {
   }
 };
 
-// Función auxiliar para construir la query string de filtros (excluyendo limit y page)
-function buildQueryString(filters) {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(filters)) {
-    if (value !== undefined && value !== null && value !== '') {
-      params.append(key, value);
-    }
-  }
-  const query = params.toString();
-  return query ? `&${query}` : '';
-}
-
-// Función auxiliar para construir la query string de filtros (excluyendo limit y page)
-function buildQueryString(filters) {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(filters)) {
-    if (value !== undefined && value !== null && value !== '') {
-      params.append(key, value);
-    }
-  }
-  const query = params.toString();
-  return query ? `&${query}` : '';
-}
-
-// POST /usuario/login
+// POST /usuario/login (incluye tienda en la respuesta)
 const login = async (req, res) => {
   try {
     const { nombre_usuario, contrasenna } = req.body;
@@ -269,6 +274,7 @@ const login = async (req, res) => {
         nombre_usuario: usuario.nombre_usuario,
         rol: usuario.rol,
         salario_diario: usuario.salario_diario,
+        id_tienda: usuario.id_tienda
       },
       process.env.JWT_SECRET,
       { expiresIn: "8h" }
@@ -280,6 +286,7 @@ const login = async (req, res) => {
       { expiresIn: "24h" }
     );
 
+    // Devolvemos también la tienda (si existe)
     res.status(200).json({
       usuario: {
         id_usuario: usuario.id_usuario,
@@ -288,6 +295,8 @@ const login = async (req, res) => {
         rol: usuario.rol,
         salario_diario: usuario.salario_diario,
         activo: usuario.activo,
+        id_tienda: usuario.id_tienda,
+        tienda: usuario.tienda || null
       },
       token,
       refreshToken,
@@ -297,7 +306,7 @@ const login = async (req, res) => {
   }
 };
 
-// POST /usuario/changePassword (requiere token)
+// POST /usuario/changePassword (sin cambios, solo comentamos que no necesita tienda)
 const changePassword = async (req, res) => {
   try {
     const { viejaContrasenna, nuevaContrasenna } = req.body;

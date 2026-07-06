@@ -46,9 +46,9 @@ const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
     info: {
-      title: "API de Gestión de Usuarios",
+      title: "API de Gestión de Usuarios y Tiendas",
       version: "1.0.0",
-      description: "API para administrar usuarios",
+      description: "API para administrar usuarios y tiendas",
     },
     components: {
       securitySchemes: {
@@ -69,6 +69,18 @@ const swaggerOptions = {
             nombre_usuario: { type: "string" },
             salario_diario: { type: "number" },
             rol: { type: "string" },
+            activo: { type: "boolean" },
+            id_tienda: { type: "integer" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        Tienda: {
+          type: "object",
+          properties: {
+            id_tienda: { type: "integer" },
+            nombre: { type: "string" },
+            tipo: { type: "string" },
             activo: { type: "boolean" },
             createdAt: { type: "string", format: "date-time" },
             updatedAt: { type: "string", format: "date-time" },
@@ -93,9 +105,11 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs, {
   },
 }));
 
-// Importar rutas de usuarios
+// Importar rutas
 const usuarioRoutes = require("./routes/usuarioRoutes");
+const tiendaRoutes = require("./routes/tiendaRoutes");
 app.use("/", usuarioRoutes);
+app.use("/", tiendaRoutes);
 
 // Inicializar la base de datos y arrancar el servidor
 const startApp = async () => {
@@ -111,10 +125,17 @@ const startApp = async () => {
       if (!fs.existsSync(subDir)) fs.mkdirSync(subDir, { recursive: true });
     });
 
-    // Sincronizar modelos (solo Usuario)
+    // Importar modelos y establecer asociaciones
     const { Usuario } = require("./models/usuario");
-    await Usuario.sync({ alter: true });
-    console.log("✅ Tabla 'Usuario' sincronizada correctamente");
+    const { Tienda } = require("./models/tienda");
+
+    // Definir asociaciones (si los modelos tienen método associate)
+    if (Usuario.associate) Usuario.associate({ Tienda });
+    if (Tienda.associate) Tienda.associate({ Usuario });
+
+    // Sincronizar todas las tablas (con alter: true para actualizar sin perder datos)
+    await sequelize.sync({ alter: true });
+    console.log("✅ Tablas sincronizadas correctamente");
 
     const PORT = process.env.PORT || 4000;
     app.listen(PORT, "0.0.0.0", () => {

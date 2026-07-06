@@ -50,8 +50,24 @@ const Usuario = sequelize.define("usuario", {
     allowNull: false,
     defaultValue: true,
   },
+  // → Nueva columna para la relación con Tienda
+  id_tienda: {
+    type: DataTypes.INTEGER,
+    allowNull: true,                   // Puede ser null si no se asigna a ninguna tienda
+    references: {
+      model: 'tiendas',                // Nombre de la tabla en BD (plural)
+      key: 'id_tienda'
+    },
+    onUpdate: 'CASCADE',
+    onDelete: 'SET NULL',              // Si se elimina la tienda, los usuarios quedan sin tienda
+  }
 }, {
   timestamps: true,
 });
+
+// Definición de asociación (estilo Entrada/Producto)
+Usuario.associate = function(models) {
+  Usuario.belongsTo(models.Tienda, { foreignKey: 'id_tienda', as: 'tienda' });
+};
 
 module.exports = { Usuario, roles };

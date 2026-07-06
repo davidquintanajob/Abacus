@@ -12,9 +12,56 @@ const authenticate = require("../helpers/authenticate");
 
 /**
  * @swagger
+ * components:
+ *   schemas:
+ *     Usuario:
+ *       type: object
+ *       properties:
+ *         id_usuario:
+ *           type: integer
+ *         nombre_natural:
+ *           type: string
+ *         telefono:
+ *           type: string
+ *         direccion:
+ *           type: string
+ *         nombre_usuario:
+ *           type: string
+ *         salario_diario:
+ *           type: number
+ *         rol:
+ *           type: string
+ *           enum: [Administrador, Médico, Técnico, Estilista]
+ *         activo:
+ *           type: boolean
+ *         id_tienda:
+ *           type: integer
+ *         tienda:
+ *           $ref: '#/components/schemas/Tienda'
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *         updatedAt:
+ *           type: string
+ *           format: date-time
+ *     Tienda:
+ *       type: object
+ *       properties:
+ *         id_tienda:
+ *           type: integer
+ *         nombre:
+ *           type: string
+ *         tipo:
+ *           type: string
+ *         activo:
+ *           type: boolean
+ */
+
+/**
+ * @swagger
  * /usuario/filter:
  *   get:
- *     summary: Filtrar usuarios con paginación (si se envía limit)
+ *     summary: Filtrar usuarios con paginación
  *     tags: [Usuarios]
  *     security:
  *       - bearerAuth: []
@@ -23,13 +70,14 @@ const authenticate = require("../helpers/authenticate");
  *         name: limit
  *         schema:
  *           type: integer
- *         description: Cantidad de registros por página (opcional). Si no se envía, devuelve todos.
+ *           default: 10
+ *         description: Cantidad de registros por página
  *       - in: query
  *         name: page
  *         schema:
  *           type: integer
  *           default: 1
- *         description: Número de página (solo si se envía limit)
+ *         description: Número de página
  *       - in: query
  *         name: nombre_natural
  *         schema:
@@ -50,9 +98,14 @@ const authenticate = require("../helpers/authenticate");
  *         schema:
  *           type: boolean
  *         description: Filtro por estado activo
+ *       - in: query
+ *         name: id_tienda
+ *         schema:
+ *           type: integer
+ *         description: Filtro exacto por ID de tienda
  *     responses:
  *       200:
- *         description: Lista de usuarios con o sin paginación
+ *         description: Lista de usuarios con paginación
  *         content:
  *           application/json:
  *             schema:
@@ -62,8 +115,6 @@ const authenticate = require("../helpers/authenticate");
  *                   type: array
  *                   items:
  *                     $ref: '#/components/schemas/Usuario'
- *                 total:
- *                   type: integer
  *                 pagination:
  *                   type: object
  *                   properties:
@@ -95,6 +146,10 @@ router.get("/usuario/filter", authenticate(), usuarioController.filterUsuarios);
  *     responses:
  *       200:
  *         description: Usuario encontrado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Usuario'
  *       404:
  *         description: Usuario no encontrado
  */
@@ -119,6 +174,7 @@ router.get("/usuario/:id", authenticate(), usuarioController.getUsuarioById);
  *               - nombre_usuario
  *               - contrasenna
  *               - rol
+ *               - id_tienda
  *             properties:
  *               nombre_natural:
  *                 type: string
@@ -137,6 +193,8 @@ router.get("/usuario/:id", authenticate(), usuarioController.getUsuarioById);
  *                 enum: [Administrador, Médico, Técnico, Estilista]
  *               activo:
  *                 type: boolean
+ *               id_tienda:
+ *                 type: integer
  *     responses:
  *       201:
  *         description: Usuario creado
@@ -183,6 +241,8 @@ router.post("/usuario", authenticate(), usuarioController.createUsuario);
  *                 enum: [Administrador, Médico, Técnico, Estilista]
  *               activo:
  *                 type: boolean
+ *               id_tienda:
+ *                 type: integer
  *     responses:
  *       200:
  *         description: Usuario actualizado
@@ -235,7 +295,7 @@ router.delete("/usuario/:id", authenticate(), usuarioController.deleteUsuario);
  *                 type: string
  *     responses:
  *       200:
- *         description: Login exitoso, devuelve token y refreshToken
+ *         description: Login exitoso, devuelve token, refreshToken y datos del usuario (incluye tienda)
  *       401:
  *         description: Contraseña incorrecta
  *       404:
