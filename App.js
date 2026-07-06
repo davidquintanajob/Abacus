@@ -9,6 +9,8 @@ import { HomeScreen } from './src/screens/HomeScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { PasswordRecoveryScreen } from './src/screens/PasswordRecoveryScreen';
 import { UserProfileScreen } from './src/screens/UserProfileScreen';
+import { TiendasScreen } from './src/screens/TiendasScreen';
+import { TiendaFormScreen } from './src/screens/TiendaFormScreen';
 import { navigationRef } from './src/navigationRef';
 
 const Stack = createNativeStackNavigator();
@@ -35,6 +37,8 @@ const AppStack = ({ initialRoute }) => (
     <Stack.Screen name="Home" component={HomeScreen} />
     <Stack.Screen name="Settings" component={SettingsScreen} />
     <Stack.Screen name="UserProfile" component={UserProfileScreen} />
+    <Stack.Screen name="Tiendas" component={TiendasScreen} />
+    <Stack.Screen name="TiendaForm" component={TiendaFormScreen} />
   </Stack.Navigator>
 );
 

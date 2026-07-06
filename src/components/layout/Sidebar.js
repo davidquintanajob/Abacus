@@ -7,12 +7,16 @@ import * as SecureStore from 'expo-secure-store';
 import { navigationRef } from '../../navigationRef';
 import { Toast } from '../common/Toast';
 import { useToast } from '../../hooks/useToast';
+import { useAuth } from '../../context/AuthContext';
 
 export const Sidebar = ({ isOpen = false, onClose, navigation }) => {
   const { colors } = useTheme();
   const responsive = useResponsive();
   const insets = useSafeAreaInsets();
   const { toast, showToast, hideToast } = useToast();
+  const { user } = useAuth();
+
+  const isAdmin = user?.rol === 'Administrador';
 
   const menuItems = [
     { icon: require('../../../assets/bar-chart.png'), label: 'Panel', route: 'Dashboard' },
@@ -20,6 +24,7 @@ export const Sidebar = ({ isOpen = false, onClose, navigation }) => {
     { icon: require('../../../assets/shopping-cart.png'), label: 'Ventas', route: 'Sales' },
     { icon: require('../../../assets/customers.png'), label: 'Clientes', route: 'Customers' },
     { icon: require('../../../assets/analitica.png'), label: 'Reportes', route: 'Reports' },
+    ...(isAdmin ? [{ icon: require('../../../assets/compras.png'), label: 'Tiendas', route: 'Tiendas' }] : []),
     { icon: require('../../../assets/config.png'), label: 'Configuración', route: 'Settings' },
   ];
 
@@ -135,8 +140,8 @@ export const Sidebar = ({ isOpen = false, onClose, navigation }) => {
                 index === 0 && { backgroundColor: colors.primary }
               ]}
               onPress={() => {
-                if (navigation && item.route === 'Settings') {
-                  navigation.navigate('Settings');
+                if (navigation && (item.route === 'Settings' || item.route === 'Tiendas')) {
+                  navigation.navigate(item.route);
                 }
                 onClose();
               }}

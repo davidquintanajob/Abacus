@@ -143,6 +143,7 @@ const UserProfileContent = () => {
       { key: 'rol', label: 'Rol' },
       { key: 'salario_diario', label: 'Salario Diario' },
       { key: 'activo', label: 'Estado' },
+      { key: 'id_tienda', label: 'ID Tienda' },
     ];
 
     return (
@@ -170,6 +171,38 @@ const UserProfileContent = () => {
             </View>
           );
         })}
+        
+        {userData.tienda && (
+          <View style={styles.tiendaSection}>
+            <Text style={[styles.sectionTitle, { color: colors.primary }]}>
+              Información de Tienda
+            </Text>
+            <View style={styles.infoRow}>
+              <Text style={[styles.infoLabel, { color: colors.outline }]}>
+                Nombre Tienda
+              </Text>
+              <Text style={[styles.infoValue, { color: colors.onSurface }]}>
+                {userData.tienda.nombre}
+              </Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={[styles.infoLabel, { color: colors.outline }]}>
+                Tipo
+              </Text>
+              <Text style={[styles.infoValue, { color: colors.onSurface }]}>
+                {userData.tienda.tipo}
+              </Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={[styles.infoLabel, { color: colors.outline }]}>
+                Estado Tienda
+              </Text>
+              <Text style={[styles.infoValue, { color: colors.onSurface }]}>
+                {userData.tienda.activo ? 'Activa' : 'Inactiva'}
+              </Text>
+            </View>
+          </View>
+        )}
       </Card>
     );
   };
@@ -478,6 +511,12 @@ const createStyles = (responsive) => StyleSheet.create({
     fontFamily: 'Hanken Grotesk',
     flex: 1,
     textAlign: 'right',
+  },
+  tiendaSection: {
+    marginTop: responsive.responsiveMargin(20),
+    paddingTop: responsive.responsivePadding(16),
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
   },
   changePasswordButton: {
     flexDirection: 'row',

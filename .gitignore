@@ -34,7 +34,7 @@ yarn-error.*
 .env*.local
 
 # local config files
-# src/config.js
+src/config.js
 
 # typescript
 *.tsbuildinfo
@@ -44,4 +44,4 @@ yarn-error.*
 /android
 
 # backend
-Abacus-backend/
+# Abacus-backend/
