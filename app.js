@@ -108,8 +108,11 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs, {
 // Importar rutas
 const usuarioRoutes = require("./routes/usuarioRoutes");
 const tiendaRoutes = require("./routes/tiendaRoutes");
+const configRoutes = require("./routes/configRoutes");  // <-- NUEVA LÍNEA
+
 app.use("/", usuarioRoutes);
 app.use("/", tiendaRoutes);
+app.use("/config", configRoutes);  // <-- NUEVA LÍNEA
 
 // Inicializar la base de datos y arrancar el servidor
 const startApp = async () => {
