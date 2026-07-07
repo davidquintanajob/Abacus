@@ -9,7 +9,7 @@ import { Toast } from '../common/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useAuth } from '../../context/AuthContext';
 
-export const Sidebar = ({ isOpen = false, onClose, navigation }) => {
+export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'Home' }) => {
   const { colors } = useTheme();
   const responsive = useResponsive();
   const insets = useSafeAreaInsets();
@@ -19,12 +19,13 @@ export const Sidebar = ({ isOpen = false, onClose, navigation }) => {
   const isAdmin = user?.rol === 'Administrador';
 
   const menuItems = [
-    { icon: require('../../../assets/bar-chart.png'), label: 'Panel', route: 'Dashboard' },
+    { icon: require('../../../assets/bar-chart.png'), label: 'Panel', route: 'Home' },
     { icon: require('../../../assets/Productos.png'), label: 'Inventario', route: 'Inventory' },
     { icon: require('../../../assets/shopping-cart.png'), label: 'Ventas', route: 'Sales' },
     { icon: require('../../../assets/customers.png'), label: 'Clientes', route: 'Customers' },
     { icon: require('../../../assets/analitica.png'), label: 'Reportes', route: 'Reports' },
-    ...(isAdmin ? [{ icon: require('../../../assets/compras.png'), label: 'Tiendas', route: 'Tiendas' }] : []),
+    ...(isAdmin ? [{ icon: require('../../../assets/tienda.png'), label: 'Tiendas', route: 'Tiendas' }] : []),
+    ...(isAdmin ? [{ icon: require('../../../assets/exchange.png'), label: 'Cambio de Moneda', route: 'CurrencyExchange' }] : []),
     { icon: require('../../../assets/config.png'), label: 'Configuración', route: 'Settings' },
   ];
 
@@ -132,36 +133,39 @@ export const Sidebar = ({ isOpen = false, onClose, navigation }) => {
 
         {/* Navigation */}
         <ScrollView style={styles.navContainer} showsVerticalScrollIndicator={false}>
-          {menuItems.map((item, index) => (
-            <TouchableOpacity
-              key={index}
-              style={[
-                styles.navItem,
-                index === 0 && { backgroundColor: colors.primary }
-              ]}
-              onPress={() => {
-                if (navigation && (item.route === 'Settings' || item.route === 'Tiendas')) {
-                  navigation.navigate(item.route);
-                }
-                onClose();
-              }}
-            >
-              <Image
-                source={item.icon}
+          {menuItems.map((item, index) => {
+            const isActive = item.route === currentRoute;
+            return (
+              <TouchableOpacity
+                key={index}
                 style={[
-                  styles.navIcon,
-                  { tintColor: index === 0 ? colors.onPrimary : colors.onSurfaceVariant }
+                  styles.navItem,
+                  isActive && { backgroundColor: colors.primary }
                 ]}
-                resizeMode="contain"
-              />
-              <Text style={[
-                styles.navLabel,
-                index === 0 ? { color: colors.onPrimary } : { color: colors.onSurfaceVariant }
-              ]}>
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+                onPress={() => {
+                  if (navigationRef.isReady()) {
+                    navigationRef.navigate(item.route);
+                  }
+                  onClose();
+                }}
+              >
+                <Image
+                  source={item.icon}
+                  style={[
+                    styles.navIcon,
+                    { tintColor: isActive ? colors.onPrimary : colors.onSurfaceVariant }
+                  ]}
+                  resizeMode="contain"
+                />
+                <Text style={[
+                  styles.navLabel,
+                  isActive ? { color: colors.onPrimary } : { color: colors.onSurfaceVariant }
+                ]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
 
         {/* Footer */}

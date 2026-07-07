@@ -9,7 +9,7 @@ import { Card } from '../components/common/Card';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
-import { API_CONFIG } from '../config';
+import { getUsuarioById, changePassword } from '../services/usuarioService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 
@@ -49,19 +49,7 @@ const UserProfileContent = () => {
         throw new Error('Usuario no autenticado');
       }
 
-      const response = await fetch(`${API_CONFIG.API_BASE_URL}/usuario/${user.id_usuario}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.errors?.[0] || 'Error al obtener datos del usuario');
-      }
+      const data = await getUsuarioById(user.id_usuario);
 
       // Exclude password, createdAt, updatedAt from display
       const { contrasenna, createdAt, updatedAt, ...displayData } = data;
@@ -94,23 +82,7 @@ const UserProfileContent = () => {
     try {
       setIsChangingPassword(true);
       
-      const response = await fetch(`${API_CONFIG.API_BASE_URL}/usuario/changePassword`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          viejaContrasenna: oldPassword,
-          nuevaContrasenna: newPassword,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.errors?.[0] || 'Error al cambiar contraseña', { cause: response.status });
-      }
+      await changePassword(oldPassword, newPassword);
 
       showToast({ type: 'success', message: 'Contraseña actualizada correctamente' });
       
@@ -120,8 +92,7 @@ const UserProfileContent = () => {
       setConfirmPassword('');
       setShowChangePassword(false);
     } catch (err) {
-      const errorCode = err.cause || err.status || null;
-      showToast({ type: 'error', message: err.message, code: errorCode });
+      showToast({ type: 'error', message: err.message, code: err.code });
     } finally {
       setIsChangingPassword(false);
     }

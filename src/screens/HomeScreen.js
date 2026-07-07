@@ -24,7 +24,7 @@ const HomeContent = () => {
     : require('../../Logos/Abacus v1.1.png');
 
   const handleSettingsPress = () => {
-    navigation.navigate('Settings');
+    navigation.navigate('Settings', { from: 'Home' });
   };
 
   const handleNotificationsPress = () => {
@@ -120,6 +120,7 @@ const HomeContent = () => {
         onProfilePress={handleProfilePress}
         isDark={isDarkMode}
         title="Abacus"
+        showLogo={true}
       />
       
       <Sidebar 

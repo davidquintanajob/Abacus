@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { Header } from '../components/layout/Header';
+import { Sidebar } from '../components/layout/Sidebar';
 import { Card } from '../components/common/Card';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
@@ -15,10 +16,11 @@ import { useToast } from '../hooks/useToast';
 
 const TiendasContent = () => {
   const navigation = useNavigation();
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { toast, showToast, hideToast } = useToast();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [tiendas, setTiendas] = useState([]);
@@ -110,12 +112,31 @@ const TiendasContent = () => {
     );
   };
 
+  const isAdmin = user?.rol === 'Administrador';
+
+  const handleTiendaPress = (tienda) => {
+    const mode = isAdmin ? 'edit' : 'view';
+    navigation.navigate('TiendaForm', { tienda, mode });
+  };
+
   const handleEdit = (tienda) => {
     navigation.navigate('TiendaForm', { tienda, mode: 'edit' });
   };
 
   const handleAdd = () => {
     navigation.navigate('TiendaForm', { mode: 'add' });
+  };
+
+  const handleSettingsPress = () => {
+    navigation.navigate('Settings');
+  };
+
+  const handleNotificationsPress = () => {
+    console.log('Notificaciones');
+  };
+
+  const handleProfilePress = () => {
+    navigation.navigate('UserProfile');
   };
 
   const handleNextPage = () => {
@@ -147,26 +168,31 @@ const TiendasContent = () => {
       />
       
       <Header 
-        showBackButton={true}
-        onBackPress={() => navigation.goBack()}
+        onMenuPress={() => setSidebarOpen(true)}
         isDark={isDarkMode}
         title="Gestión de Tiendas"
       />
 
-      <ScrollView 
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.content}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
       >
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
         {/* Filter Section */}
         <Card style={[styles.filterCard, { backgroundColor: colors.surface }]}>
           <View style={styles.filterHeader}>
             <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Filtros</Text>
-            <TouchableOpacity onPress={() => setShowAdvancedFilters(!showAdvancedFilters)}>
+            <TouchableOpacity 
+              style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+              onPress={() => setShowAdvancedFilters(!showAdvancedFilters)}
+            >
               <Ionicons 
                 name={showAdvancedFilters ? "chevron-up" : "chevron-down"} 
-                size={responsive.responsiveWidth(20)} 
-                color={colors.primary} 
+                size={responsive.responsiveWidth(24)} 
+                color={isDarkMode ? colors.primary : '#1976D2'} 
               />
             </TouchableOpacity>
           </View>
@@ -197,28 +223,69 @@ const TiendasContent = () => {
 
               <View style={styles.filterGroup}>
                 <Text style={[styles.label, { color: colors.outline }]}>Estado</Text>
-                <View style={styles.statusButtons}>
+                <View style={styles.statusFilterSwitches}>
                   <TouchableOpacity
-                    style={[
-                      styles.statusButton,
-                      { backgroundColor: filters.activo === 'true' ? colors.primary : colors.background, borderColor: colors.outlineVariant }
-                    ]}
-                    onPress={() => setFilters(prev => ({ ...prev, activo: prev.activo === 'true' ? '' : 'true' }))}
+                    style={styles.statusFilterItem}
+                    onPress={() => setFilters(prev => ({ ...prev, activo: '' }))}
                   >
-                    <Text style={[styles.statusButtonText, { color: filters.activo === 'true' ? '#fff' : colors.onSurface }]}>
-                      Activa
-                    </Text>
+                    <View style={[
+                      styles.statusFilterSwitch,
+                      { backgroundColor: filters.activo === '' ? '#9E9E9E' : '#E0E0E0' }
+                    ]}>
+                      <View style={[
+                        styles.statusFilterKnob,
+                        { transform: [{ translateX: filters.activo === '' ? responsive.responsiveWidth(26) : 0 }] }
+                      ]}>
+                        <Text style={[
+                          styles.statusFilterText,
+                          { color: filters.activo === '' ? '#9E9E9E' : '#9E9E9E' }
+                        ]}>
+                          Todos
+                        </Text>
+                      </View>
+                    </View>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[
-                      styles.statusButton,
-                      { backgroundColor: filters.activo === 'false' ? colors.error : colors.background, borderColor: colors.outlineVariant }
-                    ]}
-                    onPress={() => setFilters(prev => ({ ...prev, activo: prev.activo === 'false' ? '' : 'false' }))}
+                    style={styles.statusFilterItem}
+                    onPress={() => setFilters(prev => ({ ...prev, activo: 'true' }))}
                   >
-                    <Text style={[styles.statusButtonText, { color: filters.activo === 'false' ? '#fff' : colors.onSurface }]}>
-                      Inactiva
-                    </Text>
+                    <View style={[
+                      styles.statusFilterSwitch,
+                      { backgroundColor: filters.activo === 'true' ? '#4CAF50' : '#E0E0E0' }
+                    ]}>
+                      <View style={[
+                        styles.statusFilterKnob,
+                        { transform: [{ translateX: filters.activo === 'true' ? responsive.responsiveWidth(26) : 0 }] }
+                      ]}>
+                        <Text style={[
+                          styles.statusFilterText,
+                          { color: filters.activo === 'true' ? '#4CAF50' : '#9E9E9E' }
+                        ]}>
+                          Activa
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.statusFilterItem}
+                    onPress={() => setFilters(prev => ({ ...prev, activo: 'false' }))}
+                  >
+                    <View style={[
+                      styles.statusFilterSwitch,
+                      { backgroundColor: filters.activo === 'false' ? '#F44336' : '#E0E0E0' }
+                    ]}>
+                      <View style={[
+                        styles.statusFilterKnob,
+                        { transform: [{ translateX: filters.activo === 'false' ? responsive.responsiveWidth(26) : 0 }] }
+                      ]}>
+                        <Text style={[
+                          styles.statusFilterText,
+                          { color: filters.activo === 'false' ? '#F44336' : '#9E9E9E' }
+                        ]}>
+                          Inactiva
+                        </Text>
+                      </View>
+                    </View>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -250,14 +317,16 @@ const TiendasContent = () => {
           </View>
         </Card>
 
-        {/* Add Button */}
-        <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: colors.primary }]}
-          onPress={handleAdd}
-        >
-          <Ionicons name="add-circle-outline" size={responsive.responsiveWidth(20)} color="#fff" />
-          <Text style={[styles.addButtonText, { color: '#fff' }]}>Agregar Tienda</Text>
-        </TouchableOpacity>
+        {/* Add Button - Only for Admin */}
+        {isAdmin && (
+          <TouchableOpacity
+            style={[styles.addButton, { backgroundColor: colors.primary }]}
+            onPress={handleAdd}
+          >
+            <Ionicons name="add-circle-outline" size={responsive.responsiveWidth(20)} color="#fff" />
+            <Text style={[styles.addButtonText, { color: '#fff' }]}>Agregar Tienda</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Tiendas List */}
         {isLoading ? (
@@ -288,47 +357,66 @@ const TiendasContent = () => {
         ) : (
           <>
             {tiendas.map((tienda) => (
-              <Card key={tienda.id_tienda} style={[styles.tiendaCard, { backgroundColor: colors.surface }]}>
-                <View style={styles.tiendaInfo}>
-                  <View style={styles.tiendaHeader}>
-                    <Text style={[styles.tiendaName, { color: colors.onSurface }]}>{tienda.nombre}</Text>
-                    <View style={[
-                      styles.statusBadge,
-                      { backgroundColor: tienda.activo ? (isDarkMode ? colors.primaryContainer : '#E3F2FD') : (isDarkMode ? colors.errorContainer : '#FFEBEE') }
-                    ]}>
-                      <Text style={[
-                        styles.statusText,
-                        { color: tienda.activo ? (isDarkMode ? colors.primary : '#1976D2') : (isDarkMode ? colors.error : '#D32F2F') }
+              <TouchableOpacity
+                key={tienda.id_tienda}
+                onPress={() => handleTiendaPress(tienda)}
+                activeOpacity={0.7}
+              >
+                <Card style={[styles.tiendaCard, { backgroundColor: colors.surface }]}>
+                  <View style={styles.tiendaInfo}>
+                    <View style={styles.tiendaHeader}>
+                      <Text style={[styles.tiendaName, { color: colors.onSurface }]}>{tienda.nombre}</Text>
+                      <View style={[
+                        styles.statusSwitch,
+                        { backgroundColor: tienda.activo ? '#4CAF50' : '#F44336' }
                       ]}>
-                        {tienda.activo ? 'Activa' : 'Inactiva'}
-                      </Text>
+                        <View style={[
+                          styles.statusSwitchKnob,
+                          { transform: [{ translateX: tienda.activo ? responsive.responsiveWidth(26) : 0 }] }
+                        ]}>
+                          <Text style={[
+                            styles.statusSwitchText,
+                            { color: tienda.activo ? '#4CAF50' : '#F44336' }
+                          ]}>
+                            {tienda.activo ? 'Activa' : 'Inactiva'}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
+                    <Text style={[styles.tiendaType, { color: colors.outline }]}>Tipo: {tienda.tipo}</Text>
                   </View>
-                  <Text style={[styles.tiendaType, { color: colors.outline }]}>Tipo: {tienda.tipo}</Text>
-                </View>
-                <View style={styles.tiendaActions}>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.editButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
-                    onPress={() => handleEdit(tienda)}
-                  >
-                    <Image
-                      source={require('../../assets/editar.png')}
-                      style={styles.actionIcon}
-                      resizeMode="contain"
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.deleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                    onPress={() => handleDelete(tienda)}
-                  >
-                    <Image
-                      source={require('../../assets/basura.png')}
-                      style={styles.actionIcon}
-                      resizeMode="contain"
-                    />
-                  </TouchableOpacity>
-                </View>
-              </Card>
+                  {isAdmin && (
+                    <View style={styles.tiendaActions}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.editButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleEdit(tienda);
+                        }}
+                      >
+                        <Image
+                          source={require('../../assets/editar.png')}
+                          style={styles.actionIcon}
+                          resizeMode="contain"
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.deleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleDelete(tienda);
+                        }}
+                      >
+                        <Image
+                          source={require('../../assets/basura.png')}
+                          style={styles.actionIcon}
+                          resizeMode="contain"
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </Card>
+              </TouchableOpacity>
             ))}
 
             {/* Pagination */}
@@ -362,6 +450,13 @@ const TiendasContent = () => {
           </>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
+
+      <Sidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        currentRoute="Tiendas"
+      />
     </SafeAreaView>
   );
 };
@@ -394,6 +489,14 @@ const createStyles = (responsive) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: responsive.responsiveMargin(16),
+  },
+  expandButton: {
+    width: responsive.responsiveWidth(40),
+    height: responsive.responsiveHeight(40),
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
   },
   filterTitle: {
     fontSize: responsive.responsiveFontSize(18),
@@ -567,6 +670,70 @@ const createStyles = (responsive) => StyleSheet.create({
   statusText: {
     fontSize: responsive.fontSizes.bodySmall,
     fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  statusSwitch: {
+    width: responsive.responsiveWidth(80),
+    height: responsive.responsiveHeight(28),
+    borderRadius: 14,
+    padding: 2,
+  },
+  statusSwitchKnob: {
+    width: responsive.responsiveWidth(50),
+    height: responsive.responsiveHeight(24),
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusSwitchText: {
+    fontSize: responsive.fontSizes.caption,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  statusFilterSwitches: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(24),
+  },
+  statusFilterContainer: {
+    alignSelf: 'flex-start',
+  },
+  statusFilterItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+  },
+  statusFilterSwitch: {
+    width: responsive.responsiveWidth(80),
+    height: responsive.responsiveHeight(28),
+    borderRadius: 14,
+    padding: 2,
+  },
+  statusFilterKnob: {
+    width: responsive.responsiveWidth(50),
+    height: responsive.responsiveHeight(24),
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusFilterText: {
+    fontSize: responsive.fontSizes.caption,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  statusFilterLabel: {
+    fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
   },
   tiendaType: {

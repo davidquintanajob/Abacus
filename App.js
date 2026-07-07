@@ -11,6 +11,7 @@ import { PasswordRecoveryScreen } from './src/screens/PasswordRecoveryScreen';
 import { UserProfileScreen } from './src/screens/UserProfileScreen';
 import { TiendasScreen } from './src/screens/TiendasScreen';
 import { TiendaFormScreen } from './src/screens/TiendaFormScreen';
+import { CurrencyExchangeScreen } from './src/screens/CurrencyExchangeScreen';
 import { navigationRef } from './src/navigationRef';
 
 const Stack = createNativeStackNavigator();
@@ -39,6 +40,7 @@ const AppStack = ({ initialRoute }) => (
     <Stack.Screen name="UserProfile" component={UserProfileScreen} />
     <Stack.Screen name="Tiendas" component={TiendasScreen} />
     <Stack.Screen name="TiendaForm" component={TiendaFormScreen} />
+    <Stack.Screen name="CurrencyExchange" component={CurrencyExchangeScreen} />
   </Stack.Navigator>
 );
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../../hooks/useResponsive';
@@ -14,7 +14,8 @@ export const Header = ({
   showBackButton = false, 
   onBackPress, 
   isDark = false, 
-  title = 'abacus' 
+  title = 'abacus',
+  showLogo = false
 }) => {
   const { colors } = useTheme();
   const responsive = useResponsive();
@@ -45,9 +46,18 @@ export const Header = ({
             <Ionicons name="menu" size={responsive.responsiveWidth(24)} color={colors.primary} />
           </TouchableOpacity>
         )}
-        <Text style={[styles.title, { color: colors.primary }]}>
-          {title || 'Abacus'}
-        </Text>
+        <View style={styles.titleContainer}>
+          <Text style={[styles.title, { color: colors.primary }]}>
+            {title || 'Abacus'}
+          </Text>
+          {showLogo && title === 'Abacus' && (
+            <Image
+              source={isDarkMode ? require('../../../Logos/Abacus_sinFondo v4.png') : require('../../../Logos/Abacus_sinFondo v1.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          )}
+        </View>
       </View>
       
       <View style={styles.rightSection}>
@@ -111,6 +121,15 @@ const createStyles = (responsive, insets) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: responsive.responsiveMargin(8),
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+  },
+  logo: {
+    width: responsive.responsiveWidth(30),
+    height: responsive.responsiveHeight(30),
   },
   rightSection: {
     flexDirection: 'row',

@@ -18,7 +18,7 @@ const TiendaFormContent = () => {
   const route = useRoute();
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { toast, showToast, hideToast } = useToast();
 
   const { tienda, mode } = route.params || { mode: 'add' };
@@ -34,6 +34,7 @@ const TiendaFormContent = () => {
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isEditMode = mode === 'edit';
   const isViewMode = mode === 'view';
+  const isAdmin = user?.rol === 'Administrador';
 
   useEffect(() => {
     if (isEditMode && tienda) {
@@ -103,7 +104,7 @@ const TiendaFormContent = () => {
         showBackButton={true}
         onBackPress={() => navigation.goBack()}
         isDark={isDarkMode}
-        title={isEditMode ? 'Editar Tienda' : 'Agregar Tienda'}
+        title={isViewMode ? 'Información de la Tienda' : isEditMode ? 'Editar Tienda' : 'Agregar Tienda'}
       />
 
       <ScrollView 
@@ -146,40 +147,29 @@ const TiendaFormContent = () => {
 
           <View style={styles.formGroup}>
             <Text style={[styles.label, { color: colors.outline }]}>Estado</Text>
-            <View style={styles.statusButtons}>
-              <TouchableOpacity
-                style={[
-                  styles.statusButton,
-                  { 
-                    backgroundColor: formData.activo ? colors.primary : colors.background, 
-                    borderColor: formData.activo ? colors.primary : colors.outlineVariant 
-                  },
-                  isViewMode && styles.inputDisabled
-                ]}
-                onPress={() => !isViewMode && setFormData(prev => ({ ...prev, activo: true }))}
-                disabled={isViewMode}
-              >
-                <Text style={[styles.statusButtonText, { color: formData.activo ? '#fff' : colors.onSurface }]}>
-                  Activa
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.statusButton,
-                  { 
-                    backgroundColor: !formData.activo ? colors.error : colors.background, 
-                    borderColor: !formData.activo ? colors.error : colors.outlineVariant 
-                  },
-                  isViewMode && styles.inputDisabled
-                ]}
-                onPress={() => !isViewMode && setFormData(prev => ({ ...prev, activo: false }))}
-                disabled={isViewMode}
-              >
-                <Text style={[styles.statusButtonText, { color: !formData.activo ? '#fff' : colors.onSurface }]}>
-                  Inactiva
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.statusSwitchContainer}
+              onPress={() => !isViewMode && setFormData(prev => ({ ...prev, activo: !prev.activo }))}
+              disabled={isViewMode}
+            >
+              <View style={[
+                styles.statusSwitch,
+                { backgroundColor: formData.activo ? '#4CAF50' : '#F44336' },
+                isViewMode && styles.inputDisabled
+              ]}>
+                <View style={[
+                  styles.statusSwitchKnob,
+                  { transform: [{ translateX: formData.activo ? responsive.responsiveWidth(26) : 0 }] }
+                ]}>
+                  <Text style={[
+                    styles.statusSwitchText,
+                    { color: formData.activo ? '#4CAF50' : '#F44336' }
+                  ]}>
+                    {formData.activo ? 'Activa' : 'Inactiva'}
+                  </Text>
+                </View>
+              </View>
+            </TouchableOpacity>
           </View>
 
           {!isViewMode && (
@@ -205,7 +195,7 @@ const TiendaFormContent = () => {
           )}
         </Card>
 
-        {isViewMode && (
+        {isViewMode && isAdmin && (
           <TouchableOpacity
             style={[styles.editButton, { backgroundColor: colors.primary }]}
             onPress={() => navigation.setParams({ mode: 'edit' })}
@@ -276,6 +266,46 @@ const createStyles = (responsive) => StyleSheet.create({
   statusButtonText: {
     fontSize: responsive.fontSizes.body,
     fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  statusSwitches: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(24),
+  },
+  statusSwitchItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+  },
+  statusSwitchContainer: {
+    alignSelf: 'flex-start',
+  },
+  statusSwitch: {
+    width: responsive.responsiveWidth(80),
+    height: responsive.responsiveHeight(28),
+    borderRadius: 14,
+    padding: 2,
+  },
+  statusSwitchKnob: {
+    width: responsive.responsiveWidth(50),
+    height: responsive.responsiveHeight(24),
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusSwitchText: {
+    fontSize: responsive.fontSizes.caption,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  statusSwitchLabel: {
+    fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
   },
   buttonGroup: {

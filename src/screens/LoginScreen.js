@@ -49,7 +49,7 @@ const LoginContent = () => {
   };
 
   const handleSettings = () => {
-    navigation.navigate('Settings');
+    navigation.navigate('Settings', { from: 'Login' });
   };
 
   const logoSource = isDarkMode

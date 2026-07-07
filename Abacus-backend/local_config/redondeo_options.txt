@@ -1,0 +1,6 @@
+{
+    "value": "Exeso 5",
+    "isRedondeoFromPlus": "false",
+    "costoFormula": "Promedio ponderado",
+    "telefono_contacto": "41322223"
+}

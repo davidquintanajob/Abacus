@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, SafeAreaView, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView as RNSafeArea } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { Header } from '../components/layout/Header';
+import { Sidebar } from '../components/layout/Sidebar';
 import { Card } from '../components/common/Card';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
@@ -16,14 +17,19 @@ import { API_CONFIG } from '../config';
 
 const SettingsContent = () => {
   const navigation = useNavigation();
+  const route = useRoute();
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [serverIP, setServerIP] = useState('');
   const [isCopied, setIsCopied] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const { toast, showToast, hideToast } = useToast();
 
   const isDarkMode = isDark === true || isDark === 'true';
+  
+  // Check if we should show back button (only if coming from Login or Home)
+  const shouldShowBackButton = route.params?.from === 'Login' || route.params?.from === 'Home';
 
   // Cargar IP guardada al iniciar
   useEffect(() => {
@@ -130,11 +136,18 @@ const SettingsContent = () => {
       />
       
       <Header 
-        onMenuPress={() => {}}
-        isDark={isDarkMode}
-        title="Abacus"
-        showBackButton={true}
+        showBackButton={shouldShowBackButton}
         onBackPress={() => navigation.goBack()}
+        onMenuPress={() => setSidebarOpen(true)}
+        isDark={isDarkMode}
+        title="Configuraciones"
+      />
+
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={() => setSidebarOpen(false)}
+        navigation={navigation}
+        currentRoute="Settings"
       />
 
       <ScrollView 
