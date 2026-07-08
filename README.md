@@ -107,3 +107,24 @@ export const API_CONFIG = {
 ```bash
 npm start
 ```
+
+## 🔧 Solución de Problemas
+
+### Error: "Native module is null, cannot access legacy storage"
+
+Si encuentras este error con AsyncStorage, ejecuta:
+
+```bash
+# Limpiar caché de Expo y reinstalar dependencias
+rm -rf node_modules
+npm install
+npx expo start -c
+```
+
+Si usas development build, reconstruye la app:
+```bash
+npx expo prebuild --clean
+npx expo run:android  # o expo run:ios
+```
+
+Si usas Expo Go, asegúrate de tener la última versión instalada.

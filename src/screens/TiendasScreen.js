@@ -169,8 +169,13 @@ const TiendasContent = () => {
       
       <Header 
         onMenuPress={() => setSidebarOpen(true)}
+        onThemePress={toggleTheme}
+        onSettingsPress={handleSettingsPress}
+        onNotificationsPress={handleNotificationsPress}
+        onProfilePress={handleProfilePress}
         isDark={isDarkMode}
-        title="Gestión de Tiendas"
+        title="Abacus"
+        showLogo={true}
       />
 
       <KeyboardAvoidingView
@@ -181,6 +186,11 @@ const TiendasContent = () => {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+        {/* Page Title */}
+        <View style={styles.pageTitleContainer}>
+          <Text style={[styles.pageTitle, { color: colors.onSurface }]}>Gestión de Tiendas</Text>
+        </View>
+
         {/* Filter Section */}
         <Card style={[styles.filterCard, { backgroundColor: colors.surface }]}>
           <View style={styles.filterHeader}>
@@ -367,20 +377,12 @@ const TiendasContent = () => {
                     <View style={styles.tiendaHeader}>
                       <Text style={[styles.tiendaName, { color: colors.onSurface }]}>{tienda.nombre}</Text>
                       <View style={[
-                        styles.statusSwitch,
-                        { backgroundColor: tienda.activo ? '#4CAF50' : '#F44336' }
+                        styles.statusBadge,
+                        { backgroundColor: tienda.activo ? '#E8F5E9' : '#FFEBEE' }
                       ]}>
-                        <View style={[
-                          styles.statusSwitchKnob,
-                          { transform: [{ translateX: tienda.activo ? responsive.responsiveWidth(26) : 0 }] }
-                        ]}>
-                          <Text style={[
-                            styles.statusSwitchText,
-                            { color: tienda.activo ? '#4CAF50' : '#F44336' }
-                          ]}>
-                            {tienda.activo ? 'Activa' : 'Inactiva'}
-                          </Text>
-                        </View>
+                        <Text style={[styles.statusText, { color: tienda.activo ? '#2E7D32' : '#C62828' }]}>
+                          {tienda.activo ? 'Activo' : 'Inactivo'}
+                        </Text>
                       </View>
                     </View>
                     <Text style={[styles.tiendaType, { color: colors.outline }]}>Tipo: {tienda.tipo}</Text>
@@ -469,14 +471,24 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   content: {
     flex: 1,
+    marginTop: responsive.headerHeight,
   },
   scrollContent: {
     padding: responsive.responsivePadding(16),
   },
+  pageTitleContainer: {
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(16),
+    marginTop: responsive.responsiveMargin(5),
+  },
+  pageTitle: {
+    fontSize: responsive.responsiveFontSize(24),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+  },
   filterCard: {
     borderRadius: 16,
     padding: responsive.responsivePadding(20),
-    marginTop: responsive.responsiveMargin(50),
     marginBottom: responsive.responsiveMargin(16),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -663,14 +675,15 @@ const createStyles = (responsive) => StyleSheet.create({
     marginRight: responsive.responsiveMargin(8),
   },
   statusBadge: {
-    paddingHorizontal: responsive.responsivePadding(8),
-    paddingVertical: responsive.responsivePadding(4),
+    paddingHorizontal: responsive.responsivePadding(12),
+    paddingVertical: responsive.responsivePadding(6),
     borderRadius: 9999,
   },
   statusText: {
     fontSize: responsive.fontSizes.bodySmall,
     fontWeight: '600',
     fontFamily: 'Inter',
+    color: '#fff',
   },
   statusSwitch: {
     width: responsive.responsiveWidth(80),

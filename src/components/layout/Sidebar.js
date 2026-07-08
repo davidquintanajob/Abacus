@@ -20,10 +20,6 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
 
   const menuItems = [
     { icon: require('../../../assets/bar-chart.png'), label: 'Panel', route: 'Home' },
-    { icon: require('../../../assets/Productos.png'), label: 'Inventario', route: 'Inventory' },
-    { icon: require('../../../assets/shopping-cart.png'), label: 'Ventas', route: 'Sales' },
-    { icon: require('../../../assets/customers.png'), label: 'Clientes', route: 'Customers' },
-    { icon: require('../../../assets/analitica.png'), label: 'Reportes', route: 'Reports' },
     ...(isAdmin ? [{ icon: require('../../../assets/tienda.png'), label: 'Tiendas', route: 'Tiendas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/exchange.png'), label: 'Cambio de Moneda', route: 'CurrencyExchange' }] : []),
     { icon: require('../../../assets/config.png'), label: 'Configuración', route: 'Settings' },

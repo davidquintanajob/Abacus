@@ -106,7 +106,6 @@ const UserProfileContent = () => {
     if (!userData) return null;
 
     const fields = [
-      { key: 'id_usuario', label: 'ID Usuario' },
       { key: 'nombre_natural', label: 'Nombre' },
       { key: 'nombre_usuario', label: 'Usuario' },
       { key: 'telefono', label: 'Teléfono' },
@@ -114,7 +113,6 @@ const UserProfileContent = () => {
       { key: 'rol', label: 'Rol' },
       { key: 'salario_diario', label: 'Salario Diario' },
       { key: 'activo', label: 'Estado' },
-      { key: 'id_tienda', label: 'ID Tienda' },
     ];
 
     return (
@@ -338,9 +336,6 @@ const UserProfileContent = () => {
           <>
             <Card style={[styles.profileCard, { backgroundColor: colors.surface }]}>
               <View style={styles.profileHeader}>
-                <View style={[styles.avatarContainer, { backgroundColor: `${colors.primary}20` }]}>
-                  <Ionicons name="person" size={responsive.responsiveWidth(48)} color={colors.primary} />
-                </View>
                 <Text style={[styles.profileName, { color: colors.onSurface }]}>
                   {userData?.nombre_natural || 'Usuario'}
                 </Text>

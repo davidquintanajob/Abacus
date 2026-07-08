@@ -47,9 +47,6 @@ export const Header = ({
           </TouchableOpacity>
         )}
         <View style={styles.titleContainer}>
-          <Text style={[styles.title, { color: colors.primary }]}>
-            {title || 'Abacus'}
-          </Text>
           {showLogo && title === 'Abacus' && (
             <Image
               source={isDarkMode ? require('../../../Logos/Abacus_sinFondo v4.png') : require('../../../Logos/Abacus_sinFondo v1.png')}
@@ -57,6 +54,9 @@ export const Header = ({
               resizeMode="contain"
             />
           )}
+          <Text style={[styles.title, { color: colors.primary }]}>
+            {title || 'Abacus'}
+          </Text>
         </View>
       </View>
       
