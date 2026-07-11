@@ -10,7 +10,7 @@ export const getTiendas = async (filters = {}, page = 1, limit = 10) => {
     // Add filters
     if (filters.nombre) queryParams.append('nombre', filters.nombre);
     if (filters.tipo) queryParams.append('tipo', filters.tipo);
-    if (filters.activo !== '') queryParams.append('activo', filters.activo);
+    if (filters.activo !== undefined && filters.activo !== '') queryParams.append('activo', filters.activo);
 
     const response = await api.get(`/tienda/filter?${queryParams}`);
     return response.data;

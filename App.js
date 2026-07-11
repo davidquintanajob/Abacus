@@ -11,6 +11,8 @@ import { PasswordRecoveryScreen } from './src/screens/PasswordRecoveryScreen';
 import { UserProfileScreen } from './src/screens/UserProfileScreen';
 import { TiendasScreen } from './src/screens/TiendasScreen';
 import { TiendaFormScreen } from './src/screens/TiendaFormScreen';
+import { UsuariosScreen } from './src/screens/UsuariosScreen';
+import { UsuarioFormScreen } from './src/screens/UsuarioFormScreen';
 import { CurrencyExchangeScreen } from './src/screens/CurrencyExchangeScreen';
 import { navigationRef } from './src/navigationRef';
 
@@ -40,6 +42,8 @@ const AppStack = ({ initialRoute }) => (
     <Stack.Screen name="UserProfile" component={UserProfileScreen} />
     <Stack.Screen name="Tiendas" component={TiendasScreen} />
     <Stack.Screen name="TiendaForm" component={TiendaFormScreen} />
+    <Stack.Screen name="Usuarios" component={UsuariosScreen} />
+    <Stack.Screen name="UsuarioForm" component={UsuarioFormScreen} />
     <Stack.Screen name="CurrencyExchange" component={CurrencyExchangeScreen} />
   </Stack.Navigator>
 );
