@@ -32,6 +32,7 @@ const UsuarioFormContent = () => {
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [showTiendaDropdown, setShowTiendaDropdown] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [tiendaSearchText, setTiendaSearchText] = useState('');
   
   const [formData, setFormData] = useState({
     nombre_natural: usuario?.nombre_natural || '',
@@ -147,6 +148,10 @@ const UsuarioFormContent = () => {
 
   const selectedTienda = tiendas.find(t => t.id_tienda === formData.id_tienda);
 
+  const filteredTiendas = tiendas.filter(tienda =>
+    tienda.nombre.toLowerCase().includes(tiendaSearchText.toLowerCase())
+  );
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} animated={true} />
@@ -190,57 +195,65 @@ const UsuarioFormContent = () => {
             />
           </View>
 
-          <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: colors.outline }]}>Teléfono</Text>
-            <TextInput
-              style={[
-                styles.input, 
-                { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                isViewMode && styles.inputDisabled
-              ]}
-              placeholderTextColor={colors.outline}
-              placeholder="Teléfono"
-              value={formData.telefono}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, telefono: text }))}
-              editable={!isViewMode}
-              keyboardType="phone-pad"
-            />
+          <View style={styles.formRow}>
+            <View style={[styles.formGroup, styles.formGroupHalf]}>
+              <Text style={[styles.label, { color: colors.outline }]}>Nombre de Usuario *</Text>
+              <TextInput
+                style={[
+                  styles.input, 
+                  { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                  isViewMode && styles.inputDisabled
+                ]}
+                placeholderTextColor={colors.outline}
+                placeholder="Nombre de usuario"
+                value={formData.nombre_usuario}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, nombre_usuario: text }))}
+                editable={!isViewMode}
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={[styles.formGroup, styles.formGroupHalf]}>
+              <Text style={[styles.label, { color: colors.outline }]}>Rol *</Text>
+              <TouchableOpacity
+                style={[
+                  styles.dropdown,
+                  { backgroundColor: colors.background, borderColor: colors.outlineVariant },
+                  isViewMode && styles.inputDisabled
+                ]}
+                onPress={() => !isViewMode && setShowRoleDropdown(!showRoleDropdown)}
+                disabled={isViewMode}
+              >
+                <Text style={[styles.dropdownText, { color: formData.rol ? colors.onSurface : colors.outline }]}>
+                  {formData.rol || 'Seleccionar rol'}
+                </Text>
+                <Ionicons 
+                  name={showRoleDropdown ? "chevron-up" : "chevron-down"} 
+                  size={responsive.responsiveWidth(20)} 
+                  color={colors.outline} 
+                />
+              </TouchableOpacity>
+              
+              {showRoleDropdown && !isViewMode && (
+                <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                  {ROLES.map((role) => (
+                    <TouchableOpacity
+                      key={role}
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        setFormData(prev => ({ ...prev, rol: role }));
+                        setShowRoleDropdown(false);
+                      }}
+                    >
+                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{role}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
           </View>
 
-          <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: colors.outline }]}>Dirección</Text>
-            <TextInput
-              style={[
-                styles.input, 
-                { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                isViewMode && styles.inputDisabled
-              ]}
-              placeholderTextColor={colors.outline}
-              placeholder="Dirección"
-              value={formData.direccion}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, direccion: text }))}
-              editable={!isViewMode}
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: colors.outline }]}>Nombre de Usuario *</Text>
-            <TextInput
-              style={[
-                styles.input, 
-                { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                isViewMode && styles.inputDisabled
-              ]}
-              placeholderTextColor={colors.outline}
-              placeholder="Nombre de usuario"
-              value={formData.nombre_usuario}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, nombre_usuario: text }))}
-              editable={!isViewMode}
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View style={styles.formGroup}>
+          <View style={[styles.formGroup, styles.formGroupWithTopMargin]}>
             <Text style={[styles.label, { color: colors.outline }]}>
               {isEditMode ? 'Contraseña (dejar vacío para mantener)' : 'Contraseña *'}
             </Text>
@@ -275,62 +288,6 @@ const UsuarioFormContent = () => {
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: colors.outline }]}>Salario Diario</Text>
-            <TextInput
-              style={[
-                styles.input, 
-                { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                isViewMode && styles.inputDisabled
-              ]}
-              placeholderTextColor={colors.outline}
-              placeholder="0.00"
-              value={formData.salario_diario}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, salario_diario: text }))}
-              editable={!isViewMode}
-              keyboardType="decimal-pad"
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: colors.outline }]}>Rol *</Text>
-            <TouchableOpacity
-              style={[
-                styles.dropdown,
-                { backgroundColor: colors.background, borderColor: colors.outlineVariant },
-                isViewMode && styles.inputDisabled
-              ]}
-              onPress={() => !isViewMode && setShowRoleDropdown(!showRoleDropdown)}
-              disabled={isViewMode}
-            >
-              <Text style={[styles.dropdownText, { color: formData.rol ? colors.onSurface : colors.outline }]}>
-                {formData.rol || 'Seleccionar rol'}
-              </Text>
-              <Ionicons 
-                name={showRoleDropdown ? "chevron-up" : "chevron-down"} 
-                size={responsive.responsiveWidth(20)} 
-                color={colors.outline} 
-              />
-            </TouchableOpacity>
-            
-            {showRoleDropdown && !isViewMode && (
-              <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                {ROLES.map((role) => (
-                  <TouchableOpacity
-                    key={role}
-                    style={styles.dropdownItem}
-                    onPress={() => {
-                      setFormData(prev => ({ ...prev, rol: role }));
-                      setShowRoleDropdown(false);
-                    }}
-                  >
-                    <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{role}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-
-          <View style={styles.formGroup}>
             <Text style={[styles.label, { color: colors.outline }]}>Tienda *</Text>
             <TouchableOpacity
               style={[
@@ -353,48 +310,124 @@ const UsuarioFormContent = () => {
             
             {showTiendaDropdown && !isViewMode && (
               <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                {tiendas.map((tienda) => (
-                  <TouchableOpacity
-                    key={tienda.id_tienda}
-                    style={styles.dropdownItem}
-                    onPress={() => {
-                      setFormData(prev => ({ ...prev, id_tienda: tienda.id_tienda }));
-                      setShowTiendaDropdown(false);
-                    }}
-                  >
-                    <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
-                  </TouchableOpacity>
-                ))}
+                <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                  <Ionicons 
+                    name="search-outline" 
+                    size={responsive.responsiveWidth(18)} 
+                    color={colors.outline} 
+                    style={styles.searchIcon}
+                  />
+                  <TextInput
+                    style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Buscar tienda..."
+                    value={tiendaSearchText}
+                    onChangeText={setTiendaSearchText}
+                  />
+                </View>
+                {filteredTiendas.length > 0 ? (
+                  filteredTiendas.map((tienda, index) => (
+                    <TouchableOpacity
+                      key={tienda.id_tienda}
+                      style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
+                      onPress={() => {
+                        setFormData(prev => ({ ...prev, id_tienda: tienda.id_tienda }));
+                        setShowTiendaDropdown(false);
+                        setTiendaSearchText('');
+                      }}
+                    >
+                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <View style={styles.dropdownItem}>
+                    <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
+                  </View>
+                )}
               </View>
             )}
           </View>
 
-          <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: colors.outline }]}>Estado</Text>
-            <TouchableOpacity
-              style={styles.statusSwitchContainer}
-              onPress={() => !isViewMode && setFormData(prev => ({ ...prev, activo: !prev.activo }))}
-              disabled={isViewMode}
-            >
-              <View style={[
-                styles.statusSwitch,
-                { backgroundColor: formData.activo ? '#4CAF50' : '#F44336' },
-                isViewMode && styles.inputDisabled
-              ]}>
-                <View style={[
-                  styles.statusSwitchKnob,
-                  { transform: [{ translateX: formData.activo ? responsive.responsiveWidth(26) : 0 }] }
-                ]}>
-                  <Text style={[
-                    styles.statusSwitchText,
-                    { color: formData.activo ? '#4CAF50' : '#F44336' }
-                  ]}>
-                    {formData.activo ? 'Activo' : 'Inactivo'}
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
+          <View style={styles.formRow}>
+            <View style={[styles.formGroup, styles.formGroupHalf]}>
+              <Text style={[styles.label, { color: colors.outline }]}>Teléfono</Text>
+              <TextInput
+                style={[
+                  styles.input, 
+                  { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                  isViewMode && styles.inputDisabled
+                ]}
+                placeholderTextColor={colors.outline}
+                placeholder="Teléfono"
+                value={formData.telefono}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, telefono: text }))}
+                editable={!isViewMode}
+                keyboardType="phone-pad"
+              />
+            </View>
+
+            <View style={[styles.formGroup, styles.formGroupHalf]}>
+              <Text style={[styles.label, { color: colors.outline }]}>Salario Diario</Text>
+              <TextInput
+                style={[
+                  styles.input, 
+                  { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                  isViewMode && styles.inputDisabled
+                ]}
+                placeholderTextColor={colors.outline}
+                placeholder="0.00"
+                value={formData.salario_diario}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, salario_diario: text }))}
+                editable={!isViewMode}
+                keyboardType="decimal-pad"
+              />
+            </View>
           </View>
+
+          <View style={[styles.formGroup, styles.formGroupWithTopMargin]}>
+            <Text style={[styles.label, { color: colors.outline }]}>Dirección</Text>
+            <TextInput
+              style={[
+                styles.input, 
+                { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                isViewMode && styles.inputDisabled
+              ]}
+              placeholderTextColor={colors.outline}
+              placeholder="Dirección"
+              value={formData.direccion}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, direccion: text }))}
+              editable={!isViewMode}
+            />
+          </View>
+
+          {isEditMode && (
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.outline }]}>Estado</Text>
+              <TouchableOpacity
+                style={styles.statusSwitchContainer}
+                onPress={() => !isViewMode && setFormData(prev => ({ ...prev, activo: !prev.activo }))}
+                disabled={isViewMode}
+              >
+                <View style={[
+                  styles.statusSwitch,
+                  { backgroundColor: formData.activo ? '#4CAF50' : '#F44336' },
+                  isViewMode && styles.inputDisabled
+                ]}>
+                  <View style={[
+                    styles.statusSwitchKnob,
+                    { transform: [{ translateX: formData.activo ? responsive.responsiveWidth(26) : 0 }] }
+                  ]}>
+                    <Text style={[
+                      styles.statusSwitchText,
+                      { color: formData.activo ? '#4CAF50' : '#F44336' }
+                    ]}>
+                      {formData.activo ? 'Activo' : 'Inactivo'}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {!isViewMode && (
             <View style={styles.buttonGroup}>
@@ -459,6 +492,17 @@ const createStyles = (responsive) => StyleSheet.create({
   formGroup: {
     marginBottom: responsive.responsiveMargin(20),
   },
+  formRow: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(12),
+  },
+  formGroupHalf: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  formGroupWithTopMargin: {
+    marginTop: responsive.responsiveMargin(12),
+  },
   label: {
     fontSize: responsive.fontSizes.bodySmall,
     fontWeight: '500',
@@ -515,6 +559,28 @@ const createStyles = (responsive) => StyleSheet.create({
     padding: responsive.responsivePadding(12),
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  dropdownSearchInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: responsive.responsivePadding(10),
+    paddingVertical: responsive.responsivePadding(8),
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  dropdownSearchInputText: {
+    flex: 1,
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+    marginLeft: responsive.responsiveMargin(8),
+    paddingVertical: 0,
+  },
+  searchIcon: {
+    marginRight: responsive.responsiveMargin(4),
   },
   dropdownItemText: {
     fontSize: responsive.fontSizes.body,

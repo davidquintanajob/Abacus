@@ -18,7 +18,7 @@ import { API_CONFIG } from '../config';
 const SettingsContent = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [serverIP, setServerIP] = useState('');
@@ -27,9 +27,18 @@ const SettingsContent = () => {
   const { toast, showToast, hideToast } = useToast();
 
   const isDarkMode = isDark === true || isDark === 'true';
-  
-  // Check if we should show back button (only if coming from Login or Home)
-  const shouldShowBackButton = route.params?.from === 'Login' || route.params?.from === 'Home';
+
+  const handleSettingsPress = () => {
+    navigation.navigate('Settings');
+  };
+
+  const handleNotificationsPress = () => {
+    console.log('Notificaciones');
+  };
+
+  const handleProfilePress = () => {
+    navigation.navigate('UserProfile');
+  };
 
   // Cargar IP guardada al iniciar
   useEffect(() => {
@@ -136,11 +145,14 @@ const SettingsContent = () => {
       />
       
       <Header 
-        showBackButton={shouldShowBackButton}
-        onBackPress={() => navigation.goBack()}
         onMenuPress={() => setSidebarOpen(true)}
+        onThemePress={toggleTheme}
+        onSettingsPress={handleSettingsPress}
+        onNotificationsPress={handleNotificationsPress}
+        onProfilePress={handleProfilePress}
         isDark={isDarkMode}
-        title="Configuraciones"
+        title="Abacus"
+        showLogo={true}
       />
 
       <Sidebar 
@@ -155,11 +167,13 @@ const SettingsContent = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Page Title */}
+        <View style={styles.pageTitleContainer}>
+          <Text style={[styles.pageTitle, { color: colors.onSurface }]}>Configuraciones</Text>
+        </View>
+
         {/* Header Section */}
         <View style={styles.headerSection}>
-          <Text style={[styles.title, { color: colors.onSurface }]}>
-            Configuración
-          </Text>
           <Text style={[styles.subtitle, { color: colors.outline }]}>
             Gestione sus preferencias de conexión e infraestructura
           </Text>
@@ -276,8 +290,17 @@ const createStyles = (responsive) => StyleSheet.create({
     marginTop: responsive.headerHeight,
   },
   scrollContent: {
-    paddingHorizontal: responsive.horizontalPadding,
-    paddingBottom: responsive.responsivePadding(40),
+    padding: responsive.responsivePadding(16),
+  },
+  pageTitleContainer: {
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(0),
+    marginTop: responsive.responsiveMargin(40),
+  },
+  pageTitle: {
+    fontSize: responsive.responsiveFontSize(24),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
   },
   headerSection: {
     marginBottom: responsive.responsiveMargin(32),

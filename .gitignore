@@ -33,8 +33,8 @@ yarn-error.*
 # local env files
 .env*.local
 
-# local config files
-src/config.js
+# local config overrides (optional, for development)
+src/config.local.js
 
 # typescript
 *.tsbuildinfo

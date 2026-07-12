@@ -35,6 +35,7 @@ const UsuariosContent = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [showTiendaDropdown, setShowTiendaDropdown] = useState(false);
   const [showRolDropdown, setShowRolDropdown] = useState(false);
+  const [tiendaSearchText, setTiendaSearchText] = useState('');
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
 
@@ -172,6 +173,10 @@ const UsuariosContent = () => {
       setPagination(prev => ({ ...prev, currentPage: prev.currentPage - 1 }));
     }
   };
+
+  const filteredTiendas = tiendas.filter(tienda =>
+    tienda.nombre.toLowerCase().includes(tiendaSearchText.toLowerCase())
+  );
 
   const styles = createStyles(responsive);
 
@@ -314,27 +319,50 @@ const UsuariosContent = () => {
                 
                 {showTiendaDropdown && (
                   <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                    <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <Ionicons 
+                        name="search-outline" 
+                        size={responsive.responsiveWidth(18)} 
+                        color={colors.outline} 
+                        style={styles.searchIcon}
+                      />
+                      <TextInput
+                        style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
+                        placeholderTextColor={colors.outline}
+                        placeholder="Buscar tienda..."
+                        value={tiendaSearchText}
+                        onChangeText={setTiendaSearchText}
+                      />
+                    </View>
                     <TouchableOpacity
                       style={styles.dropdownItem}
                       onPress={() => {
                         setFilters(prev => ({ ...prev, id_tienda: '' }));
                         setShowTiendaDropdown(false);
+                        setTiendaSearchText('');
                       }}
                     >
                       <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todas las tiendas</Text>
                     </TouchableOpacity>
-                    {tiendas.map((tienda, index) => (
-                      <TouchableOpacity
-                        key={tienda.id_tienda}
-                        style={[styles.dropdownItem, index === tiendas.length - 1 && styles.dropdownItemLast]}
-                        onPress={() => {
-                          setFilters(prev => ({ ...prev, id_tienda: tienda.id_tienda.toString() }));
-                          setShowTiendaDropdown(false);
-                        }}
-                      >
-                        <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
-                      </TouchableOpacity>
-                    ))}
+                    {filteredTiendas.length > 0 ? (
+                      filteredTiendas.map((tienda, index) => (
+                        <TouchableOpacity
+                          key={tienda.id_tienda}
+                          style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
+                          onPress={() => {
+                            setFilters(prev => ({ ...prev, id_tienda: tienda.id_tienda.toString() }));
+                            setShowTiendaDropdown(false);
+                            setTiendaSearchText('');
+                          }}
+                        >
+                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
+                        </TouchableOpacity>
+                      ))
+                    ) : (
+                      <View style={styles.dropdownItem}>
+                        <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
+                      </View>
+                    )}
                   </View>
                 )}
               </View>
@@ -892,6 +920,25 @@ const createStyles = (responsive) => StyleSheet.create({
   dropdownItemText: {
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
+  },
+  dropdownSearchInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: responsive.responsivePadding(10),
+    paddingVertical: responsive.responsivePadding(8),
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  dropdownSearchInputText: {
+    flex: 1,
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+    marginLeft: responsive.responsiveMargin(8),
+    paddingVertical: 0,
+  },
+  searchIcon: {
+    marginRight: responsive.responsiveMargin(4),
   },
   tiendaDropdown: {
     marginTop: responsive.responsiveMargin(8),

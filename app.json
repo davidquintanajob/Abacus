@@ -6,34 +6,25 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "jsEngine": "jsc", 
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
-    },
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.abacus.app",
-      "jsEngine": "jsc"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.abacus.app",
-      "edgeToEdgeEnabled": true,
-      "jsEngine": "jsc"
-    },
-    "web": {
-      "favicon": "./assets/icon.png"
+      "package": "com.abacus.app"
     },
     "extra": {
       "eas": {
         "projectId": "248bb5ba-749d-473c-8d01-a4a77230b5aa"
       }
-    }
+    },
+    "plugins": [
+      "expo-font"
+    ]
   }
 }
