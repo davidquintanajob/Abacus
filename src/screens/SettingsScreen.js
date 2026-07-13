@@ -27,6 +27,7 @@ const SettingsContent = () => {
   const { toast, showToast, hideToast } = useToast();
 
   const isDarkMode = isDark === true || isDark === 'true';
+  const fromLogin = route.params?.from === 'Login';
 
   const handleSettingsPress = () => {
     navigation.navigate('Settings');
@@ -38,6 +39,10 @@ const SettingsContent = () => {
 
   const handleProfilePress = () => {
     navigation.navigate('UserProfile');
+  };
+
+  const handleBackPress = () => {
+    navigation.goBack();
   };
 
   // Cargar IP guardada al iniciar
@@ -147,9 +152,11 @@ const SettingsContent = () => {
       <Header 
         onMenuPress={() => setSidebarOpen(true)}
         onThemePress={toggleTheme}
-        onSettingsPress={handleSettingsPress}
-        onNotificationsPress={handleNotificationsPress}
-        onProfilePress={handleProfilePress}
+        onSettingsPress={fromLogin ? undefined : handleSettingsPress}
+        onNotificationsPress={fromLogin ? undefined : handleNotificationsPress}
+        onProfilePress={fromLogin ? undefined : handleProfilePress}
+        showBackButton={fromLogin}
+        onBackPress={handleBackPress}
         isDark={isDarkMode}
         title="Abacus"
         showLogo={true}

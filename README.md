@@ -108,7 +108,62 @@ export const API_CONFIG = {
 npm start
 ```
 
-## 🔧 Solución de Problemas
+## � Generar APK para Android (EAS Build)
+
+Para generar un APK instalable en tu dispositivo Android, sigue estos pasos:
+
+### 1. Instalar y Configurar EAS CLI
+
+```bash
+npm install -g eas-cli@latest
+```
+
+Inicia sesión en tu cuenta de Expo:
+
+```bash
+eas login
+```
+
+Configura el proyecto (solo la primera vez):
+
+```bash
+eas build:configure
+```
+
+### 2. Generar APK para Pruebas (Preview)
+
+Este comando genera un APK para distribución interna que puedes instalar directamente en tu dispositivo:
+
+```bash
+eas build --platform android --profile preview
+```
+
+El APK estará disponible para descargar desde el dashboard de Expo. El proceso toma aproximadamente 10-15 minutos.
+
+### 3. Generar APK para Producción (Opcional)
+
+Para una versión de producción con optimizaciones adicionales:
+
+```bash
+eas build --platform android --profile production
+```
+
+### 4. Descargar e Instalar el APK
+
+1. Ve al enlace que aparece en la terminal después del build (ej: `https://expo.dev/accounts/tu-usuario/projects/Abacus/builds/...`)
+2. Descarga el archivo `.apk` desde el dashboard
+3. Transfiere el APK a tu dispositivo Android
+4. En tu dispositivo, ve a Configuración > Seguridad y habilita "Fuentes desconocidas"
+5. Instala el APK
+
+### Notas Importantes
+
+- **Configuración actual del proyecto:** Este proyecto está configurado solo para Android (sin iOS ni web) para evitar conflictos de build
+- **Perfil recomendado:** Usa `preview` para pruebas rápidas. Usa `production` solo para la versión final de la app
+- **React Native Reanimated:** El proyecto incluye `react-native-reanimated` con el plugin de Babel configurado en `babel.config.js`
+- **Tiempo de build:** Los builds de EAS se ejecutan en la nube y pueden tardar entre 10-20 minutos
+
+## �🔧 Solución de Problemas
 
 ### Error: "Native module is null, cannot access legacy storage"
 
