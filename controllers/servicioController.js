@@ -252,10 +252,24 @@ const updateServicio = async (req, res) => {
   }
 };
 
+const deleteServicio = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await servicioService.deleteServicio(id);
+    res.status(200).json({
+      message: "Servicio y sus relaciones eliminados correctamente",
+      data: result,
+    });
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
 module.exports = {
   createServicio,
   filterServicios,
   getServicioById,
   getServicioByCodigo,
   updateServicio,
+  deleteServicio
 };

@@ -362,4 +362,27 @@ router.post("/servicio", authenticate(), servicioController.createServicio);
  */
 router.put("/servicio/:id", authenticate(), servicioController.updateServicio);
 
+/**
+ * @swagger
+ * /servicio/{id}:
+ *   delete:
+ *     summary: Eliminar un servicio y todas sus relaciones (producto, tiendas, ofertas, códigos)
+ *     tags: [Servicios]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Servicio eliminado correctamente
+ *       404:
+ *         description: Servicio no encontrado
+ *       500:
+ *         description: Error interno
+ */
+router.delete("/servicio/:id", authenticate(), servicioController.deleteServicio);
 module.exports = router;

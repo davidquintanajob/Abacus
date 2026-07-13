@@ -514,10 +514,72 @@ const updateServicio = async (id, servicioData, servicioTiendaList, ofertaList, 
   }
 };
 
+const deleteServicio = async (id) => {
+  const transaction = await Servicio.sequelize.transaction();
+
+  try {
+    // 1. Verificar que el servicio existe
+    const servicio = await Servicio.findByPk(id, { transaction });
+    if (!servicio) {
+      throwError("Servicio no encontrado", 404);
+    }
+
+    // 2. Eliminar todas las filas relacionadas
+    //    (aunque las claves foráneas tengan ON DELETE CASCADE,
+    //     hacemos la eliminación explícita para mayor control y claridad)
+
+    // Eliminar códigos de barras asociados
+    await Codigo.destroy({
+      where: { id_servicio: id },
+      transaction,
+    });
+
+    // Eliminar producto asociado (si existe)
+    await Producto.destroy({
+      where: { id_servicio: id },
+      transaction,
+    });
+
+    // Eliminar relaciones con tiendas (servicio_tienda)
+    await ServicioTienda.destroy({
+      where: { id_servicio: id },
+      transaction,
+    });
+
+    // Eliminar ofertas donde este servicio es el padre (id_servicio_oferta)
+    await Oferta.destroy({
+      where: { id_servicio_oferta: id },
+      transaction,
+    });
+
+    // Eliminar ofertas donde este servicio es un componente (id_servicio_componente)
+    await Oferta.destroy({
+      where: { id_servicio_componente: id },
+      transaction,
+    });
+
+    // 3. Finalmente, eliminar el servicio principal
+    await servicio.destroy({ transaction });
+
+    // 4. Confirmar transacción
+    await transaction.commit();
+
+    return { id_servicio: id, eliminado: true };
+  } catch (error) {
+    // Revertir en caso de error
+    if (transaction && !transaction.finished) {
+      await transaction.rollback();
+    }
+    throw error;
+  }
+};
+
+// Actualiza module.exports para incluir deleteServicio
 module.exports = {
   createServicio,
   getServicioById,
   getServicioByCodigo,
   filterServicios,
   updateServicio,
+  deleteServicio,   // <--- agregar esta línea
 };
