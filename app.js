@@ -12,8 +12,8 @@ const fs = require("fs");
 const app = express();
 
 // Middlewares básicos
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cors({
   origin: process.env.CORS_OPTIONS || "*",
   methods: ["GET", "POST", "PUT", "DELETE"],
@@ -22,6 +22,7 @@ app.use(cors({
 
 // Servir archivos estáticos (fotos si se usan)
 app.use("/fotos", express.static(path.join(__dirname, "fotos")));
+app.use("/imagenes_productos", express.static(path.join(__dirname, "imagenes_productos")));
 
 // Logger de solicitudes (simplificado)
 app.use((req, res, next) => {
@@ -58,35 +59,6 @@ const swaggerOptions = {
           bearerFormat: "JWT",
         },
       },
-      schemas: {
-        Usuario: {
-          type: "object",
-          properties: {
-            id_usuario: { type: "integer" },
-            nombre_natural: { type: "string" },
-            telefono: { type: "string" },
-            direccion: { type: "string" },
-            nombre_usuario: { type: "string" },
-            salario_diario: { type: "number" },
-            rol: { type: "string" },
-            activo: { type: "boolean" },
-            id_tienda: { type: "integer" },
-            createdAt: { type: "string", format: "date-time" },
-            updatedAt: { type: "string", format: "date-time" },
-          },
-        },
-        Tienda: {
-          type: "object",
-          properties: {
-            id_tienda: { type: "integer" },
-            nombre: { type: "string" },
-            tipo: { type: "string" },
-            activo: { type: "boolean" },
-            createdAt: { type: "string", format: "date-time" },
-            updatedAt: { type: "string", format: "date-time" },
-          },
-        },
-      },
     },
     security: [{ bearerAuth: [] }],
   },
@@ -106,10 +78,14 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs, {
 }));
 
 // Importar rutas
+const servicioRoutes = require("./routes/servicioRoutes");
+const productoRoutes = require("./routes/productoRoutes");
 const usuarioRoutes = require("./routes/usuarioRoutes");
 const tiendaRoutes = require("./routes/tiendaRoutes");
 const configRoutes = require("./routes/configRoutes");  // <-- NUEVA LÍNEA
 
+app.use("/", servicioRoutes);
+app.use("/", productoRoutes);
 app.use("/", usuarioRoutes);
 app.use("/", tiendaRoutes);
 app.use("/config", configRoutes);  // <-- NUEVA LÍNEA
@@ -131,10 +107,29 @@ const startApp = async () => {
     // Importar modelos y establecer asociaciones
     const { Usuario } = require("./models/usuario");
     const { Tienda } = require("./models/tienda");
+    const { Servicio } = require("./models/servicio");
+    const { Producto } = require("./models/producto");
+    const { ServicioTienda } = require("./models/servicio_tienda");
+    const { Oferta } = require("./models/oferta");
+    const { Codigo } = require("./models/codigo");
 
-    // Definir asociaciones (si los modelos tienen método associate)
-    if (Usuario.associate) Usuario.associate({ Tienda });
-    if (Tienda.associate) Tienda.associate({ Usuario });
+    // Agrupar todos los modelos en un objeto para pasarlos a las asociaciones
+    const models = {
+      Usuario,
+      Tienda,
+      Servicio,
+      Producto,
+      ServicioTienda,
+      Oferta,
+      Codigo,
+    };
+
+    // Ejecutar el método associate de cada modelo si existe
+    Object.values(models).forEach((model) => {
+      if (typeof model.associate === "function") {
+        model.associate(models);
+      }
+    });
 
     // Sincronizar todas las tablas (con alter: true para actualizar sin perder datos)
     await sequelize.sync({ alter: true });

@@ -8,6 +8,7 @@ npm-debug.log*
 
 # Carpeta de fotos que sirve la api
 fotos/
+imagenes_productos/
 
 # Environment variables
 .env

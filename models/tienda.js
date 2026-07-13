@@ -44,6 +44,11 @@ const Tienda = sequelize.define("tienda", {
 // Definición de asociación (estilo Entrada/Producto)
 Tienda.associate = function(models) {
   Tienda.hasMany(models.Usuario, { foreignKey: 'id_tienda', as: 'usuarios' });
+  // NUEVA: Relación directa con ServicioTienda
+  Tienda.hasMany(models.ServicioTienda, {
+    foreignKey: "id_tienda",
+    as: "tiendas_servicio",
+  });
 };
 
 module.exports = { Tienda };
