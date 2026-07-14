@@ -19,7 +19,7 @@ const UsuariosContent = () => {
   const navigation = useNavigation();
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
-  const { token, user } = useAuth();
+  const { token, user, permissions } = useAuth();
   const { toast, showToast, hideToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -66,7 +66,21 @@ const UsuariosContent = () => {
       const data = await getUsuarios(filters, pagination.currentPage, pagination.limit);
 
       // Filter out current user from the list
-      const filteredUsuarios = (data.data || []).filter(u => u.id_usuario !== user?.id_usuario);
+      let filteredUsuarios = (data.data || []).filter(u => u.id_usuario !== user?.id_usuario);
+
+      // Apply store visibility permissions
+      const userRole = user?.rol?.toLowerCase();
+      const canViewAllStores = 
+        userRole === 'administrador' ||
+        (userRole === 'dependiente' && permissions?.dependiente) ||
+        (userRole === 'almacenero' && permissions?.almacenero) ||
+        (userRole === 'económico' && permissions?.economico);
+
+      // If user cannot view all stores, filter to show only users from their own store
+      if (!canViewAllStores && user?.id_tienda) {
+        filteredUsuarios = filteredUsuarios.filter(u => u.id_tienda === user.id_tienda);
+      }
+
       setUsuarios(filteredUsuarios);
       setPagination(data.pagination || pagination);
     } catch (err) {
@@ -98,7 +112,21 @@ const UsuariosContent = () => {
         const data = await getUsuarios(clearedFilters, 1, pagination.limit);
         
         // Filter out current user from the list
-        const filteredUsuarios = (data.data || []).filter(u => u.id_usuario !== user?.id_usuario);
+        let filteredUsuarios = (data.data || []).filter(u => u.id_usuario !== user?.id_usuario);
+
+        // Apply store visibility permissions
+        const userRole = user?.rol?.toLowerCase();
+        const canViewAllStores = 
+          userRole === 'administrador' ||
+          (userRole === 'dependiente' && permissions?.dependiente) ||
+          (userRole === 'almacenero' && permissions?.almacenero) ||
+          (userRole === 'económico' && permissions?.economico);
+
+        // If user cannot view all stores, filter to show only users from their own store
+        if (!canViewAllStores && user?.id_tienda) {
+          filteredUsuarios = filteredUsuarios.filter(u => u.id_tienda === user.id_tienda);
+        }
+
         setUsuarios(filteredUsuarios);
         setPagination(data.pagination || pagination);
       } catch (err) {

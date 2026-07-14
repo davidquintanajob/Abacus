@@ -20,9 +20,10 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
 
   const menuItems = [
     { icon: require('../../../assets/bar-chart.png'), label: 'Panel', route: 'Home' },
+    { icon: require('../../../assets/lanza-libre.png'), label: 'Servicios y Ofertas', route: 'Servicios' },
     ...(isAdmin ? [{ icon: require('../../../assets/tienda.png'), label: 'Tiendas', route: 'Tiendas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/usuarios.png'), label: 'Usuarios', route: 'Usuarios' }] : []),
-    ...(isAdmin ? [{ icon: require('../../../assets/exchange.png'), label: 'Cambio de Moneda', route: 'CurrencyExchange' }] : []),
+    ...(isAdmin ? [{ icon: require('../../../assets/Servicios.png'), label: 'Configuraciones del Administrador', route: 'CurrencyExchange' }] : []),
     { icon: require('../../../assets/config.png'), label: 'Configuración', route: 'Settings' },
   ];
 
