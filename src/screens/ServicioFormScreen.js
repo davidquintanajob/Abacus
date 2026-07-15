@@ -648,24 +648,24 @@ const ServicioFormContent = () => {
           // exchangeRate represents: 1 USD = X CUP
           if (exchangeRate && field === 'precio_cup' && value !== null) {
             const cupValue = parseFloat(value) || 0;
-            updatedItem.precio_usd = parseFloat((cupValue / exchangeRate).toFixed(2));
+            updatedItem.precio_usd = parseFloat((cupValue / exchangeRate).toFixed(5));
           }
           
           if (exchangeRate && field === 'costo_cup' && value !== null) {
             const cupValue = parseFloat(value) || 0;
-            updatedItem.costo_usd = parseFloat((cupValue / exchangeRate).toFixed(2));
+            updatedItem.costo_usd = parseFloat((cupValue / exchangeRate).toFixed(5));
           }
           
           // Auto-calculate CUP from USD if exchange rate is configured and value is not null
           // exchangeRate represents: 1 USD = X CUP
           if (exchangeRate && field === 'precio_usd' && value !== null) {
             const usdValue = parseFloat(value) || 0;
-            updatedItem.precio_cup = parseFloat((usdValue * exchangeRate).toFixed(2));
+            updatedItem.precio_cup = parseFloat((usdValue * exchangeRate).toFixed(5));
           }
           
           if (exchangeRate && field === 'costo_usd' && value !== null) {
             const usdValue = parseFloat(value) || 0;
-            updatedItem.costo_cup = parseFloat((usdValue * exchangeRate).toFixed(2));
+            updatedItem.costo_cup = parseFloat((usdValue * exchangeRate).toFixed(5));
           }
           
           return updatedItem;
@@ -685,24 +685,24 @@ const ServicioFormContent = () => {
       // exchangeRate represents: 1 USD = X CUP
       if (exchangeRate && field === 'precio_cup_general' && value !== null) {
         const cupValue = parseFloat(value) || 0;
-        updated.precio_usd_general = parseFloat((cupValue / exchangeRate).toFixed(2));
+        updated.precio_usd_general = parseFloat((cupValue / exchangeRate).toFixed(5));
       }
       
       if (exchangeRate && field === 'costo_cup_general' && value !== null) {
         const cupValue = parseFloat(value) || 0;
-        updated.costo_usd_general = parseFloat((cupValue / exchangeRate).toFixed(2));
+        updated.costo_usd_general = parseFloat((cupValue / exchangeRate).toFixed(5));
       }
       
       // Auto-calculate CUP from USD if exchange rate is configured and value is not null
       // exchangeRate represents: 1 USD = X CUP
       if (exchangeRate && field === 'precio_usd_general' && value !== null) {
         const usdValue = parseFloat(value) || 0;
-        updated.precio_cup_general = parseFloat((usdValue * exchangeRate).toFixed(2));
+        updated.precio_cup_general = parseFloat((usdValue * exchangeRate).toFixed(5));
       }
       
       if (exchangeRate && field === 'costo_usd_general' && value !== null) {
         const usdValue = parseFloat(value) || 0;
-        updated.costo_cup_general = parseFloat((usdValue * exchangeRate).toFixed(2));
+        updated.costo_cup_general = parseFloat((usdValue * exchangeRate).toFixed(5));
       }
       
       return updated;
