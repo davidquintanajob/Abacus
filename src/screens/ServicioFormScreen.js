@@ -45,6 +45,12 @@ const ServicioFormContent = () => {
   // Same for general prices
   const [generalPriceInputTexts, setGeneralPriceInputTexts] = useState({});
   
+  // Estados para la sección de Oferta
+  const [allServicios, setAllServicios] = useState([]);
+  const [showComponenteSelectorModal, setShowComponenteSelectorModal] = useState(false);
+  const [componenteSearchText, setComponenteSearchText] = useState('');
+  const [isOfertaExpanded, setIsOfertaExpanded] = useState(false);
+  
   const [formData, setFormData] = useState({
     nombre: servicio?.nombre || '',
     categoria: servicio?.categoria || '',
@@ -57,6 +63,13 @@ const ServicioFormContent = () => {
     precio_usd_general: servicio?.precio_usd_general ?? null,
     costo_cup_general: servicio?.costo_cup_general ?? null,
     costo_usd_general: servicio?.costo_usd_general ?? null,
+    // Lista de componentes para la oferta
+    ofertaList: servicio?.componentes?.map(c => ({
+      id_servicio_componente: c.id_servicio,
+      cantidad: c.oferta?.cantidad || c.cantidad || 1.0,
+      nombre: c.nombre,
+      categoria: c.categoria
+    })) || [],
   });
 
   // Estado para controlar si las secciones están expandidas o colapsadas
@@ -64,6 +77,70 @@ const ServicioFormContent = () => {
   const [isCodesExpanded, setIsCodesExpanded] = useState(false);
   const [isGeneralPricesExpanded, setIsGeneralPricesExpanded] = useState(false);
   const [isPricesExpanded, setIsPricesExpanded] = useState(false);
+
+  // Auto-expand sections when they have elements
+  useEffect(() => {
+    if (formData.codigoList.length > 0) {
+      setIsCodesExpanded(true);
+    }
+    if (formData.servicioTiendaList.length > 0) {
+      setIsPricesExpanded(true);
+    }
+    if (formData.ofertaList.length > 0) {
+      setIsOfertaExpanded(true);
+    }
+  }, [formData.codigoList.length, formData.servicioTiendaList.length, formData.ofertaList.length]);
+
+  const handleGeneralPriceBlur = () => {
+    const hasAllGeneralPrices = 
+      formData.precio_cup_general !== null && 
+      formData.precio_cup_general !== '' &&
+      formData.precio_usd_general !== null && 
+      formData.precio_usd_general !== '' &&
+      (formData.costo_cup_general !== null && formData.costo_cup_general !== '' || !canViewCosts) &&
+      (formData.costo_usd_general !== null && formData.costo_usd_general !== '' || !canViewCosts);
+
+    if (hasAllGeneralPrices && formData.servicioTiendaList.length === 0) {
+      // Auto-populate all active tiendas with general prices
+      const newServicioTiendaList = tiendas.filter(tienda => tienda.activo === true).map(tienda => {
+        const precioCup = typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : parseFloat(formData.precio_cup_general);
+        const precioUsd = typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : parseFloat(formData.precio_usd_general);
+        const costoCup = canViewCosts ? (typeof formData.costo_cup_general === 'number' ? formData.costo_cup_general : parseFloat(formData.costo_cup_general)) : 0;
+        const costoUsd = canViewCosts ? (typeof formData.costo_usd_general === 'number' ? formData.costo_usd_general : parseFloat(formData.costo_usd_general)) : 0;
+        
+        return {
+          id_tienda: tienda.id_tienda,
+          precio_cup: precioCup,
+          precio_usd: precioUsd,
+          costo_cup: costoCup,
+          costo_usd: costoUsd,
+        };
+      });
+      
+      setFormData(prev => ({
+        ...prev,
+        servicioTiendaList: newServicioTiendaList
+      }));
+      setIsPricesExpanded(true);
+    } else if (hasAllGeneralPrices && formData.servicioTiendaList.length > 0) {
+      // Sync general prices to existing tienda prices
+      const precioCup = typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : parseFloat(formData.precio_cup_general);
+      const precioUsd = typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : parseFloat(formData.precio_usd_general);
+      const costoCup = canViewCosts ? (typeof formData.costo_cup_general === 'number' ? formData.costo_cup_general : parseFloat(formData.costo_cup_general)) : 0;
+      const costoUsd = canViewCosts ? (typeof formData.costo_usd_general === 'number' ? formData.costo_usd_general : parseFloat(formData.costo_usd_general)) : 0;
+      
+      setFormData(prev => ({
+        ...prev,
+        servicioTiendaList: prev.servicioTiendaList.map(item => ({
+          ...item,
+          precio_cup: precioCup,
+          precio_usd: precioUsd,
+          costo_cup: costoCup,
+          costo_usd: costoUsd,
+        }))
+      }));
+    }
+  };
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isEditMode = mode === 'edit';
@@ -80,6 +157,7 @@ const ServicioFormContent = () => {
   useEffect(() => {
     fetchTiendas();
     fetchConfig();
+    fetchAllServicios();
   }, []);
 
   useEffect(() => {
@@ -229,6 +307,13 @@ const ServicioFormContent = () => {
             precio_usd_general: precio_usd_general,
             costo_cup_general: costo_cup_general,
             costo_usd_general: costo_usd_general,
+            // Lista de componentes para la oferta
+            ofertaList: completeServicio.componentes?.map(c => ({
+              id_servicio_componente: c.id_servicio,
+              cantidad: c.oferta?.cantidad || c.cantidad || 1.0,
+              nombre: c.nombre,
+              categoria: c.categoria
+            })) || [],
           });
         } catch (err) {
           console.error('Error fetching complete servicio:', err);
@@ -261,6 +346,69 @@ const ServicioFormContent = () => {
     } catch (err) {
       console.error('Error fetching config:', err);
     }
+  };
+
+  const fetchAllServicios = async () => {
+    try {
+      // Obtener todos los servicios (vendibles y no vendibles)
+      const dataVendibles = await getServicios({ esvendible: 'true' }, 1, 1000);
+      const dataNoVendibles = await getServicios({ esvendible: 'false' }, 1, 1000);
+      const allServicios = [...(dataVendibles.data || []), ...(dataNoVendibles.data || [])];
+      setAllServicios(allServicios);
+    } catch (err) {
+      console.error('Error fetching servicios:', err);
+    }
+  };
+
+  const handleAddServicioComponente = (servicioSeleccionado) => {
+    const existe = formData.ofertaList.find(
+      item => item.id_servicio_componente === servicioSeleccionado.id_servicio
+    );
+    if (existe) {
+      showToast({ type: 'warning', message: 'Este servicio ya está agregado como componente' });
+      return;
+    }
+    setFormData(prev => ({
+      ...prev,
+      ofertaList: [
+        ...prev.ofertaList,
+        {
+          id_servicio_componente: servicioSeleccionado.id_servicio,
+          cantidad: 1.0,
+          nombre: servicioSeleccionado.nombre,
+          categoria: servicioSeleccionado.categoria
+        }
+      ]
+    }));
+    setShowComponenteSelectorModal(false);
+    setComponenteSearchText('');
+    // Expandir automáticamente después de agregar un servicio
+    setIsOfertaExpanded(true);
+  };
+
+  const handleRemoveServicioComponente = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      ofertaList: prev.ofertaList.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleCantidadChange = (index, value) => {
+    // Permitir valores con punto decimal
+    const cantidad = parseFloat(value) || 0;
+    if (cantidad < 0) {
+      showToast({ type: 'warning', message: 'La cantidad no puede ser negativa' });
+      return;
+    }
+    setFormData(prev => {
+      const updatedList = prev.ofertaList.map((item, i) => {
+        if (i === index) {
+          return { ...item, cantidad };
+        }
+        return item;
+      });
+      return { ...prev, ofertaList: updatedList };
+    });
   };
 
   const handleSave = async () => {
@@ -298,16 +446,23 @@ const ServicioFormContent = () => {
         // Lógica de precios: siempre enviar todos los precios por tienda
         // Si hay precios específicos por tienda, usarlos; si no, usar el precio general
         servicioTiendaList: (() => {
-          // Si hay precios generales definidos, crear entradas para todas las tiendas con el precio general
+          // Helper function to safely convert to number with 5 decimal places
+          const toFixed5 = (value) => {
+            if (value === null || value === undefined || value === '') return 0;
+            const num = typeof value === 'number' ? value : parseFloat(value);
+            return isNaN(num) ? 0 : parseFloat(num.toFixed(5));
+          };
+
+          // Si hay precios generales definidos, crear entradas para todas las tiendas activas con el precio general
           let baseList = [];
           if (formData.precio_cup_general !== null || formData.precio_usd_general !== null || 
               formData.costo_cup_general !== null || formData.costo_usd_general !== null) {
-            baseList = tiendas.map(tienda => ({
+            baseList = tiendas.filter(tienda => tienda.activo === true).map(tienda => ({
               id_tienda: tienda.id_tienda,
-              precio_cup: formData.precio_cup_general || 0,
-              precio_usd: formData.precio_usd_general || 0,
-              costo_cup: formData.costo_cup_general || 0,
-              costo_usd: formData.costo_usd_general || 0,
+              precio_cup: toFixed5(formData.precio_cup_general),
+              precio_usd: toFixed5(formData.precio_usd_general),
+              costo_cup: toFixed5(formData.costo_cup_general),
+              costo_usd: toFixed5(formData.costo_usd_general),
             }));
           }
           
@@ -322,19 +477,19 @@ const ServicioFormContent = () => {
                 // Sobrescribir con precios específicos (usar general si específico es null)
                 baseList[existingIndex] = {
                   ...baseList[existingIndex],
-                  precio_cup: specific.precio_cup !== null ? specific.precio_cup : (formData.precio_cup_general || 0),
-                  precio_usd: specific.precio_usd !== null ? specific.precio_usd : (formData.precio_usd_general || 0),
-                  costo_cup: specific.costo_cup !== null ? specific.costo_cup : (formData.costo_cup_general || 0),
-                  costo_usd: specific.costo_usd !== null ? specific.costo_usd : (formData.costo_usd_general || 0),
+                  precio_cup: specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general),
+                  precio_usd: specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general),
+                  costo_cup: specific.costo_cup !== null ? toFixed5(specific.costo_cup) : toFixed5(formData.costo_cup_general),
+                  costo_usd: specific.costo_usd !== null ? toFixed5(specific.costo_usd) : toFixed5(formData.costo_usd_general),
                 };
               } else {
                 // Agregar nueva tienda específica
                 baseList.push({
                   id_tienda: specific.id_tienda,
-                  precio_cup: specific.precio_cup !== null ? specific.precio_cup : (formData.precio_cup_general || 0),
-                  precio_usd: specific.precio_usd !== null ? specific.precio_usd : (formData.precio_usd_general || 0),
-                  costo_cup: specific.costo_cup !== null ? specific.costo_cup : (formData.costo_cup_general || 0),
-                  costo_usd: specific.costo_usd !== null ? specific.costo_usd : (formData.costo_usd_general || 0),
+                  precio_cup: specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general),
+                  precio_usd: specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general),
+                  costo_cup: specific.costo_cup !== null ? toFixed5(specific.costo_cup) : toFixed5(formData.costo_cup_general),
+                  costo_usd: specific.costo_usd !== null ? toFixed5(specific.costo_usd) : toFixed5(formData.costo_usd_general),
                 });
               }
             });
@@ -342,6 +497,11 @@ const ServicioFormContent = () => {
           
           return baseList;
         })(),
+        // Incluir ofertaList si hay componentes
+        ofertaList: formData.ofertaList.length > 0 ? formData.ofertaList.map(item => ({
+          id_servicio_componente: item.id_servicio_componente,
+          cantidad: item.cantidad || 1.0,
+        })) : [],
       };
       console.log('Data to send:', dataToSend);
 
@@ -366,6 +526,16 @@ const ServicioFormContent = () => {
       showToast({ type: 'warning', message: 'El código es requerido' });
       return;
     }
+
+    // Validate that the code doesn't already exist in the list
+    const codeExists = formData.codigoList.some(
+      codigo => codigo.codigo_barras_ean.trim().toLowerCase() === newCodigo.trim().toLowerCase()
+    );
+    
+    if (codeExists) {
+      showToast({ type: 'error', message: 'Este código ya está agregado a la lista' });
+      return;
+    }
     
     setFormData(prev => ({
       ...prev,
@@ -378,6 +548,7 @@ const ServicioFormContent = () => {
     setNewCodigo('');
     setNewNota('');
     setShowAddCodeModal(false);
+    setIsCodesExpanded(true);
   };
 
   const handleOpenScanner = async () => {
@@ -474,6 +645,7 @@ const ServicioFormContent = () => {
           const updatedItem = { ...item, [field]: value };
           
           // Auto-calculate USD from CUP if exchange rate is configured and value is not null
+          // exchangeRate represents: 1 USD = X CUP
           if (exchangeRate && field === 'precio_cup' && value !== null) {
             const cupValue = parseFloat(value) || 0;
             updatedItem.precio_usd = parseFloat((cupValue / exchangeRate).toFixed(2));
@@ -482,6 +654,18 @@ const ServicioFormContent = () => {
           if (exchangeRate && field === 'costo_cup' && value !== null) {
             const cupValue = parseFloat(value) || 0;
             updatedItem.costo_usd = parseFloat((cupValue / exchangeRate).toFixed(2));
+          }
+          
+          // Auto-calculate CUP from USD if exchange rate is configured and value is not null
+          // exchangeRate represents: 1 USD = X CUP
+          if (exchangeRate && field === 'precio_usd' && value !== null) {
+            const usdValue = parseFloat(value) || 0;
+            updatedItem.precio_cup = parseFloat((usdValue * exchangeRate).toFixed(2));
+          }
+          
+          if (exchangeRate && field === 'costo_usd' && value !== null) {
+            const usdValue = parseFloat(value) || 0;
+            updatedItem.costo_cup = parseFloat((usdValue * exchangeRate).toFixed(2));
           }
           
           return updatedItem;
@@ -498,6 +682,7 @@ const ServicioFormContent = () => {
       const updated = { ...prev, [field]: value };
       
       // Auto-calculate USD from CUP if exchange rate is configured and value is not null
+      // exchangeRate represents: 1 USD = X CUP
       if (exchangeRate && field === 'precio_cup_general' && value !== null) {
         const cupValue = parseFloat(value) || 0;
         updated.precio_usd_general = parseFloat((cupValue / exchangeRate).toFixed(2));
@@ -508,12 +693,24 @@ const ServicioFormContent = () => {
         updated.costo_usd_general = parseFloat((cupValue / exchangeRate).toFixed(2));
       }
       
+      // Auto-calculate CUP from USD if exchange rate is configured and value is not null
+      // exchangeRate represents: 1 USD = X CUP
+      if (exchangeRate && field === 'precio_usd_general' && value !== null) {
+        const usdValue = parseFloat(value) || 0;
+        updated.precio_cup_general = parseFloat((usdValue * exchangeRate).toFixed(2));
+      }
+      
+      if (exchangeRate && field === 'costo_usd_general' && value !== null) {
+        const usdValue = parseFloat(value) || 0;
+        updated.costo_cup_general = parseFloat((usdValue * exchangeRate).toFixed(2));
+      }
+      
       return updated;
     });
   };
 
   const filteredTiendas = tiendas.filter(tienda =>
-    tienda.nombre.toLowerCase().includes(tiendaSearchText.toLowerCase())
+    tienda.activo === true && tienda.nombre.toLowerCase().includes(tiendaSearchText.toLowerCase())
   );
 
   const styles = createStyles(responsive);
@@ -722,11 +919,14 @@ const ServicioFormContent = () => {
                       setGeneralPriceInputTexts(prev => ({ ...prev, precio_cup: text }));
                       handleGeneralPriceChange('precio_cup_general', text === '' ? null : parseFloat(text));
                     }}
-                    onBlur={() => setGeneralPriceInputTexts(prev => {
-                      const updated = { ...prev };
-                      delete updated.precio_cup;
-                      return updated;
-                    })}
+                    onBlur={() => {
+                      setGeneralPriceInputTexts(prev => {
+                        const updated = { ...prev };
+                        delete updated.precio_cup;
+                        return updated;
+                      });
+                      handleGeneralPriceBlur();
+                    }}
                     keyboardType="decimal-pad"
                     editable={!isViewMode || canEditService}
                   />
@@ -752,13 +952,16 @@ const ServicioFormContent = () => {
                     }))}
                     onChangeText={(text) => {
                       setGeneralPriceInputTexts(prev => ({ ...prev, precio_usd: text }));
-                      setFormData(prev => ({ ...prev, precio_usd_general: text === '' ? null : parseFloat(text) }));
+                      handleGeneralPriceChange('precio_usd_general', text === '' ? null : parseFloat(text));
                     }}
-                    onBlur={() => setGeneralPriceInputTexts(prev => {
-                      const updated = { ...prev };
-                      delete updated.precio_usd;
-                      return updated;
-                    })}
+                    onBlur={() => {
+                      setGeneralPriceInputTexts(prev => {
+                        const updated = { ...prev };
+                        delete updated.precio_usd;
+                        return updated;
+                      });
+                      handleGeneralPriceBlur();
+                    }}
                     keyboardType="decimal-pad"
                     editable={!isViewMode || canEditService}
                   />
@@ -788,11 +991,14 @@ const ServicioFormContent = () => {
                           setGeneralPriceInputTexts(prev => ({ ...prev, costo_cup: text }));
                           handleGeneralPriceChange('costo_cup_general', text === '' ? null : parseFloat(text));
                         }}
-                        onBlur={() => setGeneralPriceInputTexts(prev => {
-                          const updated = { ...prev };
-                          delete updated.costo_cup;
-                          return updated;
-                        })}
+                        onBlur={() => {
+                          setGeneralPriceInputTexts(prev => {
+                            const updated = { ...prev };
+                            delete updated.costo_cup;
+                            return updated;
+                          });
+                          handleGeneralPriceBlur();
+                        }}
                         keyboardType="decimal-pad"
                         editable={!isViewMode || canEditService}
                       />
@@ -818,13 +1024,16 @@ const ServicioFormContent = () => {
                         }))}
                         onChangeText={(text) => {
                           setGeneralPriceInputTexts(prev => ({ ...prev, costo_usd: text }));
-                          setFormData(prev => ({ ...prev, costo_usd_general: text === '' ? null : parseFloat(text) }));
+                          handleGeneralPriceChange('costo_usd_general', text === '' ? null : parseFloat(text));
                         }}
-                        onBlur={() => setGeneralPriceInputTexts(prev => {
-                          const updated = { ...prev };
-                          delete updated.costo_usd;
-                          return updated;
-                        })}
+                        onBlur={() => {
+                          setGeneralPriceInputTexts(prev => {
+                            const updated = { ...prev };
+                            delete updated.costo_usd;
+                            return updated;
+                          });
+                          handleGeneralPriceBlur();
+                        }}
                         keyboardType="decimal-pad"
                         editable={!isViewMode || canEditService}
                       />
@@ -870,130 +1079,150 @@ const ServicioFormContent = () => {
                 ) : (
                   formData.servicioTiendaList.map((tiendaServicio, index) => (
                     <View key={index} style={[styles.tiendaServicioItem, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                      <View style={styles.tiendaServicioRow}>
-                        <Text style={[styles.tiendaServicioLabel, { color: colors.outline }]}>Tienda</Text>
+                      <View style={styles.tiendaField}>
+                        <Text style={[styles.label, { color: colors.outline }]}>Tienda</Text>
                         <TouchableOpacity
-                          style={[styles.dropdownSmall, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
+                          style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
                           onPress={() => setShowTiendaDropdown(index)}
                           disabled={isViewMode && !canEditService}
                         >
-                          <Text style={[styles.dropdownTextSmall, { color: tiendaServicio.id_tienda ? colors.onSurface : colors.outline }]}>
+                          <Text style={[styles.dropdownText, { color: tiendaServicio.id_tienda ? colors.onSurface : colors.outline }]}>
                             {tiendas.find(t => t.id_tienda === tiendaServicio.id_tienda)?.nombre || 'Seleccionar tienda'}
                           </Text>
+                          <Ionicons 
+                            name="chevron-down" 
+                            size={responsive.responsiveWidth(18)} 
+                            color={colors.outline} 
+                          />
                         </TouchableOpacity>
                       </View>
                       
-                      <View style={styles.tiendaServicioRow}>
-                        <Text style={[styles.tiendaServicioLabel, { color: colors.outline }]}>Precio CUP</Text>
-                        <TextInput
-                          style={[styles.inputSmall, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                          value={
-                            priceInputTexts[index]?.precio_cup !== undefined
-                              ? priceInputTexts[index].precio_cup
-                              : (tiendaServicio.precio_cup !== null && tiendaServicio.precio_cup !== '' ? parseFloat(tiendaServicio.precio_cup).toFixed(2) : '')
-                          }
-                          onFocus={() => setPriceInputTexts(prev => ({
-                            ...prev,
-                            [index]: { ...prev[index], precio_cup: tiendaServicio.precio_cup !== null && tiendaServicio.precio_cup !== '' ? String(parseFloat(tiendaServicio.precio_cup)) : '' }
-                          }))}
-                          onChangeText={(text) => {
-                            setPriceInputTexts(prev => ({ ...prev, [index]: { ...prev[index], precio_cup: text } }));
-                            handleTiendaServicioChange(index, 'precio_cup', text === '' ? null : parseFloat(text));
-                          }}
-                          onBlur={() => setPriceInputTexts(prev => {
-                            const updated = { ...prev[index] };
-                            delete updated.precio_cup;
-                            return { ...prev, [index]: updated };
-                          })}
-                          keyboardType="decimal-pad"
-                          editable={!isViewMode || canEditService}
-                        />
+                      <View style={styles.pricesGrid}>
+                        <View style={styles.priceField}>
+                          <Text style={[styles.label, { color: colors.outline }]}>Precio CUP</Text>
+                          <TextInput
+                            style={[
+                              styles.input, 
+                              { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant },
+                              (!isViewMode || canEditService) === false && styles.inputDisabled
+                            ]}
+                            value={
+                              priceInputTexts[index]?.precio_cup !== undefined
+                                ? priceInputTexts[index].precio_cup
+                                : (tiendaServicio.precio_cup !== null && tiendaServicio.precio_cup !== '' ? parseFloat(tiendaServicio.precio_cup).toFixed(2) : '')
+                            }
+                            onFocus={() => setPriceInputTexts(prev => ({
+                              ...prev,
+                              [index]: { ...prev[index], precio_cup: tiendaServicio.precio_cup !== null && tiendaServicio.precio_cup !== '' ? String(parseFloat(tiendaServicio.precio_cup)) : '' }
+                            }))}
+                            onChangeText={(text) => {
+                              setPriceInputTexts(prev => ({ ...prev, [index]: { ...prev[index], precio_cup: text } }));
+                              handleTiendaServicioChange(index, 'precio_cup', text === '' ? null : parseFloat(text));
+                            }}
+                            onBlur={() => setPriceInputTexts(prev => {
+                              const updated = { ...prev[index] };
+                              delete updated.precio_cup;
+                              return { ...prev, [index]: updated };
+                            })}
+                            keyboardType="decimal-pad"
+                            editable={!isViewMode || canEditService}
+                          />
+                        </View>
+                        <View style={styles.priceField}>
+                          <Text style={[styles.label, { color: colors.outline }]}>Precio USD</Text>
+                          <TextInput
+                            style={[
+                              styles.input, 
+                              { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant },
+                              (!isViewMode || canEditService) === false && styles.inputDisabled
+                            ]}
+                            value={
+                              priceInputTexts[index]?.precio_usd !== undefined
+                                ? priceInputTexts[index].precio_usd
+                                : (tiendaServicio.precio_usd !== null && tiendaServicio.precio_usd !== '' ? parseFloat(tiendaServicio.precio_usd).toFixed(2) : '')
+                            }
+                            onFocus={() => setPriceInputTexts(prev => ({
+                              ...prev,
+                              [index]: { ...prev[index], precio_usd: tiendaServicio.precio_usd !== null && tiendaServicio.precio_usd !== '' ? String(parseFloat(tiendaServicio.precio_usd)) : '' }
+                            }))}
+                            onChangeText={(text) => {
+                              setPriceInputTexts(prev => ({ ...prev, [index]: { ...prev[index], precio_usd: text } }));
+                              handleTiendaServicioChange(index, 'precio_usd', text === '' ? null : parseFloat(text));
+                            }}
+                            onBlur={() => setPriceInputTexts(prev => {
+                              const updated = { ...prev[index] };
+                              delete updated.precio_usd;
+                              return { ...prev, [index]: updated };
+                            })}
+                            keyboardType="decimal-pad"
+                            editable={!isViewMode || canEditService}
+                          />
+                        </View>
+                        {canViewCosts && (
+                          <>
+                            <View style={styles.priceField}>
+                              <Text style={[styles.label, { color: colors.outline }]}>Costo CUP</Text>
+                              <TextInput
+                                style={[
+                                  styles.input, 
+                                  { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant },
+                                  (!isViewMode || canEditService) === false && styles.inputDisabled
+                                ]}
+                                value={
+                                  priceInputTexts[index]?.costo_cup !== undefined
+                                    ? priceInputTexts[index].costo_cup
+                                    : (tiendaServicio.costo_cup !== null && tiendaServicio.costo_cup !== '' ? parseFloat(tiendaServicio.costo_cup).toFixed(2) : '')
+                                }
+                                onFocus={() => setPriceInputTexts(prev => ({
+                                  ...prev,
+                                  [index]: { ...prev[index], costo_cup: tiendaServicio.costo_cup !== null && tiendaServicio.costo_cup !== '' ? String(parseFloat(tiendaServicio.costo_cup)) : '' }
+                                }))}
+                                onChangeText={(text) => {
+                                  setPriceInputTexts(prev => ({ ...prev, [index]: { ...prev[index], costo_cup: text } }));
+                                  handleTiendaServicioChange(index, 'costo_cup', text === '' ? null : parseFloat(text));
+                                }}
+                                onBlur={() => setPriceInputTexts(prev => {
+                                  const updated = { ...prev[index] };
+                                  delete updated.costo_cup;
+                                  return { ...prev, [index]: updated };
+                                })}
+                                keyboardType="decimal-pad"
+                                editable={!isViewMode || canEditService}
+                              />
+                            </View>
+                            <View style={styles.priceField}>
+                              <Text style={[styles.label, { color: colors.outline }]}>Costo USD</Text>
+                              <TextInput
+                                style={[
+                                  styles.input, 
+                                  { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant },
+                                  (!isViewMode || canEditService) === false && styles.inputDisabled
+                                ]}
+                                value={
+                                  priceInputTexts[index]?.costo_usd !== undefined
+                                    ? priceInputTexts[index].costo_usd
+                                    : (tiendaServicio.costo_usd !== null && tiendaServicio.costo_usd !== '' ? parseFloat(tiendaServicio.costo_usd).toFixed(2) : '')
+                                }
+                                onFocus={() => setPriceInputTexts(prev => ({
+                                  ...prev,
+                                  [index]: { ...prev[index], costo_usd: tiendaServicio.costo_usd !== null && tiendaServicio.costo_usd !== '' ? String(parseFloat(tiendaServicio.costo_usd)) : '' }
+                                }))}
+                                onChangeText={(text) => {
+                                  setPriceInputTexts(prev => ({ ...prev, [index]: { ...prev[index], costo_usd: text } }));
+                                  handleTiendaServicioChange(index, 'costo_usd', text === '' ? null : parseFloat(text));
+                                }}
+                                onBlur={() => setPriceInputTexts(prev => {
+                                  const updated = { ...prev[index] };
+                                  delete updated.costo_usd;
+                                  return { ...prev, [index]: updated };
+                                })}
+                                keyboardType="decimal-pad"
+                                editable={!isViewMode || canEditService}
+                              />
+                            </View>
+                          </>
+                        )}
                       </View>
-                      
-                      <View style={styles.tiendaServicioRow}>
-                        <Text style={[styles.tiendaServicioLabel, { color: colors.outline }]}>Precio USD</Text>
-                        <TextInput
-                          style={[styles.inputSmall, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                          value={
-                            priceInputTexts[index]?.precio_usd !== undefined
-                              ? priceInputTexts[index].precio_usd
-                              : (tiendaServicio.precio_usd !== null && tiendaServicio.precio_usd !== '' ? parseFloat(tiendaServicio.precio_usd).toFixed(2) : '')
-                          }
-                          onFocus={() => setPriceInputTexts(prev => ({
-                            ...prev,
-                            [index]: { ...prev[index], precio_usd: tiendaServicio.precio_usd !== null && tiendaServicio.precio_usd !== '' ? String(parseFloat(tiendaServicio.precio_usd)) : '' }
-                          }))}
-                          onChangeText={(text) => {
-                            setPriceInputTexts(prev => ({ ...prev, [index]: { ...prev[index], precio_usd: text } }));
-                            handleTiendaServicioChange(index, 'precio_usd', text === '' ? null : parseFloat(text));
-                          }}
-                          onBlur={() => setPriceInputTexts(prev => {
-                            const updated = { ...prev[index] };
-                            delete updated.precio_usd;
-                            return { ...prev, [index]: updated };
-                          })}
-                          keyboardType="decimal-pad"
-                          editable={!isViewMode || canEditService}
-                        />
-                      </View>
-                      
-                      {canViewCosts && (
-                        <>
-                          <View style={styles.tiendaServicioRow}>
-                            <Text style={[styles.tiendaServicioLabel, { color: colors.outline }]}>Costo CUP</Text>
-                            <TextInput
-                              style={[styles.inputSmall, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                              value={
-                                priceInputTexts[index]?.costo_cup !== undefined
-                                  ? priceInputTexts[index].costo_cup
-                                  : (tiendaServicio.costo_cup !== null && tiendaServicio.costo_cup !== '' ? parseFloat(tiendaServicio.costo_cup).toFixed(2) : '')
-                              }
-                              onFocus={() => setPriceInputTexts(prev => ({
-                                ...prev,
-                                [index]: { ...prev[index], costo_cup: tiendaServicio.costo_cup !== null && tiendaServicio.costo_cup !== '' ? String(parseFloat(tiendaServicio.costo_cup)) : '' }
-                              }))}
-                              onChangeText={(text) => {
-                                setPriceInputTexts(prev => ({ ...prev, [index]: { ...prev[index], costo_cup: text } }));
-                                handleTiendaServicioChange(index, 'costo_cup', text === '' ? null : parseFloat(text));
-                              }}
-                              onBlur={() => setPriceInputTexts(prev => {
-                                const updated = { ...prev[index] };
-                                delete updated.costo_cup;
-                                return { ...prev, [index]: updated };
-                              })}
-                              keyboardType="decimal-pad"
-                              editable={!isViewMode || canEditService}
-                            />
-                          </View>
-                          
-                          <View style={styles.tiendaServicioRow}>
-                            <Text style={[styles.tiendaServicioLabel, { color: colors.outline }]}>Costo USD</Text>
-                            <TextInput
-                              style={[styles.inputSmall, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                              value={
-                                priceInputTexts[index]?.costo_usd !== undefined
-                                  ? priceInputTexts[index].costo_usd
-                                  : (tiendaServicio.costo_usd !== null && tiendaServicio.costo_usd !== '' ? parseFloat(tiendaServicio.costo_usd).toFixed(2) : '')
-                              }
-                              onFocus={() => setPriceInputTexts(prev => ({
-                                ...prev,
-                                [index]: { ...prev[index], costo_usd: tiendaServicio.costo_usd !== null && tiendaServicio.costo_usd !== '' ? String(parseFloat(tiendaServicio.costo_usd)) : '' }
-                              }))}
-                              onChangeText={(text) => {
-                                setPriceInputTexts(prev => ({ ...prev, [index]: { ...prev[index], costo_usd: text } }));
-                                handleTiendaServicioChange(index, 'costo_usd', text === '' ? null : parseFloat(text));
-                              }}
-                              onBlur={() => setPriceInputTexts(prev => {
-                                const updated = { ...prev[index] };
-                                delete updated.costo_usd;
-                                return { ...prev, [index]: updated };
-                              })}
-                              keyboardType="decimal-pad"
-                              editable={!isViewMode || canEditService}
-                            />
-                          </View>
-                        </>
-                      )}
                       
                       {(!isViewMode || canEditService) && (
                         <TouchableOpacity
@@ -1009,6 +1238,81 @@ const ServicioFormContent = () => {
               </>
             )}
           </View>
+
+          {/* Servicios (Oferta) Section - Solo mostrar en modo edición */}
+          {isEditMode && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Servicios (Oferta)</Text>
+              <View style={styles.sectionActions}>
+                {canEditService && (
+                  <TouchableOpacity
+                    style={[styles.addButtonSmall, { backgroundColor: colors.primary }]}
+                    onPress={() => setShowComponenteSelectorModal(true)}
+                  >
+                    <Ionicons name="add" size={responsive.responsiveWidth(18)} color="#fff" />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+                  onPress={() => setIsOfertaExpanded(!isOfertaExpanded)}
+                >
+                  <Ionicons 
+                    name={isOfertaExpanded ? "chevron-up" : "chevron-down"} 
+                    size={responsive.responsiveWidth(18)} 
+                    color={isDarkMode ? colors.primary : '#1976D2'} 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            {isOfertaExpanded && (
+              <>
+                {formData.ofertaList.length === 0 ? (
+                  <Text style={[styles.emptyText, { color: colors.outline }]}>
+                    No hay servicios componentes agregados
+                  </Text>
+                ) : (
+                  formData.ofertaList.map((componente, index) => (
+                    <View key={index} style={[styles.componenteItem, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <View style={styles.componenteInfo}>
+                        <Text style={[styles.componenteNombre, { color: colors.onSurface }]}>
+                          {componente.nombre}
+                        </Text>
+                        <Text style={[styles.componenteCategoria, { color: colors.outline }]}>
+                          {componente.categoria}
+                        </Text>
+                      </View>
+                      <View style={styles.componenteCantidadRow}>
+                        <Text style={[styles.componenteLabel, { color: colors.outline }]}>Cantidad:</Text>
+                        {canEditService ? (
+                          <TextInput
+                            style={[styles.componenteCantidadInput, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                            value={componente.cantidad?.toString() || '1'}
+                            onChangeText={(text) => handleCantidadChange(index, text)}
+                            keyboardType="decimal-pad"
+                          />
+                        ) : (
+                          <View style={[styles.componenteCantidadInput, styles.inputDisabled, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}>
+                            <Text style={{ color: colors.onSurface }}>{componente.cantidad?.toString() || '1'}</Text>
+                          </View>
+                        )}
+                      </View>
+                      {canEditService && (
+                        <TouchableOpacity
+                          style={[styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                          onPress={() => handleRemoveServicioComponente(index)}
+                        >
+                          <Ionicons name="close" size={responsive.responsiveWidth(18)} color={colors.error} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ))
+                )}
+              </>
+            )}
+          </View>
+          )}
 
           {(!isViewMode || canEditService) && (
             <View style={styles.buttonGroup}>
@@ -1064,7 +1368,8 @@ const ServicioFormContent = () => {
                   placeholder="Código de barras"
                   value={newCodigo}
                   onChangeText={setNewCodigo}
-                  keyboardType="numeric"
+                  keyboardType="default"
+                  autoCapitalize="characters"
                 />
                 <TouchableOpacity
                   onPress={() => {
@@ -1195,6 +1500,58 @@ const ServicioFormContent = () => {
                 ) : (
                   <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
                 )}
+              </ScrollView>
+            </Card>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Componente Selector Modal */}
+      {showComponenteSelectorModal && (
+        <Modal
+          visible={showComponenteSelectorModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowComponenteSelectorModal(false)}
+        >
+          <TouchableOpacity 
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowComponenteSelectorModal(false)}
+          >
+            <Card style={[styles.dropdownModal, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Seleccionar Servicio Componente</Text>
+              <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                <Ionicons 
+                  name="search-outline" 
+                  size={responsive.responsiveWidth(18)} 
+                  color={colors.outline} 
+                  style={styles.searchIcon}
+                />
+                <TextInput
+                  style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Buscar servicio..."
+                  value={componenteSearchText}
+                  onChangeText={setComponenteSearchText}
+                />
+              </View>
+              <ScrollView style={styles.dropdownScroll}>
+                {allServicios
+                  .filter(s => s.nombre.toLowerCase().includes(componenteSearchText.toLowerCase()) && s.id_servicio !== servicio?.id_servicio)
+                  .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                  .map((servicio) => (
+                    <TouchableOpacity
+                      key={servicio.id_servicio}
+                      style={styles.dropdownItem}
+                      onPress={() => handleAddServicioComponente(servicio)}
+                    >
+                      <View>
+                        <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{servicio.nombre}</Text>
+                        <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>{servicio.categoria}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
               </ScrollView>
             </Card>
           </TouchableOpacity>
@@ -1544,6 +1901,50 @@ const createStyles = (responsive) => StyleSheet.create({
   dropdownItemText: {
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
+  },
+  dropdownItemSubtext: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(4),
+  },
+  componenteItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: responsive.responsivePadding(12),
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  componenteInfo: {
+    flex: 1,
+  },
+  componenteNombre: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  componenteCategoria: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+  },
+  componenteCantidadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+  },
+  componenteLabel: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+  },
+  componenteCantidadInput: {
+    width: responsive.responsiveWidth(80),
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: responsive.responsivePadding(8),
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+    textAlign: 'center',
   },
   scannerContainer: {
     flex: 1,

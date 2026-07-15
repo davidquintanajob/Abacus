@@ -155,6 +155,8 @@ const OfertaFormContent = () => {
     }));
     setShowComponenteSelectorModal(false);
     setComponenteSearchText('');
+    // Expandir automáticamente después de agregar un servicio
+    setIsOfertaExpanded(true);
   };
 
   const handleRemoveServicioComponente = (index) => {

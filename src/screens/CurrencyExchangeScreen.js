@@ -34,6 +34,7 @@ const CurrencyExchangeContent = () => {
     title: '',
     description: '',
   });
+  const [showPermissions, setShowPermissions] = useState(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
 
@@ -173,6 +174,18 @@ const CurrencyExchangeContent = () => {
                 </Text>
               </View>
 
+              <View style={styles.infoSection}>
+                <View style={styles.infoHeader}>
+                  <Ionicons name="information-circle" size={responsive.responsiveWidth(24)} color={colors.primary} />
+                  <Text style={[styles.infoTitle, { color: colors.onSurface }]}>
+                    Información
+                  </Text>
+                </View>
+                <Text style={[styles.infoText, { color: colors.outline }]}>
+                  Esta configuración se utiliza para convertir precios de CUP a USD en toda la aplicación.
+                </Text>
+              </View>
+
               <View style={styles.buttonGroup}>
                 <TouchableOpacity
                   style={[styles.button, styles.cancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
@@ -198,14 +211,29 @@ const CurrencyExchangeContent = () => {
 
         <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
           <View style={styles.permissionsHeader}>
-            <Ionicons name="shield-checkmark" size={responsive.responsiveWidth(24)} color={colors.primary} />
-            <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
-              Permisos de Usuarios
-            </Text>
+            <View style={styles.permissionsHeaderLeft}>
+              <Ionicons name="shield-checkmark" size={responsive.responsiveWidth(24)} color={colors.primary} />
+              <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
+                Permisos de Usuarios
+              </Text>
+            </View>
+            <TouchableOpacity 
+              style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+              onPress={() => setShowPermissions(!showPermissions)}
+            >
+              <Ionicons 
+                name={showPermissions ? "chevron-up" : "chevron-down"} 
+                size={responsive.responsiveWidth(24)} 
+                color={isDarkMode ? colors.primary : '#1976D2'} 
+              />
+            </TouchableOpacity>
           </View>
-          <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
-            Configura qué roles pueden ver productos y servicios de otras tiendas
-          </Text>
+
+          {showPermissions && (
+            <>
+              <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                Configura qué roles pueden ver productos y servicios de otras tiendas
+              </Text>
 
           <View style={styles.permissionItem}>
             <View style={styles.permissionInfo}>
@@ -275,19 +303,11 @@ const CurrencyExchangeContent = () => {
               thumbColor={permissions.economico ? '#fff' : colors.outline}
             />
           </View>
+
+            </>
+          )}
         </Card>
 
-        <Card style={[styles.infoCard, { backgroundColor: colors.surface }]}>
-          <View style={styles.infoHeader}>
-            <Ionicons name="information-circle" size={responsive.responsiveWidth(24)} color={colors.primary} />
-            <Text style={[styles.infoTitle, { color: colors.onSurface }]}>
-              Información
-            </Text>
-          </View>
-          <Text style={[styles.infoText, { color: colors.outline }]}>
-            Esta configuración se utiliza para convertir precios de CUP a USD en toda la aplicación.
-          </Text>
-        </Card>
       </ScrollView>
 
       <Modal
@@ -400,9 +420,12 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
   },
-  infoCard: {
-    borderRadius: 16,
+  infoSection: {
+    marginTop: responsive.responsiveMargin(16),
+    marginBottom: responsive.responsiveMargin(16),
     padding: responsive.responsivePadding(16),
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.03)',
   },
   infoHeader: {
     flexDirection: 'row',
@@ -427,9 +450,22 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   permissionsHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  permissionsHeaderLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: responsive.responsiveMargin(8),
-    marginBottom: responsive.responsiveMargin(8),
+  },
+  expandButton: {
+    width: responsive.responsiveWidth(40),
+    height: responsive.responsiveHeight(40),
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
   },
   permissionsTitle: {
     fontSize: responsive.fontSizes.body,

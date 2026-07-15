@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -14,6 +14,7 @@ import { getServicios, getServicioByCodigo, deleteServicio } from '../services/s
 import { getTiendas } from '../services/tiendaService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 
 const ServiciosContent = () => {
   const navigation = useNavigation();
@@ -36,6 +37,8 @@ const ServiciosContent = () => {
   const [showTiendaDropdown, setShowTiendaDropdown] = useState(false);
   const [showCategoriaDropdown, setShowCategoriaDropdown] = useState(false);
   const [tiendaSearchText, setTiendaSearchText] = useState('');
+  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
@@ -241,6 +244,30 @@ const ServiciosContent = () => {
     }
   };
 
+  const handleOpenScanner = async () => {
+    if (!permission) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        showToast({ type: 'error', message: 'Se requiere permiso de cámara para escanear códigos' });
+        return;
+      }
+    } else if (!permission.granted) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        showToast({ type: 'error', message: 'Se requiere permiso de cámara para escanear códigos' });
+        return;
+      }
+    }
+    
+    setShowScannerModal(true);
+  };
+
+  const handleBarcodeScanned = ({ data }) => {
+    setFilters(prev => ({ ...prev, codigo: data }));
+    setShowScannerModal(false);
+    showToast({ type: 'success', message: 'Código escaneado correctamente' });
+  };
+
   const filteredTiendas = tiendas.filter(tienda =>
     tienda.nombre.toLowerCase().includes(tiendaSearchText.toLowerCase())
   );
@@ -316,18 +343,97 @@ const ServiciosContent = () => {
           </View>
 
           <View style={styles.filterGroup}>
-            <Text style={[styles.label, { color: colors.outline }]}>Código</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-              placeholderTextColor={colors.outline}
-              placeholder="Buscar por código de barras..."
-              value={filters.codigo}
-              onChangeText={(text) => setFilters(prev => ({ ...prev, codigo: text }))}
-            />
+            <Text style={[styles.label, { color: colors.outline }]}>Tienda</Text>
+            <TouchableOpacity
+              style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+              onPress={() => setShowTiendaDropdown(!showTiendaDropdown)}
+            >
+              <Text style={[styles.dropdownText, { color: filters.id_tienda ? colors.onSurface : colors.outline }]}>
+                {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda))?.nombre || 'Todas las tiendas'}
+              </Text>
+              <Ionicons 
+                name={showTiendaDropdown ? "chevron-up" : "chevron-down"} 
+                size={responsive.responsiveWidth(20)} 
+                color={colors.outline} 
+              />
+            </TouchableOpacity>
+            
+            {showTiendaDropdown && (
+              <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                  <Ionicons 
+                    name="search-outline" 
+                    size={responsive.responsiveWidth(18)} 
+                    color={colors.outline} 
+                    style={styles.searchIcon}
+                  />
+                  <TextInput
+                    style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Buscar tienda..."
+                    value={tiendaSearchText}
+                    onChangeText={setTiendaSearchText}
+                  />
+                </View>
+                <TouchableOpacity
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    setFilters(prev => ({ ...prev, id_tienda: '' }));
+                    setShowTiendaDropdown(false);
+                    setTiendaSearchText('');
+                  }}
+                >
+                  <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todas las tiendas</Text>
+                </TouchableOpacity>
+                {filteredTiendas.length > 0 ? (
+                  filteredTiendas.map((tienda, index) => (
+                    <TouchableOpacity
+                      key={tienda.id_tienda}
+                      style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
+                      onPress={() => {
+                        setFilters(prev => ({ ...prev, id_tienda: tienda.id_tienda.toString() }));
+                        setShowTiendaDropdown(false);
+                        setTiendaSearchText('');
+                      }}
+                    >
+                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <View style={styles.dropdownItem}>
+                    <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
 
           {showAdvancedFilters && (
             <>
+              <View style={styles.filterGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Código</Text>
+                <View style={[styles.inputWithIcon, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                  <TextInput
+                    style={[styles.inputWithIconText, { color: colors.onSurface }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Buscar por código de barras..."
+                    value={filters.codigo}
+                    onChangeText={(text) => setFilters(prev => ({ ...prev, codigo: text }))}
+                  />
+                  <TouchableOpacity
+                    onPress={handleOpenScanner}
+                    style={styles.cameraButton}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons 
+                      name="camera-outline" 
+                      size={responsive.responsiveWidth(20)} 
+                      color={colors.primary} 
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
               <View style={styles.filterGroup}>
                 <Text style={[styles.label, { color: colors.outline }]}>Categoría</Text>
                 <TouchableOpacity
@@ -367,72 +473,6 @@ const ServiciosContent = () => {
                         <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{categoria}</Text>
                       </TouchableOpacity>
                     ))}
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.filterGroup}>
-                <Text style={[styles.label, { color: colors.outline }]}>Tienda</Text>
-                <TouchableOpacity
-                  style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={() => setShowTiendaDropdown(!showTiendaDropdown)}
-                >
-                  <Text style={[styles.dropdownText, { color: filters.id_tienda ? colors.onSurface : colors.outline }]}>
-                    {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda))?.nombre || 'Todas las tiendas'}
-                  </Text>
-                  <Ionicons 
-                    name={showTiendaDropdown ? "chevron-up" : "chevron-down"} 
-                    size={responsive.responsiveWidth(20)} 
-                    color={colors.outline} 
-                  />
-                </TouchableOpacity>
-                
-                {showTiendaDropdown && (
-                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                      <Ionicons 
-                        name="search-outline" 
-                        size={responsive.responsiveWidth(18)} 
-                        color={colors.outline} 
-                        style={styles.searchIcon}
-                      />
-                      <TextInput
-                        style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
-                        placeholderTextColor={colors.outline}
-                        placeholder="Buscar tienda..."
-                        value={tiendaSearchText}
-                        onChangeText={setTiendaSearchText}
-                      />
-                    </View>
-                    <TouchableOpacity
-                      style={styles.dropdownItem}
-                      onPress={() => {
-                        setFilters(prev => ({ ...prev, id_tienda: '' }));
-                        setShowTiendaDropdown(false);
-                        setTiendaSearchText('');
-                      }}
-                    >
-                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todas las tiendas</Text>
-                    </TouchableOpacity>
-                    {filteredTiendas.length > 0 ? (
-                      filteredTiendas.map((tienda, index) => (
-                        <TouchableOpacity
-                          key={tienda.id_tienda}
-                          style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
-                          onPress={() => {
-                            setFilters(prev => ({ ...prev, id_tienda: tienda.id_tienda.toString() }));
-                            setShowTiendaDropdown(false);
-                            setTiendaSearchText('');
-                          }}
-                        >
-                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
-                        </TouchableOpacity>
-                      ))
-                    ) : (
-                      <View style={styles.dropdownItem}>
-                        <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
-                      </View>
-                    )}
                   </View>
                 )}
               </View>
@@ -546,10 +586,10 @@ const ServiciosContent = () => {
           )}
           <TouchableOpacity
             style={[styles.addButton, { backgroundColor: colors.primary }]}
-            onPress={() => navigation.navigate('Ofertas')}
+            onPress={() => navigation.navigate('OfertaForm', { mode: 'add' })}
           >
-            <Ionicons name="list-outline" size={responsive.responsiveWidth(20)} color="#fff" />
-            <Text style={[styles.addButtonText, { color: '#fff' }]}>Gestionar Oferta</Text>
+            <Ionicons name="add-circle-outline" size={responsive.responsiveWidth(20)} color="#fff" />
+            <Text style={[styles.addButtonText, { color: '#fff' }]}>Agregar Oferta</Text>
           </TouchableOpacity>
         </View>
 
@@ -594,6 +634,16 @@ const ServiciosContent = () => {
                   activeOpacity={0.7}
                 >
                   <Card style={[styles.servicioCard, { backgroundColor: colors.surface }]}>
+                    {servicio.componentes && servicio.componentes.length > 0 && (
+                      <View style={[styles.offerFlag, { backgroundColor: '#4CAF50' }]}>
+                        <Ionicons name="pricetag-outline" size={responsive.responsiveWidth(14)} color="#fff" />
+                      </View>
+                    )}
+                    {servicio.nota && (
+                      <View style={[styles.noteFlag, { backgroundColor: '#2196F3' }]}>
+                        <Ionicons name="document-text-outline" size={responsive.responsiveWidth(14)} color="#fff" />
+                      </View>
+                    )}
                     <View style={styles.servicioInfo}>
                       <View style={styles.servicioHeader}>
                         <Text style={[styles.servicioName, { color: colors.onSurface }]} numberOfLines={1} ellipsizeMode="tail">
@@ -609,9 +659,6 @@ const ServiciosContent = () => {
                         </View>
                       </View>
                       <Text style={[styles.servicioDetails, { color: colors.outline }]}>Categoría: {servicio.categoria}</Text>
-                      <Text style={[styles.servicioDetails, { color: colors.outline }]}>
-                        Servicios en oferta: {servicio.ofertas_que_incluyen?.length || 0}
-                      </Text>
                       {tiendaServicio && (
                         <>
                           <Text style={[styles.servicioDetails, { color: colors.outline }]}>
@@ -671,9 +718,14 @@ const ServiciosContent = () => {
                 >
                   <Ionicons name="chevron-back" size={responsive.responsiveWidth(20)} color={colors.onSurface} />
                 </TouchableOpacity>
-                <Text style={[styles.paginationText, { color: colors.onSurface }]}>
-                  Página {pagination.currentPage} de {pagination.totalPages}
-                </Text>
+                <View style={styles.paginationInfo}>
+                  <Text style={[styles.paginationText, { color: colors.onSurface }]}>
+                    Página {pagination.currentPage} de {pagination.totalPages}
+                  </Text>
+                  <Text style={[styles.paginationText, styles.paginationSubtext, { color: colors.outline }]}>
+                    Total de servicios: {pagination.totalItems}
+                  </Text>
+                </View>
                 <TouchableOpacity
                   style={[
                     styles.paginationButton,
@@ -696,6 +748,38 @@ const ServiciosContent = () => {
         onClose={() => setSidebarOpen(false)}
         currentRoute="Servicios"
       />
+
+      {/* Barcode Scanner Modal */}
+      {showScannerModal && (
+        <Modal
+          visible={showScannerModal}
+          animationType="slide"
+          onRequestClose={() => setShowScannerModal(false)}
+        >
+          <View style={styles.scannerContainer}>
+            <CameraView
+              style={styles.scanner}
+              onBarcodeScanned={handleBarcodeScanned}
+              facing="back"
+            />
+            <View style={styles.scannerOverlay}>
+              <View style={styles.scannerCorner} />
+              <View style={[styles.scannerCorner, styles.scannerCornerTopRight]} />
+              <View style={[styles.scannerCorner, styles.scannerCornerBottomLeft]} />
+              <View style={[styles.scannerCorner, styles.scannerCornerBottomRight]} />
+              <Text style={[styles.scannerText, { color: '#fff' }]}>
+                Escanea el código de barras
+              </Text>
+              <TouchableOpacity
+                style={styles.scannerCloseButton}
+                onPress={() => setShowScannerModal(false)}
+              >
+                <Ionicons name="close" size={responsive.responsiveWidth(30)} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 };
@@ -886,6 +970,28 @@ const createStyles = (responsive) => StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  noteFlag: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    width: responsive.responsiveWidth(24),
+    height: responsive.responsiveHeight(24),
+    borderRadius: responsive.responsiveWidth(12),
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  offerFlag: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    width: responsive.responsiveWidth(24),
+    height: responsive.responsiveHeight(24),
+    borderRadius: responsive.responsiveWidth(12),
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
   servicioInfo: {
     flex: 1,
   },
@@ -1033,8 +1139,84 @@ const createStyles = (responsive) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  paginationInfo: {
+    alignItems: 'center',
+  },
   paginationText: {
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
+  },
+  paginationSubtext: {
+    fontSize: responsive.fontSizes.bodySmall,
+    marginTop: responsive.responsiveMargin(2),
+  },
+  inputWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: responsive.responsivePadding(12),
+    paddingVertical: responsive.responsivePadding(12),
+  },
+  inputWithIconText: {
+    flex: 1,
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+    paddingVertical: 0,
+  },
+  cameraButton: {
+    marginLeft: responsive.responsiveMargin(8),
+  },
+  scannerContainer: {
+    flex: 1,
+  },
+  scanner: {
+    flex: 1,
+  },
+  scannerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  scannerCorner: {
+    position: 'absolute',
+    width: responsive.responsiveWidth(60),
+    height: responsive.responsiveHeight(60),
+    borderColor: '#fff',
+    borderWidth: 2,
+  },
+  scannerCornerTopRight: {
+    top: responsive.responsiveHeight(150),
+    right: responsive.responsiveWidth(50),
+  },
+  scannerCornerBottomLeft: {
+    bottom: responsive.responsiveHeight(150),
+    left: responsive.responsiveWidth(50),
+  },
+  scannerCornerBottomRight: {
+    bottom: responsive.responsiveHeight(150),
+    right: responsive.responsiveWidth(50),
+  },
+  scannerText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(20),
+  },
+  scannerCloseButton: {
+    position: 'absolute',
+    top: responsive.responsiveHeight(50),
+    right: responsive.responsiveWidth(20),
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: responsive.responsiveWidth(20),
+    width: responsive.responsiveWidth(40),
+    height: responsive.responsiveHeight(40),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
