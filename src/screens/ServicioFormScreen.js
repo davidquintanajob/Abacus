@@ -24,7 +24,7 @@ const ServicioFormContent = () => {
   const { token, user, permissions } = useAuth();
   const { toast, showToast, hideToast } = useToast();
 
-  const { servicio, mode } = route.params || { mode: 'add' };
+  const { servicio, mode, isOferta } = route.params || { mode: 'add' };
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -431,6 +431,11 @@ const ServicioFormContent = () => {
     }
     if (!formData.codigoList || formData.codigoList.length === 0) {
       showToast({ type: 'warning', message: 'Debe agregar al menos un código' });
+      return;
+    }
+    // Validate that oferta has at least one component when in oferta mode
+    if (isOferta && (!formData.ofertaList || formData.ofertaList.length === 0)) {
+      showToast({ type: 'warning', message: 'Debe agregar al menos un servicio componente para la oferta' });
       return;
     }
 
@@ -876,6 +881,79 @@ const ServicioFormContent = () => {
             )}
           </View>
 
+          {/* Servicios (Oferta) Section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Servicios (Oferta)</Text>
+              <View style={styles.sectionActions}>
+                {canEditService && (
+                  <TouchableOpacity
+                    style={[styles.addButtonSmall, { backgroundColor: colors.primary }]}
+                    onPress={() => setShowComponenteSelectorModal(true)}
+                  >
+                    <Ionicons name="add" size={responsive.responsiveWidth(18)} color="#fff" />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+                  onPress={() => setIsOfertaExpanded(!isOfertaExpanded)}
+                >
+                  <Ionicons 
+                    name={isOfertaExpanded ? "chevron-up" : "chevron-down"} 
+                    size={responsive.responsiveWidth(18)} 
+                    color={isDarkMode ? colors.primary : '#1976D2'} 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            {isOfertaExpanded && (
+              <>
+                {formData.ofertaList.length === 0 ? (
+                  <Text style={[styles.emptyText, { color: colors.outline }]}>
+                    No hay servicios componentes agregados
+                  </Text>
+                ) : (
+                  formData.ofertaList.map((componente, index) => (
+                    <View key={index} style={[styles.componenteItem, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <View style={styles.componenteInfo}>
+                        <Text style={[styles.componenteNombre, { color: colors.onSurface }]}>
+                          {componente.nombre}
+                        </Text>
+                        <Text style={[styles.componenteCategoria, { color: colors.outline }]}>
+                          {componente.categoria}
+                        </Text>
+                      </View>
+                      <View style={styles.componenteCantidadRow}>
+                        <Text style={[styles.componenteLabel, { color: colors.outline }]}>Cantidad:</Text>
+                        {canEditService ? (
+                          <TextInput
+                            style={[styles.componenteCantidadInput, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                            value={componente.cantidad?.toString() || '1'}
+                            onChangeText={(text) => handleCantidadChange(index, text)}
+                            keyboardType="decimal-pad"
+                          />
+                        ) : (
+                          <View style={[styles.componenteCantidadInput, styles.inputDisabled, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}>
+                            <Text style={{ color: colors.onSurface }}>{componente.cantidad?.toString() || '1'}</Text>
+                          </View>
+                        )}
+                      </View>
+                      {canEditService && (
+                        <TouchableOpacity
+                          style={[styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                          onPress={() => handleRemoveServicioComponente(index)}
+                        >
+                          <Ionicons name="close" size={responsive.responsiveWidth(18)} color={colors.error} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ))
+                )}
+              </>
+            )}
+          </View>
+
           {/* Precios Generales Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -1238,81 +1316,6 @@ const ServicioFormContent = () => {
               </>
             )}
           </View>
-
-          {/* Servicios (Oferta) Section - Solo mostrar en modo edición */}
-          {isEditMode && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Servicios (Oferta)</Text>
-              <View style={styles.sectionActions}>
-                {canEditService && (
-                  <TouchableOpacity
-                    style={[styles.addButtonSmall, { backgroundColor: colors.primary }]}
-                    onPress={() => setShowComponenteSelectorModal(true)}
-                  >
-                    <Ionicons name="add" size={responsive.responsiveWidth(18)} color="#fff" />
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
-                  onPress={() => setIsOfertaExpanded(!isOfertaExpanded)}
-                >
-                  <Ionicons 
-                    name={isOfertaExpanded ? "chevron-up" : "chevron-down"} 
-                    size={responsive.responsiveWidth(18)} 
-                    color={isDarkMode ? colors.primary : '#1976D2'} 
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-            
-            {isOfertaExpanded && (
-              <>
-                {formData.ofertaList.length === 0 ? (
-                  <Text style={[styles.emptyText, { color: colors.outline }]}>
-                    No hay servicios componentes agregados
-                  </Text>
-                ) : (
-                  formData.ofertaList.map((componente, index) => (
-                    <View key={index} style={[styles.componenteItem, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                      <View style={styles.componenteInfo}>
-                        <Text style={[styles.componenteNombre, { color: colors.onSurface }]}>
-                          {componente.nombre}
-                        </Text>
-                        <Text style={[styles.componenteCategoria, { color: colors.outline }]}>
-                          {componente.categoria}
-                        </Text>
-                      </View>
-                      <View style={styles.componenteCantidadRow}>
-                        <Text style={[styles.componenteLabel, { color: colors.outline }]}>Cantidad:</Text>
-                        {canEditService ? (
-                          <TextInput
-                            style={[styles.componenteCantidadInput, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                            value={componente.cantidad?.toString() || '1'}
-                            onChangeText={(text) => handleCantidadChange(index, text)}
-                            keyboardType="decimal-pad"
-                          />
-                        ) : (
-                          <View style={[styles.componenteCantidadInput, styles.inputDisabled, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}>
-                            <Text style={{ color: colors.onSurface }}>{componente.cantidad?.toString() || '1'}</Text>
-                          </View>
-                        )}
-                      </View>
-                      {canEditService && (
-                        <TouchableOpacity
-                          style={[styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                          onPress={() => handleRemoveServicioComponente(index)}
-                        >
-                          <Ionicons name="close" size={responsive.responsiveWidth(18)} color={colors.error} />
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  ))
-                )}
-              </>
-            )}
-          </View>
-          )}
 
           {(!isViewMode || canEditService) && (
             <View style={styles.buttonGroup}>

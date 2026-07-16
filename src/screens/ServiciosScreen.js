@@ -51,13 +51,31 @@ const ServiciosContent = () => {
   useFocusEffect(
     React.useCallback(() => {
       fetchServicios();
-    }, [pagination.currentPage])
+    }, [pagination.currentPage, filters])
   );
 
   const fetchTiendas = async () => {
     try {
       const data = await getTiendas({}, 1, 1000);
-      setTiendas(data.data || []);
+      const allTiendas = data.data || [];
+      
+      // Apply store visibility permissions
+      const userRole = user?.rol?.toLowerCase();
+      const canViewAllStores = 
+        userRole === 'administrador' ||
+        (userRole === 'dependiente' && permissions?.dependiente) ||
+        (userRole === 'almacenero' && permissions?.almacenero) ||
+        (userRole === 'económico' && permissions?.economico);
+
+      // If user cannot view all stores, filter to show only their own store
+      if (!canViewAllStores && user?.id_tienda) {
+        const userTienda = allTiendas.find(t => t.id_tienda === user.id_tienda);
+        setTiendas(userTienda ? [userTienda] : []);
+        // Auto-select the user's store in the filter
+        setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
+      } else {
+        setTiendas(allTiendas);
+      }
     } catch (err) {
       console.error('Error fetching tiendas:', err);
     }
@@ -102,8 +120,14 @@ const ServiciosContent = () => {
           setPagination({ currentPage: 1, limit: 10, totalPages: 1, totalItems: 0 });
         }
       } else {
-        // Usar el endpoint de filtrado para los demás casos
-        const data = await getServicios(filters, pagination.currentPage, pagination.limit);
+        // Check if any filters are active
+        const hasActiveFilters = Object.values(filters).some(value => value !== '' && value !== null && value !== undefined);
+        
+        // If filters are active, fetch all data to ensure accurate pagination
+        // Otherwise, use paginated fetch from backend
+        const fetchLimit = hasActiveFilters ? 10000 : pagination.limit;
+        const fetchPage = hasActiveFilters ? 1 : pagination.currentPage;
+        const data = await getServicios(filters, fetchPage, fetchLimit);
         let servicios = data.data || [];
 
         // Apply store visibility permissions
@@ -122,8 +146,26 @@ const ServiciosContent = () => {
           });
         }
 
-        setServicios(servicios);
-        setPagination(data.pagination || pagination);
+        // If filters are active, paginate client-side
+        if (hasActiveFilters) {
+          const totalFilteredItems = servicios.length;
+          const totalFilteredPages = Math.ceil(totalFilteredItems / pagination.limit);
+          const startIndex = (pagination.currentPage - 1) * pagination.limit;
+          const endIndex = startIndex + pagination.limit;
+          const paginatedServicios = servicios.slice(startIndex, endIndex);
+          
+          setServicios(paginatedServicios);
+          setPagination({
+            currentPage: pagination.currentPage,
+            limit: pagination.limit,
+            totalPages: totalFilteredPages,
+            totalItems: totalFilteredItems
+          });
+        } else {
+          // No filters active, use backend pagination
+          setServicios(servicios);
+          setPagination(data.pagination || pagination);
+        }
       }
     } catch (err) {
       setError(err.message);
@@ -141,7 +183,23 @@ const ServiciosContent = () => {
   };
 
   const handleClearFilters = () => {
-    const clearedFilters = { nombre: '', codigo: '', categoria: '', esvendible: '', id_tienda: '' };
+    // Check if user can view all stores
+    const userRole = user?.rol?.toLowerCase();
+    const canViewAllStores = 
+      userRole === 'administrador' ||
+      (userRole === 'dependiente' && permissions?.dependiente) ||
+      (userRole === 'almacenero' && permissions?.almacenero) ||
+      (userRole === 'económico' && permissions?.economico);
+
+    // Preserve tienda filter for users without permission
+    const clearedFilters = { 
+      nombre: '', 
+      codigo: '', 
+      categoria: '', 
+      esvendible: '', 
+      id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : '' 
+    };
+    
     setFilters(clearedFilters);
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
@@ -151,17 +209,14 @@ const ServiciosContent = () => {
         setIsLoading(true);
         setError(null);
         
-        // Usar el endpoint de filtrado al limpiar los filtros
-        const data = await getServicios(clearedFilters, 1, pagination.limit);
+        // Check if any filters are active after clearing
+        const hasActiveFilters = Object.values(clearedFilters).some(value => value !== '' && value !== null && value !== undefined);
+        
+        // If filters are active, fetch all data to ensure accurate pagination
+        // Otherwise, use paginated fetch from backend
+        const fetchLimit = hasActiveFilters ? 10000 : pagination.limit;
+        const data = await getServicios(clearedFilters, 1, fetchLimit);
         let servicios = data.data || [];
-
-        // Apply store visibility permissions
-        const userRole = user?.rol?.toLowerCase();
-        const canViewAllStores = 
-          userRole === 'administrador' ||
-          (userRole === 'dependiente' && permissions?.dependiente) ||
-          (userRole === 'almacenero' && permissions?.almacenero) ||
-          (userRole === 'económico' && permissions?.economico);
 
         // If user cannot view all stores, filter to show only services from their own store
         if (!canViewAllStores && user?.id_tienda) {
@@ -171,8 +226,26 @@ const ServiciosContent = () => {
           });
         }
 
-        setServicios(servicios);
-        setPagination(data.pagination || pagination);
+        // If filters are active, paginate client-side
+        if (hasActiveFilters) {
+          const totalFilteredItems = servicios.length;
+          const totalFilteredPages = Math.ceil(totalFilteredItems / pagination.limit);
+          const startIndex = 0;
+          const endIndex = pagination.limit;
+          const paginatedServicios = servicios.slice(startIndex, endIndex);
+          
+          setServicios(paginatedServicios);
+          setPagination({
+            currentPage: 1,
+            limit: pagination.limit,
+            totalPages: totalFilteredPages,
+            totalItems: totalFilteredItems
+          });
+        } else {
+          // No filters active, use backend pagination
+          setServicios(servicios);
+          setPagination(data.pagination || pagination);
+        }
       } catch (err) {
         setError(err.message);
         console.error('Error fetching servicios:', err);
@@ -275,6 +348,14 @@ const ServiciosContent = () => {
   // Get unique categories from servicios
   const categorias = [...new Set(servicios.map(s => s.categoria))];
 
+  // Check if user can view all stores
+  const userRole = user?.rol?.toLowerCase();
+  const canViewAllStores = 
+    userRole === 'administrador' ||
+    (userRole === 'dependiente' && permissions?.dependiente) ||
+    (userRole === 'almacenero' && permissions?.almacenero) ||
+    (userRole === 'económico' && permissions?.economico);
+
   const styles = createStyles(responsive);
 
   return (
@@ -346,7 +427,11 @@ const ServiciosContent = () => {
             <Text style={[styles.label, { color: colors.outline }]}>Tienda</Text>
             <TouchableOpacity
               style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-              onPress={() => setShowTiendaDropdown(!showTiendaDropdown)}
+              onPress={() => {
+                if (canViewAllStores) {
+                  setShowTiendaDropdown(!showTiendaDropdown);
+                }
+              }}
             >
               <Text style={[styles.dropdownText, { color: filters.id_tienda ? colors.onSurface : colors.outline }]}>
                 {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda))?.nombre || 'Todas las tiendas'}
@@ -375,16 +460,20 @@ const ServiciosContent = () => {
                     onChangeText={setTiendaSearchText}
                   />
                 </View>
-                <TouchableOpacity
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    setFilters(prev => ({ ...prev, id_tienda: '' }));
-                    setShowTiendaDropdown(false);
-                    setTiendaSearchText('');
-                  }}
-                >
-                  <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todas las tiendas</Text>
-                </TouchableOpacity>
+                {canViewAllStores && (
+                  <TouchableOpacity
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      setFilters(prev => ({ ...prev, id_tienda: '' }));
+                      setShowTiendaDropdown(false);
+                      setTiendaSearchText('');
+                      setPagination(prev => ({ ...prev, currentPage: 1 }));
+                      fetchServicios();
+                    }}
+                  >
+                    <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todas las tiendas</Text>
+                  </TouchableOpacity>
+                )}
                 {filteredTiendas.length > 0 ? (
                   filteredTiendas.map((tienda, index) => (
                     <TouchableOpacity
@@ -394,6 +483,8 @@ const ServiciosContent = () => {
                         setFilters(prev => ({ ...prev, id_tienda: tienda.id_tienda.toString() }));
                         setShowTiendaDropdown(false);
                         setTiendaSearchText('');
+                        setPagination(prev => ({ ...prev, currentPage: 1 }));
+                        fetchServicios();
                       }}
                     >
                       <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
@@ -581,16 +672,18 @@ const ServiciosContent = () => {
               onPress={handleAdd}
             >
               <Ionicons name="add-circle-outline" size={responsive.responsiveWidth(20)} color="#fff" />
-              <Text style={[styles.addButtonText, { color: '#fff' }]}>Agregar Servicio</Text>
+              <Text style={[styles.addButtonTextSmal, { color: '#fff' }]}>Agregar Servicio</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            style={[styles.addButton, { backgroundColor: colors.primary }]}
-            onPress={() => navigation.navigate('OfertaForm', { mode: 'add' })}
-          >
-            <Ionicons name="add-circle-outline" size={responsive.responsiveWidth(20)} color="#fff" />
-            <Text style={[styles.addButtonText, { color: '#fff' }]}>Agregar Oferta</Text>
-          </TouchableOpacity>
+          {isAdmin && (
+            <TouchableOpacity
+              style={[styles.addButton, { backgroundColor: colors.primary }]}
+              onPress={() => navigation.navigate('ServicioForm', { mode: 'add', isOferta: true })}
+            >
+              <Ionicons name="add-circle-outline" size={responsive.responsiveWidth(20)} color="#fff" />
+              <Text style={[styles.addButtonTextSmall, { color: '#fff' }]}>Agregar Servicio (Oferta)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Servicios List */}
@@ -892,6 +985,7 @@ const createStyles = (responsive) => StyleSheet.create({
     justifyContent: 'center',
     gap: responsive.responsiveMargin(8),
     paddingVertical: responsive.responsivePadding(14),
+    paddingHorizontal: responsive.responsivePadding(16),
     borderRadius: 12,
     marginBottom: responsive.responsiveMargin(16),
     shadowColor: '#000',
@@ -904,6 +998,17 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.body,
     fontWeight: '600',
     fontFamily: 'Inter',
+    flexShrink: 1,
+  },
+  addButtonMultiLineText: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addButtonTextSmall: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    flexShrink: 1,
   },
   loadingContainer: {
     alignItems: 'center',
