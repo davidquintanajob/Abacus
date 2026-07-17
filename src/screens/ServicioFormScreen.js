@@ -24,7 +24,12 @@ const ServicioFormContent = () => {
   const { token, user, permissions } = useAuth();
   const { toast, showToast, hideToast } = useToast();
 
-  const { servicio, mode, isOferta } = route.params || { mode: 'add' };
+  const { servicio, mode, isOferta, isOfflineMode } = route.params || { mode: 'add' };
+
+  const isViewMode = mode === 'view';
+  const isEditMode = mode === 'edit';
+  const isAddMode = mode === 'add';
+  const isReadOnly = isOfflineMode || (isViewMode && !canEditService);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -143,8 +148,6 @@ const ServicioFormContent = () => {
   };
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
-  const isEditMode = mode === 'edit';
-  const isViewMode = mode === 'view';
   const isAdmin = user?.rol === 'Administrador';
   const isEconomico = user?.rol === 'Económico';
   const isDependiente = user?.rol === 'Dependiente';
@@ -759,13 +762,13 @@ const ServicioFormContent = () => {
               style={[
                 styles.input, 
                 { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                (!isViewMode || canEditService) === false && styles.inputDisabled
+                isReadOnly && styles.inputDisabled
               ]}
               placeholderTextColor={colors.outline}
               placeholder="Nombre del servicio"
               value={formData.nombre}
               onChangeText={(text) => setFormData(prev => ({ ...prev, nombre: text }))}
-              editable={!isViewMode || canEditService}
+              editable={!isReadOnly}
             />
           </View>
 
@@ -775,13 +778,13 @@ const ServicioFormContent = () => {
               style={[
                 styles.input, 
                 { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                (!isViewMode || canEditService) === false && styles.inputDisabled
+                isReadOnly && styles.inputDisabled
               ]}
               placeholderTextColor={colors.outline}
               placeholder="Categoría"
               value={formData.categoria}
               onChangeText={(text) => setFormData(prev => ({ ...prev, categoria: text }))}
-              editable={!isViewMode || canEditService}
+              editable={!isReadOnly}
             />
           </View>
 
@@ -791,13 +794,13 @@ const ServicioFormContent = () => {
               style={[
                 styles.input, 
                 { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                (!isViewMode || canEditService) === false && styles.inputDisabled
+                isReadOnly && styles.inputDisabled
               ]}
               placeholderTextColor={colors.outline}
               placeholder="Nota (opcional)"
               value={formData.nota}
               onChangeText={(text) => setFormData(prev => ({ ...prev, nota: text }))}
-              editable={!isViewMode || canEditService}
+              editable={!isReadOnly}
             />
           </View>
 
@@ -805,13 +808,13 @@ const ServicioFormContent = () => {
             <Text style={[styles.label, { color: colors.outline }]}>Estado</Text>
             <TouchableOpacity
               style={styles.statusSwitchContainer}
-              onPress={() => (!isViewMode || canEditService) && setFormData(prev => ({ ...prev, esvendible: !prev.esvendible }))}
-              disabled={isViewMode && !canEditService}
+              onPress={() => !isReadOnly && setFormData(prev => ({ ...prev, esvendible: !prev.esvendible }))}
+              disabled={isReadOnly}
             >
               <View style={[
                 styles.statusSwitch,
                 { backgroundColor: formData.esvendible ? '#4CAF50' : '#F44336' },
-                (!isViewMode || canEditService) === false && styles.inputDisabled
+                isReadOnly && styles.inputDisabled
               ]}>
                 <View style={[
                   styles.statusSwitchKnob,
@@ -980,7 +983,7 @@ const ServicioFormContent = () => {
                     style={[
                       styles.input, 
                       { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                      (!isViewMode || canEditService) === false && styles.inputDisabled
+                      isReadOnly && styles.inputDisabled
                     ]}
                     placeholderTextColor={colors.outline}
                     placeholder="Precio CUP"
@@ -1006,7 +1009,7 @@ const ServicioFormContent = () => {
                       handleGeneralPriceBlur();
                     }}
                     keyboardType="decimal-pad"
-                    editable={!isViewMode || canEditService}
+                    editable={!isReadOnly}
                   />
                 </View>
                 <View style={styles.priceField}>
@@ -1015,7 +1018,7 @@ const ServicioFormContent = () => {
                     style={[
                       styles.input, 
                       { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                      (!isViewMode || canEditService) === false && styles.inputDisabled
+                      isReadOnly && styles.inputDisabled
                     ]}
                     placeholderTextColor={colors.outline}
                     placeholder="Precio USD"
@@ -1041,7 +1044,7 @@ const ServicioFormContent = () => {
                       handleGeneralPriceBlur();
                     }}
                     keyboardType="decimal-pad"
-                    editable={!isViewMode || canEditService}
+                    editable={!isReadOnly}
                   />
                 </View>
                 {canViewCosts && (
@@ -1052,7 +1055,7 @@ const ServicioFormContent = () => {
                         style={[
                           styles.input, 
                           { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                          (!isViewMode || canEditService) === false && styles.inputDisabled
+                          isReadOnly && styles.inputDisabled
                         ]}
                         placeholderTextColor={colors.outline}
                         placeholder="Costo CUP"
@@ -1087,7 +1090,7 @@ const ServicioFormContent = () => {
                         style={[
                           styles.input, 
                           { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                          (!isViewMode || canEditService) === false && styles.inputDisabled
+                          isReadOnly && styles.inputDisabled
                         ]}
                         placeholderTextColor={colors.outline}
                         placeholder="Costo USD"
@@ -1182,7 +1185,7 @@ const ServicioFormContent = () => {
                             style={[
                               styles.input, 
                               { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant },
-                              (!isViewMode || canEditService) === false && styles.inputDisabled
+                              isReadOnly && styles.inputDisabled
                             ]}
                             value={
                               priceInputTexts[index]?.precio_cup !== undefined
@@ -1212,7 +1215,7 @@ const ServicioFormContent = () => {
                             style={[
                               styles.input, 
                               { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant },
-                              (!isViewMode || canEditService) === false && styles.inputDisabled
+                              isReadOnly && styles.inputDisabled
                             ]}
                             value={
                               priceInputTexts[index]?.precio_usd !== undefined
@@ -1244,7 +1247,7 @@ const ServicioFormContent = () => {
                                 style={[
                                   styles.input, 
                                   { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant },
-                                  (!isViewMode || canEditService) === false && styles.inputDisabled
+                                  isReadOnly && styles.inputDisabled
                                 ]}
                                 value={
                                   priceInputTexts[index]?.costo_cup !== undefined
@@ -1274,7 +1277,7 @@ const ServicioFormContent = () => {
                                 style={[
                                   styles.input, 
                                   { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant },
-                                  (!isViewMode || canEditService) === false && styles.inputDisabled
+                                  isReadOnly && styles.inputDisabled
                                 ]}
                                 value={
                                   priceInputTexts[index]?.costo_usd !== undefined
@@ -1317,7 +1320,7 @@ const ServicioFormContent = () => {
             )}
           </View>
 
-          {(!isViewMode || canEditService) && (
+          {(!isViewMode || canEditService) && !isOfflineMode && (
             <View style={styles.buttonGroup}>
               <TouchableOpacity
                 style={[styles.button, styles.cancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}

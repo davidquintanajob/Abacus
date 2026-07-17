@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import { useOffline } from '../../context/OfflineContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../../hooks/useResponsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +18,7 @@ export const Header = ({
   title = 'abacus',
   showLogo = false
 }) => {
+  const { isOfflineMode } = useOffline();
   const { colors } = useTheme();
   const responsive = useResponsive();
   const insets = useSafeAreaInsets();
@@ -61,6 +63,12 @@ export const Header = ({
       </View>
       
       <View style={styles.rightSection}>
+        {isOfflineMode && (
+          <View style={styles.offlineIconContainer}>
+            <Ionicons name="wifi-outline" size={responsive.responsiveWidth(24)} color={colors.primary} />
+            <Text style={[styles.offlineSlash, { color: colors.primary }]}>/</Text>
+          </View>
+        )}
         {onNotificationsPress && (
           <TouchableOpacity 
             onPress={onNotificationsPress}
@@ -147,5 +155,22 @@ const createStyles = (responsive, insets) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(24),
     fontWeight: '700',
     fontFamily: 'Hanken Grotesk',
+  },
+  offlineIconContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    width: responsive.responsiveWidth(32),
+    height: responsive.responsiveHeight(32),
+  },
+  offlineSlash: {
+    fontSize: responsive.responsiveFontSize(28),
+    fontWeight: '700',
+    fontFamily: 'Inter',
+    position: 'absolute',
+    top: -responsive.responsiveMargin(2),
+    left: responsive.responsiveMargin(8),
+    zIndex: 1,
   },
 });

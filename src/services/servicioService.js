@@ -15,6 +15,7 @@ export const getServicios = async (filters = {}, page = 1, limit = 10) => {
     if (filters.id_tienda) queryParams.append('id_tienda', filters.id_tienda);
     if (filters.fetchProducto !== undefined) queryParams.append('fetchProducto', filters.fetchProducto);
 
+    console.log('getServicios queryParams:', queryParams.toString());
     const response = await api.get(`/servicio/filter?${queryParams}`);
     return response.data;
   } catch (error) {

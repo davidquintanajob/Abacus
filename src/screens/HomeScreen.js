@@ -2,22 +2,32 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { Header } from '../components/layout/Header';
 import { Sidebar } from '../components/layout/Sidebar';
 import { Card } from '../components/common/Card';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
+import { useOffline } from '../context/OfflineContext';
 
 const HomeContent = () => {
   const navigation = useNavigation();
+  const route = useRoute();
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
+  const { enableOfflineMode, isOfflineMode: contextOfflineMode } = useOffline();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [greeting, setGreeting] = useState('Buenos días');
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
+
+  // Activar modo offline si viene del login
+  useEffect(() => {
+    if (route.params?.isOfflineMode) {
+      enableOfflineMode();
+    }
+  }, [route.params?.isOfflineMode]);
 
   const logoSource = isDarkMode
     ? require('../../Logos/Abacus v4.1.png')

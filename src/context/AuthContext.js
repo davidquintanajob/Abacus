@@ -10,6 +10,7 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
   const [config, setConfig] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -40,6 +41,7 @@ export const AuthProvider = ({ children }) => {
       const { usuario, token: newToken } = await loginService(nombre_usuario, contrasenna);
       setUser(usuario);
       setToken(newToken);
+      setIsOfflineMode(false); // Desactivar modo offline al iniciar sesión
       
       // Fetch and store configuration after successful login
       try {
@@ -81,6 +83,8 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: !!user,
     login,
     logout,
+    isOfflineMode,
+    setOfflineMode: setIsOfflineMode,
     permissions: config?.permissions || {
       dependiente: false,
       almacenero: false,

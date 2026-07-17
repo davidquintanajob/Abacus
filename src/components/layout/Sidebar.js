@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Image, TouchableWithoutFeedback, Alert } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Image, TouchableWithoutFeedback, Alert, ActivityIndicator } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { useResponsive } from '../../hooks/useResponsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,13 +8,15 @@ import { navigationRef } from '../../navigationRef';
 import { Toast } from '../common/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useAuth } from '../../context/AuthContext';
+import { storageService } from '../../services/storageService';
 
 export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'Home' }) => {
   const { colors } = useTheme();
   const responsive = useResponsive();
   const insets = useSafeAreaInsets();
   const { toast, showToast, hideToast } = useToast();
-  const { user } = useAuth();
+  const { user, permissions } = useAuth();
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const isAdmin = user?.rol === 'Administrador';
 
@@ -30,7 +32,7 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
   const handleLogout = () => {
     Alert.alert(
       'Cerrar Sesión',
-      '¿Estás seguro de que quieres cerrar sesión?',
+      '¿Estás seguro de que quieres cerrar sesión? Se sincronizarán los datos para uso offline.',
       [
         {
           text: 'Cancelar',
@@ -41,6 +43,18 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
           style: 'destructive',
           onPress: async () => {
             try {
+              setIsSyncing(true);
+              
+              // Sincronizar datos antes de cerrar sesión
+              // Pasar usuario y permisos para filtrar según los permisos del usuario
+              const syncResult = await storageService.syncAllData(user, permissions);
+              
+              if (syncResult.success) {
+                console.log(`Datos sincronizados: ${syncResult.serviciosCount} servicios (incluyendo ofertas)`);
+              } else {
+                console.warn('No se pudo sincronizar los datos:', syncResult.error);
+              }
+              
               await SecureStore.deleteItemAsync('token');
               await SecureStore.deleteItemAsync('refreshToken');
               await SecureStore.deleteItemAsync('user');
@@ -52,8 +66,10 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
                 });
               }
               onClose();
+              setIsSyncing(false);
             } catch (error) {
               console.error('Error logging out:', error);
+              setIsSyncing(false);
               showToast({ type: 'error', message: 'No se pudo cerrar sesión', code: error.code ?? null });
             }
           },
@@ -171,14 +187,19 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
           <TouchableOpacity
             style={styles.logoutItem}
             onPress={handleLogout}
+            disabled={isSyncing}
           >
-            <Image
-              source={require('../../../assets/cerrar-sesion.png')}
-              style={[styles.navIcon, { tintColor: colors.error }]}
-              resizeMode="contain"
-            />
+            {isSyncing ? (
+              <ActivityIndicator size={responsive.responsiveWidth(24)} color={colors.error} />
+            ) : (
+              <Image
+                source={require('../../../assets/cerrar-sesion.png')}
+                style={[styles.navIcon, { tintColor: colors.error }]}
+                resizeMode="contain"
+              />
+            )}
             <Text style={[styles.navLabel, { color: colors.error }]}>
-              Cerrar Sesión
+              {isSyncing ? 'Sincronizando...' : 'Cerrar Sesión'}
             </Text>
           </TouchableOpacity>
           <Text style={[styles.version, { color: colors.outline }]}>v1.0.0</Text>

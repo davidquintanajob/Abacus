@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useResponsive } from '../hooks/useResponsive';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
+import { storageService } from '../services/storageService';
 
 const LoginContent = () => {
   const navigation = useNavigation();
@@ -20,6 +21,16 @@ const LoginContent = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast, showToast, hideToast } = useToast();
+  const [hasOfflineData, setHasOfflineData] = useState(false);
+
+  useEffect(() => {
+    checkOfflineData();
+  }, []);
+
+  const checkOfflineData = async () => {
+    const hasData = await storageService.hasOfflineData();
+    setHasOfflineData(hasData);
+  };
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
 
@@ -50,6 +61,10 @@ const LoginContent = () => {
 
   const handleSettings = () => {
     navigation.navigate('Settings', { from: 'Login' });
+  };
+
+  const handleOfflineMode = () => {
+    navigation.navigate('Home', { isOfflineMode: true });
   };
 
   const logoSource = isDarkMode
@@ -205,6 +220,25 @@ const LoginContent = () => {
                 </Text>
               )}
             </TouchableOpacity>
+
+            {/* Offline Mode Button */}
+            {hasOfflineData && (
+              <TouchableOpacity
+                onPress={handleOfflineMode}
+                style={[styles.offlineButton, { borderColor: colors.outlineVariant }]}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name="wifi-outline"
+                  size={responsive.responsiveWidth(20)}
+                  color={colors.outline}
+                  style={styles.offlineIcon}
+                />
+                <Text style={[styles.offlineButtonText, { color: colors.outline }]}>
+                  Continuar sin conexión
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -331,6 +365,25 @@ const createStyles = (responsive) => StyleSheet.create({
     fontWeight: '600',
     fontFamily: 'Hanken Grotesk',
     lineHeight: responsive.fontSizes.bodyLarge * 1.4,
+  },
+  offlineButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    paddingVertical: responsive.responsivePadding(16),
+    borderRadius: responsive.responsiveWidth(12),
+    borderWidth: 1,
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  offlineIcon: {
+    marginRight: responsive.responsiveMargin(8),
+  },
+  offlineButtonText: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+    lineHeight: responsive.fontSizes.body * 1.4,
   },
   settingsButton: {
     position: 'absolute',

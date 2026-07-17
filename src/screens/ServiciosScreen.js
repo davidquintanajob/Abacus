@@ -10,17 +10,20 @@ import { Card } from '../components/common/Card';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
+import { useOffline } from '../context/OfflineContext';
 import { getServicios, getServicioByCodigo, deleteServicio } from '../services/servicioService';
 import { getTiendas } from '../services/tiendaService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { storageService } from '../services/storageService';
 
 const ServiciosContent = () => {
   const navigation = useNavigation();
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
   const { token, user, permissions } = useAuth();
+  const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -39,6 +42,7 @@ const ServiciosContent = () => {
   const [tiendaSearchText, setTiendaSearchText] = useState('');
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
+  const [hasShownOfflineToast, setHasShownOfflineToast] = useState(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
@@ -48,6 +52,20 @@ const ServiciosContent = () => {
     fetchTiendas();
   }, []);
 
+  // Mostrar toast al entrar en modo offline
+  useEffect(() => {
+    if (isOfflineMode && !hasShownOfflineToast) {
+      showToast({ 
+        type: 'warning', 
+        message: 'Modo offline activado. Usando datos locales.',
+        duration: 4000 
+      });
+      setHasShownOfflineToast(true);
+    } else if (!isOfflineMode) {
+      setHasShownOfflineToast(false);
+    }
+  }, [isOfflineMode]);
+
   useFocusEffect(
     React.useCallback(() => {
       fetchServicios();
@@ -56,6 +74,12 @@ const ServiciosContent = () => {
 
   const fetchTiendas = async () => {
     try {
+      if (isOfflineMode) {
+        // En modo offline, no cargar tiendas o usar datos cacheados si existieran
+        setTiendas([]);
+        return;
+      }
+      
       const data = await getTiendas({}, 1, 1000);
       const allTiendas = data.data || [];
       
@@ -78,6 +102,9 @@ const ServiciosContent = () => {
       }
     } catch (err) {
       console.error('Error fetching tiendas:', err);
+      if (!isOfflineMode) {
+        setTiendas([]);
+      }
     }
   };
 
@@ -86,6 +113,42 @@ const ServiciosContent = () => {
       setIsLoading(true);
       setError(null);
 
+      // Modo offline: usar datos de AsyncStorage
+      if (isOfflineMode) {
+        const allServicios = await storageService.getServicios();
+        
+        if (filters.codigo) {
+          // Buscar por código específico
+          const filtered = allServicios.filter(s => 
+            s.codigo?.toLowerCase() === filters.codigo.toLowerCase()
+          );
+          setServicios(filtered);
+          setPagination({ currentPage: 1, limit: 10, totalPages: 1, totalItems: filtered.length });
+        } else {
+          // Aplicar filtros localmente
+          const filteredServicios = await storageService.filterServiciosLocal(filters);
+          
+          // Paginación cliente
+          const totalFilteredItems = filteredServicios.length;
+          const totalFilteredPages = Math.ceil(totalFilteredItems / pagination.limit);
+          const startIndex = (pagination.currentPage - 1) * pagination.limit;
+          const endIndex = startIndex + pagination.limit;
+          const paginatedServicios = filteredServicios.slice(startIndex, endIndex);
+          
+          setServicios(paginatedServicios);
+          setPagination({
+            currentPage: pagination.currentPage,
+            limit: pagination.limit,
+            totalPages: totalFilteredPages,
+            totalItems: totalFilteredItems
+          });
+        }
+        setIsLoading(false);
+        setIsSearching(false);
+        return;
+      }
+
+      // Modo online: usar API
       // Si hay código, usar el endpoint específico /servicio/codigo/:codigo
       if (filters.codigo) {
         try {
@@ -258,6 +321,10 @@ const ServiciosContent = () => {
   };
 
   const handleDelete = (servicio) => {
+    if (isOfflineMode) {
+      showToast({ type: 'warning', message: 'No disponible en modo offline' });
+      return;
+    }
     Alert.alert(
       'Eliminar Servicio',
       `¿Estás seguro de que quieres eliminar el servicio "${servicio.nombre}"?`,
@@ -282,14 +349,22 @@ const ServiciosContent = () => {
 
   const handleServicioPress = (servicio) => {
     const mode = canEdit ? 'edit' : 'view';
-    navigation.navigate('ServicioForm', { servicio, mode });
+    navigation.navigate('ServicioForm', { servicio, mode, isOfflineMode });
   };
 
   const handleEdit = (servicio) => {
+    if (isOfflineMode) {
+      showToast({ type: 'warning', message: 'No disponible en modo offline' });
+      return;
+    }
     navigation.navigate('ServicioForm', { servicio, mode: 'edit' });
   };
 
   const handleAdd = () => {
+    if (isOfflineMode) {
+      showToast({ type: 'warning', message: 'No disponible en modo offline' });
+      return;
+    }
     navigation.navigate('ServicioForm', { mode: 'add' });
   };
 
@@ -666,7 +741,7 @@ const ServiciosContent = () => {
 
         {/* Add Buttons */}
         <View style={styles.addButtonsContainer}>
-          {isAdmin && (
+          {isAdmin && !isOfflineMode && (
             <TouchableOpacity
               style={[styles.addButton, { backgroundColor: colors.primary }]}
               onPress={handleAdd}
@@ -675,7 +750,7 @@ const ServiciosContent = () => {
               <Text style={[styles.addButtonTextSmal, { color: '#fff' }]}>Agregar Servicio</Text>
             </TouchableOpacity>
           )}
-          {isAdmin && (
+          {isAdmin && !isOfflineMode && (
             <TouchableOpacity
               style={[styles.addButton, { backgroundColor: colors.primary }]}
               onPress={() => navigation.navigate('ServicioForm', { mode: 'add', isOferta: true })}
@@ -719,6 +794,12 @@ const ServiciosContent = () => {
               const tiendaServicio = filters.id_tienda 
                 ? servicio.tiendas_servicio?.find(ts => ts.id_tienda === parseInt(filters.id_tienda))
                 : null;
+              
+              // En modo offline y no admin, mostrar precios del primer servicio_tienda disponible
+              const showOfflinePrices = isOfflineMode && !isAdmin;
+              const offlineTiendaServicio = showOfflinePrices && servicio.tiendas_servicio?.length > 0
+                ? servicio.tiendas_servicio[0]
+                : null;
 
               return (
                 <TouchableOpacity
@@ -752,7 +833,16 @@ const ServiciosContent = () => {
                         </View>
                       </View>
                       <Text style={[styles.servicioDetails, { color: colors.outline }]}>Categoría: {servicio.categoria}</Text>
-                      {tiendaServicio && (
+                      {showOfflinePrices && offlineTiendaServicio ? (
+                        <>
+                          <Text style={[styles.servicioDetails, { color: colors.outline }]}>
+                            Precio CUP: ${parseFloat(offlineTiendaServicio.precio_cup).toFixed(2)}
+                          </Text>
+                          <Text style={[styles.servicioDetails, { color: colors.outline }]}>
+                            Precio USD: ${parseFloat(offlineTiendaServicio.precio_usd).toFixed(2)}
+                          </Text>
+                        </>
+                      ) : tiendaServicio && (
                         <>
                           <Text style={[styles.servicioDetails, { color: colors.outline }]}>
                             Precio CUP: ${parseFloat(tiendaServicio.precio_cup).toFixed(2)}

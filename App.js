@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { OfflineProvider } from './src/context/OfflineContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -69,11 +70,13 @@ const RootNavigator = () => {
 export default function App() {
   return (
     <AuthProvider>
-      <ThemeProvider>
-        <NavigationContainer ref={navigationRef}>
-          <RootNavigator />
-        </NavigationContainer>
-      </ThemeProvider>
+      <OfflineProvider>
+        <ThemeProvider>
+          <NavigationContainer ref={navigationRef}>
+            <RootNavigator />
+          </NavigationContainer>
+        </ThemeProvider>
+      </OfflineProvider>
     </AuthProvider>
   );
 }
