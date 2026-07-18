@@ -1,7 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getServicios } from './servicioService';
+import { getTiendas } from './tiendaService';
 
 const SERVICIOS_KEY = '@abacus_servicios';
+const TIENDAS_KEY = '@abacus_tiendas';
 const HAS_OFFLINE_DATA_KEY = '@abacus_has_offline_data';
 
 export const storageService = {
@@ -45,6 +47,30 @@ export const storageService = {
       // Limpiar datos anteriores antes de guardar nuevos
       await storageService.clearOfflineData();
 
+      // Obtener todas las tiendas
+      const tiendasData = await getTiendas({}, 1, 1000);
+      let tiendas = tiendasData.data || [];
+      
+      // Aplicar filtrado por permisos para tiendas (misma lógica que ServiciosScreen)
+      if (user && permissions) {
+        const userRole = user.rol?.toLowerCase();
+        const canViewAllStores = 
+          userRole === 'administrador' ||
+          (userRole === 'dependiente' && permissions?.dependiente) ||
+          (userRole === 'almacenero' && permissions?.almacenero) ||
+          (userRole === 'económico' && permissions?.economico);
+
+        // Si el usuario no puede ver todas las tiendas, mostrar solo su tienda
+        if (!canViewAllStores && user?.id_tienda) {
+          const userTienda = tiendas.find(t => t.id_tienda === user.id_tienda);
+          tiendas = userTienda ? [userTienda] : [];
+          console.log(`Filtrando tiendas por tienda del usuario ${user.id_tienda}: ${tiendas.length} tiendas`);
+        }
+      }
+      
+      console.log(`Sincronizando ${tiendas.length} tiendas`);
+      await storageService.saveTiendas(tiendas);
+
       // Obtener todos los servicios (incluyendo productos y sus relaciones de ofertas)
       // Sin filtros para obtener todos los servicios
       // fetchProducto: 'true' es CRUCIAL para incluir servicios vendibles (que tienen productos)
@@ -79,7 +105,7 @@ export const storageService = {
       
       await storageService.saveServicios(servicios);
 
-      return { success: true, serviciosCount: servicios.length };
+      return { success: true, serviciosCount: servicios.length, tiendasCount: tiendas.length };
     } catch (error) {
       console.error('Error sincronizando datos:', error);
       return { success: false, error: error.message };
@@ -89,11 +115,33 @@ export const storageService = {
   // Limpiar todos los datos offline
   clearOfflineData: async () => {
     try {
-      await AsyncStorage.multiRemove([SERVICIOS_KEY, HAS_OFFLINE_DATA_KEY]);
+      await AsyncStorage.multiRemove([SERVICIOS_KEY, TIENDAS_KEY, HAS_OFFLINE_DATA_KEY]);
       return true;
     } catch (error) {
       console.error('Error limpiando datos offline:', error);
       return false;
+    }
+  },
+
+  // Guardar tiendas en AsyncStorage
+  saveTiendas: async (tiendas) => {
+    try {
+      await AsyncStorage.setItem(TIENDAS_KEY, JSON.stringify(tiendas));
+      return true;
+    } catch (error) {
+      console.error('Error guardando tiendas en AsyncStorage:', error);
+      return false;
+    }
+  },
+
+  // Obtener tiendas de AsyncStorage
+  getTiendas: async () => {
+    try {
+      const jsonValue = await AsyncStorage.getItem(TIENDAS_KEY);
+      return jsonValue !== null ? JSON.parse(jsonValue) : [];
+    } catch (error) {
+      console.error('Error leyendo tiendas de AsyncStorage:', error);
+      return [];
     }
   },
 

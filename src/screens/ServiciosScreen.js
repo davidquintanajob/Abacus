@@ -73,16 +73,6 @@ const ServiciosContent = () => {
 
   const fetchTiendas = async () => {
     try {
-      if (isOfflineMode) {
-        // En modo offline, no cargar tiendas o usar datos cacheados si existieran
-        setTiendas([]);
-        return;
-      }
-      
-      const data = await getTiendas({}, 1, 1000);
-      const allTiendas = data.data || [];
-      
-      // Apply store visibility permissions
       const userRole = user?.rol?.toLowerCase();
       const canViewAllStores = 
         userRole === 'administrador' ||
@@ -90,6 +80,17 @@ const ServiciosContent = () => {
         (userRole === 'almacenero' && permissions?.almacenero) ||
         (userRole === 'económico' && permissions?.economico);
 
+      let allTiendas = [];
+      
+      if (isOfflineMode) {
+        // En modo offline, cargar tiendas de AsyncStorage
+        allTiendas = await storageService.getTiendas();
+      } else {
+        // En modo online, cargar tiendas de la API
+        const data = await getTiendas({}, 1, 1000);
+        allTiendas = data.data || [];
+      }
+      
       // Always default to user's store if they have one
       if (user?.id_tienda) {
         // If user can view all stores, show all stores in dropdown
