@@ -112,7 +112,7 @@ export const storageService = {
 
       if (filters.codigo) {
         filtered = filtered.filter(s => 
-          s.codigo?.toLowerCase().includes(filters.codigo.toLowerCase())
+          s.codigos?.some(c => c.codigo_barras_ean?.toLowerCase().includes(filters.codigo.toLowerCase()))
         );
       }
 
@@ -128,7 +128,9 @@ export const storageService = {
       }
 
       if (filters.id_tienda) {
-        filtered = filtered.filter(s => s.id_tienda === parseInt(filters.id_tienda));
+        filtered = filtered.filter(s => 
+          s.tiendas_servicio?.some(ts => ts.id_tienda === parseInt(filters.id_tienda))
+        );
       }
 
       return filtered;

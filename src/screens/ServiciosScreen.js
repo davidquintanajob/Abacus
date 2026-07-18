@@ -38,7 +38,6 @@ const ServiciosContent = () => {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [showTiendaDropdown, setShowTiendaDropdown] = useState(false);
-  const [showCategoriaDropdown, setShowCategoriaDropdown] = useState(false);
   const [tiendaSearchText, setTiendaSearchText] = useState('');
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -91,11 +90,17 @@ const ServiciosContent = () => {
         (userRole === 'almacenero' && permissions?.almacenero) ||
         (userRole === 'económico' && permissions?.economico);
 
-      // If user cannot view all stores, filter to show only their own store
-      if (!canViewAllStores && user?.id_tienda) {
-        const userTienda = allTiendas.find(t => t.id_tienda === user.id_tienda);
-        setTiendas(userTienda ? [userTienda] : []);
-        // Auto-select the user's store in the filter
+      // Always default to user's store if they have one
+      if (user?.id_tienda) {
+        // If user can view all stores, show all stores in dropdown
+        // If user cannot view all stores, show only their store
+        if (canViewAllStores) {
+          setTiendas(allTiendas);
+        } else {
+          const userTienda = allTiendas.find(t => t.id_tienda === user.id_tienda);
+          setTiendas(userTienda ? [userTienda] : []);
+        }
+        // Always auto-select the user's store in the filter by default
         setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
       } else {
         setTiendas(allTiendas);
@@ -118,9 +123,9 @@ const ServiciosContent = () => {
         const allServicios = await storageService.getServicios();
         
         if (filters.codigo) {
-          // Buscar por código específico
+          // Buscar por código específico en el array de códigos
           const filtered = allServicios.filter(s => 
-            s.codigo?.toLowerCase() === filters.codigo.toLowerCase()
+            s.codigos?.some(c => c.codigo_barras_ean?.toLowerCase() === filters.codigo.toLowerCase())
           );
           setServicios(filtered);
           setPagination({ currentPage: 1, limit: 10, totalPages: 1, totalItems: filtered.length });
@@ -267,57 +272,8 @@ const ServiciosContent = () => {
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
     
-    const fetchWithClearedFilters = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        
-        // Check if any filters are active after clearing
-        const hasActiveFilters = Object.values(clearedFilters).some(value => value !== '' && value !== null && value !== undefined);
-        
-        // If filters are active, fetch all data to ensure accurate pagination
-        // Otherwise, use paginated fetch from backend
-        const fetchLimit = hasActiveFilters ? 10000 : pagination.limit;
-        const data = await getServicios(clearedFilters, 1, fetchLimit);
-        let servicios = data.data || [];
-
-        // If user cannot view all stores, filter to show only services from their own store
-        if (!canViewAllStores && user?.id_tienda) {
-          servicios = servicios.filter(s => {
-            // Check if the service belongs to the user's store via tiendas_servicio
-            return s.tiendas_servicio?.some(ts => ts.id_tienda === user.id_tienda);
-          });
-        }
-
-        // If filters are active, paginate client-side
-        if (hasActiveFilters) {
-          const totalFilteredItems = servicios.length;
-          const totalFilteredPages = Math.ceil(totalFilteredItems / pagination.limit);
-          const startIndex = 0;
-          const endIndex = pagination.limit;
-          const paginatedServicios = servicios.slice(startIndex, endIndex);
-          
-          setServicios(paginatedServicios);
-          setPagination({
-            currentPage: 1,
-            limit: pagination.limit,
-            totalPages: totalFilteredPages,
-            totalItems: totalFilteredItems
-          });
-        } else {
-          // No filters active, use backend pagination
-          setServicios(servicios);
-          setPagination(data.pagination || pagination);
-        }
-      } catch (err) {
-        setError(err.message);
-        console.error('Error fetching servicios:', err);
-      } finally {
-        setIsLoading(false);
-        setIsSearching(false);
-      }
-    };
-    fetchWithClearedFilters();
+    // Simply call fetchServicios which handles both online and offline modes correctly
+    fetchServicios();
   };
 
   const handleDelete = (servicio) => {
@@ -349,7 +305,7 @@ const ServiciosContent = () => {
 
   const handleServicioPress = (servicio) => {
     const mode = canEdit ? 'edit' : 'view';
-    navigation.navigate('ServicioForm', { servicio, mode, isOfflineMode });
+    navigation.navigate('ServicioForm', { servicio, mode });
   };
 
   const handleEdit = (servicio) => {
@@ -419,9 +375,6 @@ const ServiciosContent = () => {
   const filteredTiendas = tiendas.filter(tienda =>
     tienda.nombre.toLowerCase().includes(tiendaSearchText.toLowerCase())
   );
-
-  // Get unique categories from servicios
-  const categorias = [...new Set(servicios.map(s => s.categoria))];
 
   // Check if user can view all stores
   const userRole = user?.rol?.toLowerCase();
@@ -602,45 +555,13 @@ const ServiciosContent = () => {
 
               <View style={styles.filterGroup}>
                 <Text style={[styles.label, { color: colors.outline }]}>Categoría</Text>
-                <TouchableOpacity
-                  style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={() => setShowCategoriaDropdown(!showCategoriaDropdown)}
-                >
-                  <Text style={[styles.dropdownText, { color: filters.categoria ? colors.onSurface : colors.outline }]}>
-                    {filters.categoria || 'Todas las categorías'}
-                  </Text>
-                  <Ionicons 
-                    name={showCategoriaDropdown ? "chevron-up" : "chevron-down"} 
-                    size={responsive.responsiveWidth(20)} 
-                    color={colors.outline} 
-                  />
-                </TouchableOpacity>
-                
-                {showCategoriaDropdown && (
-                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    <TouchableOpacity
-                      style={styles.dropdownItem}
-                      onPress={() => {
-                        setFilters(prev => ({ ...prev, categoria: '' }));
-                        setShowCategoriaDropdown(false);
-                      }}
-                    >
-                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todas las categorías</Text>
-                    </TouchableOpacity>
-                    {categorias.map((categoria, index) => (
-                      <TouchableOpacity
-                        key={categoria}
-                        style={[styles.dropdownItem, index === categorias.length - 1 && styles.dropdownItemLast]}
-                        onPress={() => {
-                          setFilters(prev => ({ ...prev, categoria }));
-                          setShowCategoriaDropdown(false);
-                        }}
-                      >
-                        <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{categoria}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Buscar por categoría..."
+                  value={filters.categoria}
+                  onChangeText={(text) => setFilters(prev => ({ ...prev, categoria: text }))}
+                />
               </View>
 
               <View style={styles.filterGroup}>

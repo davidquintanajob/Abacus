@@ -9,9 +9,11 @@ import { Card } from '../components/common/Card';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
+import { useOffline } from '../context/OfflineContext';
 import { createServicio, updateServicio, getServicios, getServicioById } from '../services/servicioService';
 import { getTiendas } from '../services/tiendaService';
 import { configService } from '../services/configService';
+import { storageService } from '../services/storageService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -22,9 +24,10 @@ const ServicioFormContent = () => {
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
   const { token, user, permissions } = useAuth();
+  const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
 
-  const { servicio, mode, isOferta, isOfflineMode } = route.params || { mode: 'add' };
+  const { servicio, mode, isOferta } = route.params || { mode: 'add' };
 
   const isViewMode = mode === 'view';
   const isEditMode = mode === 'edit';
@@ -49,6 +52,8 @@ const ServicioFormContent = () => {
   const [priceInputTexts, setPriceInputTexts] = useState({});
   // Same for general prices
   const [generalPriceInputTexts, setGeneralPriceInputTexts] = useState({});
+  // Same for oferta cantidad field
+  const [cantidadInputTexts, setCantidadInputTexts] = useState({});
   
   // Estados para la sección de Oferta
   const [allServicios, setAllServicios] = useState([]);
@@ -170,12 +175,27 @@ const ServicioFormContent = () => {
       console.log('mode:', mode);
       console.log('servicio:', servicio);
       console.log('servicio?.id_servicio:', servicio?.id_servicio);
+      console.log('isOfflineMode:', isOfflineMode);
       
       if (servicio?.id_servicio) {
         try {
           setIsFetchingServicio(true);
-          // Fetch complete servicio data to ensure tiendas_servicio is populated
-          const completeServicio = await getServicioById(servicio.id_servicio);
+          
+          let completeServicio;
+          
+          if (isOfflineMode) {
+            // En modo offline, usar datos locales del servicio pasado como parámetro
+            completeServicio = servicio;
+            showToast({ 
+              type: 'info', 
+              message: 'Cargando datos locales. Conéctese al servidor para cargar datos actualizados.',
+              duration: 4000 
+            });
+          } else {
+            // Fetch complete servicio data to ensure tiendas_servicio is populated
+            completeServicio = await getServicioById(servicio.id_servicio);
+          }
+          
           console.log('=== Complete servicio fetched ===');
           console.log('completeServicio:', completeServicio);
           console.log('tiendas_servicio:', completeServicio.tiendas_servicio);
@@ -328,10 +348,15 @@ const ServicioFormContent = () => {
     };
 
     fetchCompleteServicio();
-  }, [servicio?.id_servicio, canViewCosts, user?.id_tienda, permissions]);
+  }, [servicio?.id_servicio, canViewCosts, user?.id_tienda, permissions, isOfflineMode]);
 
   const fetchTiendas = async () => {
     try {
+      if (isOfflineMode) {
+        // En modo offline, no cargar tiendas de la API
+        setTiendas([]);
+        return;
+      }
       const data = await getTiendas({}, 1, 1000);
       setTiendas(data.data || []);
     } catch (err) {
@@ -341,6 +366,10 @@ const ServicioFormContent = () => {
 
   const fetchConfig = async () => {
     try {
+      if (isOfflineMode) {
+        // En modo offline, no cargar config de la API
+        return;
+      }
       const data = await configService.getConfig();
       setConfig(data);
       if (data.cupToUsdRate) {
@@ -353,6 +382,12 @@ const ServicioFormContent = () => {
 
   const fetchAllServicios = async () => {
     try {
+      if (isOfflineMode) {
+        // En modo offline, cargar servicios de AsyncStorage
+        const allServicios = await storageService.getServicios();
+        setAllServicios(allServicios);
+        return;
+      }
       // Obtener todos los servicios (vendibles y no vendibles)
       const dataVendibles = await getServicios({ esvendible: 'true' }, 1, 1000);
       const dataNoVendibles = await getServicios({ esvendible: 'false' }, 1, 1000);
@@ -397,7 +432,10 @@ const ServicioFormContent = () => {
   };
 
   const handleCantidadChange = (index, value) => {
-    // Permitir valores con punto decimal
+    // Track raw text input to allow decimal input
+    setCantidadInputTexts(prev => ({ ...prev, [index]: value }));
+    
+    // Parse the value for the actual data
     const cantidad = parseFloat(value) || 0;
     if (cantidad < 0) {
       showToast({ type: 'warning', message: 'La cantidad no puede ser negativa' });
@@ -932,8 +970,13 @@ const ServicioFormContent = () => {
                         {canEditService ? (
                           <TextInput
                             style={[styles.componenteCantidadInput, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                            value={componente.cantidad?.toString() || '1'}
+                            value={cantidadInputTexts[index] ?? componente.cantidad?.toString() ?? '1'}
                             onChangeText={(text) => handleCantidadChange(index, text)}
+                            onBlur={() => {
+                              // Sync the raw text with the actual parsed value on blur
+                              const cantidad = componente.cantidad || 1.0;
+                              setCantidadInputTexts(prev => ({ ...prev, [index]: cantidad.toString() }));
+                            }}
                             keyboardType="decimal-pad"
                           />
                         ) : (
