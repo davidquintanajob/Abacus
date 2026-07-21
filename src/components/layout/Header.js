@@ -21,7 +21,7 @@ export const Header = ({
   const { isOfflineMode } = useOffline();
   const { colors } = useTheme();
   const responsive = useResponsive();
-  const insets = useSafeAreaInsets();
+  const insets = useSafeAreaInsets() || { top: 0, bottom: 0, left: 0, right: 0 };
 
   const isDarkMode = isDark === true || isDark === 'true';
   const showBack = showBackButton === true || showBackButton === 'true';

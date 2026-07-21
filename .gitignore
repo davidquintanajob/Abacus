@@ -41,7 +41,7 @@ src/config.local.js
 
 # generated native folders
 /ios
-/android
+# /android
 
 # backend
 # Abacus-backend/

@@ -24,7 +24,7 @@ const TOAST_CONFIG = {
 };
 
 export const Toast = ({ visible, type = 'error', message, code, duration = 4000, onHide, toastKey }) => {
-  const insets = useSafeAreaInsets();
+  const insets = useSafeAreaInsets() || { top: 0, bottom: 0, left: 0, right: 0 };
   const responsive = useResponsive();
   const translateY = useRef(new Animated.Value(-120)).current;
   const opacity = useRef(new Animated.Value(0)).current;

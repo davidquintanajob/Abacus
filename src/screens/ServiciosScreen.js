@@ -15,7 +15,8 @@ import { getServicios, getServicioByCodigo, deleteServicio } from '../services/s
 import { getTiendas } from '../services/tiendaService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView } from 'expo-camera';
+import * as Camera from 'expo-camera';
 import { storageService } from '../services/storageService';
 
 const ServiciosContent = () => {
@@ -40,7 +41,7 @@ const ServiciosContent = () => {
   const [showTiendaDropdown, setShowTiendaDropdown] = useState(false);
   const [tiendaSearchText, setTiendaSearchText] = useState('');
   const [showScannerModal, setShowScannerModal] = useState(false);
-  const [permission, requestPermission] = useCameraPermissions();
+  const [cameraPermission, setCameraPermission] = useState(null);
   const [hasShownOfflineToast, setHasShownOfflineToast] = useState(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
@@ -49,6 +50,10 @@ const ServiciosContent = () => {
 
   useEffect(() => {
     fetchTiendas();
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setCameraPermission(status === 'granted');
+    })();
   }, []);
 
   // Mostrar toast al entrar en modo offline
@@ -350,15 +355,10 @@ const ServiciosContent = () => {
   };
 
   const handleOpenScanner = async () => {
-    if (!permission) {
-      const result = await requestPermission();
-      if (!result.granted) {
-        showToast({ type: 'error', message: 'Se requiere permiso de cámara para escanear códigos' });
-        return;
-      }
-    } else if (!permission.granted) {
-      const result = await requestPermission();
-      if (!result.granted) {
+    if (!cameraPermission) {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setCameraPermission(status === 'granted');
+      if (status !== 'granted') {
         showToast({ type: 'error', message: 'Se requiere permiso de cámara para escanear códigos' });
         return;
       }

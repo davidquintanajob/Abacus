@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getServicios } from './servicioService';
+import { getProductos } from './productoService';
 import { getTiendas } from './tiendaService';
 
 const SERVICIOS_KEY = '@abacus_servicios';
+const PRODUCTOS_KEY = '@abacus_productos';
 const TIENDAS_KEY = '@abacus_tiendas';
 const HAS_OFFLINE_DATA_KEY = '@abacus_has_offline_data';
 
@@ -105,7 +107,32 @@ export const storageService = {
       
       await storageService.saveServicios(servicios);
 
-      return { success: true, serviciosCount: servicios.length, tiendasCount: tiendas.length };
+      // Obtener todos los productos
+      const productosData = await getProductos({ esvendible: '' }, 1, 10000);
+      let productos = productosData.data || [];
+      
+      // Aplicar filtrado por permisos (misma lógica que ProductosScreen)
+      if (user && permissions) {
+        const userRole = user.rol?.toLowerCase();
+        const canViewAllStores = 
+          userRole === 'administrador' ||
+          (userRole === 'dependiente' && permissions?.dependiente) ||
+          (userRole === 'almacenero' && permissions?.almacenero) ||
+          (userRole === 'económico' && permissions?.economico);
+
+        // Si el usuario no puede ver todas las tiendas, filtrar por su tienda
+        if (!canViewAllStores && user?.id_tienda) {
+          productos = productos.filter(p => {
+            return p.tiendas_servicio?.some(ts => ts.id_tienda === user.id_tienda);
+          });
+          console.log(`Filtrando productos por tienda ${user.id_tienda}: ${productos.length} productos`);
+        }
+      }
+      
+      console.log(`Sincronizando ${productos.length} productos`);
+      await storageService.saveProductos(productos);
+
+      return { success: true, serviciosCount: servicios.length, productosCount: productos.length, tiendasCount: tiendas.length };
     } catch (error) {
       console.error('Error sincronizando datos:', error);
       return { success: false, error: error.message };
@@ -115,11 +142,76 @@ export const storageService = {
   // Limpiar todos los datos offline
   clearOfflineData: async () => {
     try {
-      await AsyncStorage.multiRemove([SERVICIOS_KEY, TIENDAS_KEY, HAS_OFFLINE_DATA_KEY]);
+      await AsyncStorage.multiRemove([SERVICIOS_KEY, PRODUCTOS_KEY, TIENDAS_KEY, HAS_OFFLINE_DATA_KEY]);
       return true;
     } catch (error) {
       console.error('Error limpiando datos offline:', error);
       return false;
+    }
+  },
+
+  // Guardar productos en AsyncStorage
+  saveProductos: async (productos) => {
+    try {
+      await AsyncStorage.setItem(PRODUCTOS_KEY, JSON.stringify(productos));
+      return true;
+    } catch (error) {
+      console.error('Error guardando productos en AsyncStorage:', error);
+      return false;
+    }
+  },
+
+  // Obtener productos de AsyncStorage
+  getProductos: async () => {
+    try {
+      const jsonValue = await AsyncStorage.getItem(PRODUCTOS_KEY);
+      return jsonValue !== null ? JSON.parse(jsonValue) : [];
+    } catch (error) {
+      console.error('Error leyendo productos de AsyncStorage:', error);
+      return [];
+    }
+  },
+
+  // Filtrar productos localmente (para modo offline)
+  filterProductosLocal: async (filters = {}) => {
+    try {
+      const allProductos = await storageService.getProductos();
+      
+      let filtered = allProductos;
+
+      if (filters.nombre) {
+        filtered = filtered.filter(p => 
+          p.nombre?.toLowerCase().includes(filters.nombre.toLowerCase())
+        );
+      }
+
+      if (filters.codigo) {
+        filtered = filtered.filter(p => 
+          p.codigos?.some(c => c.codigo_barras_ean?.toLowerCase().includes(filters.codigo.toLowerCase()))
+        );
+      }
+
+      if (filters.categoria) {
+        filtered = filtered.filter(p => 
+          p.categoria?.toLowerCase() === filters.categoria.toLowerCase()
+        );
+      }
+
+      if (filters.esvendible !== '') {
+        const esVendible = filters.esvendible === 'true';
+        filtered = filtered.filter(p => p.esvendible === esVendible);
+      }
+
+      if (filters.id_tienda) {
+        filtered = filtered.filter(p => 
+          p.tiendas_servicio?.some(ts => ts.id_tienda === parseInt(filters.id_tienda))
+        );
+      }
+
+      return filtered;
+    } catch (error) {
+      console.error('Error filtrando productos localmente:', error);
+      return [];
     }
   },
 

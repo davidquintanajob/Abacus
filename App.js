@@ -2,6 +2,7 @@ import React from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { OfflineProvider } from './src/context/OfflineContext';
@@ -16,6 +17,9 @@ import { UsuariosScreen } from './src/screens/UsuariosScreen';
 import { UsuarioFormScreen } from './src/screens/UsuarioFormScreen';
 import { ServiciosScreen } from './src/screens/ServiciosScreen';
 import { ServicioFormScreen } from './src/screens/ServicioFormScreen';
+import { ProductosScreen } from './src/screens/ProductosScreen';
+import { ProductoFormScreen } from './src/screens/ProductoFormScreen';
+import { BarcodeScannerScreen } from './src/screens/BarcodeScannerScreen';
 import { CurrencyExchangeScreen } from './src/screens/CurrencyExchangeScreen';
 import { navigationRef } from './src/navigationRef';
 
@@ -49,6 +53,9 @@ const AppStack = ({ initialRoute }) => (
     <Stack.Screen name="UsuarioForm" component={UsuarioFormScreen} />
     <Stack.Screen name="Servicios" component={ServiciosScreen} />
     <Stack.Screen name="ServicioForm" component={ServicioFormScreen} />
+    <Stack.Screen name="Productos" component={ProductosScreen} />
+    <Stack.Screen name="ProductoForm" component={ProductoFormScreen} />
+    <Stack.Screen name="BarcodeScanner" component={BarcodeScannerScreen} />
     <Stack.Screen name="CurrencyExchange" component={CurrencyExchangeScreen} />
   </Stack.Navigator>
 );
@@ -69,14 +76,16 @@ const RootNavigator = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <OfflineProvider>
-        <ThemeProvider>
-          <NavigationContainer ref={navigationRef}>
-            <RootNavigator />
-          </NavigationContainer>
-        </ThemeProvider>
-      </OfflineProvider>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <OfflineProvider>
+          <ThemeProvider>
+            <NavigationContainer ref={navigationRef}>
+              <RootNavigator />
+            </NavigationContainer>
+          </ThemeProvider>
+        </OfflineProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }

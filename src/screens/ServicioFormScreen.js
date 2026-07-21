@@ -16,7 +16,8 @@ import { configService } from '../services/configService';
 import { storageService } from '../services/storageService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView } from 'expo-camera';
+import * as Camera from 'expo-camera';
 
 const ServicioFormContent = () => {
   const navigation = useNavigation();
@@ -44,7 +45,7 @@ const ServicioFormContent = () => {
   const [newCodigo, setNewCodigo] = useState('');
   const [newNota, setNewNota] = useState('');
   const [showScannerModal, setShowScannerModal] = useState(false);
-  const [permission, requestPermission] = useCameraPermissions();
+  const [cameraPermission, setCameraPermission] = useState(null);
   const [config, setConfig] = useState({});
   const [exchangeRate, setExchangeRate] = useState(null);
   // Tracks raw text while the user is typing in a price field (avoids .toFixed forcing cursor to end)
@@ -100,6 +101,13 @@ const ServicioFormContent = () => {
       setIsOfertaExpanded(true);
     }
   }, [formData.codigoList.length, formData.servicioTiendaList.length, formData.ofertaList.length]);
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setCameraPermission(status === 'granted');
+    })();
+  }, []);
 
   const handleGeneralPriceBlur = () => {
     const hasAllGeneralPrices = 
@@ -598,29 +606,16 @@ const ServicioFormContent = () => {
   };
 
   const handleOpenScanner = async () => {
-    console.log('Opening scanner...');
-    console.log('Permission status:', permission);
-    
-    if (!permission) {
-      console.log('Requesting permission...');
-      const result = await requestPermission();
-      console.log('Permission result:', result);
-      if (!result.granted) {
-        showToast({ type: 'error', message: 'Se requiere permiso de cámara para escanear códigos' });
-        return;
-      }
-    } else if (!permission.granted) {
-      console.log('Permission not granted, requesting...');
-      const result = await requestPermission();
-      console.log('Permission result:', result);
-      if (!result.granted) {
+    if (!cameraPermission) {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setCameraPermission(status === 'granted');
+      if (status !== 'granted') {
         showToast({ type: 'error', message: 'Se requiere permiso de cámara para escanear códigos' });
         return;
       }
     }
     
     setShowScannerModal(true);
-    console.log('Scanner modal should be open now');
   };
 
   const handleBarcodeScanned = ({ data }) => {
