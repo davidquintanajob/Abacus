@@ -38,7 +38,8 @@ const ProductoFormContent = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingProducto, setIsFetchingProducto] = useState(false);
   const [tiendas, setTiendas] = useState([]);
-  const [showTiendaDropdown, setShowTiendaDropdown] = useState(null);
+  const [showTiendaDropdown, setShowTiendaDropdown] = useState(false);
+  const [editingTiendaIndex, setEditingTiendaIndex] = useState(null);
   const [tiendaSearchText, setTiendaSearchText] = useState('');
   const [showAddCodeModal, setShowAddCodeModal] = useState(false);
   const [newCodigo, setNewCodigo] = useState('');
@@ -265,6 +266,13 @@ const ProductoFormContent = () => {
       showToast({ type: 'warning', message: 'Debe agregar al menos un código' });
       return;
     }
+    // Validate that there are no duplicate stores in productoTiendaList
+    const tiendaIds = formData.productoTiendaList.map(item => item.id_tienda).filter(id => id !== null);
+    const uniqueTiendaIds = new Set(tiendaIds);
+    if (tiendaIds.length !== uniqueTiendaIds.size) {
+      showToast({ type: 'error', message: 'No se puede guardar: hay tiendas duplicadas en la lista de precios y costos' });
+      return;
+    }
 
     try {
       setIsSaving(true);
@@ -430,18 +438,29 @@ const ProductoFormContent = () => {
   };
 
   const handleAddTiendaProducto = () => {
+    // Get all active tienda IDs that are not already in the list
+    const existingTiendaIds = formData.productoTiendaList.map(item => item.id_tienda).filter(id => id !== null);
+    const availableTiendas = tiendas.filter(tienda => 
+      tienda.activo === true && !existingTiendaIds.includes(tienda.id_tienda)
+    );
+
+    if (availableTiendas.length === 0) {
+      showToast({ type: 'warning', message: 'Todas las tiendas ya están agregadas' });
+      return;
+    }
+
+    // Add all available tiendas at once
+    const newTiendaEntries = availableTiendas.map(tienda => ({
+      id_tienda: tienda.id_tienda,
+      precio_cup: formData.precio_cup_general,
+      precio_usd: formData.precio_usd_general,
+      costo_cup: formData.costo_cup_general,
+      costo_usd: formData.costo_usd_general,
+    }));
+
     setFormData(prev => ({
       ...prev,
-      productoTiendaList: [
-        ...prev.productoTiendaList,
-        { 
-          id_tienda: null, 
-          precio_cup: prev.precio_cup_general, 
-          precio_usd: prev.precio_usd_general, 
-          costo_cup: prev.costo_cup_general, 
-          costo_usd: prev.costo_usd_general 
-        }
-      ]
+      productoTiendaList: [...prev.productoTiendaList, ...newTiendaEntries]
     }));
   };
 
@@ -1064,10 +1083,24 @@ const ProductoFormContent = () => {
               <View style={styles.sectionActions}>
                 {canEditProduct && (
                   <TouchableOpacity
-                    style={[styles.addButtonSmall, { backgroundColor: colors.primary }]}
+                    style={[
+                      styles.addButtonSmall, 
+                      { 
+                        backgroundColor: formData.productoTiendaList.filter(item => item.id_tienda !== null).length >= tiendas.filter(t => t.activo === true).length 
+                          ? colors.outlineVariant 
+                          : colors.primary 
+                      }
+                    ]}
                     onPress={handleAddTiendaProducto}
+                    disabled={formData.productoTiendaList.filter(item => item.id_tienda !== null).length >= tiendas.filter(t => t.activo === true).length}
                   >
-                    <Ionicons name="add" size={responsive.responsiveWidth(18)} color="#fff" />
+                    <Ionicons 
+                      name="add" 
+                      size={responsive.responsiveWidth(18)} 
+                      color={formData.productoTiendaList.filter(item => item.id_tienda !== null).length >= tiendas.filter(t => t.activo === true).length 
+                        ? colors.outline 
+                        : "#fff"} 
+                    />
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity
@@ -1096,7 +1129,10 @@ const ProductoFormContent = () => {
                         <Text style={[styles.label, { color: colors.outline }]}>Tienda</Text>
                         <TouchableOpacity
                           style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
-                          onPress={() => setShowTiendaDropdown(index)}
+                          onPress={() => {
+                            setEditingTiendaIndex(index);
+                            setShowTiendaDropdown(true);
+                          }}
                           disabled={isViewMode && !canEditProduct}
                         >
                           <Text style={[styles.dropdownText, { color: tiendaProducto.id_tienda ? colors.onSurface : colors.outline }]}>
@@ -1108,50 +1144,6 @@ const ProductoFormContent = () => {
                             color={colors.outline} 
                           />
                         </TouchableOpacity>
-                        
-                        {showTiendaDropdown === index && (
-                          <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                            <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                              <Ionicons 
-                                name="search-outline" 
-                                size={responsive.responsiveWidth(18)} 
-                                color={colors.outline} 
-                                style={styles.searchIcon}
-                              />
-                              <TextInput
-                                style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
-                                placeholderTextColor={colors.outline}
-                                placeholder="Buscar tienda..."
-                                value={tiendaSearchText}
-                                onChangeText={setTiendaSearchText}
-                              />
-                            </View>
-                            {filteredTiendas.length > 0 ? (
-                              filteredTiendas.map((tienda, idx) => (
-                                <TouchableOpacity
-                                  key={tienda.id_tienda}
-                                  style={[styles.dropdownItem, idx === filteredTiendas.length - 1 && styles.dropdownItemLast]}
-                                  onPress={() => {
-                                    setFormData(prev => {
-                                      const updatedList = prev.productoTiendaList.map((item, i) => 
-                                        i === index ? { ...item, id_tienda: tienda.id_tienda } : item
-                                      );
-                                      return { ...prev, productoTiendaList: updatedList };
-                                    });
-                                    setShowTiendaDropdown(null);
-                                    setTiendaSearchText('');
-                                  }}
-                                >
-                                  <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
-                                </TouchableOpacity>
-                              ))
-                            ) : (
-                              <View style={styles.dropdownItem}>
-                                <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
-                              </View>
-                            )}
-                          </View>
-                        )}
                       </View>
                       
                       <View style={styles.pricesGrid}>
@@ -1466,6 +1458,59 @@ const ProductoFormContent = () => {
           </TouchableOpacity>
         </Modal>
       )}
+
+      {/* Tienda Dropdown Modal */}
+      {showTiendaDropdown && (
+        <Modal
+          visible={showTiendaDropdown}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowTiendaDropdown(false)}
+        >
+          <TouchableOpacity 
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowTiendaDropdown(false)}
+          >
+            <Card style={[styles.dropdownModal, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+              <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                <Ionicons 
+                  name="search-outline" 
+                  size={responsive.responsiveWidth(18)} 
+                  color={colors.outline} 
+                  style={styles.searchIcon}
+                />
+                <TextInput
+                  style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Buscar tienda..."
+                  value={tiendaSearchText}
+                  onChangeText={setTiendaSearchText}
+                />
+              </View>
+              <ScrollView style={styles.dropdownScroll}>
+                {filteredTiendas.length > 0 ? (
+                  filteredTiendas.map((tienda, index) => (
+                    <TouchableOpacity
+                      key={tienda.id_tienda}
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        handleTiendaProductoChange(editingTiendaIndex, 'id_tienda', tienda.id_tienda);
+                        setShowTiendaDropdown(false);
+                        setTiendaSearchText('');
+                      }}
+                    >
+                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
+                )}
+              </ScrollView>
+            </Card>
+          </TouchableOpacity>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 };
@@ -1675,7 +1720,7 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   priceField: {
     flex: 1,
-    minWidth: responsive.responsiveWidth(140),
+    minWidth: '45%',
   },
   tiendaProductoItem: {
     padding: responsive.responsivePadding(16),
@@ -1731,6 +1776,14 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   searchIcon: {
     marginRight: responsive.responsiveMargin(4),
+  },
+  dropdownScroll: {
+    maxHeight: responsive.responsiveHeight(200),
+  },
+  dropdownModal: {
+    width: '100%',
+    maxHeight: responsive.responsiveHeight(300),
+    borderRadius: 12,
   },
   dropdownItemText: {
     fontSize: responsive.fontSizes.body,

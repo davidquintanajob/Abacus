@@ -338,7 +338,7 @@ const ServiciosContent = () => {
       showToast({ type: 'warning', message: 'No disponible en modo offline' });
       return;
     }
-    navigation.navigate('ServicioForm', { mode: 'add' });
+    navigation.navigate('ServicioForm', { mode: 'add', isOferta: false });
   };
 
   const handleSettingsPress = () => {

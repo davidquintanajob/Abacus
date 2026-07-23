@@ -933,32 +933,33 @@ const ServicioFormContent = () => {
           </View>
 
           {/* Servicios (Oferta) Section */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Servicios (Oferta)</Text>
-              <View style={styles.sectionActions}>
-                {canEditService && (
+          {isOferta && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Servicios (Oferta)</Text>
+                <View style={styles.sectionActions}>
+                  {canEditService && (
+                    <TouchableOpacity
+                      style={[styles.addButtonSmall, { backgroundColor: colors.primary }]}
+                      onPress={() => setShowComponenteSelectorModal(true)}
+                    >
+                      <Ionicons name="add" size={responsive.responsiveWidth(18)} color="#fff" />
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
-                    style={[styles.addButtonSmall, { backgroundColor: colors.primary }]}
-                    onPress={() => setShowComponenteSelectorModal(true)}
+                    style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+                    onPress={() => setIsOfertaExpanded(!isOfertaExpanded)}
                   >
-                    <Ionicons name="add" size={responsive.responsiveWidth(18)} color="#fff" />
+                    <Ionicons 
+                      name={isOfertaExpanded ? "chevron-up" : "chevron-down"} 
+                      size={responsive.responsiveWidth(18)} 
+                      color={isDarkMode ? colors.primary : '#1976D2'} 
+                    />
                   </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
-                  onPress={() => setIsOfertaExpanded(!isOfertaExpanded)}
-                >
-                  <Ionicons 
-                    name={isOfertaExpanded ? "chevron-up" : "chevron-down"} 
-                    size={responsive.responsiveWidth(18)} 
-                    color={isDarkMode ? colors.primary : '#1976D2'} 
-                  />
-                </TouchableOpacity>
+                </View>
               </View>
-            </View>
-            
-            {isOfertaExpanded && (
+              
+              {isOfertaExpanded && (
               <>
                 {formData.ofertaList.length === 0 ? (
                   <Text style={[styles.emptyText, { color: colors.outline }]}>
@@ -1009,6 +1010,7 @@ const ServicioFormContent = () => {
               </>
             )}
           </View>
+          )}
 
           {/* Precios Generales Section */}
           <View style={styles.section}>
