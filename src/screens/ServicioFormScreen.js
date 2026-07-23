@@ -481,6 +481,13 @@ const ServicioFormContent = () => {
       showToast({ type: 'warning', message: 'Debe agregar al menos un servicio componente para la oferta' });
       return;
     }
+    // Validate that there are no duplicate stores in servicioTiendaList
+    const tiendaIds = formData.servicioTiendaList.map(item => item.id_tienda).filter(id => id !== null);
+    const uniqueTiendaIds = new Set(tiendaIds);
+    if (tiendaIds.length !== uniqueTiendaIds.size) {
+      showToast({ type: 'error', message: 'No se puede guardar: hay tiendas duplicadas en la lista de precios y costos' });
+      return;
+    }
 
     try {
       setIsSaving(true);
@@ -632,18 +639,29 @@ const ServicioFormContent = () => {
   };
 
   const handleAddTiendaServicio = () => {
+    // Get all active tienda IDs that are not already in the list
+    const existingTiendaIds = formData.servicioTiendaList.map(item => item.id_tienda).filter(id => id !== null);
+    const availableTiendas = tiendas.filter(tienda => 
+      tienda.activo === true && !existingTiendaIds.includes(tienda.id_tienda)
+    );
+
+    if (availableTiendas.length === 0) {
+      showToast({ type: 'warning', message: 'Todas las tiendas ya están agregadas' });
+      return;
+    }
+
+    // Add all available tiendas at once
+    const newTiendaEntries = availableTiendas.map(tienda => ({
+      id_tienda: tienda.id_tienda,
+      precio_cup: formData.precio_cup_general,
+      precio_usd: formData.precio_usd_general,
+      costo_cup: formData.costo_cup_general,
+      costo_usd: formData.costo_usd_general,
+    }));
+
     setFormData(prev => ({
       ...prev,
-      servicioTiendaList: [
-        ...prev.servicioTiendaList,
-        { 
-          id_tienda: null, 
-          precio_cup: prev.precio_cup_general, 
-          precio_usd: prev.precio_usd_general, 
-          costo_cup: prev.costo_cup_general, 
-          costo_usd: prev.costo_usd_general 
-        }
-      ]
+      servicioTiendaList: [...prev.servicioTiendaList, ...newTiendaEntries]
     }));
   };
 
@@ -666,6 +684,17 @@ const ServicioFormContent = () => {
   };
 
   const handleTiendaServicioChange = (index, field, value) => {
+    // Prevent duplicate store selections
+    if (field === 'id_tienda' && value !== null) {
+      const isDuplicate = formData.servicioTiendaList.some((item, i) => 
+        i !== index && item.id_tienda === value
+      );
+      if (isDuplicate) {
+        showToast({ type: 'warning', message: 'Esta tienda ya está seleccionada en la lista' });
+        return;
+      }
+    }
+
     setFormData(prev => {
       const updatedList = prev.servicioTiendaList.map((item, i) => {
         if (i === index) {
@@ -1156,10 +1185,24 @@ const ServicioFormContent = () => {
               <View style={styles.sectionActions}>
                 {canEditService && (
                   <TouchableOpacity
-                    style={[styles.addButtonSmall, { backgroundColor: colors.primary }]}
+                    style={[
+                      styles.addButtonSmall, 
+                      { 
+                        backgroundColor: formData.servicioTiendaList.filter(item => item.id_tienda !== null).length >= tiendas.filter(t => t.activo === true).length 
+                          ? colors.outlineVariant 
+                          : colors.primary 
+                      }
+                    ]}
                     onPress={handleAddTiendaServicio}
+                    disabled={formData.servicioTiendaList.filter(item => item.id_tienda !== null).length >= tiendas.filter(t => t.activo === true).length}
                   >
-                    <Ionicons name="add" size={responsive.responsiveWidth(18)} color="#fff" />
+                    <Ionicons 
+                      name="add" 
+                      size={responsive.responsiveWidth(18)} 
+                      color={formData.servicioTiendaList.filter(item => item.id_tienda !== null).length >= tiendas.filter(t => t.activo === true).length 
+                        ? colors.outline 
+                        : "#fff"} 
+                    />
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity

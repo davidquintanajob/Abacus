@@ -462,6 +462,17 @@ const ProductoFormContent = () => {
   };
 
   const handleTiendaProductoChange = (index, field, value) => {
+    // Prevent duplicate store selections
+    if (field === 'id_tienda' && value !== null) {
+      const isDuplicate = formData.productoTiendaList.some((item, i) => 
+        i !== index && item.id_tienda === value
+      );
+      if (isDuplicate) {
+        showToast({ type: 'warning', message: 'Esta tienda ya está seleccionada en la lista' });
+        return;
+      }
+    }
+
     setFormData(prev => {
       const updatedList = prev.productoTiendaList.map((item, i) => {
         if (i === index) {

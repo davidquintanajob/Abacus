@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -43,7 +43,7 @@ const ServiciosContent = () => {
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [cameraPermission, setCameraPermission] = useState(null);
   const [hasShownOfflineToast, setHasShownOfflineToast] = useState(false);
-  const [skipNextFocusEffect, setSkipNextFocusEffect] = useState(false);
+  const isManualSearchRef = useRef(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
@@ -69,12 +69,12 @@ const ServiciosContent = () => {
 
   useFocusEffect(
     React.useCallback(() => {
-      if (skipNextFocusEffect) {
-        setSkipNextFocusEffect(false);
+      if (isManualSearchRef.current) {
+        isManualSearchRef.current = false;
         return;
       }
       fetchServicios();
-    }, [pagination.currentPage, skipNextFocusEffect])
+    }, [pagination.currentPage])
   );
 
   const fetchTiendas = async () => {
@@ -103,12 +103,14 @@ const ServiciosContent = () => {
         // If user cannot view all stores, show only their store
         if (canViewAllStores) {
           setTiendas(allTiendas);
+          // For users who can view all stores, don't auto-select any store by default
+          setFilters(prev => ({ ...prev, id_tienda: '' }));
         } else {
           const userTienda = allTiendas.find(t => t.id_tienda === user.id_tienda);
           setTiendas(userTienda ? [userTienda] : []);
+          // Auto-select the user's store for users who cannot view all stores
+          setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
         }
-        // Always auto-select the user's store in the filter by default
-        setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
       } else {
         setTiendas(allTiendas);
       }
@@ -195,16 +197,6 @@ const ServiciosContent = () => {
           setPagination({ currentPage: 1, limit: 10, totalPages: 1, totalItems: 0 });
         }
       } else {
-        // Check if any filters are active
-        const hasActiveFilters = Object.values(filters).some(value => value !== '' && value !== null && value !== undefined);
-        
-        // If filters are active, fetch all data to ensure accurate pagination
-        // Otherwise, use paginated fetch from backend
-        const fetchLimit = hasActiveFilters ? 10000 : pagination.limit;
-        const fetchPage = hasActiveFilters ? 1 : pagination.currentPage;
-        const data = await getServicios(filters, fetchPage, fetchLimit);
-        let servicios = data.data || [];
-
         // Apply store visibility permissions
         const userRole = user?.rol?.toLowerCase();
         const canViewAllStores = 
@@ -212,6 +204,22 @@ const ServiciosContent = () => {
           (userRole === 'dependiente' && permissions?.dependiente) ||
           (userRole === 'almacenero' && permissions?.almacenero) ||
           (userRole === 'económico' && permissions?.economico);
+
+        // Check if any filters are active (excluding empty id_tienda which means "all stores")
+        const hasActiveFilters = Object.entries(filters).some(([key, value]) => {
+          // id_tienda is not considered an active filter when empty (means "all stores")
+          if (key === 'id_tienda' && value === '') {
+            return false;
+          }
+          return value !== '' && value !== null && value !== undefined;
+        });
+        
+        // If filters are active, fetch all data to ensure accurate pagination
+        // Otherwise, use paginated fetch from backend
+        const fetchLimit = hasActiveFilters ? 10000 : pagination.limit;
+        const fetchPage = hasActiveFilters ? 1 : pagination.currentPage;
+        const data = await getServicios(filters, fetchPage, fetchLimit);
+        let servicios = data.data || [];
 
         // If user cannot view all stores, filter to show only services from their own store
         if (!canViewAllStores && user?.id_tienda) {
@@ -254,7 +262,7 @@ const ServiciosContent = () => {
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
-    setSkipNextFocusEffect(true);
+    isManualSearchRef.current = true;
     fetchServicios();
   };
 
@@ -279,7 +287,7 @@ const ServiciosContent = () => {
     setFilters(clearedFilters);
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
-    setSkipNextFocusEffect(true);
+    isManualSearchRef.current = true;
     
     // Simply call fetchServicios which handles both online and offline modes correctly
     fetchServicios();
@@ -384,7 +392,7 @@ const ServiciosContent = () => {
     showToast({ type: 'success', message: 'Código escaneado correctamente' });
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
-    setSkipNextFocusEffect(true);
+    isManualSearchRef.current = true;
     fetchServicios();
   };
 
@@ -512,7 +520,7 @@ const ServiciosContent = () => {
                       setShowTiendaDropdown(false);
                       setTiendaSearchText('');
                       setPagination(prev => ({ ...prev, currentPage: 1 }));
-                      setSkipNextFocusEffect(true);
+                      isManualSearchRef.current = true;
                       fetchServicios();
                     }}
                   >
@@ -529,7 +537,7 @@ const ServiciosContent = () => {
                         setShowTiendaDropdown(false);
                         setTiendaSearchText('');
                         setPagination(prev => ({ ...prev, currentPage: 1 }));
-                        setSkipNextFocusEffect(true);
+                        isManualSearchRef.current = true;
                         fetchServicios();
                       }}
                     >
