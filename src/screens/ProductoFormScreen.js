@@ -44,6 +44,7 @@ const ProductoFormContent = () => {
   const [newCodigo, setNewCodigo] = useState('');
   const [newNota, setNewNota] = useState('');
   const [showScannerModal, setShowScannerModal] = useState(false);
+  const [showImagePickerModal, setShowImagePickerModal] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const [config, setConfig] = useState({});
   const [exchangeRate, setExchangeRate] = useState(null);
@@ -57,7 +58,7 @@ const ProductoFormContent = () => {
     nota: producto?.nota || '',
     imagen: producto?.producto?.imagen || '',
     sufijo: producto?.producto?.sufijo || '',
-    isVencible: producto?.producto?.isVencible !== undefined ? producto.producto.isVencible : false,
+    isVencible: producto?.producto?.isVencible !== undefined ? producto.producto.isVencible : true,
     unidad_medida: producto?.producto?.unidad_medida || '',
     productoTiendaList: producto?.tiendas_servicio || [],
     codigoList: producto?.codigos || [],
@@ -183,7 +184,7 @@ const ProductoFormContent = () => {
             nota: completeProducto.nota || '',
             imagen: completeProducto.producto?.imagen || '',
             sufijo: completeProducto.producto?.sufijo || '',
-            isVencible: completeProducto.producto?.isVencible !== undefined ? completeProducto.producto.isVencible : false,
+            isVencible: completeProducto.producto?.isVencible !== undefined ? completeProducto.producto.isVencible : true,
             unidad_medida: completeProducto.producto?.unidad_medida || '',
             productoTiendaList: productoTiendaList,
             codigoList: completeProducto.codigos || [],
@@ -322,6 +323,7 @@ const ProductoFormContent = () => {
             });
           }
           
+          console.log('productoTiendaList generado:', JSON.stringify(baseList, null, 2));
           return baseList;
         })(),
       };
@@ -389,18 +391,14 @@ const ProductoFormContent = () => {
 
   const handleOpenBarcodeScanner = () => {
     navigation.navigate('BarcodeScanner', {
+      existingCodes: formData.codigoList,
       onCodeScanned: (scannedCodes) => {
-        const newCodes = scannedCodes.map(code => ({
-          codigo_barras_ean: code.codigo_barras_ean,
-          nota: code.nota
-        }));
-        
         setFormData(prev => ({
           ...prev,
-          codigoList: [...prev.codigoList, ...newCodes]
+          codigoList: scannedCodes
         }));
         setIsCodesExpanded(true);
-        showToast({ type: 'success', message: `${newCodes.length} códigos agregados` });
+        showToast({ type: 'success', message: `${scannedCodes.length} códigos actualizados` });
       }
     });
   };
@@ -526,7 +524,12 @@ const ProductoFormContent = () => {
     });
   };
 
-  const handlePickImage = async () => {
+  const handlePickImage = () => {
+    setShowImagePickerModal(true);
+  };
+
+  const handlePickFromGallery = async () => {
+    setShowImagePickerModal(false);
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
@@ -548,8 +551,36 @@ const ProductoFormContent = () => {
         showToast({ type: 'success', message: 'Imagen seleccionada correctamente' });
       }
     } catch (error) {
-      console.error('Error picking image:', error);
+      console.error('Error picking image from gallery:', error);
       showToast({ type: 'error', message: 'Error al seleccionar la imagen' });
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    setShowImagePickerModal(false);
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        showToast({ type: 'error', message: 'Se requiere permiso para acceder a la cámara' });
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.cancelled && result.assets && result.assets[0]) {
+        const base64 = result.assets[0].base64;
+        setFormData(prev => ({ ...prev, imagen: `data:image/jpeg;base64,${base64}` }));
+        showToast({ type: 'success', message: 'Foto tomada correctamente' });
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      showToast({ type: 'error', message: 'Error al tomar la foto' });
     }
   };
 
@@ -626,52 +657,39 @@ const ProductoFormContent = () => {
             />
           </View>
 
-          <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: colors.outline }]}>Categoría *</Text>
-            <TextInput
-              style={[
-                styles.input, 
-                { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                isReadOnly && styles.inputDisabled
-              ]}
-              placeholderTextColor={colors.outline}
-              placeholder="Categoría"
-              value={formData.categoria}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, categoria: text }))}
-              editable={!isReadOnly}
-            />
-          </View>
+          <View style={styles.formRow}>
+            <View style={[styles.formColumn, styles.formGroup]}>
+              <Text style={[styles.label, { color: colors.outline }]}>Categoría *</Text>
+              <TextInput
+                style={[
+                  styles.input, 
+                  { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                  isReadOnly && styles.inputDisabled
+                ]}
+                placeholderTextColor={colors.outline}
+                placeholder="Categoría"
+                value={formData.categoria}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, categoria: text }))}
+                editable={!isReadOnly}
+              />
+            </View>
 
-          <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: colors.outline }]}>Sufijo *</Text>
-            <TextInput
-              style={[
-                styles.input, 
-                { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                isReadOnly && styles.inputDisabled
-              ]}
-              placeholderTextColor={colors.outline}
-              placeholder="Sufijo del producto"
-              value={formData.sufijo}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, sufijo: text }))}
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: colors.outline }]}>Unidad de Medida</Text>
-            <TextInput
-              style={[
-                styles.input, 
-                { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                isReadOnly && styles.inputDisabled
-              ]}
-              placeholderTextColor={colors.outline}
-              placeholder="Unidad de medida (opcional)"
-              value={formData.unidad_medida}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, unidad_medida: text }))}
-              editable={!isReadOnly}
-            />
+            <View style={[styles.formColumn, styles.formGroup]}>
+              <Text style={[styles.label, { color: colors.outline }]}>Sufijo *</Text>
+              <TextInput
+                style={[
+                  styles.input, 
+                  { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                  isReadOnly && styles.inputDisabled
+                ]}
+                placeholderTextColor={colors.outline}
+                placeholder="Sufijo del producto"
+                value={formData.sufijo}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, sufijo: text }))}
+                editable={!isReadOnly}
+                textAlignVertical="center"
+              />
+            </View>
           </View>
 
           <View style={styles.formGroup}>
@@ -717,74 +735,94 @@ const ProductoFormContent = () => {
             </View>
           </View>
 
-          <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: colors.outline }]}>Es Vencible</Text>
-            <TouchableOpacity
-              style={styles.statusSwitchContainer}
-              onPress={() => !isReadOnly && setFormData(prev => ({ ...prev, isVencible: !prev.isVencible }))}
-              disabled={isReadOnly}
-            >
-              <View style={[
-                styles.statusSwitch,
-                { backgroundColor: formData.isVencible ? '#4CAF50' : '#F44336' },
-                isReadOnly && styles.inputDisabled
-              ]}>
-                <View style={[
-                  styles.statusSwitchKnob,
-                  { transform: [{ translateX: formData.isVencible ? 0 : responsive.responsiveWidth(28) }] }
-                ]}>
-                  <Text style={[
-                    styles.statusSwitchText,
-                    { color: formData.isVencible ? '#4CAF50' : '#F44336' }
-                  ]}>
-                    {formData.isVencible ? 'Sí' : 'No'}
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
+          <View style={styles.formRow}>
+            <View style={[styles.formColumn, styles.formGroup]}>
+              <Text style={[styles.label, { color: colors.outline }]}>Unidad de Medida</Text>
+              <TextInput
+                style={[
+                  styles.input, 
+                  { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                  isReadOnly && styles.inputDisabled
+                ]}
+                placeholderTextColor={colors.outline}
+                placeholder="Unidad de medida (opcional)"
+                value={formData.unidad_medida}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, unidad_medida: text }))}
+                editable={!isReadOnly}
+              />
+            </View>
+
+            <View style={[styles.formColumn, styles.formGroup]}>
+              <Text style={[styles.label, { color: colors.outline }]}>Nota</Text>
+              <TextInput
+                style={[
+                  styles.input, 
+                  { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                  isReadOnly && styles.inputDisabled
+                ]}
+                placeholderTextColor={colors.outline}
+                placeholder="Nota (opcional)"
+                value={formData.nota}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, nota: text }))}
+                editable={!isReadOnly}
+              />
+            </View>
           </View>
 
-          <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: colors.outline }]}>Nota</Text>
-            <TextInput
-              style={[
-                styles.input, 
-                { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                isReadOnly && styles.inputDisabled
-              ]}
-              placeholderTextColor={colors.outline}
-              placeholder="Nota (opcional)"
-              value={formData.nota}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, nota: text }))}
-              editable={!isReadOnly}
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: colors.outline }]}>Estado</Text>
-            <TouchableOpacity
-              style={styles.statusSwitchContainer}
-              onPress={() => !isReadOnly && setFormData(prev => ({ ...prev, esvendible: !prev.esvendible }))}
-              disabled={isReadOnly}
-            >
-              <View style={[
-                styles.statusSwitch,
-                { backgroundColor: formData.esvendible ? '#4CAF50' : '#F44336' },
-                isReadOnly && styles.inputDisabled
-              ]}>
+          <View style={styles.formRow}>
+            <View style={[styles.formColumn, styles.formGroup]}>
+              <Text style={[styles.label, { color: colors.outline }]}>Es Vencible</Text>
+              <TouchableOpacity
+                style={styles.statusSwitchContainer}
+                onPress={() => !isReadOnly && setFormData(prev => ({ ...prev, isVencible: !prev.isVencible }))}
+                disabled={isReadOnly}
+              >
                 <View style={[
-                  styles.statusSwitchKnob,
-                  { transform: [{ translateX: formData.esvendible ? 0 : responsive.responsiveWidth(28) }] }
+                  styles.statusSwitch,
+                  { backgroundColor: formData.isVencible ? '#4CAF50' : '#F44336' },
+                  isReadOnly && styles.inputDisabled
                 ]}>
-                  <Text style={[
-                    styles.statusSwitchText,
-                    { color: formData.esvendible ? '#4CAF50' : '#F44336' }
+                  <View style={[
+                    styles.statusSwitchKnob,
+                    { transform: [{ translateX: formData.isVencible ? 0 : responsive.responsiveWidth(28) }] }
                   ]}>
-                    {formData.esvendible ? 'Vendible' : 'No vendible'}
-                  </Text>
+                    <Text style={[
+                      styles.statusSwitchText,
+                      { color: formData.isVencible ? '#4CAF50' : '#F44336' }
+                    ]}>
+                      {formData.isVencible ? 'Sí' : 'No'}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.formColumn, styles.formGroup]}>
+              <Text style={[styles.label, { color: colors.outline }]}>Estado</Text>
+              <TouchableOpacity
+                style={[styles.statusSwitchContainer, { marginLeft: responsive.responsiveMargin(0) }]}
+                onPress={() => !isReadOnly && setFormData(prev => ({ ...prev, esvendible: !prev.esvendible }))}
+                disabled={isReadOnly}
+              >
+                <View style={[
+                  styles.statusSwitch,
+                  { backgroundColor: formData.esvendible ? '#4CAF50' : '#F44336' },
+                  isReadOnly && styles.inputDisabled
+                ]}>
+                  <View style={[
+                    styles.statusSwitchKnob,
+                    { transform: [{ translateX: formData.esvendible ? 0 : responsive.responsiveWidth(28) }] }
+                  ]}>
+                    <Text style={[
+                      styles.statusSwitchText,
+                      { color: formData.esvendible ? '#4CAF50' : '#F44336' }
+                    ]}>
+                      {formData.esvendible ? 'Vendible' : 'No vendible'}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Códigos Section */}
@@ -1369,6 +1407,54 @@ const ProductoFormContent = () => {
           </View>
         </Modal>
       )}
+
+      {/* Image Picker Modal */}
+      {showImagePickerModal && (
+        <Modal
+          visible={showImagePickerModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowImagePickerModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowImagePickerModal(false)}
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.surface }]} activeOpacity={1}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Seleccionar Imagen</Text>
+              <Text style={[styles.modalDescription, { color: colors.outline }]}>
+                ¿Cómo deseas obtener la imagen del producto?
+              </Text>
+              
+              <TouchableOpacity
+                style={[styles.imagePickerOption, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                onPress={handleTakePhoto}
+              >
+                <Ionicons name="camera" size={responsive.responsiveWidth(24)} color={colors.primary} />
+                <Text style={[styles.imagePickerOptionText, { color: colors.onSurface }]}>Tomar Foto</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.imagePickerOption, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                onPress={handlePickFromGallery}
+              >
+                <Ionicons name="images" size={responsive.responsiveWidth(24)} color={colors.primary} />
+                <Text style={[styles.imagePickerOptionText, { color: colors.onSurface }]}>Galería</Text>
+              </TouchableOpacity>
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
+                  onPress={() => setShowImagePickerModal(false)}
+                >
+                  <Text style={[styles.modalButtonText, { color: colors.onSurface }]}>Cancelar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 };
@@ -1400,6 +1486,13 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   formGroup: {
     marginBottom: responsive.responsiveMargin(16),
+  },
+  formRow: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(12),
+  },
+  formColumn: {
+    flex: 1,
   },
   label: {
     fontSize: responsive.fontSizes.bodySmall,
@@ -1693,6 +1786,26 @@ const createStyles = (responsive) => StyleSheet.create({
     fontWeight: '700',
     fontFamily: 'Hanken Grotesk',
     marginBottom: responsive.responsiveMargin(16),
+  },
+  modalDescription: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(20),
+    textAlign: 'center',
+  },
+  imagePickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(12),
+    padding: responsive.responsivePadding(16),
+    borderRadius: 12,
+    borderWidth: 1.5,
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  imagePickerOptionText: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Inter',
   },
   modalButtons: {
     flexDirection: 'row',

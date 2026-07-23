@@ -116,3 +116,18 @@ export const getProductosEnAlerta = async (id_tienda) => {
     throw err;
   }
 };
+
+export const deleteProducto = async (id) => {
+  try {
+    const response = await api.delete(`/servicio/${id}`);
+    return response.data;
+  } catch (error) {
+    const errorMessage = error.response?.data?.errors?.[0] || 
+                        error.response?.data?.message || 
+                        error.message ||
+                        'Error al eliminar producto';
+    const err = new Error(errorMessage);
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
+  }
+};

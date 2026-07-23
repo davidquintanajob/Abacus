@@ -102,12 +102,6 @@ const ServicioFormContent = () => {
     }
   }, [formData.codigoList.length, formData.servicioTiendaList.length, formData.ofertaList.length]);
 
-  useEffect(() => {
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setCameraPermission(status === 'granted');
-    })();
-  }, []);
 
   const handleGeneralPriceBlur = () => {
     const hasAllGeneralPrices = 
@@ -606,15 +600,7 @@ const ServicioFormContent = () => {
   };
 
   const handleOpenScanner = async () => {
-    if (!cameraPermission) {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setCameraPermission(status === 'granted');
-      if (status !== 'granted') {
-        showToast({ type: 'error', message: 'Se requiere permiso de cámara para escanear códigos' });
-        return;
-      }
-    }
-    
+    console.log('handleOpenScanner called');
     setShowScannerModal(true);
   };
 

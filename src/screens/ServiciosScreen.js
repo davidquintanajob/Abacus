@@ -43,6 +43,7 @@ const ServiciosContent = () => {
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [cameraPermission, setCameraPermission] = useState(null);
   const [hasShownOfflineToast, setHasShownOfflineToast] = useState(false);
+  const [skipNextFocusEffect, setSkipNextFocusEffect] = useState(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
@@ -50,10 +51,6 @@ const ServiciosContent = () => {
 
   useEffect(() => {
     fetchTiendas();
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setCameraPermission(status === 'granted');
-    })();
   }, []);
 
   // Mostrar toast al entrar en modo offline
@@ -72,8 +69,12 @@ const ServiciosContent = () => {
 
   useFocusEffect(
     React.useCallback(() => {
+      if (skipNextFocusEffect) {
+        setSkipNextFocusEffect(false);
+        return;
+      }
       fetchServicios();
-    }, [pagination.currentPage, filters])
+    }, [pagination.currentPage, skipNextFocusEffect])
   );
 
   const fetchTiendas = async () => {
@@ -253,6 +254,7 @@ const ServiciosContent = () => {
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
+    setSkipNextFocusEffect(true);
     fetchServicios();
   };
 
@@ -277,6 +279,7 @@ const ServiciosContent = () => {
     setFilters(clearedFilters);
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
+    setSkipNextFocusEffect(true);
     
     // Simply call fetchServicios which handles both online and offline modes correctly
     fetchServicios();
@@ -355,22 +358,34 @@ const ServiciosContent = () => {
   };
 
   const handleOpenScanner = async () => {
-    if (!cameraPermission) {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setCameraPermission(status === 'granted');
-      if (status !== 'granted') {
-        showToast({ type: 'error', message: 'Se requiere permiso de cámara para escanear códigos' });
-        return;
-      }
-    }
-    
+    console.log('handleOpenScanner called');
     setShowScannerModal(true);
   };
 
   const handleBarcodeScanned = ({ data }) => {
-    setFilters(prev => ({ ...prev, codigo: data }));
+    // Clear all fields except tienda before searching by code
+    const userRole = user?.rol?.toLowerCase();
+    const canViewAllStores = 
+      userRole === 'administrador' ||
+      (userRole === 'dependiente' && permissions?.dependiente) ||
+      (userRole === 'almacenero' && permissions?.almacenero) ||
+      (userRole === 'económico' && permissions?.economico);
+
+    const clearedFilters = { 
+      nombre: '', 
+      codigo: data, 
+      categoria: '', 
+      esvendible: '', 
+      id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : filters.id_tienda 
+    };
+    
+    setFilters(clearedFilters);
     setShowScannerModal(false);
     showToast({ type: 'success', message: 'Código escaneado correctamente' });
+    setPagination(prev => ({ ...prev, currentPage: 1 }));
+    setIsSearching(true);
+    setSkipNextFocusEffect(true);
+    fetchServicios();
   };
 
   const filteredTiendas = tiendas.filter(tienda =>
@@ -497,6 +512,7 @@ const ServiciosContent = () => {
                       setShowTiendaDropdown(false);
                       setTiendaSearchText('');
                       setPagination(prev => ({ ...prev, currentPage: 1 }));
+                      setSkipNextFocusEffect(true);
                       fetchServicios();
                     }}
                   >
@@ -513,6 +529,7 @@ const ServiciosContent = () => {
                         setShowTiendaDropdown(false);
                         setTiendaSearchText('');
                         setPagination(prev => ({ ...prev, currentPage: 1 }));
+                        setSkipNextFocusEffect(true);
                         fetchServicios();
                       }}
                     >

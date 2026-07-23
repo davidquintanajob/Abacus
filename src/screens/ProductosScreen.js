@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
-import { getProductos, getProductoByCodigo } from '../services/productoService';
+import { getProductos, getProductoByCodigo, deleteProducto } from '../services/productoService';
 import { getTiendas } from '../services/tiendaService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
@@ -68,10 +68,6 @@ const ProductosContent = () => {
 
   useEffect(() => {
     fetchTiendas();
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setCameraPermission(status === 'granted');
-    })();
   }, []);
 
   // Mostrar toast al entrar en modo offline
@@ -315,7 +311,7 @@ const ProductosContent = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              // TODO: Implement deleteProducto when backend supports it
+              await deleteProducto(producto.id_servicio);
               showToast({ type: 'success', message: 'Producto eliminado correctamente' });
               fetchProductos();
             } catch (err) {
@@ -373,15 +369,7 @@ const ProductosContent = () => {
   };
 
   const handleOpenScanner = async () => {
-    if (!cameraPermission) {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setCameraPermission(status === 'granted');
-      if (status !== 'granted') {
-        showToast({ type: 'error', message: 'Se requiere permiso de cámara para escanear códigos' });
-        return;
-      }
-    }
-    
+    console.log('handleOpenScanner called');
     setShowScannerModal(true);
   };
 

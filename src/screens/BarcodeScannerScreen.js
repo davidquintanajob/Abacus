@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Modal, KeyboardAvoidingView, Platform, Keyboard, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Modal, KeyboardAvoidingView, Platform, Keyboard, Dimensions, Image, Vibration } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
@@ -9,6 +9,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useToast } from '../hooks/useToast';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Audio } from 'expo-av';
+import { Asset } from 'expo-asset';
 
 const BarcodeScannerContent = () => {
   const navigation = useNavigation();
@@ -19,11 +21,28 @@ const BarcodeScannerContent = () => {
   const [permission, requestPermission] = useCameraPermissions();
   const [onCodeScanned, setOnCodeScanned] = useState(null);
 
+  const [scannedCodes, setScannedCodes] = useState([]);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [showTutorial, setShowTutorial] = useState(true);
+  const [newNota, setNewNota] = useState('');
+  const [editingIndex, setEditingIndex] = useState(null);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [isManualMode, setIsManualMode] = useState(false);
+  const [manualCode, setManualCode] = useState('');
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [carouselIndex2, setCarouselIndex2] = useState(0);
+  const [sound, setSound] = useState();
+  const [isScanning, setIsScanning] = useState(true);
+
   useFocusEffect(
     React.useCallback(() => {
       const params = route.params;
       if (params?.onCodeScanned) {
         setOnCodeScanned(() => params.onCodeScanned);
+      }
+      if (params?.existingCodes && params.existingCodes.length > 0) {
+        setScannedCodes(params.existingCodes);
+        setShowTutorial(false);
       }
       return () => {
         setOnCodeScanned(null);
@@ -31,17 +50,22 @@ const BarcodeScannerContent = () => {
     }, [route.params])
   );
 
-  const [scannedCodes, setScannedCodes] = useState([]);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [showTutorial, setShowTutorial] = useState(true);
-  const [newNota, setNewNota] = useState('');
-  const [editingIndex, setEditingIndex] = useState(null);
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-
   const tutorialSteps = [
-    'Paso 1: Agrupa todos los productos del mismo tipo, aunque distintos sabores o colores',
-    'Paso 2: Voltealos de tal forma que veas su código de barra',
-    'Paso 3: Escanea con la cámara el código de barra de cada producto y agrega una nota a estos si lo deseas'
+    'Paso 1: Tome todas las variantes del mismo producto que tenga en su tienda',
+    'Paso 2: Busque y escanee el código de barras de cada uno de estos productos',
+    'Paso 3: (Opcional) Agregue una nota para identificar el color o sabor del producto en el código'
+  ];
+
+  const step1Images = [
+    require('../../assets/WhatsApp Image 2026-07-21 at 9.33.18 PM (1).jpeg'),
+    require('../../assets/WhatsApp Image 2026-07-21 at 9.33.18 PM.jpeg'),
+    require('../../assets/WhatsApp Image 2026-07-21 at 9.33.19 PM.jpeg')
+  ];
+
+  const step2Images = [
+    require('../../assets/WhatsApp Image 2026-07-21 at 9.33.17 PM.jpeg'),
+    require('../../assets/WhatsApp Image 2026-07-21 at 9.33.18 PM (2).jpeg'),
+    require('../../assets/WhatsApp Image 2026-07-21 at 9.33.20 PM.jpeg')
   ];
 
   useEffect(() => {
@@ -49,6 +73,65 @@ const BarcodeScannerContent = () => {
       setShowTutorial(false);
     }
   }, [scannedCodes.length]);
+
+  // Auto-rotate carousel for step 1
+  useEffect(() => {
+    if (showTutorial && currentStep === 0) {
+      const interval = setInterval(() => {
+        setCarouselIndex(prev => (prev + 1) % step1Images.length);
+      }, 2000); // Change image every 2 seconds
+      return () => clearInterval(interval);
+    } else {
+      setCarouselIndex(0);
+    }
+  }, [showTutorial, currentStep]);
+
+  // Auto-rotate carousel for step 2
+  useEffect(() => {
+    if (showTutorial && currentStep === 1) {
+      const interval = setInterval(() => {
+        setCarouselIndex2(prev => (prev + 1) % step2Images.length);
+      }, 2000); // Change image every 2 seconds
+      return () => clearInterval(interval);
+    } else {
+      setCarouselIndex2(0);
+    }
+  }, [showTutorial, currentStep]);
+
+  // Load sound
+  useEffect(() => {
+    const loadSound = async () => {
+      try {
+        const asset = Asset.fromModule(require('../../assets/beep.mp3'));
+        await asset.downloadAsync();
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: asset.localUri || asset.uri },
+          { shouldPlay: false }
+        );
+        setSound(sound);
+      } catch (error) {
+        console.log('Error loading sound:', error);
+      }
+    };
+
+    loadSound();
+
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, []);
+
+  const playSound = async () => {
+    if (sound) {
+      try {
+        await sound.replayAsync();
+      } catch (error) {
+        console.log('Error playing sound:', error);
+      }
+    }
+  };
 
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
@@ -65,6 +148,8 @@ const BarcodeScannerContent = () => {
   }, []);
 
   const handleBarcodeScanned = ({ data }) => {
+    if (!isScanning) return;
+
     const codeExists = scannedCodes.some(
       codigo => codigo.codigo_barras_ean.trim().toLowerCase() === data.trim().toLowerCase()
     );
@@ -80,7 +165,52 @@ const BarcodeScannerContent = () => {
     };
 
     setScannedCodes(prev => [...prev, newCode]);
+    if (Platform.OS === 'android') {
+      Vibration.vibrate(100);
+    }
+    playSound();
     showToast({ type: 'success', message: 'Código escaneado correctamente' });
+
+    // Disable scanning for 1.5 seconds to prevent rapid consecutive scans
+    setIsScanning(false);
+    setTimeout(() => {
+      setIsScanning(true);
+    }, 1500);
+  };
+
+  const handleAddManualCode = () => {
+    if (!manualCode.trim()) {
+      showToast({ type: 'warning', message: 'El código es requerido' });
+      return;
+    }
+
+    // Validate that the code contains only numbers
+    if (!/^\d+$/.test(manualCode.trim())) {
+      showToast({ type: 'error', message: 'El código debe contener solo números' });
+      return;
+    }
+
+    const codeExists = scannedCodes.some(
+      codigo => codigo.codigo_barras_ean.trim().toLowerCase() === manualCode.trim().toLowerCase()
+    );
+    
+    if (codeExists) {
+      showToast({ type: 'warning', message: 'Este código ya está escaneado' });
+      return;
+    }
+
+    const newCode = {
+      codigo_barras_ean: manualCode.trim(),
+      nota: null
+    };
+
+    setScannedCodes(prev => [...prev, newCode]);
+    setManualCode('');
+    if (Platform.OS === 'android') {
+      Vibration.vibrate(100);
+    }
+    playSound();
+    showToast({ type: 'success', message: 'Código agregado correctamente' });
   };
 
   const handleNextStep = () => {
@@ -187,24 +317,67 @@ const BarcodeScannerContent = () => {
 
       <View style={styles.container}>
         {/* Camera Section - Top Half */}
-        {!isKeyboardVisible && (
+        {(!isKeyboardVisible || isManualMode) && (
           <View style={styles.cameraContainer}>
-            <CameraView
-              style={styles.camera}
-              barcodeScannerSettings={{
-                barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39'],
-              }}
-              onBarcodeScanned={handleBarcodeScanned}
-            />
-            <View style={styles.cameraOverlay}>
-              <View style={[styles.corner, styles.topLeft]} />
-              <View style={[styles.corner, styles.topRight]} />
-              <View style={[styles.corner, styles.bottomLeft]} />
-              <View style={[styles.corner, styles.bottomRight]} />
-              <Text style={[styles.cameraHint, { color: '#fff' }]}>
-                Apunta al código de barras
+            {!isManualMode ? (
+              <>
+                <CameraView
+                  style={styles.camera}
+                  barcodeScannerSettings={{
+                    barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39'],
+                  }}
+                  onBarcodeScanned={isScanning ? handleBarcodeScanned : undefined}
+                />
+                <View style={styles.cameraOverlay}>
+                  <View style={[styles.corner, styles.topLeft]} />
+                  <View style={[styles.corner, styles.topRight]} />
+                  <View style={[styles.corner, styles.bottomLeft]} />
+                  <View style={[styles.corner, styles.bottomRight]} />
+                  <Text style={[styles.cameraHint, { color: '#fff' }]}>
+                    Apunta al código de barras
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <View style={[styles.manualInputContainer, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.manualInputTitle, { color: colors.onSurface }]}>
+                  Ingresar código manualmente
+                </Text>
+                <TextInput
+                  style={[styles.manualCodeInput, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                  placeholder="Ingrese el código (solo números)"
+                  placeholderTextColor={colors.outline}
+                  value={manualCode}
+                  onChangeText={setManualCode}
+                  keyboardType="numeric"
+                  maxLength={13}
+                />
+                <TouchableOpacity
+                  style={[styles.addManualCodeButton, { backgroundColor: colors.primary }]}
+                  onPress={handleAddManualCode}
+                >
+                  <Ionicons name="add" size={responsive.responsiveWidth(20)} color="#fff" />
+                  <Text style={[styles.addManualCodeButtonText, { color: '#fff' }]}>
+                    Agregar código
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            
+            {/* Toggle Button */}
+            <TouchableOpacity
+              style={[styles.toggleModeButton, { backgroundColor: colors.surface }]}
+              onPress={() => setIsManualMode(!isManualMode)}
+            >
+              <Ionicons 
+                name={isManualMode ? "camera" : "keypad"} 
+                size={responsive.responsiveWidth(20)} 
+                color={colors.primary} 
+              />
+              <Text style={[styles.toggleModeButtonText, { color: colors.primary }]}>
+                {isManualMode ? 'Usar cámara' : 'Ingresar manualmente'}
               </Text>
-            </View>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -213,22 +386,50 @@ const BarcodeScannerContent = () => {
           {showTutorial ? (
             /* Tutorial Section */
             <View style={styles.tutorialContainer}>
-              <View style={styles.stepIndicator}>
-                {tutorialSteps.map((_, index) => (
-                  <View
-                    key={index}
-                    style={[
-                      styles.stepDot,
-                      { backgroundColor: index === currentStep ? colors.primary : colors.outlineVariant }
-                    ]}
-                  />
-                ))}
-              </View>
-              
               <Card style={[styles.tutorialCard, { backgroundColor: colors.background }]}>
                 <Text style={[styles.tutorialText, { color: colors.onSurface }]}>
                   {tutorialSteps[currentStep]}
                 </Text>
+                {currentStep === 0 && (
+                  <View style={styles.imageCarousel}>
+                    <Image 
+                      source={step1Images[carouselIndex]} 
+                      style={styles.carouselImage}
+                      resizeMode="contain"
+                    />
+                    <View style={styles.carouselDots}>
+                      {step1Images.map((_, index) => (
+                        <View
+                          key={index}
+                          style={[
+                            styles.carouselDot,
+                            { backgroundColor: index === carouselIndex ? colors.primary : colors.outlineVariant }
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                )}
+                {currentStep === 1 && (
+                  <View style={styles.imageCarousel}>
+                    <Image 
+                      source={step2Images[carouselIndex2]} 
+                      style={styles.carouselImage}
+                      resizeMode="contain"
+                    />
+                    <View style={styles.carouselDots}>
+                      {step2Images.map((_, index) => (
+                        <View
+                          key={index}
+                          style={[
+                            styles.carouselDot,
+                            { backgroundColor: index === carouselIndex2 ? colors.primary : colors.outlineVariant }
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                )}
               </Card>
 
               <View style={styles.navigationButtons}>
@@ -258,14 +459,13 @@ const BarcodeScannerContent = () => {
                     styles.navButton,
                     { backgroundColor: colors.primary }
                   ]}
-                  onPress={handleNextStep}
-                  disabled={currentStep === tutorialSteps.length - 1}
+                  onPress={currentStep === tutorialSteps.length - 1 ? () => setShowTutorial(false) : handleNextStep}
                 >
                   <Text style={[styles.navButtonText, { color: '#fff' }]}>
-                    Siguiente
+                    {currentStep === tutorialSteps.length - 1 ? 'Finalizar' : 'Siguiente'}
                   </Text>
                   <Ionicons 
-                    name="chevron-forward" 
+                    name={currentStep === tutorialSteps.length - 1 ? "checkmark" : "chevron-forward"}
                     size={responsive.responsiveWidth(20)} 
                     color="#fff" 
                   />
@@ -461,6 +661,59 @@ const createStyles = (responsive) => StyleSheet.create({
     marginTop: responsive.responsiveHeight(20),
     textAlign: 'center',
   },
+  manualInputContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: responsive.responsiveWidth(20),
+  },
+  manualInputTitle: {
+    fontSize: responsive.responsiveWidth(16),
+    fontWeight: '600',
+    marginBottom: responsive.responsiveHeight(20),
+  },
+  manualCodeInput: {
+    width: '100%',
+    padding: responsive.responsiveWidth(15),
+    borderRadius: responsive.responsiveWidth(10),
+    borderWidth: 1,
+    fontSize: responsive.responsiveWidth(16),
+    marginBottom: responsive.responsiveHeight(15),
+    textAlign: 'center',
+  },
+  addManualCodeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: responsive.responsiveWidth(20),
+    paddingVertical: responsive.responsiveHeight(12),
+    borderRadius: responsive.responsiveWidth(10),
+  },
+  addManualCodeButtonText: {
+    color: '#fff',
+    fontSize: responsive.responsiveWidth(14),
+    fontWeight: '600',
+    marginLeft: responsive.responsiveWidth(8),
+  },
+  toggleModeButton: {
+    position: 'absolute',
+    bottom: responsive.responsiveHeight(20),
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: responsive.responsiveWidth(15),
+    paddingVertical: responsive.responsiveHeight(10),
+    borderRadius: responsive.responsiveWidth(20),
+    alignSelf: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  toggleModeButtonText: {
+    fontSize: responsive.responsiveWidth(12),
+    fontWeight: '600',
+    marginLeft: responsive.responsiveWidth(5),
+  },
   bottomSection: {
     flex: 1,
     borderTopLeftRadius: responsive.responsiveWidth(20),
@@ -473,25 +726,35 @@ const createStyles = (responsive) => StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
-  stepIndicator: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: responsive.responsiveHeight(20),
-  },
-  stepDot: {
-    width: responsive.responsiveWidth(10),
-    height: responsive.responsiveWidth(10),
-    borderRadius: responsive.responsiveWidth(5),
-    marginHorizontal: responsive.responsiveWidth(5),
-  },
   tutorialCard: {
-    padding: responsive.responsiveWidth(20),
+    padding: responsive.responsiveWidth(12),
     marginBottom: responsive.responsiveHeight(20),
   },
   tutorialText: {
-    fontSize: responsive.responsiveWidth(16),
+    fontSize: responsive.responsiveWidth(14),
     textAlign: 'center',
-    lineHeight: responsive.responsiveHeight(24),
+    lineHeight: responsive.responsiveHeight(20),
+    marginBottom: responsive.responsiveHeight(15),
+  },
+  imageCarousel: {
+    alignItems: 'center',
+    marginTop: responsive.responsiveHeight(10),
+  },
+  carouselImage: {
+    width: '100%',
+    height: responsive.responsiveHeight(200),
+    borderRadius: responsive.responsiveWidth(10),
+  },
+  carouselDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: responsive.responsiveHeight(10),
+  },
+  carouselDot: {
+    width: responsive.responsiveWidth(8),
+    height: responsive.responsiveWidth(8),
+    borderRadius: responsive.responsiveWidth(4),
+    marginHorizontal: responsive.responsiveWidth(4),
   },
   navigationButtons: {
     flexDirection: 'row',
