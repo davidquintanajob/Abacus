@@ -1,3 +1,8 @@
 {
-  "cupToUsdRate": 600
+  "cupToUsdRate": 600,
+  "permissions": {
+    "dependiente": false,
+    "almacenero": true,
+    "economico": true
+  }
 }

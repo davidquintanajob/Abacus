@@ -9,6 +9,9 @@ require("dotenv").config();
 const path = require("path");
 const fs = require("fs");
 
+// <-- NUEVO: Importar el gestor de licencias
+const { SecureLicenseManager } = require("./helpers/SecureLicenseManager");
+
 const app = express();
 
 // Middlewares básicos
@@ -39,6 +42,21 @@ app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${res.statusCode} - ${req.method} ${req.url}`);
     return originalSend.call(this, body);
   };
+  next();
+});
+
+// <-- NUEVO: Middleware de verificación de licencia en cada petición
+app.use((req, res, next) => {
+  const status = SecureLicenseManager.checkLicense();
+  if (!status.isValid) {
+    logger.warn(`Acceso denegado - Licencia inválida: ${status.message}`);
+    return res.status(403).json({
+      error: "Licencia inválida o expirada. Contacte al administrador.",
+      detail: status.message
+    });
+  }
+  // Opcional: puedes registrar el estado en cada request (solo para depuración)
+  // logger.debug(`Licencia válida - Días restantes: ${status.remainingDays}`);
   next();
 });
 
@@ -82,13 +100,15 @@ const servicioRoutes = require("./routes/servicioRoutes");
 const productoRoutes = require("./routes/productoRoutes");
 const usuarioRoutes = require("./routes/usuarioRoutes");
 const tiendaRoutes = require("./routes/tiendaRoutes");
-const configRoutes = require("./routes/configRoutes");  // <-- NUEVA LÍNEA
+const configRoutes = require("./routes/configRoutes");
+const entradaRoutes = require("./routes/entradaRoutes"); // <-- NUEVA LÍNEA
 
 app.use("/", servicioRoutes);
 app.use("/", productoRoutes);
 app.use("/", usuarioRoutes);
 app.use("/", tiendaRoutes);
-app.use("/config", configRoutes);  // <-- NUEVA LÍNEA
+app.use("/config", configRoutes);
+app.use("/", entradaRoutes); // <-- NUEVA LÍNEA
 
 // Inicializar la base de datos y arrancar el servidor
 const startApp = async () => {
@@ -112,6 +132,7 @@ const startApp = async () => {
     const { ServicioTienda } = require("./models/servicio_tienda");
     const { Oferta } = require("./models/oferta");
     const { Codigo } = require("./models/codigo");
+    const { Entrada } = require("./models/entrada");
 
     // Agrupar todos los modelos en un objeto para pasarlos a las asociaciones
     const models = {
@@ -122,6 +143,7 @@ const startApp = async () => {
       ServicioTienda,
       Oferta,
       Codigo,
+      Entrada,
     };
 
     // Ejecutar el método associate de cada modelo si existe
@@ -134,6 +156,22 @@ const startApp = async () => {
     // Sincronizar todas las tablas (con alter: true para actualizar sin perder datos)
     await sequelize.sync({ alter: true });
     console.log("✅ Tablas sincronizadas correctamente");
+
+    // <-- NUEVO: Verificar el estado de la licencia al iniciar y mostrar notificación
+    const licenseInfo = SecureLicenseManager.getLicenseInfo();
+    if (licenseInfo) {
+      const status = SecureLicenseManager.checkLicense();
+      if (status.isValid) {
+        console.log(`✅ Licencia válida - Días restantes: ${status.remainingDays}`);
+        logger.info(`Licencia válida - Días restantes: ${status.remainingDays}`);
+      } else {
+        console.warn(`⚠️ ${status.message}`);
+        logger.warn(`Licencia inválida: ${status.message}`);
+      }
+    } else {
+      console.warn("⚠️ No se encontró archivo de licencia. La API funcionará pero las peticiones serán denegadas.");
+      logger.warn("No se encontró archivo de licencia.");
+    }
 
     const PORT = process.env.PORT || 4000;
     app.listen(PORT, "0.0.0.0", () => {

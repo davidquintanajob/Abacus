@@ -8,27 +8,32 @@ const fs = require("fs");
 const path = require("path");
 const { throwError } = require("../helpers/errorLauncher");
 
+// Directorio donde se guardarán las imágenes
 const IMAGE_UPLOAD_DIR = path.join(__dirname, "..", "imagenes_productos");
-const IMAGE_BASE_URL = process.env.APP_URL || `http://localhost:${process.env.PORT || 4000}`;
 
+// Asegurar que el directorio existe
 const ensureImageUploadDir = () => {
   if (!fs.existsSync(IMAGE_UPLOAD_DIR)) {
     fs.mkdirSync(IMAGE_UPLOAD_DIR, { recursive: true });
   }
 };
 
+// Detectar si es una URL remota
 const isRemoteImage = (value) => /^https?:\/\//i.test(value);
 
+// Parsear imagen base64 o URL
 const parseBase64Image = (imagen) => {
   const trimmed = imagen.trim();
   if (!trimmed) {
     return null;
   }
 
+  // Si es URL, devolvemos el tipo "url"
   if (isRemoteImage(trimmed)) {
     return { kind: "url", value: trimmed };
   }
 
+  // Si es data:image/...;base64, extraer la parte base64
   let base64 = trimmed;
   if (trimmed.startsWith("data:")) {
     const matches = trimmed.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/i);
@@ -38,6 +43,7 @@ const parseBase64Image = (imagen) => {
     base64 = matches[2];
   }
 
+  // Limpiar espacios y validar
   const normalizedBase64 = base64.replace(/\s/g, "");
   if (!normalizedBase64) {
     throwError("La imagen base64 es inválida", 400);
@@ -55,6 +61,7 @@ const parseBase64Image = (imagen) => {
   return { kind: "file", buffer };
 };
 
+// Persistir imagen: guarda en disco y devuelve ruta relativa
 const persistProductImage = async (imagen, productId, createdImagePaths = []) => {
   if (imagen === undefined || imagen === null) {
     return null;
@@ -74,23 +81,28 @@ const persistProductImage = async (imagen, productId, createdImagePaths = []) =>
     return null;
   }
 
+  // Si es URL remota, la devolvemos tal cual (permitimos que se guarde como string)
   if (parsedImage.kind === "url") {
     return parsedImage.value;
   }
 
+  // Es un archivo base64 → guardar en disco
   ensureImageUploadDir();
-  const fileName = `${productId}.webp`;
+  const fileName = `${productId}.webp`;   // usamos .webp (o .web según prefieras)
   const filePath = path.join(IMAGE_UPLOAD_DIR, fileName);
   const tempPath = path.join(IMAGE_UPLOAD_DIR, `${productId}-${Date.now()}.tmp`);
   const existedBefore = fs.existsSync(filePath);
 
+  // Escribir el buffer en un temporal y luego renombrar
   fs.writeFileSync(tempPath, parsedImage.buffer);
   fs.renameSync(tempPath, filePath);
   createdImagePaths.push({ filePath, existedBefore });
 
-  return `${IMAGE_BASE_URL}/imagenes_productos/${fileName}`;
+  // Devolver ruta relativa (para que el frontend la use con la base URL)
+  return `/imagenes_productos/${fileName}`;
 };
 
+// Limpiar archivos creados en caso de error
 const cleanupCreatedImages = (createdImagePaths = []) => {
   createdImagePaths.forEach(({ filePath, existedBefore }) => {
     if (!existedBefore && filePath && fs.existsSync(filePath)) {
@@ -99,6 +111,7 @@ const cleanupCreatedImages = (createdImagePaths = []) => {
   });
 };
 
+// Validar que la tienda exista
 const validateTiendaExists = async (id_tienda) => {
   const count = await Tienda.count({ where: { id_tienda } });
   if (count === 0) {
@@ -106,6 +119,7 @@ const validateTiendaExists = async (id_tienda) => {
   }
 };
 
+// Validar sufijo único
 const validateSufijoUnico = async (sufijo, excludeId = null) => {
   const where = { sufijo };
   if (excludeId) {
@@ -117,6 +131,7 @@ const validateSufijoUnico = async (sufijo, excludeId = null) => {
   }
 };
 
+// Normalizar lista de códigos
 const normalizeCodigoList = (codigoList) => {
   if (codigoList === undefined) {
     return undefined;
@@ -151,6 +166,7 @@ const normalizeCodigoList = (codigoList) => {
   return normalized;
 };
 
+// Validar código de barras único
 const validateCodigoBarrasUnico = async (codigoBarrasEan, excludeId = null) => {
   const where = { codigo_barras_ean: codigoBarrasEan };
   if (excludeId) {
@@ -162,19 +178,21 @@ const validateCodigoBarrasUnico = async (codigoBarrasEan, excludeId = null) => {
   }
 };
 
+// ------ FUNCIONES PRINCIPALES DEL SERVICIO ------
+
 const createProducto = async (productoData, productoTiendaList, codigoList) => {
   const transaction = await Servicio.sequelize.transaction();
   let newServicio;
+  const createdImagePaths = [];
 
   try {
     const normalizedCodigos = normalizeCodigoList(codigoList);
-    const createdImagePaths = [];
     for (const codigo of normalizedCodigos) {
       await validateCodigoBarrasUnico(codigo.codigo_barras_ean);
     }
-
     await validateSufijoUnico(productoData.sufijo);
 
+    // Crear Servicio (base)
     newServicio = await Servicio.create(
       {
         nombre: productoData.nombre,
@@ -185,8 +203,10 @@ const createProducto = async (productoData, productoTiendaList, codigoList) => {
       { transaction }
     );
 
+    // Procesar imagen (guardar archivo y obtener ruta relativa)
     const imagenUrl = await persistProductImage(productoData.imagen, newServicio.id_servicio, createdImagePaths);
 
+    // Crear Producto
     await Producto.create(
       {
         id_servicio: newServicio.id_servicio,
@@ -198,6 +218,7 @@ const createProducto = async (productoData, productoTiendaList, codigoList) => {
       { transaction }
     );
 
+    // Crear códigos
     if (normalizedCodigos && normalizedCodigos.length > 0) {
       await Codigo.bulkCreate(
         normalizedCodigos.map((codigo) => ({
@@ -209,6 +230,7 @@ const createProducto = async (productoData, productoTiendaList, codigoList) => {
       );
     }
 
+    // Asociar tiendas
     if (productoTiendaList && Array.isArray(productoTiendaList) && productoTiendaList.length > 0) {
       const tiendaIds = productoTiendaList.map((item) => item.id_tienda);
       const uniqueTiendaIds = new Set(tiendaIds);
@@ -443,9 +465,9 @@ const filterProductos = async (filterCriteria = {}, id_tienda, cantidadMin, cant
 
 const updateProducto = async (id, productoData, productoTiendaList, codigoList) => {
   const transaction = await Servicio.sequelize.transaction();
+  const createdImagePaths = [];
 
   try {
-    const createdImagePaths = [];
     const servicio = await Servicio.findByPk(id, { transaction });
     if (!servicio) {
       throwError("Producto no encontrado", 404);
@@ -456,10 +478,12 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
       throwError("Producto no encontrado", 404);
     }
 
+    // Validar sufijo si cambia
     if (productoData.sufijo && productoData.sufijo !== producto.sufijo) {
       await validateSufijoUnico(productoData.sufijo, id);
     }
 
+    // Actualizar servicio
     await servicio.update(
       {
         nombre: productoData.nombre !== undefined ? productoData.nombre : servicio.nombre,
@@ -470,19 +494,23 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
       { transaction }
     );
 
+    // Manejar imagen
     let imagenValue = producto.imagen;
     if (productoData.imagen !== undefined) {
       if (productoData.imagen === null || productoData.imagen === "") {
+        // Eliminar imagen
         imagenValue = null;
         const existingImagePath = path.join(IMAGE_UPLOAD_DIR, `${id}.webp`);
         if (fs.existsSync(existingImagePath)) {
           fs.unlinkSync(existingImagePath);
         }
       } else {
+        // Guardar nueva imagen (sobreescribe si ya existe)
         imagenValue = await persistProductImage(productoData.imagen, id, createdImagePaths);
       }
     }
 
+    // Actualizar producto
     await producto.update(
       {
         imagen: imagenValue,
@@ -493,6 +521,7 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
       { transaction }
     );
 
+    // Actualizar códigos si se envía
     if (codigoList !== undefined) {
       const normalizedCodigos = normalizeCodigoList(codigoList);
       const existingCodes = await Codigo.findAll({ where: { id_servicio: id }, transaction });
@@ -517,6 +546,7 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
       }
     }
 
+    // Actualizar tiendas si se envía
     if (productoTiendaList !== undefined) {
       await ServicioTienda.destroy({ where: { id_servicio: id }, transaction });
 

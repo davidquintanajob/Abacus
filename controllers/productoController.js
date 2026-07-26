@@ -45,6 +45,7 @@ const createProducto = async (req, res) => {
     if (esvendible !== undefined && typeof esvendible !== "boolean") {
       errors.push("esvendible debe ser booleano");
     }
+    // Validación de imagen: solo se verifica que sea string si se envía
     if (imagen !== undefined && typeof imagen !== "string") {
       errors.push("imagen debe ser un texto base64 o una URL");
     }
@@ -74,7 +75,7 @@ const createProducto = async (req, res) => {
       categoria,
       esvendible: esvendible !== undefined ? esvendible : true,
       nota: nota || null,
-      imagen: imagen || null,
+      imagen: imagen || null,  // se procesará en el servicio
       sufijo,
       isVencible: isVencible !== undefined ? isVencible : false,
       unidad_medida: unidad_medida || null,

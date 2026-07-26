@@ -73,6 +73,11 @@ ServicioTienda.associate = function(models) {
     foreignKey: "id_servicio",
     as: "servicio",
   });
+  // NUEVO: un servicio_tienda tiene muchas entradas
+  ServicioTienda.hasMany(models.Entrada, {
+    foreignKey: "id_servicio_tienda",
+    as: "entradas",
+  });
 };
 
 module.exports = { ServicioTienda };

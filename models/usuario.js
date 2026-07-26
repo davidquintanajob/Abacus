@@ -68,6 +68,11 @@ const Usuario = sequelize.define("usuario", {
 // Definición de asociación (estilo Entrada/Producto)
 Usuario.associate = function(models) {
   Usuario.belongsTo(models.Tienda, { foreignKey: 'id_tienda', as: 'tienda' });
+  // Nueva relación: un usuario tiene muchas entradas
+  Usuario.hasMany(models.Entrada, {
+    foreignKey: 'id_usuario',
+    as: 'entradas',
+  });
 };
 
 module.exports = { Usuario, roles };
