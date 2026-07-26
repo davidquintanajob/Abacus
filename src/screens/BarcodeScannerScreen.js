@@ -279,16 +279,21 @@ const BarcodeScannerContent = () => {
 
   if (!permission.granted) {
     const styles = createStyles(responsive);
+    
+    const handleRequestPermission = () => {
+      requestPermission();
+    };
+    
     return (
       <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
         <StatusBar style={isDarkMode ? 'light' : 'dark'} />
-        <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={[styles.container, styles.permissionContainer, { backgroundColor: colors.background }]}>
           <Text style={[styles.message, { color: colors.onSurface }]}>
             Necesitamos permiso para usar la cámara
           </Text>
           <TouchableOpacity
             style={[styles.permissionButton, { backgroundColor: colors.primary }]}
-            onPress={requestPermission}
+            onPress={handleRequestPermission}
           >
             <Text style={styles.permissionButtonText}>Conceder permiso</Text>
           </TouchableOpacity>
@@ -383,7 +388,7 @@ const BarcodeScannerContent = () => {
 
         {/* Bottom Section - Tutorial or Code List */}
         <View style={[styles.bottomSection, { backgroundColor: colors.surface, flex: isKeyboardVisible ? 1 : 1 }]}>
-          {showTutorial ? (
+          {showTutorial && !isKeyboardVisible ? (
             /* Tutorial Section */
             <View style={styles.tutorialContainer}>
               <Card style={[styles.tutorialCard, { backgroundColor: colors.background }]}>
@@ -549,15 +554,17 @@ const BarcodeScannerContent = () => {
                 )}
               </ScrollView>
 
-              <TouchableOpacity
-                style={[styles.finishButton, { backgroundColor: colors.primary }]}
-                onPress={handleFinish}
-                disabled={scannedCodes.length === 0}
-              >
-                <Text style={[styles.finishButtonText, { color: '#fff' }]}>
-                  Finalizar ({scannedCodes.length})
-                </Text>
-              </TouchableOpacity>
+              {!isKeyboardVisible && (
+                <TouchableOpacity
+                  style={[styles.finishButton, { backgroundColor: colors.primary }]}
+                  onPress={handleFinish}
+                  disabled={scannedCodes.length === 0}
+                >
+                  <Text style={[styles.finishButtonText, { color: '#fff' }]}>
+                    Finalizar ({scannedCodes.length})
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </View>
@@ -572,6 +579,10 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   container: {
     flex: 1,
+  },
+  permissionContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   contentWrapper: {
     flex: 1,

@@ -13,6 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
 import { getProductos, getProductoByCodigo, deleteProducto } from '../services/productoService';
 import { getTiendas } from '../services/tiendaService';
+import { getApiBaseUrl } from '../services/api';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import { CameraView } from 'expo-camera';
@@ -51,6 +52,7 @@ const ProductosContent = () => {
   const [showCodesOptionsModal, setShowCodesOptionsModal] = useState(false);
   const [showFieldSelectionModal, setShowFieldSelectionModal] = useState(false);
   const [exportType, setExportType] = useState(null); // 'inventory_excel', 'inventory_pdf', 'barcode', 'qr'
+  const [apiBaseUrl, setApiBaseUrl] = useState('');
   const [selectedFields, setSelectedFields] = useState({
     nombre: true,
     codigo: false,
@@ -68,7 +70,13 @@ const ProductosContent = () => {
 
   useEffect(() => {
     fetchTiendas();
+    loadApiBaseUrl();
   }, []);
+
+  const loadApiBaseUrl = async () => {
+    const baseUrl = await getApiBaseUrl();
+    setApiBaseUrl(baseUrl);
+  };
 
   // Mostrar toast al entrar en modo offline
   useEffect(() => {
@@ -1084,6 +1092,7 @@ const ProductosContent = () => {
             {productos.map((producto) => {
               const totalQuantity = calculateTotalQuantity(producto);
               const productImage = producto.producto?.imagen;
+              const fullImageUrl = productImage && apiBaseUrl ? `${apiBaseUrl}${productImage}` : productImage;
 
               return (
                 <TouchableOpacity
@@ -1093,9 +1102,9 @@ const ProductosContent = () => {
                 >
                   <Card style={[styles.productoCard, { backgroundColor: colors.surface }]}>
                     <View style={styles.productoImageContainer}>
-                      {productImage ? (
+                      {fullImageUrl ? (
                         <Image
-                          source={{ uri: productImage }}
+                          source={{ uri: fullImageUrl }}
                           style={styles.productoImage}
                           resizeMode="cover"
                         />
@@ -1108,7 +1117,7 @@ const ProductosContent = () => {
                     <View style={styles.productoInfo}>
                       <View style={styles.productoHeader}>
                         <Text style={[styles.productoName, { color: colors.onSurface }]} numberOfLines={1} ellipsizeMode="tail">
-                          {producto.nombre.length > 15 ? producto.nombre.substring(0, 15) + '...' : producto.nombre}
+                          {producto.nombre.length > 7 ? producto.nombre.substring(0, 7) + '...' : producto.nombre}
                       </Text>
                         <View style={[
                           styles.statusBadge,

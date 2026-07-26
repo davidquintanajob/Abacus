@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
 import { createProducto, updateProducto, getProductoById } from '../services/productoService';
 import { getTiendas } from '../services/tiendaService';
+import { getApiBaseUrl } from '../services/api';
 import { configService } from '../services/configService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
@@ -47,6 +48,7 @@ const ProductoFormContent = () => {
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [showImagePickerModal, setShowImagePickerModal] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
+  const [apiBaseUrl, setApiBaseUrl] = useState('');
   const [config, setConfig] = useState({});
   const [exchangeRate, setExchangeRate] = useState(null);
   const [priceInputTexts, setPriceInputTexts] = useState({});
@@ -72,6 +74,8 @@ const ProductoFormContent = () => {
   const [isCodesExpanded, setIsCodesExpanded] = useState(false);
   const [isGeneralPricesExpanded, setIsGeneralPricesExpanded] = useState(false);
   const [isPricesExpanded, setIsPricesExpanded] = useState(false);
+  const [isStockExpanded, setIsStockExpanded] = useState(false);
+  const [isActionsExpanded, setIsActionsExpanded] = useState(false);
 
   useEffect(() => {
     if (formData.codigoList.length > 0) {
@@ -81,6 +85,30 @@ const ProductoFormContent = () => {
       setIsPricesExpanded(true);
     }
   }, [formData.codigoList.length, formData.productoTiendaList.length]);
+
+  useEffect(() => {
+    // Check if any visible store has stock > 0
+    const hasStockInVisibleStores = formData.productoTiendaList.some((tiendaProducto) => {
+      const tienda = tiendas.find(t => t.id_tienda === tiendaProducto.id_tienda);
+      if (!tienda || !tienda.activo) return false;
+      
+      const userRole = user?.rol?.toLowerCase();
+      const canViewThisStore = 
+        userRole === 'administrador' ||
+        (userRole === 'dependiente' && permissions?.dependiente) ||
+        (userRole === 'almacenero' && permissions?.almacenero) ||
+        (userRole === 'económico' && permissions?.economico) ||
+        (user?.id_tienda === tienda.id_tienda);
+      
+      if (!canViewThisStore) return false;
+      
+      return tiendaProducto.cantidad !== null && 
+             tiendaProducto.cantidad !== undefined && 
+             parseFloat(tiendaProducto.cantidad) > 0;
+    });
+
+    setIsStockExpanded(hasStockInVisibleStores);
+  }, [formData.productoTiendaList, tiendas, user, permissions]);
 
   const handleGeneralPriceBlur = () => {
     const hasAllGeneralPrices = 
@@ -132,10 +160,11 @@ const ProductoFormContent = () => {
   };
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
-  const isAdmin = user?.rol === 'Administrador';
-  const isEconomico = user?.rol === 'Económico';
-  const isDependiente = user?.rol === 'Dependiente';
-  const isAlmacenero = user?.rol === 'Almacenero';
+  const userRole = user?.rol?.toLowerCase();
+  const isAdmin = userRole === 'administrador';
+  const isEconomico = userRole === 'económico';
+  const isDependiente = userRole === 'dependiente';
+  const isAlmacenero = userRole === 'almacenero';
   
   const canEditProduct = isAdmin;
   const canEditCodes = isAdmin;
@@ -144,7 +173,13 @@ const ProductoFormContent = () => {
   useEffect(() => {
     fetchTiendas();
     fetchConfig();
+    loadApiBaseUrl();
   }, []);
+
+  const loadApiBaseUrl = async () => {
+    const baseUrl = await getApiBaseUrl();
+    setApiBaseUrl(baseUrl);
+  };
 
   useEffect(() => {
     const fetchCompleteProducto = async () => {
@@ -282,7 +317,6 @@ const ProductoFormContent = () => {
         categoria: formData.categoria,
         esvendible: formData.esvendible,
         nota: formData.nota || null,
-        imagen: formData.imagen || null,
         sufijo: formData.sufijo,
         isVencible: formData.isVencible,
         unidad_medida: formData.unidad_medida || null,
@@ -335,6 +369,11 @@ const ProductoFormContent = () => {
           return baseList;
         })(),
       };
+
+      // Solo incluir imagen si tiene un valor
+      if (formData.imagen && formData.imagen.trim() !== '') {
+        dataToSend.imagen = formData.imagen;
+      }
 
       console.log('Datos a enviar:', JSON.stringify(dataToSend, null, 2));
 
@@ -722,26 +761,77 @@ const ProductoFormContent = () => {
             </View>
           </View>
 
-          <View style={styles.formGroup}>
+          {/* Acciones Section */}
+          {(isAdmin || isAlmacenero) && (isViewMode || isEditMode) && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Acciones</Text>
+                <View style={styles.sectionActions}>
+                  <TouchableOpacity
+                    style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+                    onPress={() => setIsActionsExpanded(!isActionsExpanded)}
+                  >
+                    <Ionicons 
+                      name={isActionsExpanded ? "chevron-up" : "chevron-down"} 
+                      size={responsive.responsiveWidth(18)} 
+                      color={isDarkMode ? colors.primary : '#1976D2'} 
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              
+              {isActionsExpanded && (
+                <View style={styles.productActionsContainer}>
+                  <TouchableOpacity
+                    style={[styles.productActionButton, { backgroundColor: isDarkMode ? '#1B5E20' : '#E8F5E9' }]}
+                    onPress={() => {}}
+                  >
+                    <Ionicons name="arrow-down-circle-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#81C784' : '#2E7D32'} />
+                    <Text style={[styles.productActionButtonText, { color: isDarkMode ? '#81C784' : '#2E7D32' }]}>Agregar Entrada</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.productActionButton, { backgroundColor: isDarkMode ? '#0D47A1' : '#E3F2FD' }]}
+                    onPress={() => {}}
+                  >
+                    <Ionicons name="swap-horizontal-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#64B5F6' : '#1976D2'} />
+                    <Text style={[styles.productActionButtonText, { color: isDarkMode ? '#64B5F6' : '#1976D2' }]}>Movimiento</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.productActionButton, { backgroundColor: isDarkMode ? '#B71C1C' : '#FFEBEE' }]}
+                    onPress={() => {}}
+                  >
+                    <Ionicons name="arrow-up-circle-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#E57373' : '#C62828'} />
+                    <Text style={[styles.productActionButtonText, { color: isDarkMode ? '#E57373' : '#C62828' }]}>Hacer Salida</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+
+          <View style={[styles.formGroup, styles.imageSection]}>
             <Text style={[styles.label, { color: colors.outline }]}>Imagen</Text>
             <View style={styles.imageContainer}>
-              {formData.imagen ? (
-                <View style={styles.imagePreviewContainer}>
-                  <Image
-                    source={{ uri: formData.imagen }}
-                    style={styles.imagePreview}
-                    resizeMode="cover"
-                  />
-                  {!isReadOnly && (
-                    <TouchableOpacity
-                      style={[styles.imageRemoveButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                      onPress={handleRemoveImage}
-                    >
-                      <Ionicons name="close" size={responsive.responsiveWidth(20)} color={colors.error} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ) : (
+              {formData.imagen ? (() => {
+                const isBase64 = formData.imagen.startsWith('data:');
+                const fullImageUrl = isBase64 ? formData.imagen : (apiBaseUrl ? `${apiBaseUrl}${formData.imagen}` : formData.imagen);
+                return (
+                  <View style={styles.imagePreviewContainer}>
+                    <Image
+                      source={{ uri: fullImageUrl }}
+                      style={styles.imagePreview}
+                      resizeMode="cover"
+                    />
+                    {!isReadOnly && (
+                      <TouchableOpacity
+                        style={[styles.imageRemoveButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                        onPress={handleRemoveImage}
+                      >
+                        <Ionicons name="close" size={responsive.responsiveWidth(20)} color={colors.error} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })() : (
                 <TouchableOpacity
                   style={[styles.imagePlaceholder, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
                   onPress={handlePickImage}
@@ -1288,6 +1378,89 @@ const ProductoFormContent = () => {
             )}
           </View>
 
+          {/* Stock por Tienda Section */}
+          {(isViewMode || isEditMode) && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Stock por Tienda</Text>
+                <View style={styles.sectionActions}>
+                  <TouchableOpacity
+                    style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+                    onPress={() => setIsStockExpanded(!isStockExpanded)}
+                  >
+                    <Ionicons 
+                      name={isStockExpanded ? "chevron-up" : "chevron-down"} 
+                      size={responsive.responsiveWidth(18)} 
+                      color={isDarkMode ? colors.primary : '#1976D2'} 
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              
+              {isStockExpanded && (
+                <>
+                  {formData.productoTiendaList.length === 0 ? (
+                    <Text style={[styles.emptyText, { color: colors.outline }]}>
+                      No hay stock disponible
+                    </Text>
+                  ) : (
+                    formData.productoTiendaList.map((tiendaProducto, index) => {
+                      const tienda = tiendas.find(t => t.id_tienda === tiendaProducto.id_tienda);
+                      if (!tienda || !tienda.activo) return null;
+                      
+                      const userRole = user?.rol?.toLowerCase();
+                      const canViewThisStore = 
+                        userRole === 'administrador' ||
+                        (userRole === 'dependiente' && permissions?.dependiente) ||
+                        (userRole === 'almacenero' && permissions?.almacenero) ||
+                        (userRole === 'económico' && permissions?.economico) ||
+                        (user?.id_tienda === tienda.id_tienda);
+                      
+                      if (!canViewThisStore) return null;
+                      
+                      return (
+                        <View key={index} style={[styles.stockItem, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                          <View style={styles.stockInfoRow}>
+                            <Text style={[styles.stockTiendaName, { color: colors.onSurface }]}>
+                              {tienda.nombre}
+                            </Text>
+                            <View style={[styles.stockBadge, { backgroundColor: tiendaProducto.cantidad > 0 ? colors.primaryContainer : colors.errorContainer }]}>
+                              <Text style={[styles.stockBadgeText, { color: tiendaProducto.cantidad > 0 ? colors.primary : colors.error }]}>
+                                {tiendaProducto.cantidad !== null && tiendaProducto.cantidad !== undefined 
+                                  ? parseFloat(tiendaProducto.cantidad).toFixed(2) 
+                                  : '0.00'}
+                              </Text>
+                            </View>
+                          </View>
+                          {tiendaProducto.cantidad_alerta !== null && tiendaProducto.cantidad_alerta !== undefined && (
+                            <Text style={[styles.stockAlertText, { color: colors.outline }]}>
+                              Alerta: {parseFloat(tiendaProducto.cantidad_alerta).toFixed(2)}
+                            </Text>
+                          )}
+                        </View>
+                      );
+                    })
+                  )}
+                  {formData.productoTiendaList.filter((tp, idx) => {
+                    const tienda = tiendas.find(t => t.id_tienda === tp.id_tienda);
+                    if (!tienda || !tienda.activo) return false;
+                    
+                    const userRole = user?.rol?.toLowerCase();
+                    return userRole === 'administrador' ||
+                      (userRole === 'dependiente' && permissions?.dependiente) ||
+                      (userRole === 'almacenero' && permissions?.almacenero) ||
+                      (userRole === 'económico' && permissions?.economico) ||
+                      (user?.id_tienda === tienda.id_tienda);
+                  }).length === 0 && (
+                    <Text style={[styles.emptyText, { color: colors.outline }]}>
+                      No hay tiendas visibles con stock
+                    </Text>
+                  )}
+                </>
+              )}
+            </View>
+          )}
+
           {(!isViewMode || canEditProduct) && !isOfflineMode && (
             <View style={styles.buttonGroup}>
               <TouchableOpacity
@@ -1358,7 +1531,7 @@ const ProductoFormContent = () => {
               </View>
               <View style={styles.modalButtons}>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.cancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
+                  style={[styles.modalButton, styles.modalCancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
                   onPress={() => {
                     setNewCodigo('');
                     setNewNota('');
@@ -1542,6 +1715,9 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   formGroup: {
     marginBottom: responsive.responsiveMargin(16),
+  },
+  imageSection: {
+    marginTop: responsive.responsiveMargin(24),
   },
   formRow: {
     flexDirection: 'row',
@@ -1882,7 +2058,7 @@ const createStyles = (responsive) => StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
-  cancelButton: {
+  modalCancelButton: {
     borderWidth: 1,
   },
   confirmButton: {
@@ -1896,6 +2072,43 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.body,
     fontWeight: '600',
     fontFamily: 'Inter',
+  },
+  stockItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: responsive.responsivePadding(12),
+    borderRadius: 8,
+    marginBottom: responsive.responsiveMargin(8),
+    borderWidth: 1,
+  },
+  stockInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flex: 1,
+  },
+  stockTiendaName: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+    flex: 1,
+  },
+  stockBadge: {
+    paddingHorizontal: responsive.responsivePadding(12),
+    paddingVertical: responsive.responsivePadding(6),
+    borderRadius: 12,
+    marginLeft: responsive.responsiveMargin(8),
+  },
+  stockBadgeText: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  stockAlertText: {
+    fontSize: responsive.fontSizes.caption,
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(4),
   },
   inputWithIcon: {
     flexDirection: 'row',
@@ -1960,10 +2173,26 @@ const createStyles = (responsive) => StyleSheet.create({
     top: responsive.responsiveHeight(50),
     right: responsive.responsiveWidth(20),
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: responsive.responsiveWidth(20),
-    width: responsive.responsiveWidth(40),
-    height: responsive.responsiveHeight(40),
+  },
+  productActionsContainer: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(8),
+    flexWrap: 'wrap',
+  },
+  productActionButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: responsive.responsiveMargin(6),
+    paddingVertical: responsive.responsivePadding(10),
+    paddingHorizontal: responsive.responsivePadding(14),
+    borderRadius: 8,
+    flex: 1,
+    minWidth: '45%',
     justifyContent: 'center',
+  },
+  productActionButtonText: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '600',
+    fontFamily: 'Inter',
   },
 });

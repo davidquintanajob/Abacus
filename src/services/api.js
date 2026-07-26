@@ -85,4 +85,5 @@ api.interceptors.response.use(
   }
 );
 
+export { getApiBaseUrl };
 export default api;
