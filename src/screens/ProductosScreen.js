@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Modal, Share } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Modal, Share, Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -20,7 +20,11 @@ import { CameraView } from 'expo-camera';
 import * as Camera from 'expo-camera';
 import { storageService } from '../services/storageService';
 import * as XLSX from 'xlsx';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
+import bwipjs from '@bwip-js/react-native';
+import { PDFDocument, rgb } from 'pdf-lib';
 
 const ProductosContent = () => {
   const navigation = useNavigation();
@@ -448,6 +452,59 @@ const ProductosContent = () => {
     }
   };
 
+  const showExportSuccessAlert = (fileUri, fileName) => {
+    Alert.alert(
+      'Documento Exportado',
+      `Guardado en: ${fileUri}`,
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Ver',
+          onPress: async () => {
+            try {
+              // Use Sharing.shareAsync with dialog to open file with system picker
+              const isAvailable = await Sharing.isAvailableAsync();
+              if (isAvailable) {
+                await Sharing.shareAsync(fileUri, {
+                  mimeType: fileName.endsWith('.xlsx') ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/pdf',
+                  dialogTitle: 'Abrir documento',
+                  UTI: fileName.endsWith('.xlsx') ? 'com.microsoft.excel.xls' : 'com.adobe.pdf',
+                });
+              } else {
+                showToast({ type: 'error', message: 'No se puede abrir archivos en este dispositivo' });
+              }
+            } catch (error) {
+              console.error('Error opening file:', error);
+              showToast({ type: 'error', message: 'Error al abrir el archivo: ' + error.message });
+            }
+          },
+        },
+        {
+          text: 'Compartir',
+          onPress: async () => {
+            try {
+              const isAvailable = await Sharing.isAvailableAsync();
+              if (isAvailable) {
+                await Sharing.shareAsync(fileUri, {
+                  mimeType: fileName.endsWith('.xlsx') ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/pdf',
+                  dialogTitle: 'Compartir documento',
+                });
+              } else {
+                showToast({ type: 'error', message: 'Compartir no está disponible en este dispositivo' });
+              }
+            } catch (error) {
+              console.error('Error sharing file:', error);
+              showToast({ type: 'error', message: 'Error al compartir el archivo' });
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const exportToExcel = async (productos) => {
     try {
       // Prepare data based on selected fields
@@ -456,8 +513,8 @@ const ProductosContent = () => {
         if (selectedFields.nombre) row['Nombre'] = producto.nombre;
         if (selectedFields.codigo) row['Código'] = producto.codigos?.[0]?.codigo_barras_ean || 'N/A';
         if (selectedFields.categoria) row['Categoría'] = producto.categoria || 'N/A';
-        if (selectedFields.precio_cup) row['Precio (CUP)'] = producto.producto?.precio_cup || 0;
-        if (selectedFields.costo_cup) row['Costo (CUP)'] = producto.producto?.costo_cup || 0;
+        if (selectedFields.precio_cup) row['Precio (CUP)'] = getProductPrice(producto);
+        if (selectedFields.costo_cup) row['Costo (CUP)'] = getProductCost(producto);
         if (selectedFields.nota) row['Nota'] = producto.producto?.nota || 'N/A';
         if (selectedFields.cantidad) row['Cantidad'] = calculateTotalQuantity(producto);
         if (selectedFields.sufijo) row['Sufijo'] = producto.producto?.sufijo || 'N/A';
@@ -480,7 +537,7 @@ const ProductosContent = () => {
         encoding: FileSystem.EncodingType.Base64,
       });
 
-      showToast({ type: 'success', message: `Excel guardado en: ${fileUri}` });
+      showExportSuccessAlert(fileUri, fileName);
     } catch (error) {
       console.error('Error exporting to Excel:', error);
       throw error;
@@ -510,8 +567,8 @@ const ProductosContent = () => {
         if (selectedFields.nombre) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.nombre}</td>`;
         if (selectedFields.codigo) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.codigos?.[0]?.codigo_barras_ean || 'N/A'}</td>`;
         if (selectedFields.categoria) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.categoria || 'N/A'}</td>`;
-        if (selectedFields.precio_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.producto?.precio_cup || 0}</td>`;
-        if (selectedFields.costo_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.producto?.costo_cup || 0}</td>`;
+        if (selectedFields.precio_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductPrice(producto)}</td>`;
+        if (selectedFields.costo_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductCost(producto)}</td>`;
         if (selectedFields.nota) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.producto?.nota || 'N/A'}</td>`;
         if (selectedFields.cantidad) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${calculateTotalQuantity(producto)}</td>`;
         if (selectedFields.sufijo) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.producto?.sufijo || 'N/A'}</td>`;
@@ -522,12 +579,26 @@ const ProductosContent = () => {
         <html>
           <head>
             <style>
-              body { font-family: Arial, sans-serif; }
-              table { border-collapse: collapse; width: 100%; }
-              th, td { text-align: left; }
-              @media print {
-                body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+              body { font-family: Arial, sans-serif; padding: 20px; }
+              h1 { text-align: center; color: #002440; margin-bottom: 10px; }
+              p { text-align: center; color: #0b1c30; margin-bottom: 20px; }
+              table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+              th { 
+                background-color: #002440; 
+                color: #ffffff; 
+                border: 1px solid #002440; 
+                padding: 12px 8px; 
+                text-align: left; 
+                font-weight: bold;
               }
+              td { 
+                border: 1px solid #d3e4fe; 
+                padding: 8px; 
+                text-align: left; 
+                color: #0b1c30;
+              }
+              tr:nth-child(even) { background-color: #f8f9ff; }
+              tr:nth-child(odd) { background-color: #ffffff; }
             </style>
           </head>
           <body>
@@ -537,20 +608,19 @@ const ProductosContent = () => {
               ${tableHeader}
               ${tableRows}
             </table>
-            <script>window.print();</script>
           </body>
         </html>
       `;
 
-      // Save as HTML file instead of PDF (Expo-compatible)
-      const fileName = `inventario_${new Date().toISOString().split('T')[0]}.html`;
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+      // Generate PDF using expo-print
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
       
-      await FileSystem.writeAsStringAsync(fileUri, htmlContent, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
+      // Rename the file
+      const fileName = `inventario_${new Date().toISOString().split('T')[0]}.pdf`;
+      const newUri = `${FileSystem.documentDirectory}${fileName}`;
+      await FileSystem.moveAsync({ from: uri, to: newUri });
 
-      showToast({ type: 'success', message: `HTML guardado en: ${fileUri}. Abre el archivo en un navegador para imprimir como PDF.` });
+      showExportSuccessAlert(newUri, fileName);
     } catch (error) {
       console.error('Error exporting to HTML:', error);
       throw error;
@@ -559,8 +629,23 @@ const ProductosContent = () => {
 
   const exportToQR = async (productos) => {
     try {
-      // Create HTML with QR codes for each product using local generation
-      let qrContent = '';
+      // Create a new PDF document
+      const pdfDoc = await PDFDocument.create();
+      
+      // Define page size (A4)
+      const pageWidth = 595.28;
+      const pageHeight = 841.89;
+      
+      // Grid settings (2x2)
+      const cols = 2;
+      const rows = 3; // Increased rows to make cells shorter
+      const margin = 20;
+      const cellWidth = (pageWidth - margin * 3) / cols;
+      const cellHeight = 220; // Fixed compact height for cells
+      
+      let currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
+      let colIndex = 0;
+      let rowIndex = 0;
       
       for (const producto of productos) {
         // Prepare data for QR code based on selected fields
@@ -568,69 +653,107 @@ const ProductosContent = () => {
         if (selectedFields.nombre) qrData.nombre = producto.nombre;
         if (selectedFields.codigo) qrData.codigo = producto.codigos?.[0]?.codigo_barras_ean || 'N/A';
         if (selectedFields.categoria) qrData.categoria = producto.categoria || 'N/A';
-        if (selectedFields.precio_cup) qrData.precio_cup = producto.producto?.precio_cup || 0;
-        if (selectedFields.costo_cup) qrData.costo_cup = producto.producto?.costo_cup || 0;
+        if (selectedFields.precio_cup) qrData.precio_cup = getProductPrice(producto);
+        if (selectedFields.costo_cup) qrData.costo_cup = getProductCost(producto);
         if (selectedFields.nota) qrData.nota = producto.producto?.nota || 'N/A';
         if (selectedFields.cantidad) qrData.cantidad = calculateTotalQuantity(producto);
         if (selectedFields.sufijo) qrData.sufijo = producto.producto?.sufijo || 'N/A';
         
         const qrString = JSON.stringify(qrData);
         
-        // Prepare product info display
-        let productInfo = '';
-        if (selectedFields.nombre) productInfo += `<p><strong>Nombre:</strong> ${producto.nombre}</p>`;
-        if (selectedFields.codigo) productInfo += `<p><strong>Código:</strong> ${producto.codigos?.[0]?.codigo_barras_ean || 'N/A'}</p>`;
-        if (selectedFields.categoria) productInfo += `<p><strong>Categoría:</strong> ${producto.categoria || 'N/A'}</p>`;
-        if (selectedFields.precio_cup) productInfo += `<p><strong>Precio (CUP):</strong> ${producto.producto?.precio_cup || 0}</p>`;
-        if (selectedFields.costo_cup) productInfo += `<p><strong>Costo (CUP):</strong> ${producto.producto?.costo_cup || 0}</p>`;
-        if (selectedFields.nota) productInfo += `<p><strong>Nota:</strong> ${producto.producto?.nota || 'N/A'}</p>`;
-        if (selectedFields.cantidad) productInfo += `<p><strong>Cantidad:</strong> ${calculateTotalQuantity(producto)}</p>`;
-        if (selectedFields.sufijo) productInfo += `<p><strong>Sufijo:</strong> ${producto.producto?.sufijo || 'N/A'}</p>`;
-
-        qrContent += `
-          <div style="border: 1px solid #ddd; padding: 20px; margin: 10px; display: inline-block; width: 45%; vertical-align: top; page-break-inside: avoid;">
-            <div style="width: 150px; height: 150px; display: block; margin: 0 auto; background: #f0f0f0; display: flex; align-items: center; justify-content: center;">
-              <span style="font-size: 10px; text-align: center;">QR Data: ${qrString.substring(0, 30)}...</span>
-            </div>
-            <div style="margin-top: 10px;">
-              ${productInfo}
-            </div>
-          </div>
-        `;
+        // Generate QR code as PNG using bwip-js
+        const qrResult = await bwipjs.toDataURL({
+          bcid: 'qrcode',
+          text: qrString,
+          scale: 4,
+          height: 10,
+          includetext: false,
+          eclevel: 'H',
+          rotate: 'N',
+        });
+        
+        // Embed QR image in PDF
+        const qrImage = await pdfDoc.embedPng(qrResult.uri);
+        
+        // Calculate position in grid
+        const x = margin + colIndex * (cellWidth + margin);
+        const y = pageHeight - margin - (rowIndex + 1) * cellHeight;
+        
+        // Draw rectangle around the cell
+        currentPage.drawRectangle({
+          x: x,
+          y: y,
+          width: cellWidth,
+          height: cellHeight,
+          borderColor: rgb(0, 0, 0),
+          borderWidth: 1,
+        });
+        
+        // Draw QR code (maintain square aspect ratio)
+        const qrSize = Math.min(cellWidth, cellHeight) * 0.5;
+        const qrX = x + (cellWidth - qrSize) / 2;
+        const qrY = y + cellHeight - qrSize - 10;
+        
+        currentPage.drawImage(qrImage, {
+          x: qrX,
+          y: qrY,
+          width: qrSize,
+          height: qrSize,
+        });
+        
+        // Draw product info text (inside the rectangle)
+        const font = await pdfDoc.embedFont('Helvetica');
+        const fontSize = 7;
+        let textY = qrY - 5;
+        
+        const textLines = [];
+        if (selectedFields.nombre) textLines.push(`Nombre: ${producto.nombre}`);
+        if (selectedFields.codigo) textLines.push(`Código: ${producto.codigos?.[0]?.codigo_barras_ean || 'N/A'}`);
+        if (selectedFields.categoria) textLines.push(`Categoría: ${producto.categoria || 'N/A'}`);
+        if (selectedFields.precio_cup) textLines.push(`Precio: ${getProductPrice(producto)}`);
+        if (selectedFields.costo_cup) textLines.push(`Costo: ${getProductCost(producto)}`);
+        if (selectedFields.nota) textLines.push(`Nota: ${producto.producto?.nota || 'N/A'}`);
+        if (selectedFields.cantidad) textLines.push(`Cantidad: ${calculateTotalQuantity(producto)}`);
+        if (selectedFields.sufijo) textLines.push(`Sufijo: ${producto.producto?.sufijo || 'N/A'}`);
+        
+        for (const line of textLines) {
+          currentPage.drawText(line, {
+            x: x + 5,
+            y: textY,
+            size: fontSize,
+            font: font,
+            color: rgb(0, 0, 0),
+          });
+          textY -= fontSize + 2;
+          // Stop if text would go outside the rectangle
+          if (textY < y + 5) break;
+        }
+        
+        // Move to next grid cell
+        colIndex++;
+        if (colIndex >= cols) {
+          colIndex = 0;
+          rowIndex++;
+          if (rowIndex >= rows) {
+            rowIndex = 0;
+            currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
+          }
+        }
       }
-
-      const htmlContent = `
-        <html>
-          <head>
-            <style>
-              body { font-family: Arial, sans-serif; padding: 20px; }
-              .qr-container { display: flex; flex-wrap: wrap; }
-              @media print {
-                .qr-container { page-break-inside: avoid; }
-                body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-              }
-            </style>
-          </head>
-          <body>
-            <h1>Códigos QR de Productos</h1>
-            <p>Fecha: ${new Date().toLocaleDateString()}</p>
-            <div class="qr-container">
-              ${qrContent}
-            </div>
-            <script>window.print();</script>
-          </body>
-        </html>
-      `;
-
-      // Save as HTML file instead of PDF (Expo-compatible)
-      const fileName = `codigos_qr_${new Date().toISOString().split('T')[0]}.html`;
+      
+      // Save PDF to bytes
+      const pdfBytes = await pdfDoc.save();
+      
+      // Convert to base64 using React Native compatible method
+      const pdfBase64 = btoa(String.fromCharCode.apply(null, new Uint8Array(pdfBytes)));
+      const fileName = `codigos_qr_${new Date().toISOString().split('T')[0]}.pdf`;
       const fileUri = `${FileSystem.documentDirectory}${fileName}`;
       
-      await FileSystem.writeAsStringAsync(fileUri, htmlContent, {
-        encoding: FileSystem.EncodingType.UTF8,
+      await FileSystem.writeAsStringAsync(fileUri, pdfBase64, {
+        encoding: FileSystem.EncodingType.Base64,
       });
-
-      showToast({ type: 'success', message: `HTML con códigos QR guardado en: ${fileUri}. Abre el archivo en un navegador para imprimir como PDF.` });
+      
+      showExportSuccessAlert(fileUri, fileName);
     } catch (error) {
       console.error('Error exporting QR codes:', error);
       throw error;
@@ -639,36 +762,52 @@ const ProductosContent = () => {
 
   const exportToBarcode = async (productos) => {
     try {
-      // Create HTML with barcodes for each product using local generation
+      // Create HTML with real barcodes for each product
       let barcodeContent = '';
       
       for (const producto of productos) {
         const codigo = producto.codigos?.[0]?.codigo_barras_ean || 'N/A';
         
-        // Generate a simple barcode representation locally
-        // This is a simplified barcode visualization that works offline
-        const barcodePattern = generateSimpleBarcode(codigo);
+        // Generate barcode as base64 image using bwip-js
+        let barcodeImageBase64 = '';
+        if (codigo !== 'N/A') {
+          try {
+            // Use bwip-js to generate barcode as data URL
+            const barcodeResult = await bwipjs.toDataURL({
+              bcid: 'code128',     // Barcode type (accepts any length)
+              text: codigo,        // Text to encode
+              scale: 4,             // Increased scale for better visibility
+              height: 15,           // Increased bar height
+              includetext: true,    // Show human-readable text
+              textxalign: 'center', // Text alignment
+              textsize: 12,         // Text size
+            });
+            
+            // Extract the data URI from the result
+            barcodeImageBase64 = barcodeResult.uri;
+          } catch (error) {
+            console.error('Error generating barcode:', error);
+            // Fallback to simple pattern if barcode generation fails
+            const barcodePattern = generateSimpleBarcode(codigo);
+            barcodeImageBase64 = `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><text x="10" y="50" font-family="monospace" font-size="8">${barcodePattern}</text><text x="10" y="90" font-size="10">${codigo}</text></svg>`)}`;
+          }
+        }
         
         // Prepare product info display
         let productInfo = '';
         if (selectedFields.nombre) productInfo += `<p><strong>Nombre:</strong> ${producto.nombre}</p>`;
         if (selectedFields.codigo) productInfo += `<p><strong>Código:</strong> ${codigo}</p>`;
         if (selectedFields.categoria) productInfo += `<p><strong>Categoría:</strong> ${producto.categoria || 'N/A'}</p>`;
-        if (selectedFields.precio_cup) productInfo += `<p><strong>Precio (CUP):</strong> ${producto.producto?.precio_cup || 0}</p>`;
-        if (selectedFields.costo_cup) productInfo += `<p><strong>Costo (CUP):</strong> ${producto.producto?.costo_cup || 0}</p>`;
+        if (selectedFields.precio_cup) productInfo += `<p><strong>Precio (CUP):</strong> ${getProductPrice(producto)}</p>`;
+        if (selectedFields.costo_cup) productInfo += `<p><strong>Costo (CUP):</strong> ${getProductCost(producto)}</p>`;
         if (selectedFields.nota) productInfo += `<p><strong>Nota:</strong> ${producto.producto?.nota || 'N/A'}</p>`;
         if (selectedFields.cantidad) productInfo += `<p><strong>Cantidad:</strong> ${calculateTotalQuantity(producto)}</p>`;
         if (selectedFields.sufijo) productInfo += `<p><strong>Sufijo:</strong> ${producto.producto?.sufijo || 'N/A'}</p>`;
 
         barcodeContent += `
-          <div style="border: 1px solid #ddd; padding: 20px; margin: 10px; display: inline-block; width: 45%; vertical-align: top; page-break-inside: avoid;">
-            <div style="width: 200px; height: 100px; display: block; margin: 0 auto; background: white; border: 1px solid #ccc; display: flex; align-items: center; justify-content: center; flex-direction: column;">
-              <div style="font-family: monospace; font-size: 8px; letter-spacing: 2px; line-height: 1;">
-                ${barcodePattern}
-              </div>
-              <div style="font-size: 10px; margin-top: 5px;">${codigo}</div>
-            </div>
-            <div style="margin-top: 10px;">
+          <div class="barcode-item">
+            <img class="barcode-image" src="${barcodeImageBase64}" />
+            <div class="product-info">
               ${productInfo}
             </div>
           </div>
@@ -679,34 +818,59 @@ const ProductosContent = () => {
         <html>
           <head>
             <style>
-              body { font-family: Arial, sans-serif; padding: 20px; }
-              .barcode-container { display: flex; flex-wrap: wrap; }
+              body { font-family: Arial, sans-serif; padding: 20px; margin: 0; }
+              .barcode-container { 
+                display: grid; 
+                grid-template-columns: 1fr 1fr; 
+                gap: 20px; 
+                width: 100%;
+              }
+              .barcode-item {
+                border: 1px solid #ddd; 
+                padding: 15px; 
+                page-break-inside: avoid;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+              }
+              .barcode-image {
+                width: 100%;
+                max-width: 300px;
+                height: auto;
+                margin-bottom: 10px;
+              }
+              .product-info {
+                font-size: 10px;
+                text-align: left;
+                width: 100%;
+              }
+              .product-info p {
+                margin: 2px 0;
+              }
               @media print {
                 .barcode-container { page-break-inside: avoid; }
-                body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
               }
             </style>
           </head>
           <body>
-            <h1>Códigos de Barra de Productos</h1>
-            <p>Fecha: ${new Date().toLocaleDateString()}</p>
+            <h1 style="text-align: center;">Códigos de Barra de Productos</h1>
+            <p style="text-align: center;">Fecha: ${new Date().toLocaleDateString()}</p>
             <div class="barcode-container">
               ${barcodeContent}
             </div>
-            <script>window.print();</script>
           </body>
         </html>
       `;
 
-      // Save as HTML file instead of PDF (Expo-compatible)
-      const fileName = `codigos_barra_${new Date().toISOString().split('T')[0]}.html`;
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+      // Generate PDF using expo-print
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
       
-      await FileSystem.writeAsStringAsync(fileUri, htmlContent, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
+      // Rename the file
+      const fileName = `codigos_barra_${new Date().toISOString().split('T')[0]}.pdf`;
+      const newUri = `${FileSystem.documentDirectory}${fileName}`;
+      await FileSystem.moveAsync({ from: uri, to: newUri });
 
-      showToast({ type: 'success', message: `HTML con códigos de barra guardado en: ${fileUri}. Abre el archivo en un navegador para imprimir como PDF.` });
+      showExportSuccessAlert(newUri, fileName);
     } catch (error) {
       console.error('Error exporting barcodes:', error);
       throw error;
@@ -747,13 +911,75 @@ const ProductosContent = () => {
       return 0;
     }
 
+    // Filter tiendas_servicio based on user permissions
+    let visibleTiendasServicio = producto.tiendas_servicio;
+    if (!canViewAllStores && user?.id_tienda) {
+      visibleTiendasServicio = producto.tiendas_servicio.filter(ts => ts.id_tienda === user.id_tienda);
+    }
+
     if (filters.id_tienda) {
-      // Show quantity for specific store
-      const tiendaServicio = producto.tiendas_servicio.find(ts => ts.id_tienda === parseInt(filters.id_tienda));
+      // Show quantity for specific store (if user has permission to view it)
+      const tiendaServicio = visibleTiendasServicio.find(ts => ts.id_tienda === parseInt(filters.id_tienda));
       return tiendaServicio?.cantidad || 0;
     } else {
-      // Show sum of all stores
-      return producto.tiendas_servicio.reduce((sum, ts) => sum + (ts.cantidad || 0), 0);
+      // Show sum of all visible stores
+      return visibleTiendasServicio.reduce((sum, ts) => sum + (ts.cantidad || 0), 0);
+    }
+  };
+
+  // Get price for a product based on user permissions
+  const getProductPrice = (producto) => {
+    // First try to get general price from producto.producto
+    if (producto.producto?.precio_cup !== null && producto.producto?.precio_cup !== undefined) {
+      return producto.producto.precio_cup;
+    }
+
+    // If no general price, get from tiendas_servicio based on permissions
+    if (!producto.tiendas_servicio || producto.tiendas_servicio.length === 0) {
+      return 0;
+    }
+
+    // Filter tiendas_servicio based on user permissions
+    let visibleTiendasServicio = producto.tiendas_servicio;
+    if (!canViewAllStores && user?.id_tienda) {
+      visibleTiendasServicio = producto.tiendas_servicio.filter(ts => ts.id_tienda === user.id_tienda);
+    }
+
+    if (filters.id_tienda) {
+      // Show price for specific store
+      const tiendaServicio = visibleTiendasServicio.find(ts => ts.id_tienda === parseInt(filters.id_tienda));
+      return tiendaServicio?.precio_cup || 0;
+    } else {
+      // Show price from first visible store (or could use average/sum depending on business logic)
+      return visibleTiendasServicio[0]?.precio_cup || 0;
+    }
+  };
+
+  // Get cost for a product based on user permissions
+  const getProductCost = (producto) => {
+    // First try to get general cost from producto.producto
+    if (producto.producto?.costo_cup !== null && producto.producto?.costo_cup !== undefined) {
+      return producto.producto.costo_cup;
+    }
+
+    // If no general cost, get from tiendas_servicio based on permissions
+    if (!producto.tiendas_servicio || producto.tiendas_servicio.length === 0) {
+      return 0;
+    }
+
+    // Filter tiendas_servicio based on user permissions
+    let visibleTiendasServicio = producto.tiendas_servicio;
+    if (!canViewAllStores && user?.id_tienda) {
+      visibleTiendasServicio = producto.tiendas_servicio.filter(ts => ts.id_tienda === user.id_tienda);
+    }
+
+    if (filters.id_tienda) {
+      // Show cost for specific store
+      const tiendaServicio = visibleTiendasServicio.find(ts => ts.id_tienda === parseInt(filters.id_tienda));
+      return tiendaServicio?.costo_cup || 0;
+    } else {
+      // Show cost from first visible store (or could use average/sum depending on business logic)
+      return visibleTiendasServicio[0]?.costo_cup || 0;
     }
   };
 
