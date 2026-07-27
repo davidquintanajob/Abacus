@@ -63,6 +63,8 @@ const ProductosContent = () => {
     categoria: false,
     precio_cup: false,
     costo_cup: false,
+    precio_usd: false,
+    costo_usd: false,
     nota: false,
     cantidad: false,
     sufijo: false
@@ -515,6 +517,8 @@ const ProductosContent = () => {
         if (selectedFields.categoria) row['Categoría'] = producto.categoria || 'N/A';
         if (selectedFields.precio_cup) row['Precio (CUP)'] = getProductPrice(producto);
         if (selectedFields.costo_cup) row['Costo (CUP)'] = getProductCost(producto);
+        if (selectedFields.precio_usd) row['Precio (USD)'] = getProductPriceUSD(producto);
+        if (selectedFields.costo_usd) row['Costo (USD)'] = getProductCostUSD(producto);
         if (selectedFields.nota) row['Nota'] = producto.producto?.nota || 'N/A';
         if (selectedFields.cantidad) row['Cantidad'] = calculateTotalQuantity(producto);
         if (selectedFields.sufijo) row['Sufijo'] = producto.producto?.sufijo || 'N/A';
@@ -556,6 +560,8 @@ const ProductosContent = () => {
       if (selectedFields.categoria) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Categoría</th>';
       if (selectedFields.precio_cup) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Precio (CUP)</th>';
       if (selectedFields.costo_cup) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo (CUP)</th>';
+      if (selectedFields.precio_usd) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Precio (USD)</th>';
+      if (selectedFields.costo_usd) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo (USD)</th>';
       if (selectedFields.nota) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Nota</th>';
       if (selectedFields.cantidad) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Cantidad</th>';
       if (selectedFields.sufijo) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Sufijo</th>';
@@ -569,6 +575,8 @@ const ProductosContent = () => {
         if (selectedFields.categoria) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.categoria || 'N/A'}</td>`;
         if (selectedFields.precio_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductPrice(producto)}</td>`;
         if (selectedFields.costo_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductCost(producto)}</td>`;
+        if (selectedFields.precio_usd) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductPriceUSD(producto)}</td>`;
+        if (selectedFields.costo_usd) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductCostUSD(producto)}</td>`;
         if (selectedFields.nota) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.producto?.nota || 'N/A'}</td>`;
         if (selectedFields.cantidad) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${calculateTotalQuantity(producto)}</td>`;
         if (selectedFields.sufijo) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.producto?.sufijo || 'N/A'}</td>`;
@@ -636,12 +644,12 @@ const ProductosContent = () => {
       const pageWidth = 595.28;
       const pageHeight = 841.89;
       
-      // Grid settings (2x2)
-      const cols = 2;
-      const rows = 3; // Increased rows to make cells shorter
+      // Grid settings (4x3 for 8.5 x 11 inch paper)
+      const cols = 4;
+      const rows = 3;
       const margin = 20;
-      const cellWidth = (pageWidth - margin * 3) / cols;
-      const cellHeight = 220; // Fixed compact height for cells
+      const cellWidth = (pageWidth - margin * 5) / cols;
+      const cellHeight = 220;
       
       let currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
       let colIndex = 0;
@@ -655,6 +663,8 @@ const ProductosContent = () => {
         if (selectedFields.categoria) qrData.categoria = producto.categoria || 'N/A';
         if (selectedFields.precio_cup) qrData.precio_cup = getProductPrice(producto);
         if (selectedFields.costo_cup) qrData.costo_cup = getProductCost(producto);
+        if (selectedFields.precio_usd) qrData.precio_usd = getProductPriceUSD(producto);
+        if (selectedFields.costo_usd) qrData.costo_usd = getProductCostUSD(producto);
         if (selectedFields.nota) qrData.nota = producto.producto?.nota || 'N/A';
         if (selectedFields.cantidad) qrData.cantidad = calculateTotalQuantity(producto);
         if (selectedFields.sufijo) qrData.sufijo = producto.producto?.sufijo || 'N/A';
@@ -689,8 +699,8 @@ const ProductosContent = () => {
           borderWidth: 1,
         });
         
-        // Draw QR code (maintain square aspect ratio)
-        const qrSize = Math.min(cellWidth, cellHeight) * 0.5;
+        // Draw QR code (smaller size)
+        const qrSize = Math.min(cellWidth, cellHeight) * 0.35;
         const qrX = x + (cellWidth - qrSize) / 2;
         const qrY = y + cellHeight - qrSize - 10;
         
@@ -701,10 +711,10 @@ const ProductosContent = () => {
           height: qrSize,
         });
         
-        // Draw product info text (inside the rectangle)
+        // Draw product info text (larger font, centered)
         const font = await pdfDoc.embedFont('Helvetica');
-        const fontSize = 7;
-        let textY = qrY - 5;
+        const fontSize = 10;
+        let textY = qrY - 20;
         
         const textLines = [];
         if (selectedFields.nombre) textLines.push(`Nombre: ${producto.nombre}`);
@@ -712,13 +722,17 @@ const ProductosContent = () => {
         if (selectedFields.categoria) textLines.push(`Categoría: ${producto.categoria || 'N/A'}`);
         if (selectedFields.precio_cup) textLines.push(`Precio: ${getProductPrice(producto)}`);
         if (selectedFields.costo_cup) textLines.push(`Costo: ${getProductCost(producto)}`);
+        if (selectedFields.precio_usd) textLines.push(`Precio USD: ${getProductPriceUSD(producto)}`);
+        if (selectedFields.costo_usd) textLines.push(`Costo USD: ${getProductCostUSD(producto)}`);
         if (selectedFields.nota) textLines.push(`Nota: ${producto.producto?.nota || 'N/A'}`);
         if (selectedFields.cantidad) textLines.push(`Cantidad: ${calculateTotalQuantity(producto)}`);
         if (selectedFields.sufijo) textLines.push(`Sufijo: ${producto.producto?.sufijo || 'N/A'}`);
         
         for (const line of textLines) {
+          const textWidth = font.widthOfTextAtSize(line, fontSize);
+          const textX = x + (cellWidth - textWidth) / 2;
           currentPage.drawText(line, {
-            x: x + 5,
+            x: textX,
             y: textY,
             size: fontSize,
             font: font,
@@ -776,11 +790,11 @@ const ProductosContent = () => {
             const barcodeResult = await bwipjs.toDataURL({
               bcid: 'code128',     // Barcode type (accepts any length)
               text: codigo,        // Text to encode
-              scale: 4,             // Increased scale for better visibility
-              height: 15,           // Increased bar height
+              scale: 3,             // Reduced scale for smaller barcode
+              height: 10,           // Reduced bar height
               includetext: true,    // Show human-readable text
               textxalign: 'center', // Text alignment
-              textsize: 12,         // Text size
+              textsize: 10,         // Text size
             });
             
             // Extract the data URI from the result
@@ -800,6 +814,8 @@ const ProductosContent = () => {
         if (selectedFields.categoria) productInfo += `<p><strong>Categoría:</strong> ${producto.categoria || 'N/A'}</p>`;
         if (selectedFields.precio_cup) productInfo += `<p><strong>Precio (CUP):</strong> ${getProductPrice(producto)}</p>`;
         if (selectedFields.costo_cup) productInfo += `<p><strong>Costo (CUP):</strong> ${getProductCost(producto)}</p>`;
+        if (selectedFields.precio_usd) productInfo += `<p><strong>Precio (USD):</strong> ${getProductPriceUSD(producto)}</p>`;
+        if (selectedFields.costo_usd) productInfo += `<p><strong>Costo (USD):</strong> ${getProductCostUSD(producto)}</p>`;
         if (selectedFields.nota) productInfo += `<p><strong>Nota:</strong> ${producto.producto?.nota || 'N/A'}</p>`;
         if (selectedFields.cantidad) productInfo += `<p><strong>Cantidad:</strong> ${calculateTotalQuantity(producto)}</p>`;
         if (selectedFields.sufijo) productInfo += `<p><strong>Sufijo:</strong> ${producto.producto?.sufijo || 'N/A'}</p>`;
@@ -821,13 +837,13 @@ const ProductosContent = () => {
               body { font-family: Arial, sans-serif; padding: 20px; margin: 0; }
               .barcode-container { 
                 display: grid; 
-                grid-template-columns: 1fr 1fr; 
-                gap: 20px; 
+                grid-template-columns: repeat(4, 1fr); 
+                gap: 15px; 
                 width: 100%;
               }
               .barcode-item {
                 border: 1px solid #ddd; 
-                padding: 15px; 
+                padding: 10px; 
                 page-break-inside: avoid;
                 display: flex;
                 flex-direction: column;
@@ -835,17 +851,17 @@ const ProductosContent = () => {
               }
               .barcode-image {
                 width: 100%;
-                max-width: 300px;
+                max-width: 150px;
                 height: auto;
-                margin-bottom: 10px;
+                margin-bottom: 8px;
               }
               .product-info {
-                font-size: 10px;
-                text-align: left;
+                font-size: 12px;
+                text-align: center;
                 width: 100%;
               }
               .product-info p {
-                margin: 2px 0;
+                margin: 3px 0;
               }
               @media print {
                 .barcode-container { page-break-inside: avoid; }
@@ -981,6 +997,90 @@ const ProductosContent = () => {
       // Show cost from first visible store (or could use average/sum depending on business logic)
       return visibleTiendasServicio[0]?.costo_cup || 0;
     }
+  };
+
+  // Get price in USD for a product based on user permissions
+  const getProductPriceUSD = (producto) => {
+    // First try to get general price from producto.producto
+    if (producto.producto?.precio_usd !== null && producto.producto?.precio_usd !== undefined) {
+      return producto.producto.precio_usd;
+    }
+
+    // If no general price, get from tiendas_servicio based on permissions
+    if (!producto.tiendas_servicio || producto.tiendas_servicio.length === 0) {
+      return 0;
+    }
+
+    // Filter tiendas_servicio based on user permissions
+    let visibleTiendasServicio = producto.tiendas_servicio;
+    if (!canViewAllStores && user?.id_tienda) {
+      visibleTiendasServicio = producto.tiendas_servicio.filter(ts => ts.id_tienda === user.id_tienda);
+    }
+
+    if (filters.id_tienda) {
+      // Show price for specific store
+      const tiendaServicio = visibleTiendasServicio.find(ts => ts.id_tienda === parseInt(filters.id_tienda));
+      return tiendaServicio?.precio_usd || 0;
+    } else {
+      // Show price from first visible store (or could use average/sum depending on business logic)
+      return visibleTiendasServicio[0]?.precio_usd || 0;
+    }
+  };
+
+  // Get cost in USD for a product based on user permissions
+  const getProductCostUSD = (producto) => {
+    // First try to get general cost from producto.producto
+    if (producto.producto?.costo_usd !== null && producto.producto?.costo_usd !== undefined) {
+      return producto.producto.costo_usd;
+    }
+
+    // If no general cost, get from tiendas_servicio based on permissions
+    if (!producto.tiendas_servicio || producto.tiendas_servicio.length === 0) {
+      return 0;
+    }
+
+    // Filter tiendas_servicio based on user permissions
+    let visibleTiendasServicio = producto.tiendas_servicio;
+    if (!canViewAllStores && user?.id_tienda) {
+      visibleTiendasServicio = producto.tiendas_servicio.filter(ts => ts.id_tienda === user.id_tienda);
+    }
+
+    if (filters.id_tienda) {
+      // Show cost for specific store
+      const tiendaServicio = visibleTiendasServicio.find(ts => ts.id_tienda === parseInt(filters.id_tienda));
+      return tiendaServicio?.costo_usd || 0;
+    } else {
+      // Show cost from first visible store (or could use average/sum depending on business logic)
+      return visibleTiendasServicio[0]?.costo_usd || 0;
+    }
+  };
+
+  // Function to wrap text by words, not cutting words in the middle
+  const wrapTextByWords = (text, maxCharsPerLine) => {
+    if (text.length <= maxCharsPerLine) {
+      return text;
+    }
+
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
+
+    for (const word of words) {
+      if (currentLine.length === 0) {
+        currentLine = word;
+      } else if (currentLine.length + 1 + word.length <= maxCharsPerLine) {
+        currentLine += ' ' + word;
+      } else {
+        lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+
+    if (currentLine.length > 0) {
+      lines.push(currentLine);
+    }
+
+    return lines.join('\n');
   };
 
   const styles = createStyles(responsive);
@@ -1342,8 +1442,8 @@ const ProductosContent = () => {
                     </View>
                     <View style={styles.productoInfo}>
                       <View style={styles.productoHeader}>
-                        <Text style={[styles.productoName, { color: colors.onSurface }]} numberOfLines={1} ellipsizeMode="tail">
-                          {producto.nombre.length > 7 ? producto.nombre.substring(0, 7) + '...' : producto.nombre}
+                        <Text style={[styles.productoName, { color: colors.onSurface }]} numberOfLines={2} ellipsizeMode="tail">
+                          {wrapTextByWords(producto.nombre, 10)}
                       </Text>
                         <View style={[
                           styles.statusBadge,
