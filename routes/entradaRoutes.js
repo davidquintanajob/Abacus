@@ -176,6 +176,9 @@ router.post("/entrada", authenticate(), entradaController.createEntrada);
  *           schema:
  *             type: object
  *             properties:
+ *               id_servicio_tienda:
+ *                 type: integer
+ *                 description: Nuevo ID de relación servicio-tienda (opcional). Si se cambia, la cantidad se ajusta automáticamente entre la tienda origen y destino.
  *               cantidad_entrada:
  *                 type: number
  *                 description: Nueva cantidad (debe ser mayor que 0)
@@ -202,7 +205,8 @@ router.post("/entrada", authenticate(), entradaController.createEntrada);
  *             note: |
  *               - No se puede modificar el código de lote ni la cantidad restante.
  *               - Si se cambia la cantidad_entrada, la cantidad restante se ajusta automáticamente.
- *               - La cantidad en servicio_tienda se actualiza automáticamente restando la anterior y sumando la nueva.
+ *               - Si se cambia el id_servicio_tienda, la cantidad se resta de la tienda origen y se suma a la tienda destino.
+ *               - Si el nuevo producto es vencible, la fecha_vencimiento es obligatoria.
  *     responses:
  *       200:
  *         description: Entrada actualizada correctamente

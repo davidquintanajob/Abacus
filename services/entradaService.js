@@ -144,9 +144,11 @@ const updateEntrada = async (id, updateData) => {
   const transaction = await Entrada.sequelize.transaction();
 
   try {
+    // 1. Obtener la entrada actual
     const entrada = await Entrada.findByPk(id, { transaction });
     if (!entrada) throwError("Entrada no encontrada.", 404);
 
+    // 2. No se permite modificar codigo_lote ni cantidad_restante
     if (updateData.codigo_lote !== undefined) {
       throwError("No se puede modificar el código de lote.", 400);
     }
@@ -154,27 +156,49 @@ const updateEntrada = async (id, updateData) => {
       throwError("No se puede modificar la cantidad restante manualmente.", 400);
     }
 
+    // 3. Validar usuario si se envía
     if (updateData.id_usuario) {
       await validateUsuarioExists(updateData.id_usuario);
     }
 
-    const { st, isVencible } = await validateServicioTiendaProducto(entrada.id_servicio_tienda);
+    // 4. Variables para manejar el cambio de servicio_tienda
+    let currentServicioTiendaId = entrada.id_servicio_tienda;
+    let newServicioTiendaId = currentServicioTiendaId;
+    let isChangingServicioTienda = false;
+
+    if (updateData.id_servicio_tienda !== undefined) {
+      if (updateData.id_servicio_tienda === currentServicioTiendaId) {
+        // Si es el mismo, no hacemos nada
+      } else {
+        newServicioTiendaId = updateData.id_servicio_tienda;
+        isChangingServicioTienda = true;
+        // Validar que el nuevo servicio_tienda exista y sea producto
+        await validateServicioTiendaProducto(newServicioTiendaId);
+      }
+    }
+
+    // 5. Validar fecha de vencimiento según producto del servicio_tienda (nuevo o actual)
+    let targetServicioTiendaId = isChangingServicioTienda ? newServicioTiendaId : currentServicioTiendaId;
+    const { isVencible } = await validateServicioTiendaProducto(targetServicioTiendaId);
 
     let newFechaVencimiento = updateData.fecha_vencimiento !== undefined ? updateData.fecha_vencimiento : entrada.fecha_vencimiento;
     if (isVencible && !newFechaVencimiento) {
       throwError("El producto requiere fecha de vencimiento, este campo es obligatorio.", 400);
     }
 
+    // 6. Preparar campos a actualizar
     const updateFields = {};
     let deltaCantidad = 0;
+    let cantidadEntradaActual = parseFloat(entrada.cantidad_entrada);
+    let nuevaCantidadEntrada = cantidadEntradaActual;
 
     if (updateData.cantidad_entrada !== undefined) {
       const newCantidad = parseFloat(updateData.cantidad_entrada);
       if (isNaN(newCantidad) || newCantidad <= 0) {
         throwError("La cantidad de entrada debe ser un número mayor que cero.", 400);
       }
-      const oldCantidad = parseFloat(entrada.cantidad_entrada);
-      deltaCantidad = newCantidad - oldCantidad;
+      deltaCantidad = newCantidad - cantidadEntradaActual;
+      nuevaCantidadEntrada = newCantidad;
       updateFields.cantidad_entrada = newCantidad;
       updateFields.cantidad_restante = newCantidad;
     }
@@ -206,15 +230,35 @@ const updateEntrada = async (id, updateData) => {
       updateFields.fecha = fechaObj;
     }
 
+    if (isChangingServicioTienda) {
+      updateFields.id_servicio_tienda = newServicioTiendaId;
+    }
+
     if (Object.keys(updateFields).length === 0) {
       throwError("No se proporcionaron campos válidos para actualizar.", 400);
     }
 
-    await entrada.update(updateFields, { transaction });
+    // 7. Aplicar cambios en orden:
+    // - Si cambia servicio_tienda:
+    //   a) Restar cantidad_entrada (la actual o la nueva si cambia) del antiguo
+    //   b) Sumar cantidad_entrada (la nueva) al nuevo
+    // - Si no cambia, solo ajustar la cantidad si cambia cantidad_entrada
 
-    if (deltaCantidad !== 0) {
-      await updateCantidadServicioTienda(entrada.id_servicio_tienda, deltaCantidad, transaction);
+    // Determinar la cantidad a usar para las operaciones de inventario
+    const cantidadAUsar = deltaCantidad !== 0 ? nuevaCantidadEntrada : cantidadEntradaActual;
+
+    if (isChangingServicioTienda) {
+      // Restar del antiguo
+      await updateCantidadServicioTienda(currentServicioTiendaId, -cantidadAUsar, transaction);
+      // Sumar al nuevo
+      await updateCantidadServicioTienda(newServicioTiendaId, cantidadAUsar, transaction);
+    } else if (deltaCantidad !== 0) {
+      // Solo ajustar la cantidad en el mismo servicio_tienda
+      await updateCantidadServicioTienda(currentServicioTiendaId, deltaCantidad, transaction);
     }
+
+    // 8. Actualizar la entrada
+    await entrada.update(updateFields, { transaction });
 
     await transaction.commit();
 

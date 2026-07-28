@@ -114,6 +114,12 @@ Entrada.associate = function (models) {
     foreignKey: "id_servicio_tienda",
     as: "servicioTienda",
   });
+  Entrada.belongsToMany(models.Salida, {
+    through: models.SalidaEntrada,
+    foreignKey: "id_entrada",
+    otherKey: "id_salida",
+    as: "salidas",
+  });
 };
 
 module.exports = { Entrada };

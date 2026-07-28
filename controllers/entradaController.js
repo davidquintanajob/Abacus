@@ -73,13 +73,18 @@ const getEntradaById = async (req, res) => {
 const updateEntrada = async (req, res) => {
   try {
     const { id } = req.params;
-    const { cantidad_entrada, costo_usd, costo_cup, fecha_vencimiento, nombre_proveedor, id_usuario, fecha } = req.body;
+    const { id_servicio_tienda, cantidad_entrada, costo_usd, costo_cup, fecha_vencimiento, nombre_proveedor, id_usuario, fecha } = req.body;
 
     if (Object.keys(req.body).length === 0) {
       throwError("Se debe proporcionar al menos un campo para actualizar", 400);
     }
 
     const errors = [];
+    if (id_servicio_tienda !== undefined) {
+      if (isNaN(id_servicio_tienda) || id_servicio_tienda <= 0) {
+        errors.push("El ID de servicio-tienda debe ser un número entero positivo.");
+      }
+    }
     if (cantidad_entrada !== undefined) {
       if (isNaN(cantidad_entrada) || cantidad_entrada <= 0) {
         errors.push("La cantidad de entrada debe ser un número mayor que cero.");
@@ -104,6 +109,7 @@ const updateEntrada = async (req, res) => {
     }
 
     const updateData = {};
+    if (id_servicio_tienda !== undefined) updateData.id_servicio_tienda = id_servicio_tienda;
     if (cantidad_entrada !== undefined) updateData.cantidad_entrada = cantidad_entrada;
     if (costo_usd !== undefined) updateData.costo_usd = costo_usd;
     if (costo_cup !== undefined) updateData.costo_cup = costo_cup;
