@@ -14,6 +14,7 @@ import { useOffline } from '../context/OfflineContext';
 import { getProductos, getProductoByCodigo, deleteProducto } from '../services/productoService';
 import { getTiendas } from '../services/tiendaService';
 import { getApiBaseUrl } from '../services/api';
+import ExportService from '../services/ExportService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import { CameraView } from 'expo-camera';
@@ -454,34 +455,79 @@ const ProductosContent = () => {
     }
   };
 
+  const sanitizeFileName = (fileName) => {
+    // Remove problematic characters and replace spaces with underscores
+    return fileName
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_');
+  };
+
+  const getSafeDownloadDirectory = async () => {
+    // Use cacheDirectory which is accessible in Expo Go
+    // Files saved here can be shared via Sharing.shareAsync
+    const cacheDir = FileSystem.cacheDirectory;
+    
+    // Ensure the directory exists
+    try {
+      const dirInfo = await FileSystem.getInfoAsync(cacheDir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(cacheDir, { intermediates: true });
+      }
+    } catch (error) {
+      console.log('Directory check failed, using documentDirectory as fallback:', error);
+      return FileSystem.documentDirectory;
+    }
+    
+    return cacheDir;
+  };
+
+  const saveToDownloads = async (fileUri, fileName) => {
+    try {
+      // Read file content as base64
+      const fileContent = await FileSystem.readAsStringAsync(fileUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      
+      // Determine MIME type
+      const mimeType = fileName.endsWith('.xlsx') 
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : 'application/pdf';
+      
+      // Use ExportService with automatic environment detection
+      const result = await ExportService.saveFile({
+        filename: fileName,
+        mimeType: mimeType,
+        base64: fileContent
+      });
+      
+      if (result.success) {
+        showToast({ type: 'success', message: result.message || 'Archivo guardado correctamente' });
+        return true;
+      } else {
+        showToast({ type: 'error', message: result.error || 'Error al guardar el archivo' });
+        return false;
+      }
+    } catch (error) {
+      console.error('Error saving to Downloads:', error);
+      showToast({ type: 'error', message: 'Error al guardar: ' + error.message });
+      return false;
+    }
+  };
+
   const showExportSuccessAlert = (fileUri, fileName) => {
     Alert.alert(
       'Documento Exportado',
-      `Guardado en: ${fileUri}`,
+      `El documento "${fileName}" ha sido generado. ¿Qué deseas hacer?`,
       [
         {
           text: 'Cancelar',
           style: 'cancel',
         },
         {
-          text: 'Ver',
+          text: 'Guardar',
           onPress: async () => {
-            try {
-              // Use Sharing.shareAsync with dialog to open file with system picker
-              const isAvailable = await Sharing.isAvailableAsync();
-              if (isAvailable) {
-                await Sharing.shareAsync(fileUri, {
-                  mimeType: fileName.endsWith('.xlsx') ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/pdf',
-                  dialogTitle: 'Abrir documento',
-                  UTI: fileName.endsWith('.xlsx') ? 'com.microsoft.excel.xls' : 'com.adobe.pdf',
-                });
-              } else {
-                showToast({ type: 'error', message: 'No se puede abrir archivos en este dispositivo' });
-              }
-            } catch (error) {
-              console.error('Error opening file:', error);
-              showToast({ type: 'error', message: 'Error al abrir el archivo: ' + error.message });
-            }
+            await saveToDownloads(fileUri, fileName);
           },
         },
         {
@@ -493,6 +539,7 @@ const ProductosContent = () => {
                 await Sharing.shareAsync(fileUri, {
                   mimeType: fileName.endsWith('.xlsx') ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/pdf',
                   dialogTitle: 'Compartir documento',
+                  UTI: fileName.endsWith('.xlsx') ? 'com.microsoft.excel.xls' : 'com.adobe.pdf',
                 });
               } else {
                 showToast({ type: 'error', message: 'Compartir no está disponible en este dispositivo' });
@@ -533,9 +580,12 @@ const ProductosContent = () => {
       // Generate file
       const excelBase64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
       
-      // Save file (using FileSystem)
-      const fileName = `inventario_${new Date().toISOString().split('T')[0]}.xlsx`;
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+      // Save file (using FileSystem to Downloads folder)
+      const date = new Date();
+      const formattedDate = `${date.getDate().toString().padStart(2, '0')}_${(date.getMonth() + 1).toString().padStart(2, '0')}_${date.getFullYear()}`;
+      const fileName = sanitizeFileName(`Inventario_de_productos_${formattedDate}.xlsx`);
+      const downloadDir = await getSafeDownloadDirectory();
+      const fileUri = `${downloadDir}${fileName}`;
       
       await FileSystem.writeAsStringAsync(fileUri, excelBase64, {
         encoding: FileSystem.EncodingType.Base64,
@@ -623,9 +673,12 @@ const ProductosContent = () => {
       // Generate PDF using expo-print
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
       
-      // Rename the file
-      const fileName = `inventario_${new Date().toISOString().split('T')[0]}.pdf`;
-      const newUri = `${FileSystem.documentDirectory}${fileName}`;
+      // Rename the file and move to Downloads folder
+      const date = new Date();
+      const formattedDate = `${date.getDate().toString().padStart(2, '0')}_${(date.getMonth() + 1).toString().padStart(2, '0')}_${date.getFullYear()}`;
+      const fileName = sanitizeFileName(`Inventario_de_productos_${formattedDate}.pdf`);
+      const downloadDir = await getSafeDownloadDirectory();
+      const newUri = `${downloadDir}${fileName}`;
       await FileSystem.moveAsync({ from: uri, to: newUri });
 
       showExportSuccessAlert(newUri, fileName);
@@ -760,8 +813,11 @@ const ProductosContent = () => {
       
       // Convert to base64 using React Native compatible method
       const pdfBase64 = btoa(String.fromCharCode.apply(null, new Uint8Array(pdfBytes)));
-      const fileName = `codigos_qr_${new Date().toISOString().split('T')[0]}.pdf`;
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+      const date = new Date();
+      const formattedDate = `${date.getDate().toString().padStart(2, '0')}_${(date.getMonth() + 1).toString().padStart(2, '0')}_${date.getFullYear()}`;
+      const fileName = sanitizeFileName(`Codigos_QR_${formattedDate}.pdf`);
+      const downloadDir = await getSafeDownloadDirectory();
+      const fileUri = `${downloadDir}${fileName}`;
       
       await FileSystem.writeAsStringAsync(fileUri, pdfBase64, {
         encoding: FileSystem.EncodingType.Base64,
@@ -881,9 +937,12 @@ const ProductosContent = () => {
       // Generate PDF using expo-print
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
       
-      // Rename the file
-      const fileName = `codigos_barra_${new Date().toISOString().split('T')[0]}.pdf`;
-      const newUri = `${FileSystem.documentDirectory}${fileName}`;
+      // Rename the file and move to Downloads folder
+      const date = new Date();
+      const formattedDate = `${date.getDate().toString().padStart(2, '0')}_${(date.getMonth() + 1).toString().padStart(2, '0')}_${date.getFullYear()}`;
+      const fileName = sanitizeFileName(`Codigos_de_barra_${formattedDate}.pdf`);
+      const downloadDir = await getSafeDownloadDirectory();
+      const newUri = `${downloadDir}${fileName}`;
       await FileSystem.moveAsync({ from: uri, to: newUri });
 
       showExportSuccessAlert(newUri, fileName);

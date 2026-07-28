@@ -75,7 +75,7 @@ const ProductoFormContent = () => {
   const [isGeneralPricesExpanded, setIsGeneralPricesExpanded] = useState(false);
   const [isPricesExpanded, setIsPricesExpanded] = useState(false);
   const [isStockExpanded, setIsStockExpanded] = useState(false);
-  const [isActionsExpanded, setIsActionsExpanded] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
 
   useEffect(() => {
     if (formData.codigoList.length > 0) {
@@ -709,6 +709,44 @@ const ProductoFormContent = () => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+        {/* Action Buttons Section - Only for Admin */}
+        {isAdmin && (isViewMode || isEditMode) && (
+          <View style={[styles.actionButtonsSection, { backgroundColor: colors.surface }]}>
+            <View style={styles.actionButtonsContainer}>
+              <TouchableOpacity
+                style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#1B5E20' : '#E8F5E9' }]}
+                onPress={() => {}}
+              >
+                <Ionicons name="arrow-down-circle-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? '#81C784' : '#2E7D32'} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#0D47A1' : '#E3F2FD' }]}
+                onPress={() => {}}
+              >
+                <Ionicons name="swap-horizontal-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? '#64B5F6' : '#1976D2'} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#B71C1C' : '#FFEBEE' }]}
+                onPress={() => {}}
+              >
+                <Ionicons name="arrow-up-circle-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? '#E57373' : '#C62828'} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#F57C00' : '#FFF3E0' }]}
+                onPress={() => {}}
+              >
+                <Ionicons name="cart-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? '#FFB74D' : '#E65100'} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.iconActionButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+                onPress={() => setShowInfoModal(true)}
+              >
+                <Ionicons name="information-circle-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? colors.primary : '#1976D2'} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         <Card style={[styles.formCard, { backgroundColor: colors.surface }]}>
           <View style={styles.formGroup}>
             <Text style={[styles.label, { color: colors.outline }]}>Nombre *</Text>
@@ -761,52 +799,6 @@ const ProductoFormContent = () => {
             </View>
           </View>
 
-          {/* Acciones Section */}
-          {(isAdmin || isAlmacenero) && (isViewMode || isEditMode) && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Acciones</Text>
-                <View style={styles.sectionActions}>
-                  <TouchableOpacity
-                    style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
-                    onPress={() => setIsActionsExpanded(!isActionsExpanded)}
-                  >
-                    <Ionicons 
-                      name={isActionsExpanded ? "chevron-up" : "chevron-down"} 
-                      size={responsive.responsiveWidth(18)} 
-                      color={isDarkMode ? colors.primary : '#1976D2'} 
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-              
-              {isActionsExpanded && (
-                <View style={styles.productActionsContainer}>
-                  <TouchableOpacity
-                    style={[styles.productActionButton, { backgroundColor: isDarkMode ? '#1B5E20' : '#E8F5E9' }]}
-                    onPress={() => {}}
-                  >
-                    <Ionicons name="arrow-down-circle-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#81C784' : '#2E7D32'} />
-                    <Text style={[styles.productActionButtonText, { color: isDarkMode ? '#81C784' : '#2E7D32' }]}>Agregar Entrada</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.productActionButton, { backgroundColor: isDarkMode ? '#0D47A1' : '#E3F2FD' }]}
-                    onPress={() => {}}
-                  >
-                    <Ionicons name="swap-horizontal-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#64B5F6' : '#1976D2'} />
-                    <Text style={[styles.productActionButtonText, { color: isDarkMode ? '#64B5F6' : '#1976D2' }]}>Movimiento</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.productActionButton, { backgroundColor: isDarkMode ? '#B71C1C' : '#FFEBEE' }]}
-                    onPress={() => {}}
-                  >
-                    <Ionicons name="arrow-up-circle-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#E57373' : '#C62828'} />
-                    <Text style={[styles.productActionButtonText, { color: isDarkMode ? '#E57373' : '#C62828' }]}>Hacer Salida</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          )}
 
           <View style={[styles.formGroup, styles.imageSection]}>
             <Text style={[styles.label, { color: colors.outline }]}>Imagen</Text>
@@ -1684,6 +1676,67 @@ const ProductoFormContent = () => {
           </TouchableOpacity>
         </Modal>
       )}
+
+      {/* Info Modal */}
+      {showInfoModal && (
+        <Modal
+          visible={showInfoModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowInfoModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowInfoModal(false)}
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.surface }]} activeOpacity={1}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Información de Acciones</Text>
+              
+              <View style={styles.infoItem}>
+                <Ionicons name="arrow-down-circle-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#81C784' : '#2E7D32'} />
+                <View style={styles.infoItemText}>
+                  <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Agregar Entrada</Text>
+                  <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra la entrada de stock al inventario del producto.</Text>
+                </View>
+              </View>
+
+              <View style={styles.infoItem}>
+                <Ionicons name="swap-horizontal-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#64B5F6' : '#1976D2'} />
+                <View style={styles.infoItemText}>
+                  <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Movimiento</Text>
+                  <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Realiza transferencias de stock entre tiendas o almacenes.</Text>
+                </View>
+              </View>
+
+              <View style={styles.infoItem}>
+                <Ionicons name="arrow-up-circle-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#E57373' : '#C62828'} />
+                <View style={styles.infoItemText}>
+                  <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Hacer Salida</Text>
+                  <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra la salida de stock del inventario del producto.</Text>
+                </View>
+              </View>
+
+              <View style={styles.infoItem}>
+                <Ionicons name="cart-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#FFB74D' : '#E65100'} />
+                <View style={styles.infoItemText}>
+                  <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Vender</Text>
+                  <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra una venta del producto reduciendo el stock disponible.</Text>
+                </View>
+              </View>
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalCancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
+                  onPress={() => setShowInfoModal(false)}
+                >
+                  <Text style={[styles.modalButtonText, { color: colors.onSurface }]}>Cerrar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 };
@@ -2194,5 +2247,47 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.bodySmall,
     fontWeight: '600',
     fontFamily: 'Inter',
+  },
+  actionButtonsSection: {
+    borderRadius: 16,
+    padding: responsive.responsivePadding(16),
+    marginBottom: responsive.responsiveMargin(16),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  iconActionButton: {
+    width: responsive.responsiveWidth(50),
+    height: responsive.responsiveWidth(50),
+    borderRadius: responsive.responsiveWidth(25),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  infoItemText: {
+    flex: 1,
+    marginLeft: responsive.responsiveMargin(12),
+  },
+  infoItemTitle: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  infoItemDescription: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+    lineHeight: 20,
   },
 });
