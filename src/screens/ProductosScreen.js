@@ -57,9 +57,11 @@ const ProductosContent = () => {
   const [showCodesOptionsModal, setShowCodesOptionsModal] = useState(false);
   const [showFieldSelectionModal, setShowFieldSelectionModal] = useState(false);
   const [exportType, setExportType] = useState(null); // 'inventory_excel', 'inventory_pdf', 'barcode', 'qr'
+  const [isExporting, setIsExporting] = useState(false);
   const [apiBaseUrl, setApiBaseUrl] = useState('');
   const [selectedFields, setSelectedFields] = useState({
     nombre: true,
+    codigo_qr_barra: false,
     codigo: false,
     categoria: false,
     precio_cup: false,
@@ -416,6 +418,7 @@ const ProductosContent = () => {
   const handleExport = async () => {
     try {
       setShowFieldSelectionModal(false);
+      setIsExporting(true);
       
       // Get all products for export (ignore pagination)
       let allProductos = [];
@@ -452,6 +455,8 @@ const ProductosContent = () => {
     } catch (error) {
       console.error('Error exporting:', error);
       showToast({ type: 'error', message: 'Error al exportar: ' + error.message });
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -556,17 +561,21 @@ const ProductosContent = () => {
 
   const exportToExcel = async (productos) => {
     try {
+      // Check if there are different prices across stores
+      const hasDifferentPrices = hasDifferentPricesAcrossStores(productos);
+      
       // Prepare data based on selected fields
       const data = productos.map(producto => {
         const row = {};
         if (selectedFields.nombre) row['Nombre'] = producto.nombre;
-        if (selectedFields.codigo) row['Código'] = producto.codigos?.[0]?.codigo_barras_ean || 'N/A';
         if (selectedFields.categoria) row['Categoría'] = producto.categoria || 'N/A';
-        if (selectedFields.precio_cup) row['Precio (CUP)'] = getProductPrice(producto);
-        if (selectedFields.costo_cup) row['Costo (CUP)'] = getProductCost(producto);
-        if (selectedFields.precio_usd) row['Precio (USD)'] = getProductPriceUSD(producto);
-        if (selectedFields.costo_usd) row['Costo (USD)'] = getProductCostUSD(producto);
-        if (selectedFields.nota) row['Nota'] = producto.producto?.nota || 'N/A';
+        // Only show price/cost columns in main sheet if prices are the same across stores
+        if (!hasDifferentPrices) {
+          if (selectedFields.precio_cup) row['Precio (CUP)'] = getProductPrice(producto);
+          if (selectedFields.costo_cup) row['Costo (CUP)'] = getProductCost(producto);
+          if (selectedFields.precio_usd) row['Precio (USD)'] = getProductPriceUSD(producto);
+          if (selectedFields.costo_usd) row['Costo (USD)'] = getProductCostUSD(producto);
+        }
         if (selectedFields.sufijo) row['Sufijo'] = producto.producto?.sufijo || 'N/A';
         return row;
       });
@@ -614,6 +623,83 @@ const ProductosContent = () => {
         XLSX.utils.book_append_sheet(wb, breakdownWs, 'Desglose Cantidad');
       }
 
+      // Create codes breakdown sheet if codigo or nota is selected
+      if (selectedFields.codigo || selectedFields.nota) {
+        // Create header for codes breakdown sheet
+        const codesData = [];
+        const codesHeader = { 'Producto': '' };
+        if (selectedFields.codigo) codesHeader['Código'] = '';
+        if (selectedFields.nota) codesHeader['Nota'] = '';
+        codesData.push(codesHeader);
+
+        // Create rows for codes breakdown sheet
+        productos.forEach(producto => {
+          const codigos = producto.codigos || [];
+          if (codigos.length === 0) {
+            // Add a row for products without codes
+            const row = { 'Producto': producto.nombre };
+            if (selectedFields.codigo) row['Código'] = 'N/A';
+            if (selectedFields.nota) row['Nota'] = 'N/A';
+            codesData.push(row);
+          } else {
+            // Add rows for each code
+            codigos.forEach((codigo, index) => {
+              const row = {};
+              // Only show product name on first row
+              if (index === 0) {
+                row['Producto'] = producto.nombre;
+              }
+              if (selectedFields.codigo) row['Código'] = codigo.codigo_barras_ean || 'N/A';
+              if (selectedFields.nota) row['Nota'] = codigo.nota || 'N/A';
+              codesData.push(row);
+            });
+          }
+        });
+
+        // Create codes breakdown worksheet
+        const codesWs = XLSX.utils.json_to_sheet(codesData);
+        XLSX.utils.book_append_sheet(wb, codesWs, 'Desglose de Códigos');
+      }
+
+      // Create prices breakdown sheet if prices are different across stores
+      if (hasDifferentPrices && (selectedFields.precio_cup || selectedFields.costo_cup || selectedFields.precio_usd || selectedFields.costo_usd)) {
+        // Get all unique store names from visible tiendas
+        let visibleTiendas = tiendas;
+        if (!canViewAllStores && user?.id_tienda) {
+          visibleTiendas = tiendas.filter(t => t.id_tienda === user.id_tienda);
+        }
+
+        // Create header for prices breakdown sheet
+        const pricesData = [];
+        const pricesHeader = { 'Producto': '' };
+        visibleTiendas.forEach(tienda => {
+          if (selectedFields.precio_cup) pricesHeader[`${tienda.nombre} - Precio CUP`] = '';
+          if (selectedFields.costo_cup) pricesHeader[`${tienda.nombre} - Costo CUP`] = '';
+          if (selectedFields.precio_usd) pricesHeader[`${tienda.nombre} - Precio USD`] = '';
+          if (selectedFields.costo_usd) pricesHeader[`${tienda.nombre} - Costo USD`] = '';
+        });
+        pricesData.push(pricesHeader);
+
+        // Create rows for prices breakdown sheet
+        productos.forEach(producto => {
+          const row = { 'Producto': producto.nombre };
+          
+          visibleTiendas.forEach(tienda => {
+            const tiendaServicio = producto.tiendas_servicio?.find(ts => ts.id_tienda === tienda.id_tienda);
+            if (selectedFields.precio_cup) row[`${tienda.nombre} - Precio CUP`] = tiendaServicio?.precio_cup || 'N/A';
+            if (selectedFields.costo_cup) row[`${tienda.nombre} - Costo CUP`] = tiendaServicio?.costo_cup || 'N/A';
+            if (selectedFields.precio_usd) row[`${tienda.nombre} - Precio USD`] = tiendaServicio?.precio_usd || 'N/A';
+            if (selectedFields.costo_usd) row[`${tienda.nombre} - Costo USD`] = tiendaServicio?.costo_usd || 'N/A';
+          });
+          
+          pricesData.push(row);
+        });
+
+        // Create prices breakdown worksheet
+        const pricesWs = XLSX.utils.json_to_sheet(pricesData);
+        XLSX.utils.book_append_sheet(wb, pricesWs, 'Desglose de Precios y Costos');
+      }
+
       // Generate file
       const excelBase64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
       
@@ -637,19 +723,23 @@ const ProductosContent = () => {
 
   const exportToPDF = async (productos) => {
     try {
+      // Check if there are different prices across stores
+      const hasDifferentPrices = hasDifferentPricesAcrossStores(productos);
+      
       // Prepare HTML content based on selected fields
       let tableRows = '';
       
       // Table header
       let tableHeader = '<tr style="background-color: #f0f0f0;">';
       if (selectedFields.nombre) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Nombre</th>';
-      if (selectedFields.codigo) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Código</th>';
       if (selectedFields.categoria) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Categoría</th>';
-      if (selectedFields.precio_cup) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Precio (CUP)</th>';
-      if (selectedFields.costo_cup) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo (CUP)</th>';
-      if (selectedFields.precio_usd) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Precio (USD)</th>';
-      if (selectedFields.costo_usd) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo (USD)</th>';
-      if (selectedFields.nota) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Nota</th>';
+      // Only show price/cost columns in main table if prices are the same across stores
+      if (!hasDifferentPrices) {
+        if (selectedFields.precio_cup) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Precio (CUP)</th>';
+        if (selectedFields.costo_cup) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo (CUP)</th>';
+        if (selectedFields.precio_usd) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Precio (USD)</th>';
+        if (selectedFields.costo_usd) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo (USD)</th>';
+      }
       if (selectedFields.sufijo) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Sufijo</th>';
       tableHeader += '</tr>';
 
@@ -657,13 +747,14 @@ const ProductosContent = () => {
       productos.forEach(producto => {
         tableRows += '<tr>';
         if (selectedFields.nombre) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.nombre}</td>`;
-        if (selectedFields.codigo) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.codigos?.[0]?.codigo_barras_ean || 'N/A'}</td>`;
         if (selectedFields.categoria) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.categoria || 'N/A'}</td>`;
-        if (selectedFields.precio_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductPrice(producto)}</td>`;
-        if (selectedFields.costo_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductCost(producto)}</td>`;
-        if (selectedFields.precio_usd) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductPriceUSD(producto)}</td>`;
-        if (selectedFields.costo_usd) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductCostUSD(producto)}</td>`;
-        if (selectedFields.nota) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.producto?.nota || 'N/A'}</td>`;
+        // Only show price/cost columns in main table if prices are the same across stores
+        if (!hasDifferentPrices) {
+          if (selectedFields.precio_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductPrice(producto)}</td>`;
+          if (selectedFields.costo_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductCost(producto)}</td>`;
+          if (selectedFields.precio_usd) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductPriceUSD(producto)}</td>`;
+          if (selectedFields.costo_usd) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductCostUSD(producto)}</td>`;
+        }
         if (selectedFields.sufijo) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.producto?.sufijo || 'N/A'}</td>`;
         tableRows += '</tr>';
       });
@@ -713,6 +804,109 @@ const ProductosContent = () => {
         `;
       }
 
+      // Generate codes breakdown table if codigo or nota is selected
+      let codesBreakdownSection = '';
+      if (selectedFields.codigo || selectedFields.nota) {
+        // Create header for codes breakdown table
+        let codesHeader = '<tr style="background-color: #f0f0f0;">';
+        codesHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Producto</th>';
+        if (selectedFields.codigo) codesHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Código</th>';
+        if (selectedFields.nota) codesHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Nota</th>';
+        codesHeader += '</tr>';
+
+        // Create rows for codes breakdown table
+        let codesRows = '';
+        productos.forEach(producto => {
+          const codigos = producto.codigos || [];
+          if (codigos.length === 0) {
+            // Add a row for products without codes
+            codesRows += '<tr>';
+            codesRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.nombre}</td>`;
+            if (selectedFields.codigo) codesRows += `<td style="border: 1px solid #ddd; padding: 8px;">N/A</td>`;
+            if (selectedFields.nota) codesRows += `<td style="border: 1px solid #ddd; padding: 8px;">N/A</td>`;
+            codesRows += '</tr>';
+          } else {
+            // Add rows for each code
+            codigos.forEach((codigo, index) => {
+              codesRows += '<tr>';
+              // Only show product name on first row
+              if (index === 0) {
+                codesRows += `<td style="border: 1px solid #ddd; padding: 8px;" rowspan="${codigos.length}">${producto.nombre}</td>`;
+              }
+              if (selectedFields.codigo) codesRows += `<td style="border: 1px solid #ddd; padding: 8px;">${codigo.codigo_barras_ean || 'N/A'}</td>`;
+              if (selectedFields.nota) codesRows += `<td style="border: 1px solid #ddd; padding: 8px;">${codigo.nota || 'N/A'}</td>`;
+              codesRows += '</tr>';
+            });
+          }
+        });
+
+        codesBreakdownSection = `
+          <h2 style="color: #002440; margin-top: 40px; margin-bottom: 10px;">Desglose de Códigos</h2>
+          <table>
+            ${codesHeader}
+            ${codesRows}
+          </table>
+        `;
+      }
+
+      // Generate prices breakdown table if prices are different across stores
+      let pricesBreakdownSection = '';
+      if (hasDifferentPrices && (selectedFields.precio_cup || selectedFields.costo_cup || selectedFields.precio_usd || selectedFields.costo_usd)) {
+        // Get all unique store names from visible tiendas
+        let visibleTiendas = tiendas;
+        if (!canViewAllStores && user?.id_tienda) {
+          visibleTiendas = tiendas.filter(t => t.id_tienda === user.id_tienda);
+        }
+
+        // Create header for prices breakdown table
+        let pricesHeader = '<tr style="background-color: #f0f0f0;">';
+        pricesHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Producto</th>';
+        visibleTiendas.forEach(tienda => {
+          if (selectedFields.precio_cup || selectedFields.costo_cup || selectedFields.precio_usd || selectedFields.costo_usd) {
+            pricesHeader += `<th style="border: 1px solid #ddd; padding: 8px; text-align: center;" colspan="4">${tienda.nombre}</th>`;
+          }
+        });
+        pricesHeader += '</tr>';
+
+        // Create sub-header for price types
+        let pricesSubHeader = '<tr style="background-color: #f0f0f0;">';
+        pricesSubHeader += '<th style="border: 1px solid #ddd; padding: 8px;"></th>';
+        visibleTiendas.forEach(() => {
+          if (selectedFields.precio_cup) pricesSubHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Precio CUP</th>';
+          if (selectedFields.costo_cup) pricesSubHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo CUP</th>';
+          if (selectedFields.precio_usd) pricesSubHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Precio USD</th>';
+          if (selectedFields.costo_usd) pricesSubHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo USD</th>';
+        });
+        pricesSubHeader += '</tr>';
+
+        // Create rows for prices breakdown table
+        let pricesRows = '';
+        productos.forEach(producto => {
+          pricesRows += '<tr>';
+          pricesRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.nombre}</td>`;
+          
+          visibleTiendas.forEach(tienda => {
+            const tiendaServicio = producto.tiendas_servicio?.find(ts => ts.id_tienda === tienda.id_tienda);
+            if (selectedFields.precio_cup) pricesRows += `<td style="border: 1px solid #ddd; padding: 8px;">${tiendaServicio?.precio_cup || 'N/A'}</td>`;
+            if (selectedFields.costo_cup) pricesRows += `<td style="border: 1px solid #ddd; padding: 8px;">${tiendaServicio?.costo_cup || 'N/A'}</td>`;
+            if (selectedFields.precio_usd) pricesRows += `<td style="border: 1px solid #ddd; padding: 8px;">${tiendaServicio?.precio_usd || 'N/A'}</td>`;
+            if (selectedFields.costo_usd) pricesRows += `<td style="border: 1px solid #ddd; padding: 8px;">${tiendaServicio?.costo_usd || 'N/A'}</td>`;
+          });
+          
+          pricesRows += '</tr>';
+        });
+
+        pricesBreakdownSection = `
+          <div style="page-break-before: always;"></div>
+          <h2 style="color: #002440; margin-top: 40px; margin-bottom: 10px;">Desglose de Precios y Costos</h2>
+          <table>
+            ${pricesHeader}
+            ${pricesSubHeader}
+            ${pricesRows}
+          </table>
+        `;
+      }
+
       const htmlContent = `
         <html>
           <head>
@@ -748,6 +942,8 @@ const ProductosContent = () => {
               ${tableRows}
             </table>
             ${quantityBreakdownSection}
+            ${codesBreakdownSection}
+            ${pricesBreakdownSection}
           </body>
         </html>
       `;
@@ -779,47 +975,18 @@ const ProductosContent = () => {
       const pageWidth = 595.28;
       const pageHeight = 841.89;
       
-      // Grid settings (4x3 for 8.5 x 11 inch paper)
-      const cols = 4;
-      const rows = 3;
+      // Grid settings (3x2 for larger QR codes)
+      const cols = 3;
+      const rows = 2;
       const margin = 20;
-      const cellWidth = (pageWidth - margin * 5) / cols;
-      const cellHeight = 220;
+      const cellWidth = (pageWidth - margin * 4) / cols;
+      const cellHeight = 350;
       
       let currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
       let colIndex = 0;
       let rowIndex = 0;
       
       for (const producto of productos) {
-        // Prepare data for QR code based on selected fields
-        const qrData = {};
-        if (selectedFields.nombre) qrData.nombre = producto.nombre;
-        if (selectedFields.codigo) qrData.codigo = producto.codigos?.[0]?.codigo_barras_ean || 'N/A';
-        if (selectedFields.categoria) qrData.categoria = producto.categoria || 'N/A';
-        if (selectedFields.precio_cup) qrData.precio_cup = getProductPrice(producto);
-        if (selectedFields.costo_cup) qrData.costo_cup = getProductCost(producto);
-        if (selectedFields.precio_usd) qrData.precio_usd = getProductPriceUSD(producto);
-        if (selectedFields.costo_usd) qrData.costo_usd = getProductCostUSD(producto);
-        if (selectedFields.nota) qrData.nota = producto.producto?.nota || 'N/A';
-        if (selectedFields.cantidad) qrData.cantidad = calculateTotalQuantity(producto);
-        if (selectedFields.sufijo) qrData.sufijo = producto.producto?.sufijo || 'N/A';
-        
-        const qrString = JSON.stringify(qrData);
-        
-        // Generate QR code as PNG using bwip-js
-        const qrResult = await bwipjs.toDataURL({
-          bcid: 'qrcode',
-          text: qrString,
-          scale: 4,
-          height: 10,
-          includetext: false,
-          eclevel: 'H',
-          rotate: 'N',
-        });
-        
-        // Embed QR image in PDF
-        const qrImage = await pdfDoc.embedPng(qrResult.uri);
-        
         // Calculate position in grid
         const x = margin + colIndex * (cellWidth + margin);
         const y = pageHeight - margin - (rowIndex + 1) * cellHeight;
@@ -834,31 +1001,68 @@ const ProductosContent = () => {
           borderWidth: 1,
         });
         
-        // Draw QR code (smaller size)
-        const qrSize = Math.min(cellWidth, cellHeight) * 0.35;
-        const qrX = x + (cellWidth - qrSize) / 2;
-        const qrY = y + cellHeight - qrSize - 10;
+        let textY;
         
-        currentPage.drawImage(qrImage, {
-          x: qrX,
-          y: qrY,
-          width: qrSize,
-          height: qrSize,
-        });
+        if (selectedFields.codigo_qr_barra) {
+          // Generate QR code
+          const qrData = {};
+          if (selectedFields.nombre) qrData.nombre = producto.nombre;
+          if (selectedFields.codigo) qrData.codigo = producto.codigos?.[0]?.codigo_barras_ean || 'N/A';
+          if (selectedFields.categoria) qrData.categoria = producto.categoria || 'N/A';
+          if (selectedFields.precio_cup) qrData.precio_cup = getProductPrice(producto);
+          if (selectedFields.costo_cup) qrData.costo_cup = getProductCost(producto);
+          if (selectedFields.precio_usd) qrData.precio_usd = getProductPriceUSD(producto);
+          if (selectedFields.costo_usd) qrData.costo_usd = getProductCostUSD(producto);
+          if (selectedFields.nota) qrData.nota = producto.producto?.nota || 'N/A';
+          if (selectedFields.cantidad) qrData.cantidad = calculateTotalQuantity(producto);
+          if (selectedFields.sufijo) qrData.sufijo = producto.producto?.sufijo || 'N/A';
+          
+          const qrString = JSON.stringify(qrData);
+          
+          // Generate QR code as PNG using bwip-js with larger scale
+          const qrResult = await bwipjs.toDataURL({
+            bcid: 'qrcode',
+            text: qrString,
+            scale: 6,
+            height: 10,
+            includetext: false,
+            eclevel: 'H',
+            rotate: 'N',
+          });
+          
+          // Embed QR image in PDF
+          const qrImage = await pdfDoc.embedPng(qrResult.uri);
+          
+          // Draw QR code (larger size for better readability)
+          const qrSize = Math.min(cellWidth, cellHeight) * 0.5;
+          const qrX = x + (cellWidth - qrSize) / 2;
+          const qrY = y + cellHeight - qrSize - 20;
+          
+          currentPage.drawImage(qrImage, {
+            x: qrX,
+            y: qrY,
+            width: qrSize,
+            height: qrSize,
+          });
+          
+          textY = qrY - 30;
+        } else {
+          // No QR code, start text from top
+          textY = y + cellHeight - 40;
+        }
         
-        // Draw product info text (larger font, centered)
-        const font = await pdfDoc.embedFont('Helvetica');
-        const fontSize = 10;
-        let textY = qrY - 20;
+        // Draw product info text (larger font, bold, centered)
+        const font = await pdfDoc.embedFont('Helvetica-Bold');
+        const fontSize = 14;
         
         const textLines = [];
         if (selectedFields.nombre) textLines.push(`Nombre: ${producto.nombre}`);
         if (selectedFields.codigo) textLines.push(`Código: ${producto.codigos?.[0]?.codigo_barras_ean || 'N/A'}`);
         if (selectedFields.categoria) textLines.push(`Categoría: ${producto.categoria || 'N/A'}`);
-        if (selectedFields.precio_cup) textLines.push(`Precio: ${getProductPrice(producto)}`);
-        if (selectedFields.costo_cup) textLines.push(`Costo: ${getProductCost(producto)}`);
-        if (selectedFields.precio_usd) textLines.push(`Precio USD: ${getProductPriceUSD(producto)}`);
-        if (selectedFields.costo_usd) textLines.push(`Costo USD: ${getProductCostUSD(producto)}`);
+        if (selectedFields.precio_cup) textLines.push(`Precio: ${formatPriceForExport(getProductPrice(producto), 'cup')}`);
+        if (selectedFields.costo_cup) textLines.push(`Costo: ${formatPriceForExport(getProductCost(producto), 'cup')}`);
+        if (selectedFields.precio_usd) textLines.push(`Precio USD: ${formatPriceForExport(getProductPriceUSD(producto), 'usd')}`);
+        if (selectedFields.costo_usd) textLines.push(`Costo USD: ${formatPriceForExport(getProductCostUSD(producto), 'usd')}`);
         if (selectedFields.nota) textLines.push(`Nota: ${producto.producto?.nota || 'N/A'}`);
         if (selectedFields.cantidad) textLines.push(`Cantidad: ${calculateTotalQuantity(producto)}`);
         if (selectedFields.sufijo) textLines.push(`Sufijo: ${producto.producto?.sufijo || 'N/A'}`);
@@ -873,7 +1077,7 @@ const ProductosContent = () => {
             font: font,
             color: rgb(0, 0, 0),
           });
-          textY -= fontSize + 2;
+          textY -= fontSize + 4;
           // Stop if text would go outside the rectangle
           if (textY < y + 5) break;
         }
@@ -920,19 +1124,54 @@ const ProductosContent = () => {
       for (const producto of productos) {
         const codigo = producto.codigos?.[0]?.codigo_barras_ean || 'N/A';
         
-        // Generate barcode as base64 image using bwip-js
+        // Generate barcode as base64 image using bwip-js only if field is selected
         let barcodeImageBase64 = '';
-        if (codigo !== 'N/A') {
+        if (selectedFields.codigo_qr_barra && codigo !== 'N/A') {
           try {
-            // Use bwip-js to generate barcode as data URL
+            // Define size ranges based on code length for consistent appearance
+            // Short codes get larger bars, long codes get smaller bars
+            let targetWidth, targetHeight;
+            
+            if (codigo.length <= 4) {
+              // Very short codes: match height with 10-char codes
+              targetWidth = 180;
+              targetHeight = 14;
+            } else if (codigo.length <= 6) {
+              // Short codes
+              targetWidth = 170;
+              targetHeight = 17;
+            } else if (codigo.length <= 8) {
+              // Medium-short codes: further reduced height
+              targetWidth = 160;
+              targetHeight = 19;
+            } else if (codigo.length <= 10) {
+              // Medium codes
+              targetWidth = 150;
+              targetHeight = 22;
+            } else if (codigo.length <= 12) {
+              // Medium-long codes
+              targetWidth = 140;
+              targetHeight = 25;
+            } else {
+              // Long codes: make them smaller to fit better
+              targetWidth = 130;
+              targetHeight = 20;
+            }
+            
+            // Calculate scale based on target width
+            const modulesPerChar = 11;
+            const totalModules = codigo.length * modulesPerChar + 20;
+            const scale = Math.max(1, Math.floor(targetWidth / totalModules));
+            
+            // Use bwip-js to generate barcode with range-based sizing
             const barcodeResult = await bwipjs.toDataURL({
               bcid: 'code128',     // Barcode type (accepts any length)
               text: codigo,        // Text to encode
-              scale: 3,             // Reduced scale for smaller barcode
-              height: 10,           // Reduced bar height
+              scale: scale,        // Scale calculated for target width
+              height: targetHeight, // Height based on code length range
               includetext: true,    // Show human-readable text
               textxalign: 'center', // Text alignment
-              textsize: 10,         // Text size
+              textsize: 12,         // Text size
             });
             
             // Extract the data URI from the result
@@ -945,27 +1184,38 @@ const ProductosContent = () => {
           }
         }
         
-        // Prepare product info display
+        // Prepare product info display with formatted prices
         let productInfo = '';
         if (selectedFields.nombre) productInfo += `<p><strong>Nombre:</strong> ${producto.nombre}</p>`;
         if (selectedFields.codigo) productInfo += `<p><strong>Código:</strong> ${codigo}</p>`;
         if (selectedFields.categoria) productInfo += `<p><strong>Categoría:</strong> ${producto.categoria || 'N/A'}</p>`;
-        if (selectedFields.precio_cup) productInfo += `<p><strong>Precio (CUP):</strong> ${getProductPrice(producto)}</p>`;
-        if (selectedFields.costo_cup) productInfo += `<p><strong>Costo (CUP):</strong> ${getProductCost(producto)}</p>`;
-        if (selectedFields.precio_usd) productInfo += `<p><strong>Precio (USD):</strong> ${getProductPriceUSD(producto)}</p>`;
-        if (selectedFields.costo_usd) productInfo += `<p><strong>Costo (USD):</strong> ${getProductCostUSD(producto)}</p>`;
+        if (selectedFields.precio_cup) productInfo += `<p><strong>Precio (CUP):</strong> ${formatPriceForExport(getProductPrice(producto), 'cup')}</p>`;
+        if (selectedFields.costo_cup) productInfo += `<p><strong>Costo (CUP):</strong> ${formatPriceForExport(getProductCost(producto), 'cup')}</p>`;
+        if (selectedFields.precio_usd) productInfo += `<p><strong>Precio (USD):</strong> ${formatPriceForExport(getProductPriceUSD(producto), 'usd')}</p>`;
+        if (selectedFields.costo_usd) productInfo += `<p><strong>Costo (USD):</strong> ${formatPriceForExport(getProductCostUSD(producto), 'usd')}</p>`;
         if (selectedFields.nota) productInfo += `<p><strong>Nota:</strong> ${producto.producto?.nota || 'N/A'}</p>`;
         if (selectedFields.cantidad) productInfo += `<p><strong>Cantidad:</strong> ${calculateTotalQuantity(producto)}</p>`;
         if (selectedFields.sufijo) productInfo += `<p><strong>Sufijo:</strong> ${producto.producto?.sufijo || 'N/A'}</p>`;
 
-        barcodeContent += `
-          <div class="barcode-item">
-            <img class="barcode-image" src="${barcodeImageBase64}" />
-            <div class="product-info">
-              ${productInfo}
+        // Only include barcode image if field is selected
+        if (selectedFields.codigo_qr_barra) {
+          barcodeContent += `
+            <div class="barcode-item">
+              <img class="barcode-image" src="${barcodeImageBase64}" />
+              <div class="product-info">
+                ${productInfo}
+              </div>
             </div>
-          </div>
-        `;
+          `;
+        } else {
+          barcodeContent += `
+            <div class="barcode-item">
+              <div class="product-info">
+                ${productInfo}
+              </div>
+            </div>
+          `;
+        }
       }
 
       const htmlContent = `
@@ -994,12 +1244,13 @@ const ProductosContent = () => {
                 margin-bottom: 8px;
               }
               .product-info {
-                font-size: 12px;
+                font-size: 14px;
+                font-weight: bold;
                 text-align: center;
                 width: 100%;
               }
               .product-info p {
-                margin: 3px 0;
+                margin: 4px 0;
               }
               @media print {
                 .barcode-container { page-break-inside: avoid; }
@@ -1007,8 +1258,6 @@ const ProductosContent = () => {
             </style>
           </head>
           <body>
-            <h1 style="text-align: center;">Códigos de Barra de Productos</h1>
-            <p style="text-align: center;">Fecha: ${new Date().toLocaleDateString()}</p>
             <div class="barcode-container">
               ${barcodeContent}
             </div>
@@ -1117,6 +1366,63 @@ const ProductosContent = () => {
 
     // Return formatted string with per-store quantities and total
     return `${quantityDetails.join(' | ')} (Total: ${formattedTotal})`;
+  };
+
+  // Format price to 2 decimal places with specific format for exports
+  const formatPriceForExport = (price, currency) => {
+    const formattedPrice = parseFloat(price).toFixed(2);
+    if (currency === 'cup') {
+      return `${formattedPrice} cup (c/u)`;
+    } else if (currency === 'usd') {
+      return `${formattedPrice} (usd)`;
+    }
+    return formattedPrice;
+  };
+
+  // Check if product has different prices/costs across stores
+  const hasDifferentPricesAcrossStores = (productos) => {
+    let visibleTiendas = tiendas;
+    if (!canViewAllStores && user?.id_tienda) {
+      visibleTiendas = tiendas.filter(t => t.id_tienda === user.id_tienda);
+    }
+
+    // If only one visible store, no differences possible
+    if (visibleTiendas.length <= 1) {
+      return false;
+    }
+
+    // Check if any product has different prices/costs across stores
+    for (const producto of productos) {
+      if (!producto.tiendas_servicio || producto.tiendas_servicio.length === 0) {
+        continue;
+      }
+
+      const visibleTiendasServicio = producto.tiendas_servicio.filter(ts => 
+        visibleTiendas.some(t => t.id_tienda === ts.id_tienda)
+      );
+
+      if (visibleTiendasServicio.length <= 1) {
+        continue;
+      }
+
+      // Check for price differences
+      const firstPrice = visibleTiendasServicio[0]?.precio_cup;
+      const firstCost = visibleTiendasServicio[0]?.costo_cup;
+      const firstPriceUSD = visibleTiendasServicio[0]?.precio_usd;
+      const firstCostUSD = visibleTiendasServicio[0]?.costo_usd;
+
+      for (let i = 1; i < visibleTiendasServicio.length; i++) {
+        const current = visibleTiendasServicio[i];
+        if (current?.precio_cup !== firstPrice || 
+            current?.costo_cup !== firstCost ||
+            current?.precio_usd !== firstPriceUSD ||
+            current?.costo_usd !== firstCostUSD) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   };
 
   // Get price for a product based on user permissions
@@ -1642,7 +1948,7 @@ const ProductosContent = () => {
                         </>
                       )}
                       <Text style={[styles.productoQuantity, { color: colors.primary }]}>
-                        Cantidad: {totalQuantity}
+                        Cantidad: {parseFloat(totalQuantity).toFixed(2)}
                       </Text>
                     </View>
                     {canEdit && (
@@ -1858,6 +2164,7 @@ const ProductosContent = () => {
                 onPress={() => {
                   setShowCodesOptionsModal(false);
                   setExportType('barcode');
+                  setSelectedFields(prev => ({ ...prev, codigo_qr_barra: true }));
                   setShowFieldSelectionModal(true);
                 }}
               >
@@ -1869,6 +2176,7 @@ const ProductosContent = () => {
                 onPress={() => {
                   setShowCodesOptionsModal(false);
                   setExportType('qr');
+                  setSelectedFields(prev => ({ ...prev, codigo_qr_barra: true }));
                   setShowFieldSelectionModal(true);
                 }}
               >
@@ -1896,22 +2204,31 @@ const ProductosContent = () => {
             <View style={[styles.fieldSelectionModal, { backgroundColor: colors.surface }]}>
               <Text style={[styles.exportModalTitle, { color: colors.onSurface }]}>Seleccionar Campos</Text>
               <ScrollView style={styles.fieldSelectionScroll}>
-                {Object.keys(selectedFields).map((field) => (
-                  <TouchableOpacity
-                    key={field}
-                    style={[styles.fieldSelectionItem, { backgroundColor: colors.surfaceVariant }]}
-                    onPress={() => setSelectedFields(prev => ({ ...prev, [field]: !prev[field] }))}
-                  >
-                    <View style={[styles.checkbox, { borderColor: colors.outlineVariant, backgroundColor: selectedFields[field] ? colors.primary : 'transparent' }]}>
-                      {selectedFields[field] && (
-                        <Ionicons name="checkmark" size={responsive.responsiveWidth(16)} color="#fff" />
-                      )}
-                    </View>
-                    <Text style={[styles.fieldSelectionText, { color: colors.onSurface }]}>
-                      {field.charAt(0).toUpperCase() + field.slice(1).replace('_', ' ')}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {Object.keys(selectedFields).map((field) => {
+                  // Only show codigo_qr_barra field for barcode or qr exports
+                  if (field === 'codigo_qr_barra' && exportType !== 'barcode' && exportType !== 'qr') {
+                    return null;
+                  }
+                  return (
+                    <TouchableOpacity
+                      key={field}
+                      style={[styles.fieldSelectionItem, { backgroundColor: colors.surfaceVariant }]}
+                      onPress={() => setSelectedFields(prev => ({ ...prev, [field]: !prev[field] }))}
+                    >
+                      <View style={[styles.checkbox, { borderColor: colors.outlineVariant, backgroundColor: selectedFields[field] ? colors.primary : 'transparent' }]}>
+                        {selectedFields[field] && (
+                          <Ionicons name="checkmark" size={responsive.responsiveWidth(16)} color="#fff" />
+                        )}
+                      </View>
+                      <Text style={[styles.fieldSelectionText, { color: colors.onSurface }]}>
+                        {field === 'codigo_qr_barra' 
+                          ? (exportType === 'barcode' ? 'Código de Barra' : 'Código QR')
+                          : field.charAt(0).toUpperCase() + field.slice(1).replace('_', ' ')
+                        }
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
               <TouchableOpacity
                 style={[styles.exportConfirmButton, { backgroundColor: colors.primary }]}
@@ -1953,6 +2270,28 @@ const ProductosContent = () => {
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Export Loading Modal */}
+      {isExporting && (
+        <Modal
+          visible={isExporting}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => {}}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.loadingModal, { backgroundColor: colors.surface }]}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.loadingModalText, { color: colors.onSurface }]}>
+                Generando documento...
+              </Text>
+              <Text style={[styles.loadingModalSubtext, { color: colors.onSurfaceVariant }]}>
+                Por favor espere, esto puede tomar unos segundos
+              </Text>
+            </View>
+          </View>
         </Modal>
       )}
     </SafeAreaView>
@@ -2475,6 +2814,31 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.body,
     fontWeight: '600',
     fontFamily: 'Inter',
+  },
+  loadingModal: {
+    borderRadius: 16,
+    padding: responsive.responsivePadding(32),
+    width: '85%',
+    maxWidth: responsive.responsiveWidth(350),
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  loadingModalText: {
+    fontSize: responsive.responsiveFontSize(18),
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    marginTop: responsive.responsiveMargin(16),
+    textAlign: 'center',
+  },
+  loadingModalSubtext: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(8),
+    textAlign: 'center',
   },
   fieldSelectionModal: {
     borderRadius: 16,
