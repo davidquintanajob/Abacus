@@ -29,18 +29,26 @@ const CurrencyExchangeContent = () => {
     almacenero: false,
     economico: false,
   });
+  const [entradaPermissions, setEntradaPermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
+  const [applyWeightedAverageCost, setApplyWeightedAverageCost] = useState(false);
+  const [showPermissions, setShowPermissions] = useState(false);
+  const [showEntradaPermissions, setShowEntradaPermissions] = useState(false);
+  const [showEntradaConfig, setShowEntradaConfig] = useState(false);
   const [infoModal, setInfoModal] = useState({
     visible: false,
     title: '',
     description: '',
   });
-  const [showPermissions, setShowPermissions] = useState(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
 
   useEffect(() => {
     fetchConfig();
-  }, []);
+  }, []); // Solo se ejecuta al montar el componente
 
   const fetchConfig = async () => {
     try {
@@ -52,6 +60,12 @@ const CurrencyExchangeContent = () => {
       }
       if (data.permissions) {
         setPermissions(data.permissions);
+      }
+      if (data.entradaPermissions) {
+        setEntradaPermissions(data.entradaPermissions);
+      }
+      if (data.applyWeightedAverageCost !== undefined) {
+        setApplyWeightedAverageCost(data.applyWeightedAverageCost);
       }
     } catch (error) {
       showToast({ type: 'error', message: 'Error al cargar configuración' });
@@ -112,6 +126,43 @@ const CurrencyExchangeContent = () => {
     } catch (error) {
       showToast({ type: 'error', message: 'Error al actualizar permiso' });
       setPermissions(permissions);
+    }
+  };
+
+  const toggleEntradaPermission = async (role) => {
+    const newEntradaPermissions = { ...entradaPermissions, [role]: !entradaPermissions[role] };
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        entradaPermissions: newEntradaPermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      
+      // Recargar configuración desde el backend para asegurar sincronización
+      await fetchConfig();
+      
+      showToast({ type: 'success', message: 'Permiso de entrada actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de entrada' });
+    }
+  };
+
+  const toggleWeightedAverageCost = async () => {
+    const newValue = !applyWeightedAverageCost;
+    setApplyWeightedAverageCost(newValue);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        applyWeightedAverageCost: newValue,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Configuración de costo promedio actualizada correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar configuración de costo promedio' });
+      setApplyWeightedAverageCost(applyWeightedAverageCost);
     }
   };
 
@@ -301,6 +352,157 @@ const CurrencyExchangeContent = () => {
               onValueChange={() => togglePermission('economico')}
               trackColor={{ false: colors.outlineVariant, true: colors.primary }}
               thumbColor={permissions.economico ? '#fff' : colors.outline}
+            />
+          </View>
+
+            </>
+          )}
+        </Card>
+
+        <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
+          <View style={styles.permissionsHeader}>
+            <View style={styles.permissionsHeaderLeft}>
+              <Ionicons name="shield-checkmark" size={responsive.responsiveWidth(24)} color={colors.primary} />
+              <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
+                Configuración de Entradas
+              </Text>
+            </View>
+            <TouchableOpacity 
+              style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+              onPress={() => setShowEntradaConfig(!showEntradaConfig)}
+            >
+              <Ionicons 
+                name={showEntradaConfig ? "chevron-up" : "chevron-down"} 
+                size={responsive.responsiveWidth(24)} 
+                color={isDarkMode ? colors.primary : '#1976D2'} 
+              />
+            </TouchableOpacity>
+          </View>
+
+          {showEntradaConfig && (
+            <>
+              <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                Configura el cálculo automático de costo promedio ponderado para las entradas
+              </Text>
+
+              <View style={styles.permissionItem}>
+                <View style={styles.permissionInfo}>
+                  <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                    Aplicar Fórmula de Costo Promedio Ponderado
+                  </Text>
+                  <TouchableOpacity 
+                    style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                    onPress={() => showInfoModal(
+                      'Fórmula de Costo Promedio Ponderado',
+                      'Cuando está activo, el costo de los productos se recalcula automáticamente al crear una entrada usando la fórmula: (costo_actual × cantidad_actual + costo_entrada × cantidad_entrada) / (cantidad_actual + cantidad_entrada)'
+                    )}
+                  >
+                    <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                  </TouchableOpacity>
+                </View>
+                <Switch
+                  value={applyWeightedAverageCost}
+                  onValueChange={toggleWeightedAverageCost}
+                  trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                  thumbColor={applyWeightedAverageCost ? '#fff' : colors.outline}
+                />
+              </View>
+            </>
+          )}
+        </Card>
+
+        <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
+          <View style={styles.permissionsHeader}>
+            <View style={styles.permissionsHeaderLeft}>
+              <Ionicons name="shield-checkmark" size={responsive.responsiveWidth(24)} color={colors.primary} />
+              <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
+                Permisos de Entradas
+              </Text>
+            </View>
+            <TouchableOpacity 
+              style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+              onPress={() => setShowEntradaPermissions(!showEntradaPermissions)}
+            >
+              <Ionicons 
+                name={showEntradaPermissions ? "chevron-up" : "chevron-down"} 
+                size={responsive.responsiveWidth(24)} 
+                color={isDarkMode ? colors.primary : '#1976D2'} 
+              />
+            </TouchableOpacity>
+          </View>
+
+          {showEntradaPermissions && (
+            <>
+              <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                Configura qué roles pueden ver y gestionar entradas de todas las tiendas (general) o solo la suya (sencillo)
+              </Text>
+
+          <View style={styles.permissionItem}>
+            <View style={styles.permissionInfo}>
+              <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                Dependiente
+              </Text>
+              <TouchableOpacity 
+                style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                onPress={() => showInfoModal(
+                  'Permiso Entradas - Dependiente',
+                  'Cuando está activo (General), los usuarios con rol Dependiente pueden ver y gestionar entradas de todas las tiendas. Cuando está desactivado (Sencillo), solo pueden ver y gestionar entradas de su propia tienda.'
+                )}
+              >
+                <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+              </TouchableOpacity>
+            </View>
+            <Switch
+              value={entradaPermissions.dependiente}
+              onValueChange={() => toggleEntradaPermission('dependiente')}
+              trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+              thumbColor={entradaPermissions.dependiente ? '#fff' : colors.outline}
+            />
+          </View>
+
+          <View style={styles.permissionItem}>
+            <View style={styles.permissionInfo}>
+              <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                Almacenero
+              </Text>
+              <TouchableOpacity 
+                style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                onPress={() => showInfoModal(
+                  'Permiso Entradas - Almacenero',
+                  'Cuando está activo (General), los usuarios con rol Almacenero pueden ver y gestionar entradas de todas las tiendas. Cuando está desactivado (Sencillo), solo pueden ver y gestionar entradas de su propia tienda.'
+                )}
+              >
+                <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+              </TouchableOpacity>
+            </View>
+            <Switch
+              value={entradaPermissions.almacenero}
+              onValueChange={() => toggleEntradaPermission('almacenero')}
+              trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+              thumbColor={entradaPermissions.almacenero ? '#fff' : colors.outline}
+            />
+          </View>
+
+          <View style={styles.permissionItem}>
+            <View style={styles.permissionInfo}>
+              <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                Económico
+              </Text>
+              <TouchableOpacity 
+                style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                onPress={() => showInfoModal(
+                  'Permiso Entradas - Económico',
+                  'Cuando está activo (General), los usuarios con rol Económico pueden ver y gestionar entradas de todas las tiendas. Cuando está desactivado (Sencillo), solo pueden ver y gestionar entradas de su propia tienda.'
+                )}
+              >
+                <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+              </TouchableOpacity>
+            </View>
+            <Switch
+              value={entradaPermissions.economico}
+              onValueChange={() => toggleEntradaPermission('economico')}
+              trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+              thumbColor={entradaPermissions.economico ? '#fff' : colors.outline}
             />
           </View>
 

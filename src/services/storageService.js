@@ -244,6 +244,10 @@ export const storageService = {
       
       let filtered = allServicios;
 
+      // Excluir servicios que tienen un producto asociado (productos)
+      // Esto es equivalente a fetchProducto: false en el backend
+      filtered = filtered.filter(s => !s.producto && !s.hasProducto);
+
       if (filters.nombre) {
         filtered = filtered.filter(s => 
           s.nombre?.toLowerCase().includes(filters.nombre.toLowerCase())

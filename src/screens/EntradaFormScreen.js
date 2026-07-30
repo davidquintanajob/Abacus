@@ -1,0 +1,947 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { useTheme } from '../theme/ThemeContext';
+import { Header } from '../components/layout/Header';
+import { Card } from '../components/common/Card';
+import { Ionicons } from '@expo/vector-icons';
+import { useResponsive } from '../hooks/useResponsive';
+import { useAuth } from '../context/AuthContext';
+import { useOffline } from '../context/OfflineContext';
+import { createEntrada, updateEntrada, getEntradaById, getEntradas } from '../services/entradaService';
+import { getProductos, getProductoById, updateProducto } from '../services/productoService';
+import { getTiendas } from '../services/tiendaService';
+import { configService } from '../services/configService';
+import { Toast } from '../components/common/Toast';
+import { useToast } from '../hooks/useToast';
+import DateTimePicker from '@react-native-community/datetimepicker';
+
+const EntradaFormContent = () => {
+  const navigation = useNavigation();
+  const route = useRoute();
+  const { colors, isDark } = useTheme();
+  const responsive = useResponsive();
+  const { token, user, permissions } = useAuth();
+  const { isOfflineMode } = useOffline();
+  const { toast, showToast, hideToast } = useToast();
+
+  const { entrada, mode, productoPreSeleccionado } = route.params || { mode: 'add' };
+
+  const isViewMode = mode === 'view';
+  const isEditMode = mode === 'edit';
+  const isAddMode = mode === 'add';
+  const isReadOnly = isOfflineMode || isViewMode;
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isFetchingEntrada, setIsFetchingEntrada] = useState(false);
+  const [tiendas, setTiendas] = useState([]);
+  const [showTiendaDropdown, setShowTiendaDropdown] = useState(false);
+  const [tiendaSearchText, setTiendaSearchText] = useState('');
+  const [showProductoModal, setShowProductoModal] = useState(false);
+  const [productoSearchText, setProductoSearchText] = useState('');
+  const [productos, setProductos] = useState([]);
+  const [config, setConfig] = useState({});
+  const [exchangeRate, setExchangeRate] = useState(null);
+  const [costoInputTexts, setCostoInputTexts] = useState({});
+  
+  const [formData, setFormData] = useState({
+    id_servicio_tienda: null,
+    cantidad_entrada: '',
+    costo_usd: '',
+    costo_cup: '',
+    fecha_vencimiento: '',
+    nombre_proveedor: '',
+    fecha: new Date().toISOString().split('T')[0],
+    producto: null,
+    tienda: null,
+  });
+
+  const [displayCostoCup, setDisplayCostoCup] = useState('');
+  const [displayCostoUsd, setDisplayCostoUsd] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
+  const isAdmin = user?.rol === 'Administrador';
+
+  useEffect(() => {
+    fetchTiendas();
+    fetchProductos();
+    fetchConfig();
+  }, []);
+
+  useEffect(() => {
+    const fetchCompleteEntrada = async () => {
+      if (entrada?.id_entrada) {
+        try {
+          setIsFetchingEntrada(true);
+          
+          let completeEntrada;
+          if (isOfflineMode) {
+            completeEntrada = entrada;
+            showToast({ 
+              type: 'info', 
+              message: 'Cargando datos locales. Conéctese al servidor para cargar datos actualizados.',
+              duration: 4000 
+            });
+          } else {
+            completeEntrada = await getEntradaById(entrada.id_entrada);
+          }
+          
+          setFormData({
+            id_servicio_tienda: completeEntrada.id_servicio_tienda,
+            cantidad_entrada: completeEntrada.cantidad_entrada.toString(),
+            costo_usd: completeEntrada.costo_usd.toString(),
+            costo_cup: completeEntrada.costo_cup.toString(),
+            fecha_vencimiento: completeEntrada.fecha_vencimiento ? completeEntrada.fecha_vencimiento.split('T')[0] : '',
+            nombre_proveedor: completeEntrada.nombre_proveedor || '',
+            fecha: completeEntrada.fecha ? completeEntrada.fecha.split('T')[0] : new Date().toISOString().split('T')[0],
+            producto: completeEntrada.servicioTienda?.servicio,
+            tienda: completeEntrada.servicioTienda?.tienda,
+          });
+          
+          setDisplayCostoCup(parseFloat(completeEntrada.costo_cup).toFixed(2));
+          setDisplayCostoUsd(parseFloat(completeEntrada.costo_usd).toFixed(2));
+        } catch (err) {
+          console.error('Error fetching complete entrada:', err);
+          showToast({ type: 'error', message: 'Error al cargar datos de la entrada' });
+        } finally {
+          setIsFetchingEntrada(false);
+        }
+      }
+    };
+
+    fetchCompleteEntrada();
+  }, [entrada?.id_entrada, isOfflineMode]);
+
+  useEffect(() => {
+    if (productoPreSeleccionado && isAddMode) {
+      console.log('productoPreSeleccionado:', JSON.stringify(productoPreSeleccionado, null, 2));
+      console.log('tiendas_servicio:', JSON.stringify(productoPreSeleccionado.tiendas_servicio, null, 2));
+      
+      // Get costs from the first tienda_servicio entry if available
+      const firstTiendaServicio = productoPreSeleccionado.tiendas_servicio?.[0];
+      const costoCup = firstTiendaServicio?.costo_cup || '';
+      const costoUsd = firstTiendaServicio?.costo_usd || '';
+      
+      console.log('costoCup:', costoCup, 'costoUsd:', costoUsd);
+      
+      setFormData(prev => ({
+        ...prev,
+        producto: productoPreSeleccionado,
+        costo_cup: costoCup,
+        costo_usd: costoUsd,
+      }));
+      
+      setDisplayCostoCup(costoCup ? parseFloat(costoCup).toFixed(2) : '');
+      setDisplayCostoUsd(costoUsd ? parseFloat(costoUsd).toFixed(2) : '');
+    }
+  }, [productoPreSeleccionado, isAddMode]);
+
+  const fetchTiendas = async () => {
+    try {
+      if (isOfflineMode) {
+        setTiendas([]);
+        return;
+      }
+      const data = await getTiendas({}, 1, 1000);
+      setTiendas(data.data?.filter(t => t.activo === true) || []);
+    } catch (err) {
+      console.error('Error fetching tiendas:', err);
+    }
+  };
+
+  const fetchProductos = async () => {
+    try {
+      if (isOfflineMode) {
+        setProductos([]);
+        return;
+      }
+      const data = await getProductos({ esvendible: 'true' }, 1, 1000);
+      setProductos(data.data || []);
+    } catch (err) {
+      console.error('Error fetching productos:', err);
+    }
+  };
+
+  const fetchConfig = async () => {
+    try {
+      if (isOfflineMode) {
+        return;
+      }
+      const data = await configService.getConfig();
+      setConfig(data);
+      if (data.cupToUsdRate) {
+        setExchangeRate(data.cupToUsdRate);
+      }
+    } catch (err) {
+      console.error('Error fetching config:', err);
+    }
+  };
+
+  const calcularCostoPromedioPonderado = async (producto, tienda, nuevaCantidad, nuevoCostoCup, nuevoCostoUsd) => {
+    try {
+      // Obtener todas las entradas anteriores del producto en esta tienda
+      const servicioTienda = producto.tiendas_servicio?.find(ts => ts.id_tienda === tienda.id_tienda);
+      if (!servicioTienda) {
+        return { costo_cup: nuevoCostoCup, costo_usd: nuevoCostoUsd };
+      }
+
+      const entradas = await getEntradas({ 
+        id_servicio_tienda: servicioTienda.id_servicio_tienda 
+      }, 1, 1000);
+      
+      const cantidadActual = servicioTienda.cantidad || 0;
+      const costoActualCup = servicioTienda.costo_cup || 0;
+      const costoActualUsd = servicioTienda.costo_usd || 0;
+
+      // Calcular costo promedio ponderado
+      const cantidadTotal = cantidadActual + parseFloat(nuevaCantidad);
+      const costoTotalCup = (costoActualCup * cantidadActual) + (nuevoCostoCup * parseFloat(nuevaCantidad));
+      const costoTotalUsd = (costoActualUsd * cantidadActual) + (nuevoCostoUsd * parseFloat(nuevaCantidad));
+
+      const nuevoCostoPromedioCup = costoTotalCup / cantidadTotal;
+      const nuevoCostoPromedioUsd = costoTotalUsd / cantidadTotal;
+
+      return {
+        costo_cup: parseFloat(nuevoCostoPromedioCup.toFixed(5)),
+        costo_usd: parseFloat(nuevoCostoPromedioUsd.toFixed(5)),
+      };
+    } catch (error) {
+      console.error('Error calculando costo promedio:', error);
+      return { costo_cup: nuevoCostoCup, costo_usd: nuevoCostoUsd };
+    }
+  };
+
+  const handleSave = async () => {
+    if (!formData.producto) {
+      showToast({ type: 'warning', message: 'Debe seleccionar un producto' });
+      return;
+    }
+    if (!formData.tienda) {
+      showToast({ type: 'warning', message: 'Debe seleccionar una tienda' });
+      return;
+    }
+    if (!formData.cantidad_entrada || parseFloat(formData.cantidad_entrada) <= 0) {
+      showToast({ type: 'warning', message: 'La cantidad debe ser mayor que 0' });
+      return;
+    }
+    if (!formData.costo_usd || parseFloat(formData.costo_usd) < 0) {
+      showToast({ type: 'warning', message: 'El costo USD debe ser mayor o igual a 0' });
+      return;
+    }
+    if (!formData.costo_cup || parseFloat(formData.costo_cup) < 0) {
+      showToast({ type: 'warning', message: 'El costo CUP debe ser mayor o igual a 0' });
+      return;
+    }
+
+    // Validar fecha de vencimiento si el producto es vencible
+    if (formData.producto.producto?.isVencible && !formData.fecha_vencimiento) {
+      showToast({ type: 'warning', message: 'El producto requiere fecha de vencimiento' });
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+
+      // Verificar si el producto existe en la tienda seleccionada
+      const productoTienda = formData.producto.tiendas_servicio?.find(
+        ts => ts.id_tienda === formData.tienda.id_tienda
+      );
+
+      let id_servicio_tienda = productoTienda?.id_servicio_tienda;
+
+      // Si el producto no existe en la tienda, primero actualizar el producto
+      if (!productoTienda) {
+        showToast({ type: 'info', message: 'El producto no existe en esta tienda. Agregando relación producto-tienda...' });
+        
+        const productoActualizado = await getProductoById(formData.producto.id_servicio);
+        const nuevoProductoTienda = {
+          id_tienda: formData.tienda.id_tienda,
+          precio_cup: 0, // Precio inicial 0, se puede editar después
+          precio_usd: 0,
+          costo_cup: parseFloat(formData.costo_cup),
+          costo_usd: parseFloat(formData.costo_usd),
+        };
+
+        const productoTiendaList = [...(productoActualizado.tiendas_servicio || []), nuevoProductoTienda];
+        
+        await updateProducto(formData.producto.id_servicio, {
+          productoTiendaList: productoTiendaList,
+        });
+
+        // Obtener el producto actualizado para obtener el nuevo id_servicio_tienda
+        const productoActualizado2 = await getProductoById(formData.producto.id_servicio);
+        const nuevoProductoTiendaCreado = productoActualizado2.tiendas_servicio?.find(
+          ts => ts.id_tienda === formData.tienda.id_tienda
+        );
+        id_servicio_tienda = nuevoProductoTiendaCreado?.id_servicio_tienda;
+
+        if (!id_servicio_tienda) {
+          throw new Error('Error al crear relación producto-tienda');
+        }
+      }
+
+      // Calcular costo promedio ponderado si está activado
+      let costo_cup = parseFloat(formData.costo_cup);
+      let costo_usd = parseFloat(formData.costo_usd);
+
+      if (config.applyWeightedAverageCost && !isEditMode) {
+        const nuevosCostos = await calcularCostoPromedioPonderado(
+          formData.producto,
+          formData.tienda,
+          formData.cantidad_entrada,
+          costo_cup,
+          costo_usd
+        );
+        costo_cup = nuevosCostos.costo_cup;
+        costo_usd = nuevosCostos.costo_usd;
+        
+        showToast({ 
+          type: 'info', 
+          message: `Costo promedio calculado: CUP ${costo_cup}, USD ${costo_usd}` 
+        });
+      }
+
+      const entradaData = {
+        id_servicio_tienda,
+        cantidad_entrada: parseFloat(formData.cantidad_entrada),
+        costo_usd,
+        costo_cup,
+        fecha_vencimiento: formData.fecha_vencimiento || null,
+        nombre_proveedor: formData.nombre_proveedor || null,
+        fecha: formData.fecha,
+        id_usuario: user.id_usuario,
+      };
+
+      if (isEditMode) {
+        await updateEntrada(entrada.id_entrada, entradaData);
+        showToast({ type: 'success', message: 'Entrada actualizada correctamente' });
+      } else {
+        await createEntrada(entradaData);
+        showToast({ type: 'success', message: 'Entrada creada correctamente' });
+      }
+      
+      navigation.goBack();
+    } catch (err) {
+      console.error('Error en handleSave:', err);
+      showToast({ type: 'error', message: err.message, code: err.code });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      const formattedDate = selectedDate.toISOString().split('T')[0];
+      setFormData(prev => ({ ...prev, fecha_vencimiento: formattedDate }));
+    }
+  };
+
+  const handleCostoChange = (field, value) => {
+    setFormData(prev => {
+      const updated = { ...prev, [field]: value };
+      
+      if (exchangeRate && field === 'costo_cup' && value !== '') {
+        const cupValue = parseFloat(value) || 0;
+        updated.costo_usd = parseFloat((cupValue / exchangeRate).toFixed(5));
+        setDisplayCostoUsd(parseFloat(updated.costo_usd).toFixed(2));
+        setDisplayCostoCup(value);
+      }
+      
+      if (exchangeRate && field === 'costo_usd' && value !== '') {
+        const usdValue = parseFloat(value) || 0;
+        updated.costo_cup = parseFloat((usdValue * exchangeRate).toFixed(5));
+        setDisplayCostoCup(parseFloat(updated.costo_cup).toFixed(2));
+        setDisplayCostoUsd(value);
+      }
+      
+      if (!exchangeRate) {
+        if (field === 'costo_cup') {
+          setDisplayCostoCup(value);
+        } else if (field === 'costo_usd') {
+          setDisplayCostoUsd(value);
+        }
+      }
+      
+      return updated;
+    });
+  };
+
+  const filteredTiendas = tiendas.filter(tienda =>
+    tienda.nombre.toLowerCase().includes(tiendaSearchText.toLowerCase())
+  );
+
+  const filteredProductos = productos.filter(producto =>
+    producto.nombre.toLowerCase().includes(productoSearchText.toLowerCase())
+  );
+
+  const styles = createStyles(responsive);
+
+  return (
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <StatusBar style={isDarkMode ? 'light' : 'dark'} animated={true} />
+      
+      <Toast
+        visible={toast.visible}
+        type={toast.type}
+        message={toast.message}
+        code={toast.code}
+        duration={toast.duration}
+        onHide={hideToast}
+        toastKey={toast.key}
+      />
+      
+      <Header 
+        showBackButton={true}
+        onBackPress={() => navigation.goBack()}
+        isDark={isDarkMode}
+        title={isViewMode ? 'Información de Entrada' : isEditMode ? 'Editar Entrada' : 'Agregar Entrada'}
+      />
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.flex1}
+        keyboardVerticalOffset={responsive.headerHeight + 20}
+      >
+        <ScrollView 
+          style={styles.content}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+        <Card style={[styles.formCard, { backgroundColor: colors.surface }]}>
+          {isFetchingEntrada ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.loadingText, { color: colors.outline }]}>
+                Cargando datos...
+              </Text>
+            </View>
+          ) : (
+            <>
+              {/* Producto Selection and Cantidad */}
+              <View style={styles.formRow}>
+                <View style={[styles.formColumn, styles.formGroup]}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Producto *</Text>
+                  <TouchableOpacity
+                    style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                    onPress={() => !isReadOnly && setShowProductoModal(true)}
+                    disabled={isReadOnly}
+                  >
+                    <Text style={[styles.dropdownText, { color: formData.producto ? colors.onSurface : colors.outline }]}>
+                      {formData.producto?.nombre || 'Seleccionar...'}
+                    </Text>
+                    {!isReadOnly && (
+                      <Ionicons 
+                        name="chevron-down" 
+                        size={responsive.responsiveWidth(20)} 
+                        color={colors.outline} 
+                      />
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                <View style={[styles.formColumn, styles.formGroup]}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Cantidad Entrante *</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Cantidad"
+                    value={formData.cantidad_entrada}
+                    onChangeText={(text) => setFormData(prev => ({ ...prev, cantidad_entrada: text }))}
+                    keyboardType="decimal-pad"
+                    editable={!isReadOnly}
+                  />
+                </View>
+              </View>
+
+              {/* Tienda Selection */}
+              <View style={styles.formGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Tienda *</Text>
+                <TouchableOpacity
+                  style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                  onPress={() => !isReadOnly && setShowTiendaDropdown(!showTiendaDropdown)}
+                  disabled={isReadOnly}
+                >
+                  <Text style={[styles.dropdownText, { color: formData.tienda ? colors.onSurface : colors.outline }]}>
+                    {formData.tienda?.nombre || 'Seleccionar tienda'}
+                  </Text>
+                  {!isReadOnly && (
+                    <Ionicons 
+                      name={showTiendaDropdown ? "chevron-up" : "chevron-down"} 
+                      size={responsive.responsiveWidth(20)} 
+                      color={colors.outline} 
+                    />
+                  )}
+                </TouchableOpacity>
+                
+                {showTiendaDropdown && !isReadOnly && (
+                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                    <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <Ionicons 
+                        name="search-outline" 
+                        size={responsive.responsiveWidth(18)} 
+                        color={colors.outline} 
+                        style={styles.searchIcon}
+                      />
+                      <TextInput
+                        style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
+                        placeholderTextColor={colors.outline}
+                        placeholder="Buscar tienda..."
+                        value={tiendaSearchText}
+                        onChangeText={setTiendaSearchText}
+                      />
+                    </View>
+                    {filteredTiendas.length > 0 ? (
+                      filteredTiendas.map((tienda, index) => (
+                        <TouchableOpacity
+                          key={tienda.id_tienda}
+                          style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
+                          onPress={() => {
+                            setFormData(prev => ({ ...prev, tienda }));
+                            setShowTiendaDropdown(false);
+                            setTiendaSearchText('');
+                          }}
+                        >
+                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
+                        </TouchableOpacity>
+                      ))
+                    ) : (
+                      <View style={styles.dropdownItem}>
+                        <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+
+              {/* Costos */}
+              <View style={styles.formRow}>
+                <View style={[styles.formColumn, styles.formGroup]}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Costo CUP *</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Costo CUP"
+                    value={displayCostoCup}
+                    onChangeText={(text) => handleCostoChange('costo_cup', text)}
+                    keyboardType="decimal-pad"
+                    editable={!isReadOnly}
+                  />
+                </View>
+
+                <View style={[styles.formColumn, styles.formGroup]}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Costo USD *</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Costo USD"
+                    value={displayCostoUsd}
+                    onChangeText={(text) => handleCostoChange('costo_usd', text)}
+                    keyboardType="decimal-pad"
+                    editable={!isReadOnly}
+                  />
+                </View>
+              </View>
+
+              {/* Fecha de Vencimiento and Fecha de Entrada */}
+              {formData.producto?.producto?.isVencible ? (
+                <View style={styles.formRow}>
+                  <View style={[styles.formColumn, styles.formGroup]}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Fecha Vencimiento *</Text>
+                    <TouchableOpacity
+                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                      onPress={() => !isReadOnly && setShowDatePicker(true)}
+                      disabled={isReadOnly}
+                    >
+                      <Text style={[styles.inputText, { color: formData.fecha_vencimiento ? colors.onSurface : colors.outline }]}>
+                        {formData.fecha_vencimiento || 'Seleccionar fecha'}
+                      </Text>
+                    </TouchableOpacity>
+                    {showDatePicker && (
+                      <DateTimePicker
+                        value={formData.fecha_vencimiento ? new Date(formData.fecha_vencimiento) : new Date()}
+                        mode="date"
+                        display="default"
+                        onChange={handleDateChange}
+                      />
+                    )}
+                  </View>
+
+                  <View style={[styles.formColumn, styles.formGroup]}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Fecha de Entrada</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                      placeholderTextColor={colors.outline}
+                      placeholder="YYYY-MM-DD"
+                      value={formData.fecha}
+                      onChangeText={(text) => setFormData(prev => ({ ...prev, fecha: text }))}
+                      editable={false}
+                    />
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.formGroup}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Fecha de Entrada</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="YYYY-MM-DD"
+                    value={formData.fecha}
+                    onChangeText={(text) => setFormData(prev => ({ ...prev, fecha: text }))}
+                    editable={false}
+                  />
+                </View>
+              )}
+
+              {/* Proveedor */}
+              <View style={styles.formGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Nombre del Proveedor</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Proveedor (opcional)"
+                  value={formData.nombre_proveedor}
+                  onChangeText={(text) => setFormData(prev => ({ ...prev, nombre_proveedor: text }))}
+                  editable={!isReadOnly}
+                />
+              </View>
+
+              {/* Info about weighted average */}
+              {config.applyWeightedAverageCost && isAddMode && (
+                <View style={[styles.infoSection, { backgroundColor: colors.primaryContainer }]}>
+                  <Ionicons name="information-circle" size={responsive.responsiveWidth(20)} color={colors.primary} />
+                  <Text style={[styles.infoText, { color: colors.onSurface }]}>
+                    La fórmula de costo promedio ponderado está activada. El costo se calculará automáticamente.
+                  </Text>
+                </View>
+              )}
+
+              {/* Product Selection Modal */}
+              <Modal
+                visible={showProductoModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowProductoModal(false)}
+              >
+                <View style={styles.modalOverlay}>
+                  <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+                    <View style={styles.modalHeader}>
+                      <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Seleccionar Producto</Text>
+                      <TouchableOpacity
+                        style={styles.closeButton}
+                        onPress={() => setShowProductoModal(false)}
+                      >
+                        <Ionicons name="close" size={responsive.responsiveWidth(24)} color={colors.outline} />
+                      </TouchableOpacity>
+                    </View>
+                    
+                    <View style={[styles.modalSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <Ionicons 
+                        name="search-outline" 
+                        size={responsive.responsiveWidth(18)} 
+                        color={colors.outline} 
+                        style={styles.searchIcon}
+                      />
+                      <TextInput
+                        style={[styles.modalSearchInputText, { color: colors.onSurface }]}
+                        placeholderTextColor={colors.outline}
+                        placeholder="Buscar producto..."
+                        value={productoSearchText}
+                        onChangeText={setProductoSearchText}
+                      />
+                    </View>
+                    
+                    <ScrollView 
+                      style={styles.modalList}
+                      contentContainerStyle={styles.modalListContent}
+                      showsVerticalScrollIndicator={true}
+                    >
+                      {filteredProductos.length > 0 ? (
+                        filteredProductos.map((producto) => (
+                          <TouchableOpacity
+                            key={producto.id_servicio}
+                            style={[styles.modalListItem, { borderBottomColor: colors.outlineVariant, backgroundColor: colors.surface }]}
+                            onPress={() => {
+                              setFormData(prev => ({ ...prev, producto }));
+                              setShowProductoModal(false);
+                              setProductoSearchText('');
+                            }}
+                          >
+                            <Text style={[styles.modalListItemText, { color: colors.onSurface }]}>{producto.nombre}</Text>
+                          </TouchableOpacity>
+                        ))
+                      ) : (
+                        <View style={styles.modalEmptyState}>
+                          <Text style={[styles.modalEmptyText, { color: colors.outline }]}>No se encontraron productos</Text>
+                        </View>
+                      )}
+                    </ScrollView>
+                  </View>
+                </View>
+              </Modal>
+
+              {/* Action Buttons */}
+              {!isReadOnly && (
+                <View style={styles.buttonGroup}>
+                  <TouchableOpacity
+                    style={[styles.button, styles.cancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
+                    onPress={() => navigation.goBack()}
+                  >
+                    <Text style={[styles.buttonText, { color: colors.onSurface }]}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.button, styles.saveButton, { backgroundColor: colors.primary }]}
+                    onPress={handleSave}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={[styles.buttonText, { color: '#fff' }]}>Guardar</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
+          )}
+        </Card>
+      </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+};
+
+export const EntradaFormScreen = () => <EntradaFormContent />;
+
+const createStyles = (responsive) => StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  flex1: {
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: responsive.responsivePadding(16),
+  },
+  formCard: {
+    borderRadius: 16,
+    padding: responsive.responsivePadding(24),
+    marginTop: responsive.responsiveMargin(55),
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  formGroup: {
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  label: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: responsive.responsivePadding(16),
+    paddingVertical: responsive.responsivePadding(12),
+    fontSize: responsive.responsiveFontSize(16),
+    fontFamily: 'Inter',
+    minHeight: responsive.responsiveHeight(50),
+  },
+  inputText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontFamily: 'Inter',
+  },
+  formRow: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(12),
+  },
+  formColumn: {
+    flex: 1,
+  },
+  dropdown: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: responsive.responsivePadding(16),
+    paddingVertical: responsive.responsivePadding(12),
+    minHeight: responsive.responsiveHeight(50),
+  },
+  dropdownText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontFamily: 'Inter',
+  },
+  dropdownMenu: {
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: responsive.responsiveMargin(8),
+    padding: responsive.responsivePadding(8),
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    backgroundColor: '#fff',
+    maxHeight: responsive.responsiveHeight(200),
+  },
+  dropdownSearchInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: responsive.responsivePadding(12),
+    paddingVertical: responsive.responsivePadding(8),
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  searchIcon: {
+    marginRight: responsive.responsiveMargin(8),
+  },
+  dropdownSearchInputText: {
+    flex: 1,
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+  },
+  dropdownItem: {
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(16),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  dropdownItemText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontFamily: 'Inter',
+  },
+  buttonGroup: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(12),
+    marginTop: responsive.responsiveMargin(8),
+  },
+  button: {
+    flex: 1,
+    paddingVertical: responsive.responsivePadding(14),
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    borderWidth: 1,
+  },
+  saveButton: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  buttonText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: responsive.responsivePadding(40),
+  },
+  loadingText: {
+    marginTop: responsive.responsiveMargin(16),
+    fontSize: responsive.responsiveFontSize(16),
+    fontFamily: 'Inter',
+  },
+  infoSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+    padding: responsive.responsivePadding(12),
+    borderRadius: 8,
+    marginTop: responsive.responsiveMargin(16),
+  },
+  infoText: {
+    flex: 1,
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: responsive.responsivePadding(20),
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: responsive.responsiveWidth(500),
+    borderRadius: 16,
+    maxHeight: responsive.responsiveHeight(700),
+    minHeight: responsive.responsiveHeight(400),
+    overflow: 'hidden',
+    flexDirection: 'column',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: responsive.responsivePadding(16),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  modalTitle: {
+    fontSize: responsive.responsiveFontSize(18),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  closeButton: {
+    padding: responsive.responsivePadding(8),
+  },
+  modalSearchInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: responsive.responsivePadding(12),
+    paddingVertical: responsive.responsivePadding(8),
+    margin: responsive.responsiveMargin(16),
+    marginTop: responsive.responsiveMargin(16),
+  },
+  modalSearchInputText: {
+    flex: 1,
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+  },
+  modalList: {
+    flex: 1,
+    paddingHorizontal: responsive.responsivePadding(16),
+    paddingBottom: responsive.responsivePadding(16),
+    minHeight: responsive.responsiveHeight(300),
+  },
+  modalListContent: {
+    paddingVertical: responsive.responsivePadding(8),
+  },
+  modalListItem: {
+    paddingVertical: responsive.responsivePadding(14),
+    borderBottomWidth: 1,
+  },
+  modalListItemText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontFamily: 'Inter',
+  },
+  modalEmptyState: {
+    paddingVertical: responsive.responsivePadding(40),
+    alignItems: 'center',
+  },
+  modalEmptyText: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+  },
+});

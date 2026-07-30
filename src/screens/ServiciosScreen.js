@@ -43,7 +43,6 @@ const ServiciosContent = () => {
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [cameraPermission, setCameraPermission] = useState(null);
   const [hasShownOfflineToast, setHasShownOfflineToast] = useState(false);
-  const isManualSearchRef = useRef(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
@@ -69,12 +68,8 @@ const ServiciosContent = () => {
 
   useFocusEffect(
     React.useCallback(() => {
-      if (isManualSearchRef.current) {
-        isManualSearchRef.current = false;
-        return;
-      }
       fetchServicios();
-    }, [pagination.currentPage])
+    }, [pagination.currentPage, filters])
   );
 
   const fetchTiendas = async () => {
@@ -103,14 +98,12 @@ const ServiciosContent = () => {
         // If user cannot view all stores, show only their store
         if (canViewAllStores) {
           setTiendas(allTiendas);
-          // For users who can view all stores, don't auto-select any store by default
-          setFilters(prev => ({ ...prev, id_tienda: '' }));
         } else {
           const userTienda = allTiendas.find(t => t.id_tienda === user.id_tienda);
           setTiendas(userTienda ? [userTienda] : []);
-          // Auto-select the user's store for users who cannot view all stores
-          setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
         }
+        // Always auto-select the user's store in the filter by default
+        setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
       } else {
         setTiendas(allTiendas);
       }
@@ -133,7 +126,9 @@ const ServiciosContent = () => {
         
         if (filters.codigo) {
           // Buscar por código específico en el array de códigos
+          // Excluir servicios que tienen un producto asociado (productos)
           const filtered = allServicios.filter(s => 
+            !s.producto && !s.hasProducto &&
             s.codigos?.some(c => c.codigo_barras_ean?.toLowerCase() === filters.codigo.toLowerCase())
           );
           setServicios(filtered);
@@ -168,26 +163,6 @@ const ServiciosContent = () => {
         try {
           const servicio = await getServicioByCodigo(filters.codigo);
           
-          // Apply store visibility permissions
-          const userRole = user?.rol?.toLowerCase();
-          const canViewAllStores = 
-            userRole === 'administrador' ||
-            (userRole === 'dependiente' && permissions?.dependiente) ||
-            (userRole === 'almacenero' && permissions?.almacenero) ||
-            (userRole === 'económico' && permissions?.economico);
-
-          // If user cannot view all stores, check if service belongs to their store
-          if (!canViewAllStores && user?.id_tienda) {
-            const belongsToStore = servicio.tiendas_servicio?.some(ts => ts.id_tienda === user.id_tienda);
-            if (!belongsToStore) {
-              setServicios([]);
-              setPagination({ currentPage: 1, limit: 10, totalPages: 1, totalItems: 0 });
-              setIsLoading(false);
-              setIsSearching(false);
-              return;
-            }
-          }
-          
           // Devolver como array con una sola posición para mantener la estructura
           setServicios([servicio]);
           setPagination({ currentPage: 1, limit: 10, totalPages: 1, totalItems: 1 });
@@ -197,22 +172,8 @@ const ServiciosContent = () => {
           setPagination({ currentPage: 1, limit: 10, totalPages: 1, totalItems: 0 });
         }
       } else {
-        // Apply store visibility permissions
-        const userRole = user?.rol?.toLowerCase();
-        const canViewAllStores = 
-          userRole === 'administrador' ||
-          (userRole === 'dependiente' && permissions?.dependiente) ||
-          (userRole === 'almacenero' && permissions?.almacenero) ||
-          (userRole === 'económico' && permissions?.economico);
-
-        // Check if any filters are active (excluding empty id_tienda which means "all stores")
-        const hasActiveFilters = Object.entries(filters).some(([key, value]) => {
-          // id_tienda is not considered an active filter when empty (means "all stores")
-          if (key === 'id_tienda' && value === '') {
-            return false;
-          }
-          return value !== '' && value !== null && value !== undefined;
-        });
+        // Check if any filters are active
+        const hasActiveFilters = Object.values(filters).some(value => value !== '' && value !== null && value !== undefined);
         
         // If filters are active, fetch all data to ensure accurate pagination
         // Otherwise, use paginated fetch from backend
@@ -220,6 +181,14 @@ const ServiciosContent = () => {
         const fetchPage = hasActiveFilters ? 1 : pagination.currentPage;
         const data = await getServicios(filters, fetchPage, fetchLimit);
         let servicios = data.data || [];
+
+        // Apply store visibility permissions
+        const userRole = user?.rol?.toLowerCase();
+        const canViewAllStores = 
+          userRole === 'administrador' ||
+          (userRole === 'dependiente' && permissions?.dependiente) ||
+          (userRole === 'almacenero' && permissions?.almacenero) ||
+          (userRole === 'económico' && permissions?.economico);
 
         // If user cannot view all stores, filter to show only services from their own store
         if (!canViewAllStores && user?.id_tienda) {
@@ -262,32 +231,22 @@ const ServiciosContent = () => {
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
-    isManualSearchRef.current = true;
     fetchServicios();
   };
 
   const handleClearFilters = () => {
-    // Check if user can view all stores
-    const userRole = user?.rol?.toLowerCase();
-    const canViewAllStores = 
-      userRole === 'administrador' ||
-      (userRole === 'dependiente' && permissions?.dependiente) ||
-      (userRole === 'almacenero' && permissions?.almacenero) ||
-      (userRole === 'económico' && permissions?.economico);
-
-    // Preserve tienda filter for users without permission
+    // Always preserve user's store filter when clearing
     const clearedFilters = { 
       nombre: '', 
       codigo: '', 
       categoria: '', 
       esvendible: '', 
-      id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : '' 
+      id_tienda: user?.id_tienda ? user.id_tienda.toString() : '' 
     };
     
     setFilters(clearedFilters);
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
-    isManualSearchRef.current = true;
     
     // Simply call fetchServicios which handles both online and offline modes correctly
     fetchServicios();
@@ -322,7 +281,8 @@ const ServiciosContent = () => {
 
   const handleServicioPress = (servicio) => {
     const mode = canEdit ? 'edit' : 'view';
-    navigation.navigate('ServicioForm', { servicio, mode });
+    const isOferta = servicio.componentes && servicio.componentes.length > 0;
+    navigation.navigate('ServicioForm', { servicio, mode, isOferta });
   };
 
   const handleEdit = (servicio) => {
@@ -392,7 +352,6 @@ const ServiciosContent = () => {
     showToast({ type: 'success', message: 'Código escaneado correctamente' });
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
-    isManualSearchRef.current = true;
     fetchServicios();
   };
 
@@ -564,7 +523,6 @@ const ServiciosContent = () => {
                       setShowTiendaDropdown(false);
                       setTiendaSearchText('');
                       setPagination(prev => ({ ...prev, currentPage: 1 }));
-                      isManualSearchRef.current = true;
                       fetchServicios();
                     }}
                   >
@@ -581,7 +539,6 @@ const ServiciosContent = () => {
                         setShowTiendaDropdown(false);
                         setTiendaSearchText('');
                         setPagination(prev => ({ ...prev, currentPage: 1 }));
-                        isManualSearchRef.current = true;
                         fetchServicios();
                       }}
                     >

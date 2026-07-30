@@ -107,6 +107,14 @@ const ProductosContent = () => {
     }, [pagination.currentPage, filters])
   );
 
+  // Also refresh when screen comes into focus to catch updates from entries
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchProductos();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   const fetchTiendas = async () => {
     try {
       const userRole = user?.rol?.toLowerCase();
@@ -587,9 +595,17 @@ const ProductosContent = () => {
 
       // Create quantity breakdown sheet if cantidad is selected
       if (selectedFields.cantidad) {
+        // Check if user can view all stores (dynamic check)
+        const userRole = user?.rol?.toLowerCase();
+        const canViewAllStoresExport = 
+          userRole === 'administrador' ||
+          (userRole === 'dependiente' && permissions?.dependiente) ||
+          (userRole === 'almacenero' && permissions?.almacenero) ||
+          (userRole === 'económico' && permissions?.economico);
+
         // Get all unique store names from visible tiendas
         let visibleTiendas = tiendas;
-        if (!canViewAllStores && user?.id_tienda) {
+        if (!canViewAllStoresExport && user?.id_tienda) {
           visibleTiendas = tiendas.filter(t => t.id_tienda === user.id_tienda);
         }
 
@@ -610,11 +626,11 @@ const ProductosContent = () => {
           visibleTiendas.forEach(tienda => {
             const tiendaServicio = producto.tiendas_servicio?.find(ts => ts.id_tienda === tienda.id_tienda);
             const cantidad = tiendaServicio?.cantidad || 0;
-            totalQuantity += cantidad;
+            totalQuantity += parseFloat(cantidad) || 0;
             row[tienda.nombre] = parseFloat(cantidad).toString();
           });
           
-          row['Total'] = parseFloat(totalQuantity).toString();
+          row['Total'] = parseFloat(totalQuantity).toFixed(2);
           breakdownData.push(row);
         });
 
@@ -762,9 +778,17 @@ const ProductosContent = () => {
       // Generate quantity breakdown table if cantidad is selected
       let quantityBreakdownSection = '';
       if (selectedFields.cantidad) {
+        // Check if user can view all stores (dynamic check)
+        const userRole = user?.rol?.toLowerCase();
+        const canViewAllStoresPDF = 
+          userRole === 'administrador' ||
+          (userRole === 'dependiente' && permissions?.dependiente) ||
+          (userRole === 'almacenero' && permissions?.almacenero) ||
+          (userRole === 'económico' && permissions?.economico);
+
         // Get all unique store names from visible tiendas
         let visibleTiendas = tiendas;
-        if (!canViewAllStores && user?.id_tienda) {
+        if (!canViewAllStoresPDF && user?.id_tienda) {
           visibleTiendas = tiendas.filter(t => t.id_tienda === user.id_tienda);
         }
 
@@ -787,11 +811,11 @@ const ProductosContent = () => {
           visibleTiendas.forEach(tienda => {
             const tiendaServicio = producto.tiendas_servicio?.find(ts => ts.id_tienda === tienda.id_tienda);
             const cantidad = tiendaServicio?.cantidad || 0;
-            totalQuantity += cantidad;
-            breakdownRows += `<td style="border: 1px solid #ddd; padding: 8px;">${parseFloat(cantidad).toString()}</td>`;
+            totalQuantity += parseFloat(cantidad) || 0;
+            breakdownRows += `<td style="border: 1px solid #ddd; padding: 8px;">${parseFloat(cantidad).toFixed(2)}</td>`;
           });
           
-          breakdownRows += `<td style="border: 1px solid #ddd; padding: 8px; font-weight: bold;">${parseFloat(totalQuantity).toString()}</td>`;
+          breakdownRows += `<td style="border: 1px solid #ddd; padding: 8px; font-weight: bold;">${parseFloat(totalQuantity).toFixed(2)}</td>`;
           breakdownRows += '</tr>';
         });
 
@@ -978,18 +1002,37 @@ const ProductosContent = () => {
       // Grid settings (3x2 for larger QR codes)
       const cols = 3;
       const rows = 2;
-      const margin = 20;
-      const cellWidth = (pageWidth - margin * 4) / cols;
-      const cellHeight = 350;
+      const pageMargin = 10;
+      const cellMargin = 5;
+      const cellWidth = (pageWidth - pageMargin * 2 - cellMargin * (cols - 1)) / cols;
+      const maxCellHeight = 400;
       
       let currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
       let colIndex = 0;
       let rowIndex = 0;
       
       for (const producto of productos) {
+        // Calculate dynamic height based on number of selected fields
+        let fieldCount = 0;
+        if (selectedFields.nombre) fieldCount++;
+        if (selectedFields.codigo) fieldCount++;
+        if (selectedFields.categoria) fieldCount++;
+        if (selectedFields.precio_cup) fieldCount++;
+        if (selectedFields.costo_cup) fieldCount++;
+        if (selectedFields.precio_usd) fieldCount++;
+        if (selectedFields.costo_usd) fieldCount++;
+        if (selectedFields.nota) fieldCount++;
+        if (selectedFields.cantidad) fieldCount++;
+        if (selectedFields.sufijo) fieldCount++;
+        
+        // Base height + dynamic height per field (30px per field, minimum 250px, maximum 400px)
+        const baseHeight = selectedFields.codigo_qr_barra ? 200 : 150;
+        const dynamicHeight = fieldCount * 30;
+        const cellHeight = Math.min(Math.max(baseHeight + dynamicHeight, 250), maxCellHeight);
+        
         // Calculate position in grid
-        const x = margin + colIndex * (cellWidth + margin);
-        const y = pageHeight - margin - (rowIndex + 1) * cellHeight;
+        const x = pageMargin + colIndex * (cellWidth + cellMargin);
+        const y = pageHeight - pageMargin - (rowIndex + 1) * cellHeight;
         
         // Draw rectangle around the cell
         currentPage.drawRectangle({
@@ -1004,20 +1047,8 @@ const ProductosContent = () => {
         let textY;
         
         if (selectedFields.codigo_qr_barra) {
-          // Generate QR code
-          const qrData = {};
-          if (selectedFields.nombre) qrData.nombre = producto.nombre;
-          if (selectedFields.codigo) qrData.codigo = producto.codigos?.[0]?.codigo_barras_ean || 'N/A';
-          if (selectedFields.categoria) qrData.categoria = producto.categoria || 'N/A';
-          if (selectedFields.precio_cup) qrData.precio_cup = getProductPrice(producto);
-          if (selectedFields.costo_cup) qrData.costo_cup = getProductCost(producto);
-          if (selectedFields.precio_usd) qrData.precio_usd = getProductPriceUSD(producto);
-          if (selectedFields.costo_usd) qrData.costo_usd = getProductCostUSD(producto);
-          if (selectedFields.nota) qrData.nota = producto.producto?.nota || 'N/A';
-          if (selectedFields.cantidad) qrData.cantidad = calculateTotalQuantity(producto);
-          if (selectedFields.sufijo) qrData.sufijo = producto.producto?.sufijo || 'N/A';
-          
-          const qrString = JSON.stringify(qrData);
+          // Generate QR code with only the product barcode
+          const qrString = producto.codigos?.[0]?.codigo_barras_ean || 'N/A';
           
           // Generate QR code as PNG using bwip-js with larger scale
           const qrResult = await bwipjs.toDataURL({
@@ -1056,28 +1087,34 @@ const ProductosContent = () => {
         const fontSize = 14;
         
         const textLines = [];
-        if (selectedFields.nombre) textLines.push(`Nombre: ${producto.nombre}`);
-        if (selectedFields.codigo) textLines.push(`Código: ${producto.codigos?.[0]?.codigo_barras_ean || 'N/A'}`);
-        if (selectedFields.categoria) textLines.push(`Categoría: ${producto.categoria || 'N/A'}`);
-        if (selectedFields.precio_cup) textLines.push(`Precio: ${formatPriceForExport(getProductPrice(producto), 'cup')}`);
-        if (selectedFields.costo_cup) textLines.push(`Costo: ${formatPriceForExport(getProductCost(producto), 'cup')}`);
-        if (selectedFields.precio_usd) textLines.push(`Precio USD: ${formatPriceForExport(getProductPriceUSD(producto), 'usd')}`);
-        if (selectedFields.costo_usd) textLines.push(`Costo USD: ${formatPriceForExport(getProductCostUSD(producto), 'usd')}`);
-        if (selectedFields.nota) textLines.push(`Nota: ${producto.producto?.nota || 'N/A'}`);
-        if (selectedFields.cantidad) textLines.push(`Cantidad: ${calculateTotalQuantity(producto)}`);
-        if (selectedFields.sufijo) textLines.push(`Sufijo: ${producto.producto?.sufijo || 'N/A'}`);
+        if (selectedFields.nombre) textLines.push({ text: `Nombre: ${producto.nombre}`, isPrice: false });
+        if (selectedFields.codigo) textLines.push({ text: `Código: ${producto.codigos?.[0]?.codigo_barras_ean || 'N/A'}`, isPrice: false });
+        if (selectedFields.categoria) textLines.push({ text: `Categoría: ${producto.categoria || 'N/A'}`, isPrice: false });
+        if (selectedFields.precio_cup) textLines.push({ text: formatPriceForExport(getProductPrice(producto), 'cup'), isPrice: true });
+        if (selectedFields.costo_cup) textLines.push({ text: `Costo: ${formatPriceForExport(getProductCost(producto), 'cup')}`, isPrice: false });
+        if (selectedFields.precio_usd) textLines.push({ text: formatPriceForExport(getProductPriceUSD(producto), 'usd'), isPrice: true });
+        if (selectedFields.costo_usd) textLines.push({ text: `Costo USD: ${formatPriceForExport(getProductCostUSD(producto), 'usd')}`, isPrice: false });
+        if (selectedFields.nota) textLines.push({ text: `Nota: ${producto.producto?.nota || 'N/A'}`, isPrice: false });
+        if (selectedFields.cantidad) textLines.push({ text: `Cantidad: ${calculateAbsoluteTotalQuantity(producto)}`, isPrice: false });
+        if (selectedFields.sufijo) textLines.push({ text: `Sufijo: ${producto.producto?.sufijo || 'N/A'}`, isPrice: false });
         
         for (const line of textLines) {
-          const textWidth = font.widthOfTextAtSize(line, fontSize);
+          const lineFontSize = line.isPrice ? 28 : fontSize;
+          // Add spacing before price to avoid overlapping with text above
+          if (line.isPrice) {
+            textY -= 40;
+          }
+          const textWidth = font.widthOfTextAtSize(line.text, lineFontSize);
           const textX = x + (cellWidth - textWidth) / 2;
-          currentPage.drawText(line, {
+          currentPage.drawText(line.text, {
             x: textX,
             y: textY,
-            size: fontSize,
+            size: lineFontSize,
             font: font,
             color: rgb(0, 0, 0),
           });
-          textY -= fontSize + 4;
+          const spacing = line.isPrice ? 8 : 4;
+          textY -= lineFontSize + spacing;
           // Stop if text would go outside the rectangle
           if (textY < y + 5) break;
         }
@@ -1189,12 +1226,12 @@ const ProductosContent = () => {
         if (selectedFields.nombre) productInfo += `<p><strong>Nombre:</strong> ${producto.nombre}</p>`;
         if (selectedFields.codigo) productInfo += `<p><strong>Código:</strong> ${codigo}</p>`;
         if (selectedFields.categoria) productInfo += `<p><strong>Categoría:</strong> ${producto.categoria || 'N/A'}</p>`;
-        if (selectedFields.precio_cup) productInfo += `<p><strong>Precio (CUP):</strong> ${formatPriceForExport(getProductPrice(producto), 'cup')}</p>`;
-        if (selectedFields.costo_cup) productInfo += `<p><strong>Costo (CUP):</strong> ${formatPriceForExport(getProductCost(producto), 'cup')}</p>`;
-        if (selectedFields.precio_usd) productInfo += `<p><strong>Precio (USD):</strong> ${formatPriceForExport(getProductPriceUSD(producto), 'usd')}</p>`;
-        if (selectedFields.costo_usd) productInfo += `<p><strong>Costo (USD):</strong> ${formatPriceForExport(getProductCostUSD(producto), 'usd')}</p>`;
+        if (selectedFields.precio_cup) productInfo += `<p class="price-text">${formatPriceForExport(getProductPrice(producto), 'cup')}</p>`;
+        if (selectedFields.costo_cup) productInfo += `<p><strong>Costo:</strong> ${formatPriceForExport(getProductCost(producto), 'cup')}</p>`;
+        if (selectedFields.precio_usd) productInfo += `<p class="price-text">${formatPriceForExport(getProductPriceUSD(producto), 'usd')}</p>`;
+        if (selectedFields.costo_usd) productInfo += `<p><strong>Costo USD:</strong> ${formatPriceForExport(getProductCostUSD(producto), 'usd')}</p>`;
         if (selectedFields.nota) productInfo += `<p><strong>Nota:</strong> ${producto.producto?.nota || 'N/A'}</p>`;
-        if (selectedFields.cantidad) productInfo += `<p><strong>Cantidad:</strong> ${calculateTotalQuantity(producto)}</p>`;
+        if (selectedFields.cantidad) productInfo += `<p><strong>Cantidad:</strong> ${calculateAbsoluteTotalQuantity(producto)}</p>`;
         if (selectedFields.sufijo) productInfo += `<p><strong>Sufijo:</strong> ${producto.producto?.sufijo || 'N/A'}</p>`;
 
         // Only include barcode image if field is selected
@@ -1236,6 +1273,8 @@ const ProductosContent = () => {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
+                height: auto;
+                min-height: 150px;
               }
               .barcode-image {
                 width: 100%;
@@ -1251,6 +1290,11 @@ const ProductosContent = () => {
               }
               .product-info p {
                 margin: 4px 0;
+              }
+              .price-text {
+                font-size: 24px;
+                font-weight: bold;
+                margin: 10px 0 6px 0;
               }
               @media print {
                 .barcode-container { page-break-inside: avoid; }
@@ -1311,26 +1355,66 @@ const ProductosContent = () => {
     (userRole === 'almacenero' && permissions?.almacenero) ||
     (userRole === 'económico' && permissions?.economico);
 
-  // Calculate total quantity for a product
+  // Calculate total quantity for a product (with filters and permissions)
   const calculateTotalQuantity = (producto) => {
     if (!producto.tiendas_servicio || producto.tiendas_servicio.length === 0) {
       return 0;
     }
 
-    // Filter tiendas_servicio based on user permissions
+    // Check if user can view all stores (dynamic check)
+    const userRole = user?.rol?.toLowerCase();
+    const canViewAllStores = 
+      userRole === 'administrador' ||
+      (userRole === 'dependiente' && permissions?.dependiente) ||
+      (userRole === 'almacenero' && permissions?.almacenero) ||
+      (userRole === 'económico' && permissions?.economico);
+
+    // If a specific store filter is selected, show only that store
+    if (filters.id_tienda && filters.id_tienda !== '') {
+      // Check if user has permission to view this specific store
+      if (!canViewAllStores && user?.id_tienda && parseInt(filters.id_tienda) !== user.id_tienda) {
+        return 0;
+      }
+      const tiendaServicio = producto.tiendas_servicio.find(ts => ts.id_tienda === parseInt(filters.id_tienda));
+      return tiendaServicio?.cantidad || 0;
+    }
+    
+    // No specific filter - filter tiendas_servicio based on user permissions
     let visibleTiendasServicio = producto.tiendas_servicio;
+    
+    // Only filter by user's store if user cannot view all stores
     if (!canViewAllStores && user?.id_tienda) {
       visibleTiendasServicio = producto.tiendas_servicio.filter(ts => ts.id_tienda === user.id_tienda);
     }
 
-    if (filters.id_tienda) {
-      // Show quantity for specific store (if user has permission to view it)
-      const tiendaServicio = visibleTiendasServicio.find(ts => ts.id_tienda === parseInt(filters.id_tienda));
-      return tiendaServicio?.cantidad || 0;
-    } else {
-      // Show sum of all visible stores
-      return visibleTiendasServicio.reduce((sum, ts) => sum + (ts.cantidad || 0), 0);
+    // Show sum of all visible stores
+    return visibleTiendasServicio.reduce((sum, ts) => sum + (parseFloat(ts.cantidad) || 0), 0);
+  };
+
+  // Calculate absolute total quantity for a product (all stores, with permissions but no filters)
+  const calculateAbsoluteTotalQuantity = (producto) => {
+    if (!producto.tiendas_servicio || producto.tiendas_servicio.length === 0) {
+      return 0;
     }
+
+    // Check if user can view all stores (dynamic check)
+    const userRole = user?.rol?.toLowerCase();
+    const canViewAllStores = 
+      userRole === 'administrador' ||
+      (userRole === 'dependiente' && permissions?.dependiente) ||
+      (userRole === 'almacenero' && permissions?.almacenero) ||
+      (userRole === 'económico' && permissions?.economico);
+
+    // Filter tiendas_servicio based on user permissions (same as Excel/PDF)
+    let visibleTiendasServicio = producto.tiendas_servicio;
+    
+    // Only filter by user's store if user cannot view all stores
+    if (!canViewAllStores && user?.id_tienda) {
+      visibleTiendasServicio = producto.tiendas_servicio.filter(ts => ts.id_tienda === user.id_tienda);
+    }
+
+    // Sum all visible stores (same logic as Excel/PDF breakdown)
+    return visibleTiendasServicio.reduce((sum, ts) => sum + (parseFloat(ts.cantidad) || 0), 0);
   };
 
   // Format quantity for export with per-store quantities and total
@@ -1372,7 +1456,7 @@ const ProductosContent = () => {
   const formatPriceForExport = (price, currency) => {
     const formattedPrice = parseFloat(price).toFixed(2);
     if (currency === 'cup') {
-      return `${formattedPrice} cup (c/u)`;
+      return `${formattedPrice} (c/u)`;
     } else if (currency === 'usd') {
       return `${formattedPrice} (usd)`;
     }

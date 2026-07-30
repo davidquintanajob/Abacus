@@ -16,6 +16,11 @@ export const getProductos = async (filters = {}, page = 1, limit = 10) => {
     if (filters.cantidad_min !== undefined) queryParams.append('cantidad_min', filters.cantidad_min);
     if (filters.cantidad_max !== undefined) queryParams.append('cantidad_max', filters.cantidad_max);
 
+    // If no store filter is selected, add a dummy cantidad_min=0 to force backend to include tiendas_servicio
+    if (!filters.id_tienda && filters.cantidad_min === undefined && filters.cantidad_max === undefined) {
+      queryParams.append('cantidad_min', '0');
+    }
+
     console.log('getProductos queryParams:', queryParams.toString());
     const response = await api.get(`/producto/filter?${queryParams}`);
     return response.data;

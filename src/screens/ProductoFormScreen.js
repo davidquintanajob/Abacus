@@ -715,7 +715,25 @@ const ProductoFormContent = () => {
             <View style={styles.actionButtonsContainer}>
               <TouchableOpacity
                 style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#1B5E20' : '#E8F5E9' }]}
-                onPress={() => {}}
+                onPress={() => {
+                  if (isOfflineMode) {
+                    showToast({ type: 'warning', message: 'No disponible en modo offline' });
+                    return;
+                  }
+                  const userRole = user?.rol?.toLowerCase();
+                  const canManageEntradas = 
+                    userRole === 'administrador' ||
+                    (userRole === 'dependiente' && permissions?.entradaPermissions?.dependiente?.general) ||
+                    (userRole === 'almacenero' && permissions?.entradaPermissions?.almacenero?.general) ||
+                    (userRole === 'económico' && permissions?.entradaPermissions?.economico?.general);
+                  
+                  if (!canManageEntradas) {
+                    showToast({ type: 'warning', message: 'No tienes permiso para gestionar entradas' });
+                    return;
+                  }
+                  
+                  navigation.navigate('EntradaForm', { mode: 'add', productoPreSeleccionado: producto });
+                }}
               >
                 <Ionicons name="arrow-down-circle-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? '#81C784' : '#2E7D32'} />
               </TouchableOpacity>
