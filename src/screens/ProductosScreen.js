@@ -1514,7 +1514,16 @@ const ProductosContent = () => {
                         </View>
                       </View>
                       <Text style={[styles.productoDetails, { color: colors.outline }]}>Categoría: {producto.categoria}</Text>
-                      <Text style={[styles.productoDetails, { color: colors.outline }]}>Sufijo: {producto.producto?.sufijo || 'N/A'}</Text>
+                      {filters.id_tienda && (
+                        <>
+                          <Text style={[styles.productoDetails, { color: colors.primary }]}>
+                            Precio CUP: {getProductPrice(producto)}
+                          </Text>
+                          <Text style={[styles.productoDetails, { color: colors.primary }]}>
+                            Precio USD: {getProductPriceUSD(producto)}
+                          </Text>
+                        </>
+                      )}
                       <Text style={[styles.productoQuantity, { color: colors.primary }]}>
                         Cantidad: {totalQuantity}
                       </Text>

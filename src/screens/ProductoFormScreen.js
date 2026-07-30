@@ -883,7 +883,7 @@ const ProductoFormContent = () => {
 
           <View style={styles.formRow}>
             <View style={[styles.formColumn, styles.formGroup]}>
-              <Text style={[styles.label, { color: colors.outline }]}>Es Vencible</Text>
+              <Text style={[styles.label, { color: colors.outline }]}>Es Perecedero</Text>
               <TouchableOpacity
                 style={styles.statusSwitchContainer}
                 onPress={() => !isReadOnly && setFormData(prev => ({ ...prev, isVencible: !prev.isVencible }))}
@@ -1417,7 +1417,7 @@ const ProductoFormContent = () => {
                               {tienda.nombre}
                             </Text>
                             <View style={[styles.stockBadge, { backgroundColor: tiendaProducto.cantidad > 0 ? colors.primaryContainer : colors.errorContainer }]}>
-                              <Text style={[styles.stockBadgeText, { color: tiendaProducto.cantidad > 0 ? colors.primary : colors.error }]}>
+                              <Text style={[styles.stockBadgeText, { color: tiendaProducto.cantidad > 0 && !isDarkMode ? '#FFFFFF' : (tiendaProducto.cantidad > 0 ? colors.primary : colors.error) }]}>
                                 {tiendaProducto.cantidad !== null && tiendaProducto.cantidad !== undefined 
                                   ? parseFloat(tiendaProducto.cantidad).toFixed(2) 
                                   : '0.00'}
