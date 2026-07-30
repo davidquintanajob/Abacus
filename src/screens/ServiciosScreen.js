@@ -408,6 +408,50 @@ const ServiciosContent = () => {
     (userRole === 'almacenero' && permissions?.almacenero) ||
     (userRole === 'económico' && permissions?.economico);
 
+  // Get price for a service based on user permissions
+  const getServicePrice = (servicio) => {
+    if (!servicio.tiendas_servicio || servicio.tiendas_servicio.length === 0) {
+      return 0;
+    }
+
+    // Filter tiendas_servicio based on user permissions
+    let visibleTiendasServicio = servicio.tiendas_servicio;
+    if (!canViewAllStores && user?.id_tienda) {
+      visibleTiendasServicio = servicio.tiendas_servicio.filter(ts => ts.id_tienda === user.id_tienda);
+    }
+
+    if (filters.id_tienda) {
+      // Show price for specific store
+      const tiendaServicio = visibleTiendasServicio.find(ts => ts.id_tienda === parseInt(filters.id_tienda));
+      return tiendaServicio?.precio_cup || 0;
+    } else {
+      // Show price from first visible store
+      return visibleTiendasServicio[0]?.precio_cup || 0;
+    }
+  };
+
+  // Get price in USD for a service based on user permissions
+  const getServicePriceUSD = (servicio) => {
+    if (!servicio.tiendas_servicio || servicio.tiendas_servicio.length === 0) {
+      return 0;
+    }
+
+    // Filter tiendas_servicio based on user permissions
+    let visibleTiendasServicio = servicio.tiendas_servicio;
+    if (!canViewAllStores && user?.id_tienda) {
+      visibleTiendasServicio = servicio.tiendas_servicio.filter(ts => ts.id_tienda === user.id_tienda);
+    }
+
+    if (filters.id_tienda) {
+      // Show price for specific store
+      const tiendaServicio = visibleTiendasServicio.find(ts => ts.id_tienda === parseInt(filters.id_tienda));
+      return tiendaServicio?.precio_usd || 0;
+    } else {
+      // Show price from first visible store
+      return visibleTiendasServicio[0]?.precio_usd || 0;
+    }
+  };
+
   const styles = createStyles(responsive);
 
   return (
@@ -737,17 +781,6 @@ const ServiciosContent = () => {
         ) : (
           <>
             {servicios.map((servicio) => {
-              // Find the tienda_servicio for the filtered tienda
-              const tiendaServicio = filters.id_tienda 
-                ? servicio.tiendas_servicio?.find(ts => ts.id_tienda === parseInt(filters.id_tienda))
-                : null;
-              
-              // En modo offline y no admin, mostrar precios del primer servicio_tienda disponible
-              const showOfflinePrices = isOfflineMode && !isAdmin;
-              const offlineTiendaServicio = showOfflinePrices && servicio.tiendas_servicio?.length > 0
-                ? servicio.tiendas_servicio[0]
-                : null;
-
               return (
                 <TouchableOpacity
                   key={servicio.id_servicio}
@@ -780,22 +813,13 @@ const ServiciosContent = () => {
                         </View>
                       </View>
                       <Text style={[styles.servicioDetails, { color: colors.outline }]}>Categoría: {servicio.categoria}</Text>
-                      {showOfflinePrices && offlineTiendaServicio ? (
+                      {filters.id_tienda && (
                         <>
-                          <Text style={[styles.servicioDetails, { color: colors.outline }]}>
-                            Precio CUP: ${parseFloat(offlineTiendaServicio.precio_cup).toFixed(2)}
+                          <Text style={[styles.servicioDetails, { color: colors.primary }]}>
+                            Precio CUP: ${parseFloat(getServicePrice(servicio)).toFixed(2)}
                           </Text>
-                          <Text style={[styles.servicioDetails, { color: colors.outline }]}>
-                            Precio USD: ${parseFloat(offlineTiendaServicio.precio_usd).toFixed(2)}
-                          </Text>
-                        </>
-                      ) : tiendaServicio && (
-                        <>
-                          <Text style={[styles.servicioDetails, { color: colors.outline }]}>
-                            Precio CUP: ${parseFloat(tiendaServicio.precio_cup).toFixed(2)}
-                          </Text>
-                          <Text style={[styles.servicioDetails, { color: colors.outline }]}>
-                            Precio USD: ${parseFloat(tiendaServicio.precio_usd).toFixed(2)}
+                          <Text style={[styles.servicioDetails, { color: colors.primary }]}>
+                            Precio USD: ${parseFloat(getServicePriceUSD(servicio)).toFixed(2)}
                           </Text>
                         </>
                       )}

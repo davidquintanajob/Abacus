@@ -567,15 +567,52 @@ const ProductosContent = () => {
         if (selectedFields.precio_usd) row['Precio (USD)'] = getProductPriceUSD(producto);
         if (selectedFields.costo_usd) row['Costo (USD)'] = getProductCostUSD(producto);
         if (selectedFields.nota) row['Nota'] = producto.producto?.nota || 'N/A';
-        if (selectedFields.cantidad) row['Cantidad'] = calculateTotalQuantity(producto);
         if (selectedFields.sufijo) row['Sufijo'] = producto.producto?.sufijo || 'N/A';
         return row;
       });
 
-      // Create worksheet
-      const ws = XLSX.utils.json_to_sheet(data);
+      // Create workbook and main worksheet
       const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(data);
       XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
+
+      // Create quantity breakdown sheet if cantidad is selected
+      if (selectedFields.cantidad) {
+        // Get all unique store names from visible tiendas
+        let visibleTiendas = tiendas;
+        if (!canViewAllStores && user?.id_tienda) {
+          visibleTiendas = tiendas.filter(t => t.id_tienda === user.id_tienda);
+        }
+
+        // Create header for breakdown sheet
+        const breakdownData = [];
+        const header = { 'Producto': '' };
+        visibleTiendas.forEach(tienda => {
+          header[tienda.nombre] = '';
+        });
+        header['Total'] = '';
+        breakdownData.push(header);
+
+        // Create rows for breakdown sheet
+        productos.forEach(producto => {
+          const row = { 'Producto': producto.nombre };
+          let totalQuantity = 0;
+          
+          visibleTiendas.forEach(tienda => {
+            const tiendaServicio = producto.tiendas_servicio?.find(ts => ts.id_tienda === tienda.id_tienda);
+            const cantidad = tiendaServicio?.cantidad || 0;
+            totalQuantity += cantidad;
+            row[tienda.nombre] = parseFloat(cantidad).toString();
+          });
+          
+          row['Total'] = parseFloat(totalQuantity).toString();
+          breakdownData.push(row);
+        });
+
+        // Create breakdown worksheet
+        const breakdownWs = XLSX.utils.json_to_sheet(breakdownData);
+        XLSX.utils.book_append_sheet(wb, breakdownWs, 'Desglose Cantidad');
+      }
 
       // Generate file
       const excelBase64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
@@ -613,7 +650,6 @@ const ProductosContent = () => {
       if (selectedFields.precio_usd) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Precio (USD)</th>';
       if (selectedFields.costo_usd) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo (USD)</th>';
       if (selectedFields.nota) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Nota</th>';
-      if (selectedFields.cantidad) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Cantidad</th>';
       if (selectedFields.sufijo) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Sufijo</th>';
       tableHeader += '</tr>';
 
@@ -628,10 +664,54 @@ const ProductosContent = () => {
         if (selectedFields.precio_usd) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductPriceUSD(producto)}</td>`;
         if (selectedFields.costo_usd) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductCostUSD(producto)}</td>`;
         if (selectedFields.nota) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.producto?.nota || 'N/A'}</td>`;
-        if (selectedFields.cantidad) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${calculateTotalQuantity(producto)}</td>`;
         if (selectedFields.sufijo) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.producto?.sufijo || 'N/A'}</td>`;
         tableRows += '</tr>';
       });
+
+      // Generate quantity breakdown table if cantidad is selected
+      let quantityBreakdownSection = '';
+      if (selectedFields.cantidad) {
+        // Get all unique store names from visible tiendas
+        let visibleTiendas = tiendas;
+        if (!canViewAllStores && user?.id_tienda) {
+          visibleTiendas = tiendas.filter(t => t.id_tienda === user.id_tienda);
+        }
+
+        // Create header for breakdown table
+        let breakdownHeader = '<tr style="background-color: #f0f0f0;">';
+        breakdownHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Producto</th>';
+        visibleTiendas.forEach(tienda => {
+          breakdownHeader += `<th style="border: 1px solid #ddd; padding: 8px;">${tienda.nombre}</th>`;
+        });
+        breakdownHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Total</th>';
+        breakdownHeader += '</tr>';
+
+        // Create rows for breakdown table
+        let breakdownRows = '';
+        productos.forEach(producto => {
+          breakdownRows += '<tr>';
+          breakdownRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.nombre}</td>`;
+          
+          let totalQuantity = 0;
+          visibleTiendas.forEach(tienda => {
+            const tiendaServicio = producto.tiendas_servicio?.find(ts => ts.id_tienda === tienda.id_tienda);
+            const cantidad = tiendaServicio?.cantidad || 0;
+            totalQuantity += cantidad;
+            breakdownRows += `<td style="border: 1px solid #ddd; padding: 8px;">${parseFloat(cantidad).toString()}</td>`;
+          });
+          
+          breakdownRows += `<td style="border: 1px solid #ddd; padding: 8px; font-weight: bold;">${parseFloat(totalQuantity).toString()}</td>`;
+          breakdownRows += '</tr>';
+        });
+
+        quantityBreakdownSection = `
+          <h2 style="color: #002440; margin-top: 40px; margin-bottom: 10px;">Desglose Cantidad</h2>
+          <table>
+            ${breakdownHeader}
+            ${breakdownRows}
+          </table>
+        `;
+      }
 
       const htmlContent = `
         <html>
@@ -639,6 +719,7 @@ const ProductosContent = () => {
             <style>
               body { font-family: Arial, sans-serif; padding: 20px; }
               h1 { text-align: center; color: #002440; margin-bottom: 10px; }
+              h2 { text-align: center; color: #002440; margin-bottom: 10px; }
               p { text-align: center; color: #0b1c30; margin-bottom: 20px; }
               table { border-collapse: collapse; width: 100%; margin-top: 20px; }
               th { 
@@ -666,6 +747,7 @@ const ProductosContent = () => {
               ${tableHeader}
               ${tableRows}
             </table>
+            ${quantityBreakdownSection}
           </body>
         </html>
       `;
@@ -1000,6 +1082,41 @@ const ProductosContent = () => {
       // Show sum of all visible stores
       return visibleTiendasServicio.reduce((sum, ts) => sum + (ts.cantidad || 0), 0);
     }
+  };
+
+  // Format quantity for export with per-store quantities and total
+  const formatQuantityForExport = (producto) => {
+    if (!producto.tiendas_servicio || producto.tiendas_servicio.length === 0) {
+      return 'Sin tiendas';
+    }
+
+    // Filter tiendas_servicio based on user permissions
+    let visibleTiendasServicio = producto.tiendas_servicio;
+    if (!canViewAllStores && user?.id_tienda) {
+      visibleTiendasServicio = producto.tiendas_servicio.filter(ts => ts.id_tienda === user.id_tienda);
+    }
+
+    if (visibleTiendasServicio.length === 0) {
+      return 'Sin tiendas visibles';
+    }
+
+    // Build quantity string with per-store quantities
+    const quantityDetails = visibleTiendasServicio.map(ts => {
+      const tienda = tiendas.find(t => t.id_tienda === ts.id_tienda);
+      const tiendaName = tienda?.nombre || `Tienda ${ts.id_tienda}`;
+      const cantidad = ts.cantidad || 0;
+      // Format number to remove leading zeros
+      const formattedCantidad = parseFloat(cantidad).toString();
+      return `${tiendaName}: ${formattedCantidad}`;
+    });
+
+    // Calculate total
+    const total = visibleTiendasServicio.reduce((sum, ts) => sum + (ts.cantidad || 0), 0);
+    // Format total to remove leading zeros
+    const formattedTotal = parseFloat(total).toString();
+
+    // Return formatted string with per-store quantities and total
+    return `${quantityDetails.join(' | ')} (Total: ${formattedTotal})`;
   };
 
   // Get price for a product based on user permissions
@@ -1517,10 +1634,10 @@ const ProductosContent = () => {
                       {filters.id_tienda && (
                         <>
                           <Text style={[styles.productoDetails, { color: colors.primary }]}>
-                            Precio CUP: {getProductPrice(producto)}
+                            Precio CUP: ${parseFloat(getProductPrice(producto)).toFixed(2)}
                           </Text>
                           <Text style={[styles.productoDetails, { color: colors.primary }]}>
-                            Precio USD: {getProductPriceUSD(producto)}
+                            Precio USD: ${parseFloat(getProductPriceUSD(producto)).toFixed(2)}
                           </Text>
                         </>
                       )}
