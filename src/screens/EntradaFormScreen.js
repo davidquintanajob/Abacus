@@ -23,11 +23,11 @@ const EntradaFormContent = () => {
   const route = useRoute();
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
-  const { token, user, permissions } = useAuth();
+  const { token, user, permissions, entradaPermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
 
-  const { entrada, mode, productoPreSeleccionado } = route.params || { mode: 'add' };
+  const { entrada, mode, productoPreSeleccionado, canViewAllEntradas: canViewAllEntradasParam } = route.params || { mode: 'add' };
 
   const isViewMode = mode === 'view';
   const isEditMode = mode === 'edit';
@@ -146,8 +146,24 @@ const EntradaFormContent = () => {
         setTiendas([]);
         return;
       }
+      
+      const userRole = user?.rol?.toLowerCase();
+      const canViewAllEntradas = 
+        canViewAllEntradasParam !== undefined ? canViewAllEntradasParam :
+        (userRole === 'administrador' ||
+        (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
+        (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
+        (userRole === 'económico' && entradaPermissions?.economico));
+      
       const data = await getTiendas({}, 1, 1000);
-      setTiendas(data.data?.filter(t => t.activo === true) || []);
+      let allTiendas = data.data?.filter(t => t.activo === true) || [];
+      
+      if (user?.id_tienda && !canViewAllEntradas) {
+        const userTienda = allTiendas.find(t => t.id_tienda === user.id_tienda);
+        setTiendas(userTienda ? [userTienda] : []);
+      } else {
+        setTiendas(allTiendas);
+      }
     } catch (err) {
       console.error('Error fetching tiendas:', err);
     }
@@ -193,9 +209,9 @@ const EntradaFormContent = () => {
         id_servicio_tienda: servicioTienda.id_servicio_tienda 
       }, 1, 1000);
       
-      const cantidadActual = servicioTienda.cantidad || 0;
-      const costoActualCup = servicioTienda.costo_cup || 0;
-      const costoActualUsd = servicioTienda.costo_usd || 0;
+      const cantidadActual = parseFloat(servicioTienda.cantidad) || 0;
+      const costoActualCup = parseFloat(servicioTienda.costo_cup) || 0;
+      const costoActualUsd = parseFloat(servicioTienda.costo_usd) || 0;
 
       // Calcular costo promedio ponderado
       const cantidadTotal = cantidadActual + parseFloat(nuevaCantidad);
@@ -255,8 +271,6 @@ const EntradaFormContent = () => {
 
       // Si el producto no existe en la tienda, primero actualizar el producto
       if (!productoTienda) {
-        showToast({ type: 'info', message: 'El producto no existe en esta tienda. Agregando relación producto-tienda...' });
-        
         const productoActualizado = await getProductoById(formData.producto.id_servicio);
         const nuevoProductoTienda = {
           id_tienda: formData.tienda.id_tienda,
@@ -266,7 +280,17 @@ const EntradaFormContent = () => {
           costo_usd: parseFloat(formData.costo_usd),
         };
 
-        const productoTiendaList = [...(productoActualizado.tiendas_servicio || []), nuevoProductoTienda];
+        const productoTiendaList = [
+          ...(productoActualizado.tiendas_servicio || []).map(ts => ({
+            id_tienda: ts.id_tienda,
+            precio_cup: ts.precio_cup,
+            precio_usd: ts.precio_usd,
+            costo_cup: ts.costo_cup,
+            costo_usd: ts.costo_usd,
+            cantidad_alerta: ts.cantidad_alerta,
+          })),
+          nuevoProductoTienda
+        ];
         
         await updateProducto(formData.producto.id_servicio, {
           productoTiendaList: productoTiendaList,
@@ -432,7 +456,7 @@ const EntradaFormContent = () => {
                     onPress={() => !isReadOnly && setShowProductoModal(true)}
                     disabled={isReadOnly}
                   >
-                    <Text style={[styles.dropdownText, { color: formData.producto ? colors.onSurface : colors.outline }]}>
+                    <Text style={[styles.dropdownText, { color: formData.producto ? colors.onSurface : colors.outline }]} numberOfLines={1} ellipsizeMode="tail">
                       {formData.producto?.nombre || 'Seleccionar...'}
                     </Text>
                     {!isReadOnly && (
@@ -559,7 +583,7 @@ const EntradaFormContent = () => {
                       disabled={isReadOnly}
                     >
                       <Text style={[styles.inputText, { color: formData.fecha_vencimiento ? colors.onSurface : colors.outline }]}>
-                        {formData.fecha_vencimiento || 'Seleccionar fecha'}
+                        {formData.fecha_vencimiento || 'Seleccionar...'}
                       </Text>
                     </TouchableOpacity>
                     {showDatePicker && (
@@ -614,8 +638,8 @@ const EntradaFormContent = () => {
               {/* Info about weighted average */}
               {config.applyWeightedAverageCost && isAddMode && (
                 <View style={[styles.infoSection, { backgroundColor: colors.primaryContainer }]}>
-                  <Ionicons name="information-circle" size={responsive.responsiveWidth(20)} color={colors.primary} />
-                  <Text style={[styles.infoText, { color: colors.onSurface }]}>
+                  <Ionicons name="information-circle" size={responsive.responsiveWidth(20)} color="#fff" />
+                  <Text style={[styles.infoText, { color: '#fff' }]}>
                     La fórmula de costo promedio ponderado está activada. El costo se calculará automáticamente.
                   </Text>
                 </View>
@@ -667,12 +691,26 @@ const EntradaFormContent = () => {
                             key={producto.id_servicio}
                             style={[styles.modalListItem, { borderBottomColor: colors.outlineVariant, backgroundColor: colors.surface }]}
                             onPress={() => {
-                              setFormData(prev => ({ ...prev, producto }));
+                              // Get costs from the first tienda_servicio entry if available
+                              // Only populate costs if weighted average cost is NOT active
+                              const firstTiendaServicio = producto.tiendas_servicio?.[0];
+                              const costoCup = config.applyWeightedAverageCost ? '' : (firstTiendaServicio?.costo_cup || '');
+                              const costoUsd = config.applyWeightedAverageCost ? '' : (firstTiendaServicio?.costo_usd || '');
+                              
+                              setFormData(prev => ({
+                                ...prev,
+                                producto,
+                                costo_cup: costoCup,
+                                costo_usd: costoUsd,
+                              }));
+                              
                               setShowProductoModal(false);
                               setProductoSearchText('');
                             }}
                           >
-                            <Text style={[styles.modalListItemText, { color: colors.onSurface }]}>{producto.nombre}</Text>
+                            <Text style={[styles.modalListItemText, { color: colors.onSurface }]}>
+                              {producto.nombre}
+                            </Text>
                           </TouchableOpacity>
                         ))
                       ) : (
@@ -826,7 +864,7 @@ const createStyles = (responsive) => StyleSheet.create({
   buttonGroup: {
     flexDirection: 'row',
     gap: responsive.responsiveMargin(12),
-    marginTop: responsive.responsiveMargin(8),
+    marginTop: responsive.responsiveMargin(24),
   },
   button: {
     flex: 1,

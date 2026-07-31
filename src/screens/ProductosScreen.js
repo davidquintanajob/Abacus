@@ -432,6 +432,8 @@ const ProductosContent = () => {
       let allProductos = [];
       if (isOfflineMode) {
         allProductos = await storageService.getProductos();
+        // Apply filters locally in offline mode
+        allProductos = await storageService.filterProductosLocal(filters);
       } else {
         const data = await getProductos(filters, 1, 10000);
         allProductos = data.data || [];
@@ -577,8 +579,8 @@ const ProductosContent = () => {
         const row = {};
         if (selectedFields.nombre) row['Nombre'] = producto.nombre;
         if (selectedFields.categoria) row['Categoría'] = producto.categoria || 'N/A';
-        // Only show price/cost columns in main sheet if prices are the same across stores
-        if (!hasDifferentPrices) {
+        // Only show price/cost columns in main sheet if prices are the same across stores OR if a store filter is active
+        if (!hasDifferentPrices || filters.id_tienda) {
           if (selectedFields.precio_cup) row['Precio (CUP)'] = getProductPrice(producto);
           if (selectedFields.costo_cup) row['Costo (CUP)'] = getProductCost(producto);
           if (selectedFields.precio_usd) row['Precio (USD)'] = getProductPriceUSD(producto);
@@ -677,8 +679,8 @@ const ProductosContent = () => {
         XLSX.utils.book_append_sheet(wb, codesWs, 'Desglose de Códigos');
       }
 
-      // Create prices breakdown sheet if prices are different across stores
-      if (hasDifferentPrices && (selectedFields.precio_cup || selectedFields.costo_cup || selectedFields.precio_usd || selectedFields.costo_usd)) {
+      // Create prices breakdown sheet if prices are different across stores AND no store filter is active
+      if (hasDifferentPrices && !filters.id_tienda && (selectedFields.precio_cup || selectedFields.costo_cup || selectedFields.precio_usd || selectedFields.costo_usd)) {
         // Get all unique store names from visible tiendas
         let visibleTiendas = tiendas;
         if (!canViewAllStores && user?.id_tienda) {
@@ -749,8 +751,8 @@ const ProductosContent = () => {
       let tableHeader = '<tr style="background-color: #f0f0f0;">';
       if (selectedFields.nombre) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Nombre</th>';
       if (selectedFields.categoria) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Categoría</th>';
-      // Only show price/cost columns in main table if prices are the same across stores
-      if (!hasDifferentPrices) {
+      // Only show price/cost columns in main table if prices are the same across stores OR if a store filter is active
+      if (!hasDifferentPrices || filters.id_tienda) {
         if (selectedFields.precio_cup) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Precio (CUP)</th>';
         if (selectedFields.costo_cup) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo (CUP)</th>';
         if (selectedFields.precio_usd) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Precio (USD)</th>';
@@ -764,8 +766,8 @@ const ProductosContent = () => {
         tableRows += '<tr>';
         if (selectedFields.nombre) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.nombre}</td>`;
         if (selectedFields.categoria) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${producto.categoria || 'N/A'}</td>`;
-        // Only show price/cost columns in main table if prices are the same across stores
-        if (!hasDifferentPrices) {
+        // Only show price/cost columns in main table if prices are the same across stores OR if a store filter is active
+        if (!hasDifferentPrices || filters.id_tienda) {
           if (selectedFields.precio_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductPrice(producto)}</td>`;
           if (selectedFields.costo_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductCost(producto)}</td>`;
           if (selectedFields.precio_usd) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${getProductPriceUSD(producto)}</td>`;
@@ -873,9 +875,9 @@ const ProductosContent = () => {
         `;
       }
 
-      // Generate prices breakdown table if prices are different across stores
+      // Generate prices breakdown table if prices are different across stores AND no store filter is active
       let pricesBreakdownSection = '';
-      if (hasDifferentPrices && (selectedFields.precio_cup || selectedFields.costo_cup || selectedFields.precio_usd || selectedFields.costo_usd)) {
+      if (hasDifferentPrices && !filters.id_tienda && (selectedFields.precio_cup || selectedFields.costo_cup || selectedFields.precio_usd || selectedFields.costo_usd)) {
         // Get all unique store names from visible tiendas
         let visibleTiendas = tiendas;
         if (!canViewAllStores && user?.id_tienda) {

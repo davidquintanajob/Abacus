@@ -723,9 +723,9 @@ const ProductoFormContent = () => {
                   const userRole = user?.rol?.toLowerCase();
                   const canManageEntradas = 
                     userRole === 'administrador' ||
-                    (userRole === 'dependiente' && permissions?.entradaPermissions?.dependiente?.general) ||
-                    (userRole === 'almacenero' && permissions?.entradaPermissions?.almacenero?.general) ||
-                    (userRole === 'económico' && permissions?.entradaPermissions?.economico?.general);
+                    (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
+                    (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
+                    (userRole === 'económico' && entradaPermissions?.economico);
                   
                   if (!canManageEntradas) {
                     showToast({ type: 'warning', message: 'No tienes permiso para gestionar entradas' });

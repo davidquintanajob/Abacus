@@ -23,12 +23,14 @@ import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import ExportService from '../services/ExportService';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { CameraView } from 'expo-camera';
+import * as Camera from 'expo-camera';
 
 const EntradasContent = () => {
   const navigation = useNavigation();
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
-  const { token, user, permissions } = useAuth();
+  const { token, user, permissions, entradaPermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -51,9 +53,24 @@ const EntradasContent = () => {
   const [showFechaDesdePicker, setShowFechaDesdePicker] = useState(false);
   const [showFechaHastaPicker, setShowFechaHastaPicker] = useState(false);
   const [hasShownOfflineToast, setHasShownOfflineToast] = useState(false);
+  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [cameraPermission, setCameraPermission] = useState(null);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportType, setExportType] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [showFieldSelectionModal, setShowFieldSelectionModal] = useState(false);
+  const [selectedFields, setSelectedFields] = useState({
+    producto: true,
+    costo_cup: true,
+    costo_usd: true,
+    cantidad: true,
+    tienda: true,
+    fecha: false,
+    codigo_lote: false,
+    fecha_vencimiento: false,
+    proveedor: false,
+    usuario: false
+  });
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
@@ -61,7 +78,13 @@ const EntradasContent = () => {
   useEffect(() => {
     fetchTiendas();
     fetchUsers();
+    requestCameraPermission();
   }, []);
+
+  const requestCameraPermission = async () => {
+    const { status } = await Camera.requestCameraPermissionsAsync();
+    setCameraPermission(status === 'granted');
+  };
 
   // Mostrar toast al entrar en modo offline
   useEffect(() => {
@@ -88,9 +111,9 @@ const EntradasContent = () => {
       const userRole = user?.rol?.toLowerCase();
       const canViewAllEntradas = 
         userRole === 'administrador' ||
-        (userRole === 'dependiente' && permissions?.entradas?.dependiente?.general) ||
-        (userRole === 'almacenero' && permissions?.entradas?.almacenero?.general) ||
-        (userRole === 'económico' && permissions?.entradas?.economico?.general);
+        (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
+        (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
+        (userRole === 'económico' && entradaPermissions?.economico);
 
       let allTiendas = [];
       
@@ -108,7 +131,7 @@ const EntradasContent = () => {
           const userTienda = allTiendas.find(t => t.id_tienda === user.id_tienda);
           setTiendas(userTienda ? [userTienda] : []);
         }
-        // Always auto-select the user's store in the filter by default
+        // Always auto-select the user's store by default
         setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
       } else {
         setTiendas(allTiendas);
@@ -149,26 +172,38 @@ const EntradasContent = () => {
       const userRole = user?.rol?.toLowerCase();
       const canViewAllEntradas = 
         userRole === 'administrador' ||
-        (userRole === 'dependiente' && permissions?.entradas?.dependiente?.general) ||
-        (userRole === 'almacenero' && permissions?.entradas?.almacenero?.general) ||
-        (userRole === 'económico' && permissions?.entradas?.economico?.general);
+        (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
+        (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
+        (userRole === 'económico' && entradaPermissions?.economico);
 
       const hasActiveFilters = Object.values(filters).some(value => value !== '' && value !== null && value !== undefined);
       const fetchLimit = hasActiveFilters ? 10000 : pagination.limit;
       const fetchPage = hasActiveFilters ? 1 : pagination.currentPage;
       
-      const data = await getEntradas(filters, fetchPage, fetchLimit);
+      // Build filters to send to API - use id_servicio_tienda for store filtering
+      const apiFilters = { ...filters };
+      
+      // Remove id_tienda from filters since backend doesn't support it directly
+      delete apiFilters.id_tienda;
+      
+      // If a store filter is set, we need to get the servicio_tienda IDs for that store
+      // For now, we'll need to handle this differently - let's check if we have servicio_tienda data
+      
+      console.log('fetchEntradas - filters:', filters);
+      console.log('fetchEntradas - apiFilters:', apiFilters);
+      console.log('fetchEntradas - canViewAllEntradas:', canViewAllEntradas);
+      console.log('fetchEntradas - user.id_tienda:', user?.id_tienda);
+      console.log('fetchEntradas - filters.id_tienda:', filters.id_tienda);
+      
+      const data = await getEntradas(apiFilters, fetchPage, fetchLimit);
       let entradas = data.data || [];
 
-      // Filter by selected store if id_tienda filter is active
+      // Filter by store in frontend since backend doesn't support id_tienda filtering
       if (filters.id_tienda) {
         entradas = entradas.filter(e => {
           return e.servicioTienda?.id_tienda === parseInt(filters.id_tienda);
         });
-      }
-
-      // Filter by user's store if they don't have general permission
-      if (!canViewAllEntradas && user?.id_tienda) {
+      } else if (!canViewAllEntradas && user?.id_tienda) {
         entradas = entradas.filter(e => {
           return e.servicioTienda?.id_tienda === user.id_tienda;
         });
@@ -211,9 +246,9 @@ const EntradasContent = () => {
     const userRole = user?.rol?.toLowerCase();
     const canViewAllEntradas = 
       userRole === 'administrador' ||
-      (userRole === 'dependiente' && permissions?.entradas?.dependiente?.general) ||
-      (userRole === 'almacenero' && permissions?.entradas?.almacenero?.general) ||
-      (userRole === 'económico' && permissions?.entradas?.economico?.general);
+      (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
+      (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
+      (userRole === 'económico' && entradaPermissions?.economico);
 
     const clearedFilters = { 
       nombre_servicio: '', 
@@ -274,7 +309,11 @@ const EntradasContent = () => {
       showToast({ type: 'warning', message: 'No disponible en modo offline' });
       return;
     }
-    navigation.navigate('EntradaForm', { mode: 'add' });
+    
+    navigation.navigate('EntradaForm', { 
+      mode: 'add',
+      canViewAllEntradas: canViewAllEntradas
+    });
   };
 
   const handleSettingsPress = () => {
@@ -301,23 +340,66 @@ const EntradasContent = () => {
     }
   };
 
+  const handleOpenScanner = async () => {
+    if (cameraPermission !== 'granted') {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setCameraPermission(status === 'granted');
+      if (status !== 'granted') {
+        showToast({ type: 'error', message: 'Se requiere permiso de cámara para escanear' });
+        return;
+      }
+    }
+    setShowScannerModal(true);
+  };
+
+  const handleBarcodeScanned = ({ data }) => {
+    if (data) {
+      const clearedFilters = {
+        nombre_servicio: '',
+        fecha_desde: '',
+        fecha_hasta: '',
+        id_tienda: '',
+        id_usuario: ''
+      };
+      
+      setFilters({ ...clearedFilters, codigo_lote: data });
+      setShowScannerModal(false);
+      showToast({ type: 'success', message: 'Código escaneado correctamente' });
+      setPagination(prev => ({ ...prev, currentPage: 1 }));
+      setIsSearching(true);
+    }
+  };
+
   const handleExport = async () => {
     try {
-      setShowExportModal(false);
+      setShowFieldSelectionModal(false);
       setIsExporting(true);
       
-      let allEntradas = [];
-      const data = await getEntradas(filters, 1, 10000);
-      allEntradas = data.data || [];
-
       const userRole = user?.rol?.toLowerCase();
       const canViewAllEntradas = 
         userRole === 'administrador' ||
-        (userRole === 'dependiente' && permissions?.entradas?.dependiente?.general) ||
-        (userRole === 'almacenero' && permissions?.entradas?.almacenero?.general) ||
-        (userRole === 'económico' && permissions?.entradas?.economico?.general);
+        (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
+        (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
+        (userRole === 'económico' && entradaPermissions?.economico);
 
-      if (!canViewAllEntradas && user?.id_tienda) {
+      // Build filters to send to API - use id_servicio_tienda for store filtering
+      const apiFilters = { ...filters };
+      
+      // Remove id_tienda from filters since backend doesn't support it directly
+      delete apiFilters.id_tienda;
+      
+      console.log('handleExport - filters:', filters);
+      console.log('handleExport - apiFilters:', apiFilters);
+      
+      const data = await getEntradas(apiFilters, 1, 10000);
+      let allEntradas = data.data || [];
+
+      // Filter by store in frontend since backend doesn't support id_tienda filtering
+      if (filters.id_tienda) {
+        allEntradas = allEntradas.filter(e => {
+          return e.servicioTienda?.id_tienda === parseInt(filters.id_tienda);
+        });
+      } else if (!canViewAllEntradas && user?.id_tienda) {
         allEntradas = allEntradas.filter(e => {
           return e.servicioTienda?.id_tienda === user.id_tienda;
         });
@@ -345,18 +427,21 @@ const EntradasContent = () => {
 
   const exportToExcel = async (entradas) => {
     try {
-      const data = entradas.map(entrada => ({
-        'Código Lote': entrada.codigo_lote,
-        'Producto': entrada.servicioTienda?.servicio?.nombre || 'N/A',
-        'Tienda': entrada.servicioTienda?.tienda?.nombre || 'N/A',
-        'Cantidad': entrada.cantidad_entrada,
-        'Costo CUP': entrada.costo_cup,
-        'Costo USD': entrada.costo_usd,
-        'Fecha': new Date(entrada.fecha).toLocaleDateString(),
-        'Fecha Vencimiento': entrada.fecha_vencimiento ? new Date(entrada.fecha_vencimiento).toLocaleDateString() : 'N/A',
-        'Proveedor': entrada.nombre_proveedor || 'N/A',
-        'Usuario': entrada.usuario?.nombre || 'N/A',
-      }));
+      // Prepare data based on selected fields
+      const data = entradas.map(entrada => {
+        const row = {};
+        if (selectedFields.producto) row['Nombre'] = entrada.servicioTienda?.servicio?.nombre || 'N/A';
+        if (selectedFields.tienda) row['Tienda'] = entrada.servicioTienda?.tienda?.nombre || 'N/A';
+        if (selectedFields.cantidad) row['Cantidad'] = entrada.cantidad_entrada;
+        if (selectedFields.costo_cup) row['Costo CUP'] = entrada.costo_cup;
+        if (selectedFields.costo_usd) row['Costo USD'] = entrada.costo_usd;
+        if (selectedFields.fecha) row['Fecha'] = new Date(entrada.fecha).toLocaleDateString();
+        if (selectedFields.codigo_lote) row['Código Lote'] = entrada.codigo_lote;
+        if (selectedFields.fecha_vencimiento) row['Fecha Vencimiento'] = entrada.fecha_vencimiento ? new Date(entrada.fecha_vencimiento).toLocaleDateString() : 'N/A';
+        if (selectedFields.proveedor) row['Proveedor'] = entrada.nombre_proveedor || 'N/A';
+        if (selectedFields.usuario) row['Usuario'] = entrada.usuario?.nombre_natural || 'N/A';
+        return row;
+      });
 
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(data);
@@ -366,7 +451,7 @@ const EntradasContent = () => {
       
       const date = new Date();
       const formattedDate = `${date.getDate().toString().padStart(2, '0')}_${(date.getMonth() + 1).toString().padStart(2, '0')}_${date.getFullYear()}`;
-      const fileName = sanitizeFileName(`Entradas_${formattedDate}.xlsx`);
+      const fileName = sanitizeFileName(`Historial_Entradas_${formattedDate}.xlsx`);
       const downloadDir = FileSystem.cacheDirectory;
       const fileUri = `${downloadDir}${fileName}`;
       
@@ -385,27 +470,33 @@ const EntradasContent = () => {
     try {
       let tableRows = '';
       
-      const tableHeader = '<tr style="background-color: #f0f0f0;">';
-      tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Código Lote</th>';
-      tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Producto</th>';
-      tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Tienda</th>';
-      tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Cantidad</th>';
-      tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo CUP</th>';
-      tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo USD</th>';
-      tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Fecha</th>';
-      tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Proveedor</th>';
+      // Table header based on selected fields
+      let tableHeader = '<tr style="background-color: #f0f0f0;">';
+      if (selectedFields.producto) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Nombre</th>';
+      if (selectedFields.tienda) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Tienda</th>';
+      if (selectedFields.cantidad) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Cantidad</th>';
+      if (selectedFields.costo_cup) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo CUP</th>';
+      if (selectedFields.costo_usd) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo USD</th>';
+      if (selectedFields.fecha) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Fecha</th>';
+      if (selectedFields.codigo_lote) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Código Lote</th>';
+      if (selectedFields.fecha_vencimiento) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Fecha Vencimiento</th>';
+      if (selectedFields.proveedor) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Proveedor</th>';
+      if (selectedFields.usuario) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Usuario</th>';
       tableHeader += '</tr>';
 
+      // Table rows based on selected fields
       entradas.forEach(entrada => {
         tableRows += '<tr>';
-        tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.codigo_lote}</td>`;
-        tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.servicioTienda?.servicio?.nombre || 'N/A'}</td>`;
-        tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.servicioTienda?.tienda?.nombre || 'N/A'}</td>`;
-        tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.cantidad_entrada}</td>`;
-        tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.costo_cup}</td>`;
-        tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.costo_usd}</td>`;
-        tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${new Date(entrada.fecha).toLocaleDateString()}</td>`;
-        tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.nombre_proveedor || 'N/A'}</td>`;
+        if (selectedFields.producto) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.servicioTienda?.servicio?.nombre || 'N/A'}</td>`;
+        if (selectedFields.tienda) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.servicioTienda?.tienda?.nombre || 'N/A'}</td>`;
+        if (selectedFields.cantidad) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.cantidad_entrada}</td>`;
+        if (selectedFields.costo_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.costo_cup}</td>`;
+        if (selectedFields.costo_usd) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.costo_usd}</td>`;
+        if (selectedFields.fecha) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${new Date(entrada.fecha).toLocaleDateString()}</td>`;
+        if (selectedFields.codigo_lote) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.codigo_lote}</td>`;
+        if (selectedFields.fecha_vencimiento) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.fecha_vencimiento ? new Date(entrada.fecha_vencimiento).toLocaleDateString() : 'N/A'}</td>`;
+        if (selectedFields.proveedor) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.nombre_proveedor || 'N/A'}</td>`;
+        if (selectedFields.usuario) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.usuario?.nombre_natural || 'N/A'}</td>`;
         tableRows += '</tr>';
       });
 
@@ -414,13 +505,30 @@ const EntradasContent = () => {
           <head>
             <style>
               body { font-family: Arial, sans-serif; padding: 20px; }
-              h1 { color: #002440; }
+              h1 { text-align: center; color: #002440; margin-bottom: 10px; }
+              p { text-align: center; color: #0b1c30; margin-bottom: 20px; }
               table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+              th { 
+                background-color: #002440; 
+                color: #ffffff; 
+                border: 1px solid #002440; 
+                padding: 12px 8px; 
+                text-align: left; 
+                font-weight: bold;
+              }
+              td { 
+                border: 1px solid #d3e4fe; 
+                padding: 8px; 
+                text-align: left; 
+                color: #0b1c30;
+              }
+              tr:nth-child(even) { background-color: #f8f9ff; }
+              tr:nth-child(odd) { background-color: #ffffff; }
             </style>
           </head>
           <body>
-            <h1>Reporte de Entradas</h1>
+            <h1>Historial de Entradas</h1>
+            <p>Fecha: ${new Date().toLocaleDateString()}</p>
             <table>
               ${tableHeader}
               ${tableRows}
@@ -433,7 +541,7 @@ const EntradasContent = () => {
       
       const date = new Date();
       const formattedDate = `${date.getDate().toString().padStart(2, '0')}_${(date.getMonth() + 1).toString().padStart(2, '0')}_${date.getFullYear()}`;
-      const fileName = sanitizeFileName(`Entradas_${formattedDate}.pdf`);
+      const fileName = sanitizeFileName(`Historial_Entradas_${formattedDate}.pdf`);
       
       showExportSuccessAlert(uri, fileName);
     } catch (error) {
@@ -530,15 +638,15 @@ const EntradasContent = () => {
   const userRole = user?.rol?.toLowerCase();
   const canViewAllEntradas = 
     userRole === 'administrador' ||
-    (userRole === 'dependiente' && permissions?.entradas?.dependiente?.general) ||
-    (userRole === 'almacenero' && permissions?.entradas?.almacenero?.general) ||
-    (userRole === 'económico' && permissions?.entradas?.economico?.general);
+    (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
+    (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
+    (userRole === 'económico' && entradaPermissions?.economico);
 
   const canManageEntradas = 
     userRole === 'administrador' ||
-    (userRole === 'dependiente' && permissions?.entradas?.dependiente) ||
-    (userRole === 'almacenero' && permissions?.entradas?.almacenero) ||
-    (userRole === 'económico' && permissions?.entradas?.economico);
+    (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
+    (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
+    (userRole === 'económico' && entradaPermissions?.economico);
 
   const styles = createStyles(responsive);
 
@@ -846,7 +954,7 @@ const EntradasContent = () => {
 
         {/* Action Buttons */}
         <View style={styles.actionButtonsContainer}>
-          {canManageEntradas && !isOfflineMode && (
+          {!isOfflineMode && (
             <TouchableOpacity
               style={[styles.addButton, { backgroundColor: colors.primary }]}
               onPress={handleAdd}
@@ -899,75 +1007,58 @@ const EntradasContent = () => {
                 activeOpacity={0.7}
               >
                 <Card style={[styles.entradaCard, { backgroundColor: colors.surface }]}>
-                  <View style={styles.entradaHeader}>
-                    <View style={styles.entradaInfo}>
-                      <Text style={[styles.entradaCodigo, { color: colors.onSurface }]}>
-                        {entrada.codigo_lote}
-                      </Text>
-                      <Text style={[styles.entradaProducto, { color: colors.outline }]}>
-                        {entrada.servicioTienda?.servicio?.nombre}
+                  <View style={styles.entradaInfo}>
+                    <View style={styles.entradaHeader}>
+                      <Text style={[styles.entradaNombre, { color: colors.onSurface }]} numberOfLines={2} ellipsizeMode="tail">
+                        {entrada.servicioTienda?.servicio?.nombre || 'N/A'}
                       </Text>
                     </View>
+                    <Text style={[styles.entradaProducto, { color: colors.outline }]}>
+                      Código Lote: {entrada.codigo_lote}
+                    </Text>
+                    <Text style={[styles.entradaTienda, { color: colors.outline }]}>
+                      Tienda: {entrada.servicioTienda?.tienda?.nombre || 'N/A'}
+                    </Text>
+                    <Text style={[styles.entradaCosto, { color: colors.primary }]}>
+                      CUP: ${parseFloat(entrada.costo_cup).toFixed(2)} | USD: ${parseFloat(entrada.costo_usd).toFixed(2)}
+                    </Text>
+                    <Text style={[styles.entradaCantidad, { color: colors.primary }]}>
+                      Cantidad: {entrada.cantidad_entrada}
+                    </Text>
+                    <Text style={[styles.entradaFecha, { color: colors.outline }]}>
+                      Fecha: {new Date(entrada.fecha).toLocaleDateString()}
+                    </Text>
+                  </View>
+                  {canManageEntradas && (
                     <View style={styles.entradaActions}>
-                      {canManageEntradas && !isOfflineMode && (
-                        <TouchableOpacity
-                          style={[styles.actionButton, styles.editButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleEdit(entrada);
-                          }}
-                        >
-                          <Image
-                            source={require('../../assets/editar.png')}
-                            style={styles.actionIcon}
-                            resizeMode="contain"
-                          />
-                        </TouchableOpacity>
-                      )}
-                      {canManageEntradas && !isOfflineMode && (
-                        <TouchableOpacity
-                          style={[styles.actionButton, styles.deleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleDelete(entrada);
-                          }}
-                        >
-                          <Image
-                            source={require('../../assets/basura.png')}
-                            style={styles.actionIcon}
-                            resizeMode="contain"
-                          />
-                        </TouchableOpacity>
-                      )}
+                      <TouchableOpacity
+                        style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleEdit(entrada);
+                        }}
+                      >
+                        <Image
+                          source={require('../../assets/editar.png')}
+                          style={styles.actionIconSmall}
+                          resizeMode="contain"
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleDelete(entrada);
+                        }}
+                      >
+                        <Image
+                          source={require('../../assets/basura.png')}
+                          style={styles.actionIconSmall}
+                          resizeMode="contain"
+                        />
+                      </TouchableOpacity>
                     </View>
-                  </View>
-                  
-                  <View style={styles.entradaDetails}>
-                    <View style={styles.detailItem}>
-                      <Ionicons name="storefront-outline" size={responsive.responsiveWidth(16)} color={colors.outline} />
-                      <Text style={[styles.detailText, { color: colors.outline }]}>
-                        {entrada.servicioTienda?.tienda?.nombre}
-                      </Text>
-                    </View>
-                    <View style={styles.detailItem}>
-                      <Ionicons name="cube-outline" size={responsive.responsiveWidth(16)} color={colors.outline} />
-                      <Text style={[styles.detailText, { color: colors.outline }]}>
-                        Cantidad: {entrada.cantidad_entrada}
-                      </Text>
-                    </View>
-                    <View style={styles.detailItem}>
-                      <Ionicons name="cash-outline" size={responsive.responsiveWidth(16)} color={colors.outline} />
-                      <Text style={[styles.detailText, { color: colors.outline }]}>
-                        CUP: {parseFloat(entrada.costo_cup).toFixed(2)} | USD: {parseFloat(entrada.costo_usd).toFixed(2)}
-                      </Text>
-                    </View>
-                    <View style={styles.detailItem}>
-                      <Ionicons name="calendar-outline" size={responsive.responsiveWidth(16)} color={colors.outline} />
-                      <Text style={[styles.detailText, { color: colors.outline }]}>
-                        {new Date(entrada.fecha).toLocaleDateString()}
-                      </Text>
-                    </View>
-                  </View>
+                  )}
                 </Card>
               </TouchableOpacity>
             ))}
@@ -1028,8 +1119,9 @@ const EntradasContent = () => {
               <TouchableOpacity
                 style={[styles.exportOption, { backgroundColor: colors.surfaceVariant }]}
                 onPress={() => {
+                  setShowExportModal(false);
                   setExportType('excel');
-                  handleExport();
+                  setShowFieldSelectionModal(true);
                 }}
                 disabled={isExporting}
               >
@@ -1039,8 +1131,9 @@ const EntradasContent = () => {
               <TouchableOpacity
                 style={[styles.exportOption, { backgroundColor: colors.surfaceVariant }]}
                 onPress={() => {
+                  setShowExportModal(false);
                   setExportType('pdf');
-                  handleExport();
+                  setShowFieldSelectionModal(true);
                 }}
                 disabled={isExporting}
               >
@@ -1049,6 +1142,85 @@ const EntradasContent = () => {
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Field Selection Modal */}
+      {showFieldSelectionModal && (
+        <Modal
+          visible={showFieldSelectionModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowFieldSelectionModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowFieldSelectionModal(false)}
+          >
+            <View style={[styles.fieldSelectionModal, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.exportModalTitle, { color: colors.onSurface }]}>Seleccionar Campos</Text>
+              <ScrollView style={styles.fieldSelectionScroll}>
+                {Object.keys(selectedFields).map((field) => {
+                  const fieldLabel = field === 'producto' ? 'Nombre' : field.charAt(0).toUpperCase() + field.slice(1).replace('_', ' ');
+                  return (
+                    <TouchableOpacity
+                      key={field}
+                      style={[styles.fieldSelectionItem, { backgroundColor: colors.surfaceVariant }]}
+                      onPress={() => setSelectedFields(prev => ({ ...prev, [field]: !prev[field] }))}
+                    >
+                      <View style={[styles.checkbox, { borderColor: colors.outlineVariant, backgroundColor: selectedFields[field] ? colors.primary : 'transparent' }]}>
+                        {selectedFields[field] && (
+                          <Ionicons name="checkmark" size={responsive.responsiveWidth(16)} color="#fff" />
+                        )}
+                      </View>
+                      <Text style={[styles.fieldSelectionText, { color: colors.onSurface }]}>
+                        {fieldLabel}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+              <TouchableOpacity
+                style={[styles.exportConfirmButton, { backgroundColor: colors.primary }]}
+                onPress={handleExport}
+              >
+                <Text style={[styles.exportConfirmButtonText, { color: '#fff' }]}>Generar Exportación</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Barcode Scanner Modal */}
+      {showScannerModal && (
+        <Modal
+          visible={showScannerModal}
+          animationType="slide"
+          onRequestClose={() => setShowScannerModal(false)}
+        >
+          <View style={styles.scannerContainer}>
+            <CameraView
+              style={styles.scanner}
+              onBarcodeScanned={handleBarcodeScanned}
+              facing="back"
+            />
+            <View style={styles.scannerOverlay}>
+              <View style={styles.scannerCorner} />
+              <View style={[styles.scannerCorner, styles.scannerCornerTopRight]} />
+              <View style={[styles.scannerCorner, styles.scannerCornerBottomLeft]} />
+              <View style={[styles.scannerCorner, styles.scannerCornerBottomRight]} />
+              <Text style={[styles.scannerText, { color: '#fff' }]}>
+                Escanea el código de barras
+              </Text>
+              <TouchableOpacity
+                style={styles.scannerCloseButton}
+                onPress={() => setShowScannerModal(false)}
+              >
+                <Ionicons name="close" size={responsive.responsiveWidth(30)} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
         </Modal>
       )}
 
@@ -1318,57 +1490,78 @@ const createStyles = (responsive) => StyleSheet.create({
     fontFamily: 'Inter',
   },
   entradaCard: {
-    borderRadius: 16,
+    borderRadius: 12,
     padding: responsive.responsivePadding(16),
     marginBottom: responsive.responsiveMargin(12),
-  },
-  entradaHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: responsive.responsiveMargin(12),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   entradaInfo: {
     flex: 1,
   },
-  entradaCodigo: {
-    fontSize: responsive.responsiveFontSize(18),
-    fontWeight: '700',
-    fontFamily: 'Hanken Grotesk',
+  entradaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: responsive.responsiveMargin(4),
   },
+  entradaNombre: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    marginRight: responsive.responsiveMargin(8),
+  },
   entradaProducto: {
-    fontSize: responsive.responsiveFontSize(14),
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+  },
+  entradaTienda: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+  },
+  entradaCosto: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(2),
+  },
+  entradaCantidad: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(2),
+  },
+  entradaFecha: {
+    fontSize: responsive.fontSizes.bodySmall,
     fontFamily: 'Inter',
   },
   entradaActions: {
     flexDirection: 'row',
     gap: responsive.responsiveMargin(8),
   },
-  actionButton: {
-    padding: responsive.responsivePadding(8),
-  },
-  editButton: {
+  actionButtonSmall: {
+    width: responsive.responsiveWidth(40),
+    height: responsive.responsiveHeight(40),
     borderRadius: 8,
-  },
-  deleteButton: {
-    borderRadius: 8,
-  },
-  actionIcon: {
-    width: responsive.responsiveWidth(20),
-    height: responsive.responsiveHeight(20),
-  },
-  entradaDetails: {
-    gap: responsive.responsiveMargin(8),
-  },
-  detailItem: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: responsive.responsiveMargin(8),
+    justifyContent: 'center',
   },
-  detailText: {
-    fontSize: responsive.responsiveFontSize(14),
-    fontFamily: 'Inter',
+  actionIconSmall: {
+    width: responsive.responsiveWidth(22),
+    height: responsive.responsiveHeight(22),
+  },
+  editButtonSmall: {
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  deleteButtonSmall: {
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   pagination: {
     flexDirection: 'row',
@@ -1458,5 +1651,124 @@ const createStyles = (responsive) => StyleSheet.create({
     fontFamily: 'Inter',
     marginTop: responsive.responsiveMargin(8),
     textAlign: 'center',
+  },
+  fieldSelectionModal: {
+    borderRadius: 16,
+    padding: responsive.responsivePadding(24),
+    width: '85%',
+    maxWidth: responsive.responsiveWidth(400),
+    maxHeight: responsive.responsiveHeight(500),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  fieldSelectionScroll: {
+    maxHeight: responsive.responsiveHeight(300),
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  fieldSelectionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(12),
+    padding: responsive.responsivePadding(12),
+    borderRadius: 8,
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  checkbox: {
+    width: responsive.responsiveWidth(24),
+    height: responsive.responsiveHeight(24),
+    borderRadius: 4,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fieldSelectionText: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+    flex: 1,
+  },
+  exportConfirmButton: {
+    paddingVertical: responsive.responsivePadding(14),
+    paddingHorizontal: responsive.responsivePadding(24),
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  exportConfirmButtonText: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    color: '#fff',
+  },
+  inputWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: responsive.responsivePadding(12),
+    paddingVertical: responsive.responsivePadding(12),
+  },
+  inputWithIconText: {
+    flex: 1,
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+    paddingVertical: 0,
+  },
+  cameraButton: {
+    marginLeft: responsive.responsiveMargin(8),
+  },
+  scannerContainer: {
+    flex: 1,
+  },
+  scanner: {
+    flex: 1,
+  },
+  scannerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  scannerCorner: {
+    position: 'absolute',
+    width: responsive.responsiveWidth(60),
+    height: responsive.responsiveHeight(60),
+    borderColor: '#fff',
+    borderWidth: 2,
+  },
+  scannerCornerTopRight: {
+    top: responsive.responsiveHeight(150),
+    right: responsive.responsiveWidth(50),
+  },
+  scannerCornerBottomLeft: {
+    bottom: responsive.responsiveHeight(150),
+    left: responsive.responsiveWidth(50),
+  },
+  scannerCornerBottomRight: {
+    bottom: responsive.responsiveHeight(150),
+    right: responsive.responsiveWidth(50),
+  },
+  scannerText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(20),
+  },
+  scannerCloseButton: {
+    position: 'absolute',
+    top: responsive.responsiveHeight(50),
+    right: responsive.responsiveWidth(20),
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: responsive.responsiveWidth(20),
+    width: responsive.responsiveWidth(40),
+    height: responsive.responsiveHeight(40),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

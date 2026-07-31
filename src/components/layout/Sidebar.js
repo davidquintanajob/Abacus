@@ -21,18 +21,11 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
   const isAdmin = user?.rol === 'Administrador';
   const userRole = user?.rol?.toLowerCase();
 
-  // Check if user has permission to view entradas
-  const canViewEntradas = 
-    isAdmin ||
-    (userRole === 'dependiente' && permissions?.entradaPermissions?.dependiente) ||
-    (userRole === 'almacenero' && permissions?.entradaPermissions?.almacenero) ||
-    (userRole === 'económico' && permissions?.entradaPermissions?.economico);
-
   const menuItems = [
     { icon: require('../../../assets/bar-chart.png'), label: 'Panel', route: 'Home' },
     { icon: require('../../../assets/lanza-libre.png'), label: 'Servicios y Ofertas', route: 'Servicios' },
     { icon: require('../../../assets/product.png'), label: 'Productos', route: 'Productos' },
-    ...(canViewEntradas ? [{ icon: require('../../../assets/moving.png'), label: 'Entradas', route: 'Entradas' }] : []),
+    { icon: require('../../../assets/moving.png'), label: 'Entradas', route: 'Entradas' },
     ...(isAdmin ? [{ icon: require('../../../assets/tienda.png'), label: 'Tiendas', route: 'Tiendas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/usuarios.png'), label: 'Usuarios', route: 'Usuarios' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/Servicios.png'), label: 'Configuraciones del Administrador', route: 'CurrencyExchange' }] : []),
