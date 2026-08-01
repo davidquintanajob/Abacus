@@ -15,17 +15,23 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
   const responsive = useResponsive();
   const insets = useSafeAreaInsets() || { top: 0, bottom: 0, left: 0, right: 0 };
   const { toast, showToast, hideToast } = useToast();
-  const { user, permissions } = useAuth();
+  const { user, permissions, entradaAccessPermissions } = useAuth();
   const [isSyncing, setIsSyncing] = useState(false);
 
   const isAdmin = user?.rol === 'Administrador';
   const userRole = user?.rol?.toLowerCase();
 
+  const canAccessEntradas = 
+    isAdmin ||
+    (userRole === 'dependiente' && entradaAccessPermissions?.dependiente) ||
+    (userRole === 'almacenero' && entradaAccessPermissions?.almacenero) ||
+    (userRole === 'económico' && entradaAccessPermissions?.economico);
+
   const menuItems = [
     { icon: require('../../../assets/bar-chart.png'), label: 'Panel', route: 'Home' },
     { icon: require('../../../assets/lanza-libre.png'), label: 'Servicios y Ofertas', route: 'Servicios' },
     { icon: require('../../../assets/product.png'), label: 'Productos', route: 'Productos' },
-    { icon: require('../../../assets/moving.png'), label: 'Entradas', route: 'Entradas' },
+    ...(canAccessEntradas ? [{ icon: require('../../../assets/moving.png'), label: 'Entradas', route: 'Entradas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/tienda.png'), label: 'Tiendas', route: 'Tiendas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/usuarios.png'), label: 'Usuarios', route: 'Usuarios' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/Servicios.png'), label: 'Configuraciones del Administrador', route: 'CurrencyExchange' }] : []),

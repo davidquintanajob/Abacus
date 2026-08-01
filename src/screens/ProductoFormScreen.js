@@ -24,7 +24,7 @@ const ProductoFormContent = () => {
   const route = useRoute();
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
-  const { token, user, permissions } = useAuth();
+  const { token, user, permissions, entradaManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
 
@@ -709,34 +709,45 @@ const ProductoFormContent = () => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-        {/* Action Buttons Section - Only for Admin */}
-        {isAdmin && (isViewMode || isEditMode) && (
+        {/* Action Buttons Section - For Admin and users with entradaManagePermissions */}
+        {(() => {
+          const userRole = user?.rol?.toLowerCase();
+          const canManageEntradas = 
+            userRole === 'administrador' ||
+            (userRole === 'dependiente' && entradaManagePermissions?.dependiente) ||
+            (userRole === 'almacenero' && entradaManagePermissions?.almacenero) ||
+            (userRole === 'económico' && entradaManagePermissions?.economico);
+          
+          if (!canManageEntradas || !(isViewMode || isEditMode)) return null;
+          
+          return (
           <View style={[styles.actionButtonsSection, { backgroundColor: colors.surface }]}>
             <View style={styles.actionButtonsContainer}>
-              <TouchableOpacity
-                style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#1B5E20' : '#E8F5E9' }]}
-                onPress={() => {
-                  if (isOfflineMode) {
-                    showToast({ type: 'warning', message: 'No disponible en modo offline' });
-                    return;
-                  }
-                  const userRole = user?.rol?.toLowerCase();
-                  const canManageEntradas = 
-                    userRole === 'administrador' ||
-                    (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
-                    (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
-                    (userRole === 'económico' && entradaPermissions?.economico);
-                  
-                  if (!canManageEntradas) {
-                    showToast({ type: 'warning', message: 'No tienes permiso para gestionar entradas' });
-                    return;
-                  }
-                  
-                  navigation.navigate('EntradaForm', { mode: 'add', productoPreSeleccionado: producto });
-                }}
-              >
-                <Ionicons name="arrow-down-circle-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? '#81C784' : '#2E7D32'} />
-              </TouchableOpacity>
+              {(() => {
+                const userRole = user?.rol?.toLowerCase();
+                const canManageEntradas = 
+                  userRole === 'administrador' ||
+                  (userRole === 'dependiente' && entradaManagePermissions?.dependiente) ||
+                  (userRole === 'almacenero' && entradaManagePermissions?.almacenero) ||
+                  (userRole === 'económico' && entradaManagePermissions?.economico);
+                
+                if (!canManageEntradas) return null;
+                
+                return (
+                  <TouchableOpacity
+                    style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#1B5E20' : '#E8F5E9' }]}
+                    onPress={() => {
+                      if (isOfflineMode) {
+                        showToast({ type: 'warning', message: 'No disponible en modo offline' });
+                        return;
+                      }
+                      navigation.navigate('EntradaForm', { mode: 'add', productoPreSeleccionado: producto });
+                    }}
+                  >
+                    <Ionicons name="arrow-down-circle-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? '#81C784' : '#2E7D32'} />
+                  </TouchableOpacity>
+                );
+              })()}
               <TouchableOpacity
                 style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#0D47A1' : '#E3F2FD' }]}
                 onPress={() => {}}
@@ -763,7 +774,8 @@ const ProductoFormContent = () => {
               </TouchableOpacity>
             </View>
           </View>
-        )}
+          );
+        })()}
 
         <Card style={[styles.formCard, { backgroundColor: colors.surface }]}>
           <View style={styles.formGroup}>

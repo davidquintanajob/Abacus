@@ -39,6 +39,16 @@ export const AuthProvider = ({ children }) => {
   const login = async (nombre_usuario, contrasenna) => {
     try {
       const { usuario, token: newToken } = await loginService(nombre_usuario, contrasenna);
+      
+      // Check if user is inactive
+      if (usuario.estado === 'Inactivo' || usuario.activo === false) {
+        return {
+          success: false,
+          error: 'Tu usuario está inactivo. Contacta al administrador.',
+          code: 403,
+        };
+      }
+      
       setUser(usuario);
       setToken(newToken);
       setIsOfflineMode(false); // Desactivar modo offline al iniciar sesión
@@ -91,6 +101,16 @@ export const AuthProvider = ({ children }) => {
       economico: false,
     },
     entradaPermissions: config?.entradaPermissions || {
+      dependiente: false,
+      almacenero: false,
+      economico: false,
+    },
+    entradaAccessPermissions: config?.entradaAccessPermissions || {
+      dependiente: false,
+      almacenero: false,
+      economico: false,
+    },
+    entradaManagePermissions: config?.entradaManagePermissions || {
       dependiente: false,
       almacenero: false,
       economico: false,

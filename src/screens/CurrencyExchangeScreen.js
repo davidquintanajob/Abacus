@@ -34,10 +34,22 @@ const CurrencyExchangeContent = () => {
     almacenero: false,
     economico: false,
   });
+  const [entradaAccessPermissions, setEntradaAccessPermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
+  const [entradaManagePermissions, setEntradaManagePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
   const [applyWeightedAverageCost, setApplyWeightedAverageCost] = useState(false);
   const [showPermissions, setShowPermissions] = useState(false);
   const [showEntradaPermissions, setShowEntradaPermissions] = useState(false);
   const [showEntradaConfig, setShowEntradaConfig] = useState(false);
+  const [showEntradaAccess, setShowEntradaAccess] = useState(false);
+  const [showEntradaManage, setShowEntradaManage] = useState(false);
   const [infoModal, setInfoModal] = useState({
     visible: false,
     title: '',
@@ -63,6 +75,12 @@ const CurrencyExchangeContent = () => {
       }
       if (data.entradaPermissions) {
         setEntradaPermissions(data.entradaPermissions);
+      }
+      if (data.entradaAccessPermissions) {
+        setEntradaAccessPermissions(data.entradaAccessPermissions);
+      }
+      if (data.entradaManagePermissions) {
+        setEntradaManagePermissions(data.entradaManagePermissions);
       }
       if (data.applyWeightedAverageCost !== undefined) {
         setApplyWeightedAverageCost(data.applyWeightedAverageCost);
@@ -145,6 +163,42 @@ const CurrencyExchangeContent = () => {
       showToast({ type: 'success', message: 'Permiso de entrada actualizado correctamente' });
     } catch (error) {
       showToast({ type: 'error', message: 'Error al actualizar permiso de entrada' });
+    }
+  };
+
+  const toggleEntradaAccessPermission = async (role) => {
+    const newEntradaAccessPermissions = { ...entradaAccessPermissions, [role]: !entradaAccessPermissions[role] };
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        entradaAccessPermissions: newEntradaAccessPermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      
+      await fetchConfig();
+      
+      showToast({ type: 'success', message: 'Permiso de acceso a entradas actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de acceso a entradas' });
+    }
+  };
+
+  const toggleEntradaManagePermission = async (role) => {
+    const newEntradaManagePermissions = { ...entradaManagePermissions, [role]: !entradaManagePermissions[role] };
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        entradaManagePermissions: newEntradaManagePermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      
+      await fetchConfig();
+      
+      showToast({ type: 'success', message: 'Permiso de gestión de entradas actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de gestión de entradas' });
     }
   };
 
@@ -434,7 +488,7 @@ const CurrencyExchangeContent = () => {
           {showEntradaPermissions && (
             <>
               <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
-                Configura qué roles pueden ver y gestionar entradas de todas las tiendas (general) o solo la suya (sencillo)
+                Configura qué roles pueden ver entradas de todas las tiendas (general) o solo la suya (sencillo)
               </Text>
 
           <View style={styles.permissionItem}>
@@ -446,7 +500,7 @@ const CurrencyExchangeContent = () => {
                 style={[styles.infoButton, { backgroundColor: colors.primary }]}
                 onPress={() => showInfoModal(
                   'Permiso Entradas - Dependiente',
-                  'Cuando está activo (General), los usuarios con rol Dependiente pueden ver y gestionar entradas de todas las tiendas. Cuando está desactivado (Sencillo), solo pueden ver y gestionar entradas de su propia tienda.'
+                  'Cuando está activo (General), los usuarios con rol Dependiente pueden ver entradas de todas las tiendas. Cuando está desactivado (Sencillo), solo pueden ver entradas de su propia tienda.'
                 )}
               >
                 <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
@@ -469,7 +523,7 @@ const CurrencyExchangeContent = () => {
                 style={[styles.infoButton, { backgroundColor: colors.primary }]}
                 onPress={() => showInfoModal(
                   'Permiso Entradas - Almacenero',
-                  'Cuando está activo (General), los usuarios con rol Almacenero pueden ver y gestionar entradas de todas las tiendas. Cuando está desactivado (Sencillo), solo pueden ver y gestionar entradas de su propia tienda.'
+                  'Cuando está activo (General), los usuarios con rol Almacenero pueden ver entradas de todas las tiendas. Cuando está desactivado (Sencillo), solo pueden ver entradas de su propia tienda.'
                 )}
               >
                 <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
@@ -492,7 +546,7 @@ const CurrencyExchangeContent = () => {
                 style={[styles.infoButton, { backgroundColor: colors.primary }]}
                 onPress={() => showInfoModal(
                   'Permiso Entradas - Económico',
-                  'Cuando está activo (General), los usuarios con rol Económico pueden ver y gestionar entradas de todas las tiendas. Cuando está desactivado (Sencillo), solo pueden ver y gestionar entradas de su propia tienda.'
+                  'Cuando está activo (General), los usuarios con rol Económico pueden ver entradas de todas las tiendas. Cuando está desactivado (Sencillo), solo pueden ver entradas de su propia tienda.'
                 )}
               >
                 <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
@@ -504,6 +558,188 @@ const CurrencyExchangeContent = () => {
               trackColor={{ false: colors.outlineVariant, true: colors.primary }}
               thumbColor={entradaPermissions.economico ? '#fff' : colors.outline}
             />
+          </View>
+
+          <View style={styles.permissionSection}>
+            <View style={styles.permissionSectionHeader}>
+              <Text style={[styles.permissionSectionTitle, { color: colors.onSurface }]}>
+                Acceso a Pantalla de Entradas
+              </Text>
+              <TouchableOpacity 
+                style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+                onPress={() => setShowEntradaAccess(!showEntradaAccess)}
+              >
+                <Ionicons 
+                  name={showEntradaAccess ? "chevron-up" : "chevron-down"} 
+                  size={responsive.responsiveWidth(20)} 
+                  color={isDarkMode ? colors.primary : '#1976D2'} 
+                />
+              </TouchableOpacity>
+            </View>
+            {showEntradaAccess && (
+              <>
+                <Text style={[styles.permissionSectionSubtitle, { color: colors.outline }]}>
+                  Configura qué roles pueden ver la opción de navegación "Entradas" en el menú lateral
+                </Text>
+                <View style={styles.permissionItem}>
+                  <View style={styles.permissionInfo}>
+                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                      Dependiente
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                      onPress={() => showInfoModal(
+                        'Acceso Entradas - Dependiente',
+                        'Cuando está activo, los usuarios con rol Dependiente pueden ver y acceder a la pantalla de Entradas en el menú lateral.'
+                      )}
+                    >
+                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Switch
+                    value={entradaAccessPermissions.dependiente}
+                    onValueChange={() => toggleEntradaAccessPermission('dependiente')}
+                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                    thumbColor={entradaAccessPermissions.dependiente ? '#fff' : colors.outline}
+                  />
+                </View>
+                <View style={styles.permissionItem}>
+                  <View style={styles.permissionInfo}>
+                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                      Almacenero
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                      onPress={() => showInfoModal(
+                        'Acceso Entradas - Almacenero',
+                        'Cuando está activo, los usuarios con rol Almacenero pueden ver y acceder a la pantalla de Entradas en el menú lateral.'
+                      )}
+                    >
+                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Switch
+                    value={entradaAccessPermissions.almacenero}
+                    onValueChange={() => toggleEntradaAccessPermission('almacenero')}
+                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                    thumbColor={entradaAccessPermissions.almacenero ? '#fff' : colors.outline}
+                  />
+                </View>
+                <View style={styles.permissionItem}>
+                  <View style={styles.permissionInfo}>
+                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                      Económico
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                      onPress={() => showInfoModal(
+                        'Acceso Entradas - Económico',
+                        'Cuando está activo, los usuarios con rol Económico pueden ver y acceder a la pantalla de Entradas en el menú lateral.'
+                      )}
+                    >
+                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Switch
+                    value={entradaAccessPermissions.economico}
+                    onValueChange={() => toggleEntradaAccessPermission('economico')}
+                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                    thumbColor={entradaAccessPermissions.economico ? '#fff' : colors.outline}
+                  />
+                </View>
+              </>
+            )}
+          </View>
+
+          <View style={styles.permissionSection}>
+            <View style={styles.permissionSectionHeader}>
+              <Text style={[styles.permissionSectionTitle, { color: colors.onSurface }]}>
+                Gestión de Entradas
+              </Text>
+              <TouchableOpacity 
+                style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+                onPress={() => setShowEntradaManage(!showEntradaManage)}
+              >
+                <Ionicons 
+                  name={showEntradaManage ? "chevron-up" : "chevron-down"} 
+                  size={responsive.responsiveWidth(20)} 
+                  color={isDarkMode ? colors.primary : '#1976D2'} 
+                />
+              </TouchableOpacity>
+            </View>
+            {showEntradaManage && (
+              <>
+                <Text style={[styles.permissionSectionSubtitle, { color: colors.outline }]}>
+                  Configura qué roles pueden crear, editar y eliminar entradas
+                </Text>
+                <View style={styles.permissionItem}>
+                  <View style={styles.permissionInfo}>
+                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                      Dependiente
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                      onPress={() => showInfoModal(
+                        'Gestión Entradas - Dependiente',
+                        'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar entradas. Se muestra el botón "Agregar Entrada".'
+                      )}
+                    >
+                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Switch
+                    value={entradaManagePermissions.dependiente}
+                    onValueChange={() => toggleEntradaManagePermission('dependiente')}
+                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                    thumbColor={entradaManagePermissions.dependiente ? '#fff' : colors.outline}
+                  />
+                </View>
+                <View style={styles.permissionItem}>
+                  <View style={styles.permissionInfo}>
+                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                      Almacenero
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                      onPress={() => showInfoModal(
+                        'Gestión Entradas - Almacenero',
+                        'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar entradas. Se muestra el botón "Agregar Entrada".'
+                      )}
+                    >
+                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Switch
+                    value={entradaManagePermissions.almacenero}
+                    onValueChange={() => toggleEntradaManagePermission('almacenero')}
+                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                    thumbColor={entradaManagePermissions.almacenero ? '#fff' : colors.outline}
+                  />
+                </View>
+                <View style={styles.permissionItem}>
+                  <View style={styles.permissionInfo}>
+                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                      Económico
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                      onPress={() => showInfoModal(
+                        'Gestión Entradas - Económico',
+                        'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar entradas. Se muestra el botón "Agregar Entrada".'
+                      )}
+                    >
+                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Switch
+                    value={entradaManagePermissions.economico}
+                    onValueChange={() => toggleEntradaManagePermission('economico')}
+                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                    thumbColor={entradaManagePermissions.economico ? '#fff' : colors.outline}
+                  />
+                </View>
+              </>
+            )}
           </View>
 
             </>
@@ -686,6 +922,28 @@ const createStyles = (responsive) => StyleSheet.create({
     paddingVertical: responsive.responsivePadding(12),
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  permissionSection: {
+    marginTop: responsive.responsiveMargin(16),
+    paddingTop: responsive.responsivePadding(16),
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  permissionSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  permissionSectionTitle: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+  },
+  permissionSectionSubtitle: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(16),
   },
   permissionInfo: {
     flexDirection: 'row',

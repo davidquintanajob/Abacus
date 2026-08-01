@@ -30,7 +30,7 @@ const EntradasContent = () => {
   const navigation = useNavigation();
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
-  const { token, user, permissions, entradaPermissions } = useAuth();
+  const { token, user, permissions, entradaPermissions, entradaManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -644,9 +644,9 @@ const EntradasContent = () => {
 
   const canManageEntradas = 
     userRole === 'administrador' ||
-    (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
-    (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
-    (userRole === 'económico' && entradaPermissions?.economico);
+    (userRole === 'dependiente' && entradaManagePermissions?.dependiente) ||
+    (userRole === 'almacenero' && entradaManagePermissions?.almacenero) ||
+    (userRole === 'económico' && entradaManagePermissions?.economico);
 
   const styles = createStyles(responsive);
 
@@ -954,7 +954,7 @@ const EntradasContent = () => {
 
         {/* Action Buttons */}
         <View style={styles.actionButtonsContainer}>
-          {!isOfflineMode && (
+          {!isOfflineMode && canManageEntradas && (
             <TouchableOpacity
               style={[styles.addButton, { backgroundColor: colors.primary }]}
               onPress={handleAdd}
