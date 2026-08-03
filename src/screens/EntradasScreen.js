@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -39,6 +39,10 @@ const EntradasContent = () => {
   const [entradas, setEntradas] = useState([]);
   const [pagination, setPagination] = useState({ currentPage: 1, limit: 10, totalPages: 1, totalItems: 0 });
   const [error, setError] = useState(null);
+
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [userTiendaReady, setUserTiendaReady] = useState(false);
+  const hasDoneInitialFetch = useRef(false);
 
   // Filter states
   const [filters, setFilters] = useState({ nombre_servicio: '', codigo_lote: '', fecha_desde: '', fecha_hasta: '', id_tienda: '', id_usuario: '' });
@@ -81,6 +85,30 @@ const EntradasContent = () => {
     requestCameraPermission();
   }, []);
 
+  // Initialize user's store filter when both user and tiendas are ready
+  useEffect(() => {
+    if (!isInitialized && user?.id_tienda && tiendas.length > 0) {
+      setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
+      setUserTiendaReady(true);
+      setIsInitialized(true);
+    }
+  }, [user, tiendas, isInitialized]);
+
+  // Single API call when all data is ready
+  useEffect(() => {
+    if (userTiendaReady && !hasDoneInitialFetch.current) {
+      fetchEntradas();
+      hasDoneInitialFetch.current = true;
+    }
+  }, [userTiendaReady]);
+
+  // Fetch on pagination changes after initial load
+  useEffect(() => {
+    if (hasDoneInitialFetch.current) {
+      fetchEntradas();
+    }
+  }, [pagination.currentPage]);
+
   const requestCameraPermission = async () => {
     const { status } = await Camera.requestCameraPermissionsAsync();
     setCameraPermission(status === 'granted');
@@ -102,8 +130,11 @@ const EntradasContent = () => {
 
   useFocusEffect(
     React.useCallback(() => {
-      fetchEntradas();
-    }, [pagination.currentPage, filters])
+      // Only fetch on screen focus after initial load
+      if (isInitialized) {
+        fetchEntradas();
+      }
+    }, [])
   );
 
   const fetchTiendas = async () => {
@@ -131,8 +162,7 @@ const EntradasContent = () => {
           const userTienda = allTiendas.find(t => t.id_tienda === user.id_tienda);
           setTiendas(userTienda ? [userTienda] : []);
         }
-        // Always auto-select the user's store by default
-        setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
+        // Note: id_tienda filter is already initialized in useState, no need to set it here
       } else {
         setTiendas(allTiendas);
       }
@@ -176,7 +206,13 @@ const EntradasContent = () => {
         (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
         (userRole === 'económico' && entradaPermissions?.economico);
 
-      const hasActiveFilters = Object.values(filters).some(value => value !== '' && value !== null && value !== undefined);
+      const hasActiveFilters = Object.entries(filters).some(([key, value]) => {
+        // Don't count id_tienda as an active filter if it's just the user's default store
+        if (key === 'id_tienda' && value === user?.id_tienda?.toString()) {
+          return false;
+        }
+        return value !== '' && value !== null && value !== undefined;
+      });
       const fetchLimit = hasActiveFilters ? 10000 : pagination.limit;
       const fetchPage = hasActiveFilters ? 1 : pagination.currentPage;
       

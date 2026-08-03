@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Modal, Share, Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -41,6 +41,10 @@ const ProductosContent = () => {
   const [pagination, setPagination] = useState({ currentPage: 1, limit: 10, totalPages: 1, totalItems: 0 });
   const [error, setError] = useState(null);
 
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [userTiendaReady, setUserTiendaReady] = useState(false);
+  const hasDoneInitialFetch = useRef(false);
+
   // Filter states
   const [filters, setFilters] = useState({ nombre: '', codigo: '', categoria: '', esvendible: '', id_tienda: '' });
   const [tiendas, setTiendas] = useState([]);
@@ -82,6 +86,30 @@ const ProductosContent = () => {
     loadApiBaseUrl();
   }, []);
 
+  // Initialize user's store filter when both user and tiendas are ready
+  useEffect(() => {
+    if (!isInitialized && user?.id_tienda && tiendas.length > 0) {
+      setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
+      setUserTiendaReady(true);
+      setIsInitialized(true);
+    }
+  }, [user, tiendas, isInitialized]);
+
+  // Single API call when all data is ready
+  useEffect(() => {
+    if (userTiendaReady && !hasDoneInitialFetch.current) {
+      fetchProductos();
+      hasDoneInitialFetch.current = true;
+    }
+  }, [userTiendaReady]);
+
+  // Fetch on pagination changes after initial load
+  useEffect(() => {
+    if (hasDoneInitialFetch.current) {
+      fetchProductos();
+    }
+  }, [pagination.currentPage]);
+
   const loadApiBaseUrl = async () => {
     const baseUrl = await getApiBaseUrl();
     setApiBaseUrl(baseUrl);
@@ -103,17 +131,12 @@ const ProductosContent = () => {
 
   useFocusEffect(
     React.useCallback(() => {
-      fetchProductos();
-    }, [pagination.currentPage, filters])
+      // Only fetch on screen focus after initial load
+      if (isInitialized) {
+        fetchProductos();
+      }
+    }, [])
   );
-
-  // Also refresh when screen comes into focus to catch updates from entries
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      fetchProductos();
-    });
-    return unsubscribe;
-  }, [navigation]);
 
   const fetchTiendas = async () => {
     try {
@@ -145,8 +168,7 @@ const ProductosContent = () => {
           const userTienda = allTiendas.find(t => t.id_tienda === user.id_tienda);
           setTiendas(userTienda ? [userTienda] : []);
         }
-        // Always auto-select the user's store in the filter by default
-        setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
+        // Note: id_tienda filter is already initialized in useState, no need to set it here
       } else {
         setTiendas(allTiendas);
       }
@@ -233,8 +255,14 @@ const ProductosContent = () => {
           setPagination({ currentPage: 1, limit: 10, totalPages: 1, totalItems: 0 });
         }
       } else {
-        // Check if any filters are active
-        const hasActiveFilters = Object.values(filters).some(value => value !== '' && value !== null && value !== undefined);
+        // Check if any filters are active (excluding id_tienda if it's just the user's default store)
+        const hasActiveFilters = Object.entries(filters).some(([key, value]) => {
+          // Don't count id_tienda as an active filter if it's just the user's default store
+          if (key === 'id_tienda' && value === user?.id_tienda?.toString()) {
+            return false;
+          }
+          return value !== '' && value !== null && value !== undefined;
+        });
         
         // If filters are active, fetch all data to ensure accurate pagination
         // Otherwise, use paginated fetch from backend
@@ -1001,36 +1029,68 @@ const ProductosContent = () => {
       const pageWidth = 595.28;
       const pageHeight = 841.89;
       
-      // Grid settings (3x2 for larger QR codes)
+      // Calculate field count for grid configuration
+      let fieldCount = 0;
+      if (selectedFields.nombre) fieldCount++;
+      if (selectedFields.codigo) fieldCount++;
+      if (selectedFields.categoria) fieldCount++;
+      if (selectedFields.precio_cup) fieldCount++;
+      if (selectedFields.costo_cup) fieldCount++;
+      if (selectedFields.precio_usd) fieldCount++;
+      if (selectedFields.costo_usd) fieldCount++;
+      if (selectedFields.nota) fieldCount++;
+      if (selectedFields.cantidad) fieldCount++;
+      if (selectedFields.sufijo) fieldCount++;
+      
+      // Grid settings (3x3 for 6 or fewer fields, 3x2 for more than 6 fields)
       const cols = 3;
-      const rows = 2;
+      const rows = fieldCount <= 6 ? 3 : 2;
       const pageMargin = 10;
       const cellMargin = 5;
       const cellWidth = (pageWidth - pageMargin * 2 - cellMargin * (cols - 1)) / cols;
-      const maxCellHeight = 400;
       
       let currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
       let colIndex = 0;
       let rowIndex = 0;
       
       for (const producto of productos) {
-        // Calculate dynamic height based on number of selected fields
-        let fieldCount = 0;
-        if (selectedFields.nombre) fieldCount++;
-        if (selectedFields.codigo) fieldCount++;
-        if (selectedFields.categoria) fieldCount++;
-        if (selectedFields.precio_cup) fieldCount++;
-        if (selectedFields.costo_cup) fieldCount++;
-        if (selectedFields.precio_usd) fieldCount++;
-        if (selectedFields.costo_usd) fieldCount++;
-        if (selectedFields.nota) fieldCount++;
-        if (selectedFields.cantidad) fieldCount++;
-        if (selectedFields.sufijo) fieldCount++;
+        // Calculate precise height based on actual content
+        let contentHeight = 10; // Top padding
         
-        // Base height + dynamic height per field (30px per field, minimum 250px, maximum 400px)
-        const baseHeight = selectedFields.codigo_qr_barra ? 200 : 150;
-        const dynamicHeight = fieldCount * 30;
-        const cellHeight = Math.min(Math.max(baseHeight + dynamicHeight, 250), maxCellHeight);
+        if (selectedFields.codigo_qr_barra) {
+          // QR code takes 55% of cell width
+          const qrSize = cellWidth * 0.55;
+          contentHeight += qrSize + 8; // QR + small gap
+        }
+        
+        // Calculate text height precisely
+        const textLines = [];
+        if (selectedFields.nombre) textLines.push({ text: `Nombre: ${producto.nombre}`, isPrice: false });
+        if (selectedFields.codigo) textLines.push({ text: `Código: ${producto.codigos?.[0]?.codigo_barras_ean || 'N/A'}`, isPrice: false });
+        if (selectedFields.categoria) textLines.push({ text: `Categoría: ${producto.categoria || 'N/A'}`, isPrice: false });
+        if (selectedFields.precio_cup) textLines.push({ text: formatPriceForExport(getProductPrice(producto), 'cup'), isPrice: true });
+        if (selectedFields.costo_cup) textLines.push({ text: `Costo: ${formatPriceForExport(getProductCost(producto), 'cup')}`, isPrice: false });
+        if (selectedFields.precio_usd) textLines.push({ text: formatPriceForExport(getProductPriceUSD(producto), 'usd'), isPrice: true });
+        if (selectedFields.costo_usd) textLines.push({ text: `Costo USD: ${formatPriceForExport(getProductCostUSD(producto), 'usd')}`, isPrice: false });
+        if (selectedFields.nota) textLines.push({ text: `Nota: ${producto.producto?.nota || 'N/A'}`, isPrice: false });
+        if (selectedFields.cantidad) textLines.push({ text: `Cantidad: ${calculateAbsoluteTotalQuantity(producto)}`, isPrice: false });
+        if (selectedFields.sufijo) textLines.push({ text: `Sufijo: ${producto.producto?.sufijo || 'N/A'}`, isPrice: false });
+        
+        const fontSize = 12;
+        for (let i = 0; i < textLines.length; i++) {
+          const line = textLines[i];
+          const lineFontSize = line.isPrice ? 18 : fontSize;
+          if (line.isPrice && i > 0) {
+            contentHeight += 18; // Extra spacing before price
+          }
+          contentHeight += lineFontSize;
+          // Add spacing only if not last line
+          if (i < textLines.length - 1) {
+            contentHeight += line.isPrice ? 4 : 2;
+          }
+        }
+        
+        const cellHeight = contentHeight + 10; // Bottom padding
         
         // Calculate position in grid
         const x = pageMargin + colIndex * (cellWidth + cellMargin);
@@ -1052,11 +1112,11 @@ const ProductosContent = () => {
           // Generate QR code with only the product barcode
           const qrString = producto.codigos?.[0]?.codigo_barras_ean || 'N/A';
           
-          // Generate QR code as PNG using bwip-js with larger scale
+          // Generate QR code as PNG using bwip-js with adaptive scale
           const qrResult = await bwipjs.toDataURL({
             bcid: 'qrcode',
             text: qrString,
-            scale: 6,
+            scale: 3,
             height: 10,
             includetext: false,
             eclevel: 'H',
@@ -1066,10 +1126,10 @@ const ProductosContent = () => {
           // Embed QR image in PDF
           const qrImage = await pdfDoc.embedPng(qrResult.uri);
           
-          // Draw QR code (larger size for better readability)
-          const qrSize = Math.min(cellWidth, cellHeight) * 0.5;
+          // Draw QR code (compact size based on cell width)
+          const qrSize = cellWidth * 0.55;
           const qrX = x + (cellWidth - qrSize) / 2;
-          const qrY = y + cellHeight - qrSize - 20;
+          const qrY = y + cellHeight - qrSize - 10;
           
           currentPage.drawImage(qrImage, {
             x: qrX,
@@ -1078,33 +1138,20 @@ const ProductosContent = () => {
             height: qrSize,
           });
           
-          textY = qrY - 30;
+          textY = qrY - 18;
         } else {
           // No QR code, start text from top
-          textY = y + cellHeight - 40;
+          textY = y + cellHeight - 20;
         }
         
-        // Draw product info text (larger font, bold, centered)
+        // Draw product info text (compact font, bold, centered)
         const font = await pdfDoc.embedFont('Helvetica-Bold');
-        const fontSize = 14;
-        
-        const textLines = [];
-        if (selectedFields.nombre) textLines.push({ text: `Nombre: ${producto.nombre}`, isPrice: false });
-        if (selectedFields.codigo) textLines.push({ text: `Código: ${producto.codigos?.[0]?.codigo_barras_ean || 'N/A'}`, isPrice: false });
-        if (selectedFields.categoria) textLines.push({ text: `Categoría: ${producto.categoria || 'N/A'}`, isPrice: false });
-        if (selectedFields.precio_cup) textLines.push({ text: formatPriceForExport(getProductPrice(producto), 'cup'), isPrice: true });
-        if (selectedFields.costo_cup) textLines.push({ text: `Costo: ${formatPriceForExport(getProductCost(producto), 'cup')}`, isPrice: false });
-        if (selectedFields.precio_usd) textLines.push({ text: formatPriceForExport(getProductPriceUSD(producto), 'usd'), isPrice: true });
-        if (selectedFields.costo_usd) textLines.push({ text: `Costo USD: ${formatPriceForExport(getProductCostUSD(producto), 'usd')}`, isPrice: false });
-        if (selectedFields.nota) textLines.push({ text: `Nota: ${producto.producto?.nota || 'N/A'}`, isPrice: false });
-        if (selectedFields.cantidad) textLines.push({ text: `Cantidad: ${calculateAbsoluteTotalQuantity(producto)}`, isPrice: false });
-        if (selectedFields.sufijo) textLines.push({ text: `Sufijo: ${producto.producto?.sufijo || 'N/A'}`, isPrice: false });
         
         for (const line of textLines) {
-          const lineFontSize = line.isPrice ? 28 : fontSize;
+          const lineFontSize = line.isPrice ? 18 : fontSize;
           // Add spacing before price to avoid overlapping with text above
           if (line.isPrice) {
-            textY -= 40;
+            textY -= 18;
           }
           const textWidth = font.widthOfTextAtSize(line.text, lineFontSize);
           const textX = x + (cellWidth - textWidth) / 2;
@@ -1115,7 +1162,9 @@ const ProductosContent = () => {
             font: font,
             color: rgb(0, 0, 0),
           });
-          const spacing = line.isPrice ? 8 : 4;
+          // Only add spacing if this is not the last line
+          const isLastLine = textLines.indexOf(line) === textLines.length - 1;
+          const spacing = isLastLine ? 0 : (line.isPrice ? 4 : 2);
           textY -= lineFontSize + spacing;
           // Stop if text would go outside the rectangle
           if (textY < y + 5) break;
