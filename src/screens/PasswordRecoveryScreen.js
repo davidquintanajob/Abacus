@@ -45,17 +45,14 @@ const PasswordRecoveryContent = () => {
       await Linking.openURL(url);
       return;
     } catch (err) {
-      console.warn('makePhoneCall failed to open URL', err);
       // Intentar canOpenURL como fallback informativo
       try {
-        const supported = await Linking.canOpenURL(url);
-        console.log('makePhoneCall supported after error:', supported);
         if (supported) {
           await Linking.openURL(url);
           return;
         }
       } catch (e2) {
-        console.warn('canOpenURL failed', e2);
+        // canOpenURL failed
       }
       showToast({
         type: 'error',

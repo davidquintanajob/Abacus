@@ -25,9 +25,13 @@ import ExportService from '../services/ExportService';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { CameraView } from 'expo-camera';
 import * as Camera from 'expo-camera';
+import { BarcodeEngine, ALLOWED_BARCODE_TYPES } from '../barcode';
 
 const EntradasContent = () => {
   const navigation = useNavigation();
+  
+  // Initialize Barcode Engine
+  const barcodeEngineRef = useRef(null);
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
   const { token, user, permissions, entradaPermissions, entradaManagePermissions } = useAuth();
@@ -85,6 +89,20 @@ const EntradasContent = () => {
     requestCameraPermission();
   }, []);
 
+  // Initialize Barcode Engine
+  useEffect(() => {
+    barcodeEngineRef.current = new BarcodeEngine('QUICK_SCAN');
+    
+    // Start session when component mounts
+    barcodeEngineRef.current.startSession();
+    
+    return () => {
+      if (barcodeEngineRef.current) {
+        barcodeEngineRef.current.resetSession();
+      }
+    };
+  }, []);
+
   // Initialize user's store filter when both user and tiendas are ready
   useEffect(() => {
     if (!isInitialized && user?.id_tienda && tiendas.length > 0) {
@@ -134,7 +152,7 @@ const EntradasContent = () => {
       if (isInitialized) {
         fetchEntradas();
       }
-    }, [])
+    }, [isInitialized])
   );
 
   const fetchTiendas = async () => {
@@ -167,7 +185,6 @@ const EntradasContent = () => {
         setTiendas(allTiendas);
       }
     } catch (err) {
-      console.error('Error fetching tiendas:', err);
       if (!isOfflineMode) {
         setTiendas([]);
       }
@@ -182,12 +199,12 @@ const EntradasContent = () => {
       const data = await getUsuarios({ activo: true }, 1, 1000);
       setUsers(data.data || []);
     } catch (err) {
-      console.error('Error fetching users:', err);
+      // Error fetching users
       setUsers([]);
     }
   };
 
-  const fetchEntradas = async () => {
+  const fetchEntradas = async (overrideIdTienda = null) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -216,34 +233,16 @@ const EntradasContent = () => {
       const fetchLimit = hasActiveFilters ? 10000 : pagination.limit;
       const fetchPage = hasActiveFilters ? 1 : pagination.currentPage;
       
-      // Build filters to send to API - use id_servicio_tienda for store filtering
+      // Build filters to send to API
       const apiFilters = { ...filters };
       
-      // Remove id_tienda from filters since backend doesn't support it directly
-      delete apiFilters.id_tienda;
-      
-      // If a store filter is set, we need to get the servicio_tienda IDs for that store
-      // For now, we'll need to handle this differently - let's check if we have servicio_tienda data
-      
-      console.log('fetchEntradas - filters:', filters);
-      console.log('fetchEntradas - apiFilters:', apiFilters);
-      console.log('fetchEntradas - canViewAllEntradas:', canViewAllEntradas);
-      console.log('fetchEntradas - user.id_tienda:', user?.id_tienda);
-      console.log('fetchEntradas - filters.id_tienda:', filters.id_tienda);
+      // Use overrideIdTienda if provided (for immediate filter changes)
+      if (overrideIdTienda !== null) {
+        apiFilters.id_tienda = overrideIdTienda;
+      }
       
       const data = await getEntradas(apiFilters, fetchPage, fetchLimit);
       let entradas = data.data || [];
-
-      // Filter by store in frontend since backend doesn't support id_tienda filtering
-      if (filters.id_tienda) {
-        entradas = entradas.filter(e => {
-          return e.servicioTienda?.id_tienda === parseInt(filters.id_tienda);
-        });
-      } else if (!canViewAllEntradas && user?.id_tienda) {
-        entradas = entradas.filter(e => {
-          return e.servicioTienda?.id_tienda === user.id_tienda;
-        });
-      }
 
       if (hasActiveFilters) {
         const totalFilteredItems = entradas.length;
@@ -265,7 +264,6 @@ const EntradasContent = () => {
       }
     } catch (err) {
       setError(err.message);
-      console.error('Error fetching entradas:', err);
     } finally {
       setIsLoading(false);
       setIsSearching(false);
@@ -298,7 +296,9 @@ const EntradasContent = () => {
     setFilters(clearedFilters);
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
-    fetchEntradas();
+    
+    // Pass cleared filters directly to avoid stale state
+    fetchEntradas(clearedFilters.id_tienda);
   };
 
   const handleDelete = (entrada) => {
@@ -357,7 +357,7 @@ const EntradasContent = () => {
   };
 
   const handleNotificationsPress = () => {
-    console.log('Notificaciones');
+    // Notificaciones
   };
 
   const handleProfilePress = () => {
@@ -388,21 +388,51 @@ const EntradasContent = () => {
     setShowScannerModal(true);
   };
 
-  const handleBarcodeScanned = ({ data }) => {
-    if (data) {
-      const clearedFilters = {
-        nombre_servicio: '',
-        fecha_desde: '',
-        fecha_hasta: '',
-        id_tienda: '',
-        id_usuario: ''
-      };
+  const handleBarcodeScanned = async (scanningResult) => {
+    if (!barcodeEngineRef.current) return;
+
+    try {
+      const result = await barcodeEngineRef.current.processScanningResult(scanningResult);
       
-      setFilters({ ...clearedFilters, codigo_lote: data });
-      setShowScannerModal(false);
-      showToast({ type: 'success', message: 'Código escaneado correctamente' });
-      setPagination(prev => ({ ...prev, currentPage: 1 }));
-      setIsSearching(true);
+      if (!result) {
+        // Still accumulating reads, wait for more
+        return;
+      }
+
+      if (result.success) {
+        const clearedFilters = {
+          nombre_servicio: '',
+          fecha_desde: '',
+          fecha_hasta: '',
+          id_tienda: '',
+          id_usuario: ''
+        };
+        
+        setFilters({ ...clearedFilters, codigo_lote: result.code });
+        setShowScannerModal(false);
+        showToast({ 
+          type: 'success', 
+          message: `Código escaneado (${result.type}) - Confianza: ${(result.confidenceScore * 100).toFixed(0)}%` 
+        });
+        setPagination(prev => ({ ...prev, currentPage: 1 }));
+        setIsSearching(true);
+        
+        // Reset session for next use
+        barcodeEngineRef.current.startSession();
+      } else {
+        showToast({ 
+          type: 'warning', 
+          message: result.rejectionReason || 'Código no válido. Por favor vuelva a enfocar.' 
+        });
+        
+        // Reset session to try again
+        barcodeEngineRef.current.startSession();
+      }
+    } catch (error) {
+      console.error('Error processing barcode:', error);
+      showToast({ type: 'error', message: 'Error al procesar código' });
+      barcodeEngineRef.current.resetSession();
+      barcodeEngineRef.current.startSession();
     }
   };
 
@@ -418,28 +448,11 @@ const EntradasContent = () => {
         (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
         (userRole === 'económico' && entradaPermissions?.economico);
 
-      // Build filters to send to API - use id_servicio_tienda for store filtering
+      // Build filters to send to API
       const apiFilters = { ...filters };
-      
-      // Remove id_tienda from filters since backend doesn't support it directly
-      delete apiFilters.id_tienda;
-      
-      console.log('handleExport - filters:', filters);
-      console.log('handleExport - apiFilters:', apiFilters);
       
       const data = await getEntradas(apiFilters, 1, 10000);
       let allEntradas = data.data || [];
-
-      // Filter by store in frontend since backend doesn't support id_tienda filtering
-      if (filters.id_tienda) {
-        allEntradas = allEntradas.filter(e => {
-          return e.servicioTienda?.id_tienda === parseInt(filters.id_tienda);
-        });
-      } else if (!canViewAllEntradas && user?.id_tienda) {
-        allEntradas = allEntradas.filter(e => {
-          return e.servicioTienda?.id_tienda === user.id_tienda;
-        });
-      }
 
       if (exportType === 'excel') {
         await exportToExcel(allEntradas);
@@ -447,7 +460,6 @@ const EntradasContent = () => {
         await exportToPDF(allEntradas);
       }
     } catch (error) {
-      console.error('Error exporting:', error);
       showToast({ type: 'error', message: 'Error al exportar: ' + error.message });
     } finally {
       setIsExporting(false);
@@ -497,7 +509,6 @@ const EntradasContent = () => {
 
       showExportSuccessAlert(fileUri, fileName);
     } catch (error) {
-      console.error('Error exporting to Excel:', error);
       throw error;
     }
   };
@@ -581,7 +592,6 @@ const EntradasContent = () => {
       
       showExportSuccessAlert(uri, fileName);
     } catch (error) {
-      console.error('Error exporting to PDF:', error);
       throw error;
     }
   };
@@ -619,7 +629,6 @@ const EntradasContent = () => {
                 showToast({ type: 'error', message: result.error || 'Error al guardar el archivo' });
               }
             } catch (error) {
-              console.error('Error saving to Downloads:', error);
               showToast({ type: 'error', message: 'Error al guardar: ' + error.message });
             }
           },
@@ -638,7 +647,6 @@ const EntradasContent = () => {
                 showToast({ type: 'error', message: 'Compartir no está disponible en este dispositivo' });
               }
             } catch (error) {
-              console.error('Error sharing file:', error);
               showToast({ type: 'error', message: 'Error al compartir el archivo' });
             }
           },
@@ -803,7 +811,7 @@ const EntradasContent = () => {
                       setShowTiendaDropdown(false);
                       setTiendaSearchText('');
                       setPagination(prev => ({ ...prev, currentPage: 1 }));
-                      fetchEntradas();
+                      fetchEntradas('');
                     }}
                   >
                     <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todas las tiendas</Text>
@@ -815,11 +823,12 @@ const EntradasContent = () => {
                       key={tienda.id_tienda}
                       style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
                       onPress={() => {
-                        setFilters(prev => ({ ...prev, id_tienda: tienda.id_tienda.toString() }));
+                        const newIdTienda = tienda.id_tienda.toString();
+                        setFilters(prev => ({ ...prev, id_tienda: newIdTienda }));
                         setShowTiendaDropdown(false);
                         setTiendaSearchText('');
                         setPagination(prev => ({ ...prev, currentPage: 1 }));
-                        fetchEntradas();
+                        fetchEntradas(newIdTienda);
                       }}
                     >
                       <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
@@ -1238,6 +1247,9 @@ const EntradasContent = () => {
           <View style={styles.scannerContainer}>
             <CameraView
               style={styles.scanner}
+              barcodeScannerSettings={{
+                barcodeTypes: ALLOWED_BARCODE_TYPES,
+              }}
               onBarcodeScanned={handleBarcodeScanned}
               facing="back"
             />

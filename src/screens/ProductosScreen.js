@@ -135,7 +135,7 @@ const ProductosContent = () => {
       if (isInitialized) {
         fetchProductos();
       }
-    }, [])
+    }, [isInitialized])
   );
 
   const fetchTiendas = async () => {
@@ -173,14 +173,13 @@ const ProductosContent = () => {
         setTiendas(allTiendas);
       }
     } catch (err) {
-      console.error('Error fetching tiendas:', err);
       if (!isOfflineMode) {
         setTiendas([]);
       }
     }
   };
 
-  const fetchProductos = async () => {
+  const fetchProductos = async (overrideIdTienda = null) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -268,7 +267,14 @@ const ProductosContent = () => {
         // Otherwise, use paginated fetch from backend
         const fetchLimit = hasActiveFilters ? 10000 : pagination.limit;
         const fetchPage = hasActiveFilters ? 1 : pagination.currentPage;
-        const data = await getProductos(filters, fetchPage, fetchLimit);
+        
+        // Use overrideIdTienda if provided (for immediate filter changes)
+        const apiFilters = { ...filters };
+        if (overrideIdTienda !== null) {
+          apiFilters.id_tienda = overrideIdTienda;
+        }
+        
+        const data = await getProductos(apiFilters, fetchPage, fetchLimit);
         let productos = data.data || [];
 
         // Apply store visibility permissions
@@ -310,7 +316,6 @@ const ProductosContent = () => {
       }
     } catch (err) {
       setError(err.message);
-      console.error('Error fetching productos:', err);
     } finally {
       setIsLoading(false);
       setIsSearching(false);
@@ -345,8 +350,8 @@ const ProductosContent = () => {
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
     
-    // Simply call fetchProductos which handles both online and offline modes correctly
-    fetchProductos();
+    // Pass cleared filters directly to avoid stale state
+    fetchProductos(clearedFilters.id_tienda);
   };
 
   const handleDelete = (producto) => {
@@ -402,7 +407,7 @@ const ProductosContent = () => {
   };
 
   const handleNotificationsPress = () => {
-    console.log('Notificaciones');
+    // Notificaciones
   };
 
   const handleProfilePress = () => {
@@ -422,7 +427,6 @@ const ProductosContent = () => {
   };
 
   const handleOpenScanner = async () => {
-    console.log('handleOpenScanner called');
     setShowScannerModal(true);
   };
 
@@ -491,7 +495,6 @@ const ProductosContent = () => {
         await exportToBarcode(allProductos);
       }
     } catch (error) {
-      console.error('Error exporting:', error);
       showToast({ type: 'error', message: 'Error al exportar: ' + error.message });
     } finally {
       setIsExporting(false);
@@ -518,7 +521,7 @@ const ProductosContent = () => {
         await FileSystem.makeDirectoryAsync(cacheDir, { intermediates: true });
       }
     } catch (error) {
-      console.log('Directory check failed, using documentDirectory as fallback:', error);
+      // Directory check failed, using documentDirectory as fallback
       return FileSystem.documentDirectory;
     }
     
@@ -552,7 +555,6 @@ const ProductosContent = () => {
         return false;
       }
     } catch (error) {
-      console.error('Error saving to Downloads:', error);
       showToast({ type: 'error', message: 'Error al guardar: ' + error.message });
       return false;
     }
@@ -588,7 +590,6 @@ const ProductosContent = () => {
                 showToast({ type: 'error', message: 'Compartir no está disponible en este dispositivo' });
               }
             } catch (error) {
-              console.error('Error sharing file:', error);
               showToast({ type: 'error', message: 'Error al compartir el archivo' });
             }
           },
@@ -762,7 +763,6 @@ const ProductosContent = () => {
 
       showExportSuccessAlert(fileUri, fileName);
     } catch (error) {
-      console.error('Error exporting to Excel:', error);
       throw error;
     }
   };
@@ -1015,7 +1015,6 @@ const ProductosContent = () => {
 
       showExportSuccessAlert(newUri, fileName);
     } catch (error) {
-      console.error('Error exporting to HTML:', error);
       throw error;
     }
   };
@@ -1199,7 +1198,6 @@ const ProductosContent = () => {
       
       showExportSuccessAlert(fileUri, fileName);
     } catch (error) {
-      console.error('Error exporting QR codes:', error);
       throw error;
     }
   };
@@ -1265,7 +1263,6 @@ const ProductosContent = () => {
             // Extract the data URI from the result
             barcodeImageBase64 = barcodeResult.uri;
           } catch (error) {
-            console.error('Error generating barcode:', error);
             // Fallback to simple pattern if barcode generation fails
             const barcodePattern = generateSimpleBarcode(codigo);
             barcodeImageBase64 = `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><text x="10" y="50" font-family="monospace" font-size="8">${barcodePattern}</text><text x="10" y="90" font-size="10">${codigo}</text></svg>`)}`;
@@ -1373,7 +1370,6 @@ const ProductosContent = () => {
 
       showExportSuccessAlert(newUri, fileName);
     } catch (error) {
-      console.error('Error exporting barcodes:', error);
       throw error;
     }
   };
@@ -1820,7 +1816,7 @@ const ProductosContent = () => {
                       setShowTiendaDropdown(false);
                       setTiendaSearchText('');
                       setPagination(prev => ({ ...prev, currentPage: 1 }));
-                      fetchProductos();
+                      fetchProductos('');
                     }}
                   >
                     <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todas las tiendas</Text>
@@ -1832,11 +1828,12 @@ const ProductosContent = () => {
                       key={tienda.id_tienda}
                       style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
                       onPress={() => {
-                        setFilters(prev => ({ ...prev, id_tienda: tienda.id_tienda.toString() }));
+                        const newIdTienda = tienda.id_tienda.toString();
+                        setFilters(prev => ({ ...prev, id_tienda: newIdTienda }));
                         setShowTiendaDropdown(false);
                         setTiendaSearchText('');
                         setPagination(prev => ({ ...prev, currentPage: 1 }));
-                        fetchProductos();
+                        fetchProductos(newIdTienda);
                       }}
                     >
                       <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>

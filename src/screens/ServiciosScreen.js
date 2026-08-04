@@ -58,9 +58,7 @@ const ServiciosContent = () => {
 
   // Initialize user's store filter when both user and tiendas are ready
   useEffect(() => {
-    console.log('[ServiciosScreen] Init effect - user:', user?.id_tienda, 'tiendas.length:', tiendas.length, 'isInitialized:', isInitialized);
     if (!isInitialized && user?.id_tienda && tiendas.length > 0) {
-      console.log('[ServiciosScreen] Setting id_tienda filter:', user.id_tienda);
       setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
       setUserTiendaReady(true);
       setIsInitialized(true);
@@ -69,9 +67,7 @@ const ServiciosContent = () => {
 
   // Single API call when all data is ready
   useEffect(() => {
-    console.log('[ServiciosScreen] Ready effect - userTiendaReady:', userTiendaReady, 'hasDoneInitialFetch:', hasDoneInitialFetch.current);
     if (userTiendaReady && !hasDoneInitialFetch.current) {
-      console.log('[ServiciosScreen] Making initial API call');
       fetchServicios();
       hasDoneInitialFetch.current = true;
     }
@@ -80,7 +76,6 @@ const ServiciosContent = () => {
   // Fetch on pagination changes after initial load
   useEffect(() => {
     if (hasDoneInitialFetch.current) {
-      console.log('[ServiciosScreen] Pagination changed to:', pagination.currentPage);
       fetchServicios();
     }
   }, [pagination.currentPage]);
@@ -101,13 +96,11 @@ const ServiciosContent = () => {
 
   useFocusEffect(
     React.useCallback(() => {
-      console.log('[ServiciosScreen] useFocusEffect triggered - isInitialized:', isInitialized);
       // Only fetch on screen focus after initial load
       if (isInitialized) {
-        console.log('[ServiciosScreen] Fetching on screen focus');
         fetchServicios();
       }
-    }, [])
+    }, [isInitialized])
   );
 
   const fetchTiendas = async () => {
@@ -145,15 +138,13 @@ const ServiciosContent = () => {
         setTiendas(allTiendas);
       }
     } catch (err) {
-      console.error('Error fetching tiendas:', err);
       if (!isOfflineMode) {
         setTiendas([]);
       }
     }
   };
 
-  const fetchServicios = async () => {
-    console.log('[ServiciosScreen] fetchServicios called - filters:', filters);
+  const fetchServicios = async (overrideIdTienda = null) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -223,7 +214,14 @@ const ServiciosContent = () => {
         // Otherwise, use paginated fetch from backend
         const fetchLimit = hasActiveFilters ? 10000 : pagination.limit;
         const fetchPage = hasActiveFilters ? 1 : pagination.currentPage;
-        const data = await getServicios(filters, fetchPage, fetchLimit);
+        
+        // Use overrideIdTienda if provided (for immediate filter changes)
+        const apiFilters = { ...filters };
+        if (overrideIdTienda !== null) {
+          apiFilters.id_tienda = overrideIdTienda;
+        }
+        
+        const data = await getServicios(apiFilters, fetchPage, fetchLimit);
         let servicios = data.data || [];
 
         // Apply store visibility permissions
@@ -265,7 +263,6 @@ const ServiciosContent = () => {
       }
     } catch (err) {
       setError(err.message);
-      console.error('Error fetching servicios:', err);
     } finally {
       setIsLoading(false);
       setIsSearching(false);
@@ -273,28 +270,35 @@ const ServiciosContent = () => {
   };
 
   const handleSearch = () => {
-    console.log('[ServiciosScreen] handleSearch called');
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
     fetchServicios();
   };
 
   const handleClearFilters = () => {
-    // Always preserve user's store filter when clearing
+    // Check if user can view all stores
+    const userRole = user?.rol?.toLowerCase();
+    const canViewAllStores = 
+      userRole === 'administrador' ||
+      (userRole === 'dependiente' && permissions?.dependiente) ||
+      (userRole === 'almacenero' && permissions?.almacenero) ||
+      (userRole === 'económico' && permissions?.economico);
+
+    // Preserve tienda filter only for users without permission
     const clearedFilters = { 
       nombre: '', 
       codigo: '', 
       categoria: '', 
       esvendible: '', 
-      id_tienda: user?.id_tienda ? user.id_tienda.toString() : '' 
+      id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : '' 
     };
     
     setFilters(clearedFilters);
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
     
-    // Simply call fetchServicios which handles both online and offline modes correctly
-    fetchServicios();
+    // Pass cleared filters directly to avoid stale state
+    fetchServicios(clearedFilters.id_tienda);
   };
 
   const handleDelete = (servicio) => {
@@ -351,7 +355,7 @@ const ServiciosContent = () => {
   };
 
   const handleNotificationsPress = () => {
-    console.log('Notificaciones');
+    // Notificaciones
   };
 
   const handleProfilePress = () => {
@@ -359,21 +363,18 @@ const ServiciosContent = () => {
   };
 
   const handleNextPage = () => {
-    console.log('[ServiciosScreen] handleNextPage called - current:', pagination.currentPage, 'total:', pagination.totalPages);
     if (pagination.currentPage < pagination.totalPages) {
       setPagination(prev => ({ ...prev, currentPage: prev.currentPage + 1 }));
     }
   };
 
   const handlePrevPage = () => {
-    console.log('[ServiciosScreen] handlePrevPage called - current:', pagination.currentPage);
     if (pagination.currentPage > 1) {
       setPagination(prev => ({ ...prev, currentPage: prev.currentPage - 1 }));
     }
   };
 
   const handleOpenScanner = async () => {
-    console.log('handleOpenScanner called');
     setShowScannerModal(true);
   };
 
@@ -570,7 +571,7 @@ const ServiciosContent = () => {
                       setShowTiendaDropdown(false);
                       setTiendaSearchText('');
                       setPagination(prev => ({ ...prev, currentPage: 1 }));
-                      fetchServicios();
+                      fetchServicios('');
                     }}
                   >
                     <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todas las tiendas</Text>
@@ -582,11 +583,12 @@ const ServiciosContent = () => {
                       key={tienda.id_tienda}
                       style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
                       onPress={() => {
-                        setFilters(prev => ({ ...prev, id_tienda: tienda.id_tienda.toString() }));
+                        const newIdTienda = tienda.id_tienda.toString();
+                        setFilters(prev => ({ ...prev, id_tienda: newIdTienda }));
                         setShowTiendaDropdown(false);
                         setTiendaSearchText('');
                         setPagination(prev => ({ ...prev, currentPage: 1 }));
-                        fetchServicios();
+                        fetchServicios(newIdTienda);
                       }}
                     >
                       <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>

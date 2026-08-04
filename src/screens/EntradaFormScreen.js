@@ -105,7 +105,6 @@ const EntradaFormContent = () => {
           setDisplayCostoCup(parseFloat(completeEntrada.costo_cup).toFixed(2));
           setDisplayCostoUsd(parseFloat(completeEntrada.costo_usd).toFixed(2));
         } catch (err) {
-          console.error('Error fetching complete entrada:', err);
           showToast({ type: 'error', message: 'Error al cargar datos de la entrada' });
         } finally {
           setIsFetchingEntrada(false);
@@ -118,15 +117,10 @@ const EntradaFormContent = () => {
 
   useEffect(() => {
     if (productoPreSeleccionado && isAddMode) {
-      console.log('productoPreSeleccionado:', JSON.stringify(productoPreSeleccionado, null, 2));
-      console.log('tiendas_servicio:', JSON.stringify(productoPreSeleccionado.tiendas_servicio, null, 2));
-      
       // Get costs from the first tienda_servicio entry if available
       const firstTiendaServicio = productoPreSeleccionado.tiendas_servicio?.[0];
       const costoCup = firstTiendaServicio?.costo_cup || '';
       const costoUsd = firstTiendaServicio?.costo_usd || '';
-      
-      console.log('costoCup:', costoCup, 'costoUsd:', costoUsd);
       
       setFormData(prev => ({
         ...prev,
@@ -165,7 +159,7 @@ const EntradaFormContent = () => {
         setTiendas(allTiendas);
       }
     } catch (err) {
-      console.error('Error fetching tiendas:', err);
+      // Error fetching tiendas
     }
   };
 
@@ -178,7 +172,7 @@ const EntradaFormContent = () => {
       const data = await getProductos({ esvendible: 'true' }, 1, 1000);
       setProductos(data.data || []);
     } catch (err) {
-      console.error('Error fetching productos:', err);
+      // Error fetching productos
     }
   };
 
@@ -193,7 +187,7 @@ const EntradaFormContent = () => {
         setExchangeRate(data.cupToUsdRate);
       }
     } catch (err) {
-      console.error('Error fetching config:', err);
+      // Error fetching config
     }
   };
 
@@ -226,7 +220,7 @@ const EntradaFormContent = () => {
         costo_usd: parseFloat(nuevoCostoPromedioUsd.toFixed(5)),
       };
     } catch (error) {
-      console.error('Error calculando costo promedio:', error);
+      // Error calculando costo promedio
       return { costo_cup: nuevoCostoCup, costo_usd: nuevoCostoUsd };
     }
   };
@@ -350,7 +344,6 @@ const EntradaFormContent = () => {
       
       navigation.goBack();
     } catch (err) {
-      console.error('Error en handleSave:', err);
       showToast({ type: 'error', message: err.message, code: err.code });
     } finally {
       setIsSaving(false);

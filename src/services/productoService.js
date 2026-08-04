@@ -21,7 +21,6 @@ export const getProductos = async (filters = {}, page = 1, limit = 10) => {
       queryParams.append('cantidad_min', '0');
     }
 
-    console.log('getProductos queryParams:', queryParams.toString());
     const response = await api.get(`/producto/filter?${queryParams}`);
     return response.data;
   } catch (error) {
@@ -52,13 +51,9 @@ export const getProductoById = async (id) => {
 
 export const createProducto = async (productoData) => {
   try {
-    console.log('createProducto llamado con datos:', JSON.stringify(productoData, null, 2));
     const response = await api.post('/producto', productoData);
-    console.log('Respuesta del servidor:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Error en createProducto:', error);
-    console.error('Error response:', error.response?.data);
     const errorMessage = error.response?.data?.errors?.[0] || 
                         error.response?.data?.message || 
                         error.message ||

@@ -14,8 +14,8 @@ export const getEntradas = async (filters = {}, page = 1, limit = 10) => {
     if (filters.fecha_hasta) queryParams.append('fecha_hasta', filters.fecha_hasta);
     if (filters.nombre_servicio) queryParams.append('nombre_servicio', filters.nombre_servicio);
     if (filters.codigo_lote) queryParams.append('codigo_lote', filters.codigo_lote);
+    if (filters.id_tienda) queryParams.append('id_tienda', filters.id_tienda);
 
-    console.log('getEntradas queryParams:', queryParams.toString());
     const response = await api.get(`/entrada/filter?${queryParams}`);
     return response.data;
   } catch (error) {
@@ -46,13 +46,9 @@ export const getEntradaById = async (id) => {
 
 export const createEntrada = async (entradaData) => {
   try {
-    console.log('createEntrada llamado con datos:', JSON.stringify(entradaData, null, 2));
     const response = await api.post('/entrada', entradaData);
-    console.log('Respuesta del servidor:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Error en createEntrada:', error);
-    console.error('Error response:', error.response?.data);
     const errorMessage = error.response?.data?.errors?.[0] || 
                         error.response?.data?.message || 
                         error.message ||

@@ -37,7 +37,7 @@ const TiendasContent = () => {
   useFocusEffect(
     React.useCallback(() => {
       fetchTiendas();
-    }, [pagination.currentPage])
+    }, [])
   );
 
   const fetchTiendas = async () => {
@@ -51,7 +51,6 @@ const TiendasContent = () => {
       setPagination(data.pagination || pagination);
     } catch (err) {
       setError(err.message);
-      console.error('Error fetching tiendas:', err);
     } finally {
       setIsLoading(false);
       setIsSearching(false);
@@ -80,7 +79,6 @@ const TiendasContent = () => {
         setPagination(data.pagination || pagination);
       } catch (err) {
         setError(err.message);
-        console.error('Error fetching tiendas:', err);
       } finally {
         setIsLoading(false);
         setIsSearching(false);
@@ -132,7 +130,7 @@ const TiendasContent = () => {
   };
 
   const handleNotificationsPress = () => {
-    console.log('Notificaciones');
+    // Notificaciones
   };
 
   const handleProfilePress = () => {

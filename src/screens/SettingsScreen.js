@@ -34,7 +34,7 @@ const SettingsContent = () => {
   };
 
   const handleNotificationsPress = () => {
-    console.log('Notificaciones');
+    // Notificaciones
   };
 
   const handleProfilePress = () => {
@@ -60,7 +60,6 @@ const SettingsContent = () => {
         setServerIP(API_CONFIG.API_BASE_URL || '');
       }
     } catch (error) {
-      console.error('Error loading server URL:', error);
       // Fallback a config.js en caso de error
       setServerIP(API_CONFIG.API_BASE_URL || '');
     }
@@ -82,7 +81,6 @@ const SettingsContent = () => {
       showToast({ type: 'success', message: 'URL del servidor guardada correctamente' });
     } catch (error) {
       showToast({ type: 'error', message: 'No se pudo guardar la URL del servidor' });
-      console.error('Error saving server URL:', error);
     }
   };
 

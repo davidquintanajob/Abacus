@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, ActivityIndicator, Image, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -64,15 +64,21 @@ const AppStack = ({ initialRoute }) => (
   </Stack.Navigator>
 );
 
+const SplashScreen = () => (
+  <View style={styles.splashContainer}>
+    <Image 
+      source={require('./assets/splash-icon.png')} 
+      style={styles.splashImage}
+      resizeMode="contain"
+    />
+  </View>
+);
+
 const RootNavigator = () => {
   const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
+    return <SplashScreen />;
   }
 
   return <AppStack initialRoute={isAuthenticated ? 'Home' : 'Login'} />;
@@ -93,3 +99,16 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  splashContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+  },
+  splashImage: {
+    width: 200,
+    height: 200,
+  },
+});

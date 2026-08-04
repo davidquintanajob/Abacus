@@ -46,7 +46,7 @@ const UsuariosContent = () => {
   useFocusEffect(
     React.useCallback(() => {
       fetchUsuarios();
-    }, [pagination.currentPage])
+    }, [])
   );
 
   const fetchTiendas = async () => {
@@ -54,7 +54,7 @@ const UsuariosContent = () => {
       const data = await getTiendas({}, 1, 1000);
       setTiendas(data.data || []);
     } catch (err) {
-      console.error('Error fetching tiendas:', err);
+      // Error fetching tiendas
     }
   };
 
@@ -85,7 +85,6 @@ const UsuariosContent = () => {
       setPagination(data.pagination || pagination);
     } catch (err) {
       setError(err.message);
-      console.error('Error fetching usuarios:', err);
     } finally {
       setIsLoading(false);
       setIsSearching(false);
@@ -131,7 +130,6 @@ const UsuariosContent = () => {
         setPagination(data.pagination || pagination);
       } catch (err) {
         setError(err.message);
-        console.error('Error fetching usuarios:', err);
       } finally {
         setIsLoading(false);
         setIsSearching(false);
@@ -183,7 +181,7 @@ const UsuariosContent = () => {
   };
 
   const handleNotificationsPress = () => {
-    console.log('Notificaciones');
+    // Notificaciones
   };
 
   const handleProfilePress = () => {

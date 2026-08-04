@@ -54,7 +54,6 @@ class ExportService {
         message: 'Archivo guardado correctamente en Descargas.'
       };
     } catch (error) {
-      console.error('Error saving with MediaStore:', error);
       return {
         success: false,
         method: 'MediaStore',
@@ -96,7 +95,6 @@ class ExportService {
         message: 'Abre el diálogo para guardar o compartir el archivo.'
       };
     } catch (error) {
-      console.error('Error saving with Sharing:', error);
       return {
         success: false,
         method: 'Sharing',
@@ -126,7 +124,6 @@ class ExportService {
         message: `Archivo guardado temporalmente en: ${fileUri}`
       };
     } catch (error) {
-      console.error('Error saving to cache:', error);
       return {
         success: false,
         method: 'Cache',

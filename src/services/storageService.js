@@ -16,7 +16,6 @@ export const storageService = {
       await AsyncStorage.setItem(HAS_OFFLINE_DATA_KEY, 'true');
       return true;
     } catch (error) {
-      console.error('Error guardando servicios en AsyncStorage:', error);
       return false;
     }
   },
@@ -27,7 +26,6 @@ export const storageService = {
       const jsonValue = await AsyncStorage.getItem(SERVICIOS_KEY);
       return jsonValue !== null ? JSON.parse(jsonValue) : [];
     } catch (error) {
-      console.error('Error leyendo servicios de AsyncStorage:', error);
       return [];
     }
   },
@@ -38,7 +36,6 @@ export const storageService = {
       const hasData = await AsyncStorage.getItem(HAS_OFFLINE_DATA_KEY);
       return hasData === 'true';
     } catch (error) {
-      console.error('Error verificando datos offline:', error);
       return false;
     }
   },
@@ -66,11 +63,9 @@ export const storageService = {
         if (!canViewAllStores && user?.id_tienda) {
           const userTienda = tiendas.find(t => t.id_tienda === user.id_tienda);
           tiendas = userTienda ? [userTienda] : [];
-          console.log(`Filtrando tiendas por tienda del usuario ${user.id_tienda}: ${tiendas.length} tiendas`);
         }
       }
       
-      console.log(`Sincronizando ${tiendas.length} tiendas`);
       await storageService.saveTiendas(tiendas);
 
       // Obtener todos los servicios (incluyendo productos y sus relaciones de ofertas)
@@ -93,17 +88,8 @@ export const storageService = {
           servicios = servicios.filter(s => {
             return s.tiendas_servicio?.some(ts => ts.id_tienda === user.id_tienda);
           });
-          console.log(`Filtrando por tienda ${user.id_tienda}: ${servicios.length} servicios`);
         }
       }
-      
-      console.log(`Sincronizando ${servicios.length} servicios`);
-      console.log('Muestra de servicios:', servicios.slice(0, 5).map(s => ({
-        id: s.id_servicio,
-        nombre: s.nombre,
-        esvendible: s.esvendible,
-        hasProducto: !!s.producto
-      })));
       
       await storageService.saveServicios(servicios);
 
@@ -125,16 +111,13 @@ export const storageService = {
           productos = productos.filter(p => {
             return p.tiendas_servicio?.some(ts => ts.id_tienda === user.id_tienda);
           });
-          console.log(`Filtrando productos por tienda ${user.id_tienda}: ${productos.length} productos`);
         }
       }
       
-      console.log(`Sincronizando ${productos.length} productos`);
       await storageService.saveProductos(productos);
 
       return { success: true, serviciosCount: servicios.length, productosCount: productos.length, tiendasCount: tiendas.length };
     } catch (error) {
-      console.error('Error sincronizando datos:', error);
       return { success: false, error: error.message };
     }
   },
@@ -145,7 +128,6 @@ export const storageService = {
       await AsyncStorage.multiRemove([SERVICIOS_KEY, PRODUCTOS_KEY, TIENDAS_KEY, HAS_OFFLINE_DATA_KEY]);
       return true;
     } catch (error) {
-      console.error('Error limpiando datos offline:', error);
       return false;
     }
   },
@@ -156,7 +138,6 @@ export const storageService = {
       await AsyncStorage.setItem(PRODUCTOS_KEY, JSON.stringify(productos));
       return true;
     } catch (error) {
-      console.error('Error guardando productos en AsyncStorage:', error);
       return false;
     }
   },
@@ -167,7 +148,6 @@ export const storageService = {
       const jsonValue = await AsyncStorage.getItem(PRODUCTOS_KEY);
       return jsonValue !== null ? JSON.parse(jsonValue) : [];
     } catch (error) {
-      console.error('Error leyendo productos de AsyncStorage:', error);
       return [];
     }
   },
@@ -210,7 +190,6 @@ export const storageService = {
 
       return filtered;
     } catch (error) {
-      console.error('Error filtrando productos localmente:', error);
       return [];
     }
   },
@@ -221,7 +200,6 @@ export const storageService = {
       await AsyncStorage.setItem(TIENDAS_KEY, JSON.stringify(tiendas));
       return true;
     } catch (error) {
-      console.error('Error guardando tiendas en AsyncStorage:', error);
       return false;
     }
   },
@@ -232,7 +210,6 @@ export const storageService = {
       const jsonValue = await AsyncStorage.getItem(TIENDAS_KEY);
       return jsonValue !== null ? JSON.parse(jsonValue) : [];
     } catch (error) {
-      console.error('Error leyendo tiendas de AsyncStorage:', error);
       return [];
     }
   },
@@ -279,7 +256,6 @@ export const storageService = {
 
       return filtered;
     } catch (error) {
-      console.error('Error filtrando servicios localmente:', error);
       return [];
     }
   },

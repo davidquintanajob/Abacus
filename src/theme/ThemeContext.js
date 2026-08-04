@@ -36,7 +36,7 @@ export const ThemeProvider = ({ children }) => {
         setIsDark(savedTheme === 'dark');
       }
     } catch (error) {
-      console.error('Error loading theme:', error);
+      // Error loading theme
     } finally {
       setIsLoading(false);
     }
@@ -46,7 +46,7 @@ export const ThemeProvider = ({ children }) => {
     try {
       await SecureStore.setItemAsync('theme', dark ? 'dark' : 'light');
     } catch (error) {
-      console.error('Error saving theme:', error);
+      // Error saving theme
     }
   };
 

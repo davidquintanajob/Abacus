@@ -39,7 +39,6 @@ const HomeContent = () => {
 
   const handleNotificationsPress = () => {
     // Implementar lógica de notificaciones
-    console.log('Notificaciones');
   };
 
   const handleProfilePress = () => {

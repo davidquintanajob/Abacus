@@ -33,7 +33,7 @@ export const logout = async () => {
     await SecureStore.deleteItemAsync('refreshToken');
     await SecureStore.deleteItemAsync('user');
   } catch (error) {
-    console.error('Error al cerrar sesión:', error);
+    // Error al cerrar sesión
   }
 };
 
@@ -57,7 +57,6 @@ export const getUser = async () => {
     const userJson = await SecureStore.getItemAsync('user');
     return userJson ? JSON.parse(userJson) : null;
   } catch (error) {
-    console.error('Error al obtener usuario:', error);
     return null;
   }
 };
@@ -66,7 +65,6 @@ export const getToken = async () => {
   try {
     return await SecureStore.getItemAsync('token');
   } catch (error) {
-    console.error('Error al obtener token:', error);
     return null;
   }
 };

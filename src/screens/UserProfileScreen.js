@@ -56,7 +56,6 @@ const UserProfileContent = () => {
       setUserData(displayData);
     } catch (err) {
       setError(err.message);
-      console.error('Error fetching user data:', err);
     } finally {
       setIsLoading(false);
     }

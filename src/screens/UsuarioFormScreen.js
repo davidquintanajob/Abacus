@@ -76,7 +76,7 @@ const UsuarioFormContent = () => {
       const data = await getTiendas({}, 1, 1000);
       setTiendas(data.data || []);
     } catch (err) {
-      console.error('Error fetching tiendas:', err);
+      // Error fetching tiendas
     }
   };
 

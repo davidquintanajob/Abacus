@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +18,7 @@ import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import { BarcodeEngine, ALLOWED_BARCODE_TYPES } from '../barcode';
 
 const ProductoFormContent = () => {
   const navigation = useNavigation();
@@ -27,6 +28,9 @@ const ProductoFormContent = () => {
   const { token, user, permissions, entradaManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
+  
+  // Initialize Barcode Engine
+  const barcodeEngineRef = useRef(null);
 
   const { producto, mode } = route.params || { mode: 'add' };
 
@@ -85,6 +89,33 @@ const ProductoFormContent = () => {
       setIsPricesExpanded(true);
     }
   }, [formData.codigoList.length, formData.productoTiendaList.length]);
+
+  // Initialize Barcode Engine
+  useEffect(() => {
+    barcodeEngineRef.current = new BarcodeEngine('PRODUCT_CREATION');
+    
+    // Set business rules callback to check for duplicate codes
+    barcodeEngineRef.current.setBusinessRulesCallback(async ({ code, type }) => {
+      const codeExists = formData.codigoList.some(
+        codigo => codigo.codigo_barras_ean.trim().toLowerCase() === code.trim().toLowerCase()
+      );
+      
+      if (codeExists) {
+        return { valid: false, details: 'Este código ya está registrado para este producto' };
+      }
+      
+      return { valid: true, details: 'Código único para producto' };
+    });
+    
+    // Start session when component mounts
+    barcodeEngineRef.current.startSession();
+    
+    return () => {
+      if (barcodeEngineRef.current) {
+        barcodeEngineRef.current.resetSession();
+      }
+    };
+  }, [formData.codigoList]);
 
   useEffect(() => {
     // Check if any visible store has stock > 0
@@ -230,7 +261,6 @@ const ProductoFormContent = () => {
             costo_usd_general: null,
           });
         } catch (err) {
-          console.error('Error fetching complete producto:', err);
           showToast({ type: 'error', message: 'Error al cargar datos del producto' });
         } finally {
           setIsFetchingProducto(false);
@@ -250,7 +280,7 @@ const ProductoFormContent = () => {
       const data = await getTiendas({}, 1, 1000);
       setTiendas(data.data || []);
     } catch (err) {
-      console.error('Error fetching tiendas:', err);
+      // Error fetching tiendas
     }
   };
 
@@ -265,14 +295,11 @@ const ProductoFormContent = () => {
         setExchangeRate(data.cupToUsdRate);
       }
     } catch (err) {
-      console.error('Error fetching config:', err);
+      // Error fetching config
     }
   };
 
   const handleSave = async () => {
-    console.log('handleSave iniciado');
-    console.log('formData actual:', JSON.stringify(formData, null, 2));
-    
     if (!formData.nombre.trim()) {
       showToast({ type: 'warning', message: 'El nombre es requerido' });
       return;
@@ -365,7 +392,6 @@ const ProductoFormContent = () => {
             });
           }
           
-          console.log('productoTiendaList generado:', JSON.stringify(baseList, null, 2));
           return baseList;
         })(),
       };
@@ -374,8 +400,6 @@ const ProductoFormContent = () => {
       if (formData.imagen && formData.imagen.trim() !== '') {
         dataToSend.imagen = formData.imagen;
       }
-
-      console.log('Datos a enviar:', JSON.stringify(dataToSend, null, 2));
 
       if (isEditMode) {
         await updateProducto(producto.id_servicio, dataToSend);
@@ -387,8 +411,6 @@ const ProductoFormContent = () => {
       
       navigation.goBack();
     } catch (err) {
-      console.error('Error en handleSave:', err);
-      console.error('Error details:', JSON.stringify(err, null, 2));
       showToast({ type: 'error', message: err.message, code: err.code });
     } finally {
       setIsSaving(false);
@@ -450,10 +472,42 @@ const ProductoFormContent = () => {
     });
   };
 
-  const handleBarcodeScanned = ({ data }) => {
-    setNewCodigo(data);
-    setShowScannerModal(false);
-    showToast({ type: 'success', message: 'Código escaneado correctamente' });
+  const handleBarcodeScanned = async (scanningResult) => {
+    if (!barcodeEngineRef.current) return;
+
+    try {
+      const result = await barcodeEngineRef.current.processScanningResult(scanningResult);
+      
+      if (!result) {
+        // Still accumulating reads, wait for more
+        return;
+      }
+
+      if (result.success) {
+        setNewCodigo(result.code);
+        setShowScannerModal(false);
+        showToast({ 
+          type: 'success', 
+          message: `Código escaneado (${result.type}) - Confianza: ${(result.confidenceScore * 100).toFixed(0)}%` 
+        });
+        
+        // Reset session for next use
+        barcodeEngineRef.current.startSession();
+      } else {
+        showToast({ 
+          type: 'warning', 
+          message: result.rejectionReason || 'Código no válido. Por favor vuelva a enfocar.' 
+        });
+        
+        // Reset session to try again
+        barcodeEngineRef.current.startSession();
+      }
+    } catch (error) {
+      console.error('Error processing barcode:', error);
+      showToast({ type: 'error', message: 'Error al procesar código' });
+      barcodeEngineRef.current.resetSession();
+      barcodeEngineRef.current.startSession();
+    }
   };
 
   const handleDeleteCode = (index) => {
@@ -620,7 +674,6 @@ const ProductoFormContent = () => {
         showToast({ type: 'success', message: 'Imagen seleccionada correctamente' });
       }
     } catch (error) {
-      console.error('Error picking image from gallery:', error);
       showToast({ type: 'error', message: 'Error al seleccionar la imagen' });
     }
   };
@@ -648,7 +701,6 @@ const ProductoFormContent = () => {
         showToast({ type: 'success', message: 'Foto tomada correctamente' });
       }
     } catch (error) {
-      console.error('Error taking photo:', error);
       showToast({ type: 'error', message: 'Error al tomar la foto' });
     }
   };
@@ -1584,6 +1636,9 @@ const ProductoFormContent = () => {
           <View style={styles.scannerContainer}>
             <CameraView
               style={styles.scanner}
+              barcodeScannerSettings={{
+                barcodeTypes: ALLOWED_BARCODE_TYPES,
+              }}
               onBarcodeScanned={handleBarcodeScanned}
               facing="back"
             />

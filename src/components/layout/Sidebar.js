@@ -59,9 +59,9 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
               const syncResult = await storageService.syncAllData(user, permissions);
               
               if (syncResult.success) {
-                console.log(`Datos sincronizados: ${syncResult.serviciosCount} servicios (incluyendo ofertas)`);
+                // Datos sincronizados
               } else {
-                console.warn('No se pudo sincronizar los datos:', syncResult.error);
+                // No se pudo sincronizar los datos
               }
               
               await SecureStore.deleteItemAsync('token');
@@ -77,7 +77,6 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
               onClose();
               setIsSyncing(false);
             } catch (error) {
-              console.error('Error logging out:', error);
               setIsSyncing(false);
               showToast({ type: 'error', message: 'No se pudo cerrar sesión', code: error.code ?? null });
             }

@@ -13,7 +13,7 @@ const getApiBaseUrl = async () => {
       return userConfiguredURL;
     }
   } catch (error) {
-    console.error('Error reading serverIP from SecureStore:', error);
+    // Error reading serverIP from SecureStore
   }
 
   // Fallback a config.js

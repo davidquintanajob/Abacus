@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Modal, KeyboardAvoidingView, Platform, Keyboard, Dimensions, Image, Vibration } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ import { useToast } from '../hooks/useToast';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Audio } from 'expo-av';
 import { Asset } from 'expo-asset';
+import { BarcodeEngine, ALLOWED_BARCODE_TYPES } from '../barcode';
 
 const BarcodeScannerContent = () => {
   const navigation = useNavigation();
@@ -33,6 +34,39 @@ const BarcodeScannerContent = () => {
   const [carouselIndex2, setCarouselIndex2] = useState(0);
   const [sound, setSound] = useState();
   const [isScanning, setIsScanning] = useState(true);
+  
+  // Initialize Barcode Engine
+  const barcodeEngineRef = useRef(null);
+  
+  useEffect(() => {
+    barcodeEngineRef.current = new BarcodeEngine('PRODUCT_CREATION');
+    
+    // Start session when component mounts
+    barcodeEngineRef.current.startSession();
+    
+    return () => {
+      if (barcodeEngineRef.current) {
+        barcodeEngineRef.current.resetSession();
+      }
+    };
+  }, []);
+
+  // Update business rules callback when scannedCodes changes
+  useEffect(() => {
+    if (barcodeEngineRef.current) {
+      barcodeEngineRef.current.setBusinessRulesCallback(async ({ code, type }) => {
+        const codeExists = scannedCodes.some(
+          codigo => codigo.codigo_barras_ean.trim().toLowerCase() === code.trim().toLowerCase()
+        );
+        
+        if (codeExists) {
+          return { valid: false, details: 'Este código ya está escaneado en esta sesión' };
+        }
+        
+        return { valid: true, details: 'Código único en sesión' };
+      });
+    }
+  }, [scannedCodes]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -110,7 +144,7 @@ const BarcodeScannerContent = () => {
         );
         setSound(sound);
       } catch (error) {
-        console.log('Error loading sound:', error);
+        // Error loading sound
       }
     };
 
@@ -128,7 +162,7 @@ const BarcodeScannerContent = () => {
       try {
         await sound.replayAsync();
       } catch (error) {
-        console.log('Error playing sound:', error);
+        // Error playing sound
       }
     }
   };
@@ -147,35 +181,41 @@ const BarcodeScannerContent = () => {
     };
   }, []);
 
-  const handleBarcodeScanned = ({ data }) => {
-    if (!isScanning) return;
-
-    const codeExists = scannedCodes.some(
-      codigo => codigo.codigo_barras_ean.trim().toLowerCase() === data.trim().toLowerCase()
-    );
-    
-    if (codeExists) {
-      showToast({ type: 'warning', message: 'Este código ya está escaneado' });
+  const handleBarcodeScanned = async (scanningResult) => {
+    if (!isScanning || !barcodeEngineRef.current) {
       return;
     }
 
-    const newCode = {
-      codigo_barras_ean: data.trim(),
-      nota: null
-    };
+    try {
+      const result = await barcodeEngineRef.current.processScanningResult(scanningResult);
+      
+      if (!result) {
+        return;
+      }
 
-    setScannedCodes(prev => [...prev, newCode]);
-    if (Platform.OS === 'android') {
-      Vibration.vibrate(100);
+      if (result.success) {
+        const newCode = {
+          codigo_barras_ean: result.code,
+          nota: null
+        };
+
+        setScannedCodes(prev => [...prev, newCode]);
+        if (Platform.OS === 'android') {
+          Vibration.vibrate(100);
+        }
+        playSound();
+        showToast({ type: 'success', message: 'Código escaneado correctamente' });
+
+        // Disable scanning for 1.5 seconds after successful scan
+        setIsScanning(false);
+        setTimeout(() => {
+          setIsScanning(true);
+        }, 1500);
+      }
+    } catch (error) {
+      console.error('Error processing barcode:', error);
+      showToast({ type: 'error', message: 'Error al procesar código' });
     }
-    playSound();
-    showToast({ type: 'success', message: 'Código escaneado correctamente' });
-
-    // Disable scanning for 1.5 seconds to prevent rapid consecutive scans
-    setIsScanning(false);
-    setTimeout(() => {
-      setIsScanning(true);
-    }, 1500);
   };
 
   const handleAddManualCode = () => {
@@ -329,7 +369,7 @@ const BarcodeScannerContent = () => {
                 <CameraView
                   style={styles.camera}
                   barcodeScannerSettings={{
-                    barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39'],
+                    barcodeTypes: ALLOWED_BARCODE_TYPES,
                   }}
                   onBarcodeScanned={isScanning ? handleBarcodeScanned : undefined}
                 />

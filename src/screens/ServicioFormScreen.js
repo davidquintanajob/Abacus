@@ -172,13 +172,6 @@ const ServicioFormContent = () => {
 
   useEffect(() => {
     const fetchCompleteServicio = async () => {
-      console.log('=== fetchCompleteServicio called ===');
-      console.log('isEditMode:', isEditMode);
-      console.log('mode:', mode);
-      console.log('servicio:', servicio);
-      console.log('servicio?.id_servicio:', servicio?.id_servicio);
-      console.log('isOfflineMode:', isOfflineMode);
-      
       if (servicio?.id_servicio) {
         try {
           setIsFetchingServicio(true);
@@ -198,10 +191,6 @@ const ServicioFormContent = () => {
             completeServicio = await getServicioById(servicio.id_servicio);
           }
           
-          console.log('=== Complete servicio fetched ===');
-          console.log('completeServicio:', completeServicio);
-          console.log('tiendas_servicio:', completeServicio.tiendas_servicio);
-          
           // Apply store visibility permissions for non-admin users
           const userRole = user?.rol?.toLowerCase();
           const canViewAllStores = 
@@ -210,20 +199,11 @@ const ServicioFormContent = () => {
             (userRole === 'almacenero' && permissions?.almacenero) ||
             (userRole === 'económico' && permissions?.economico);
 
-          console.log('User role:', userRole);
-          console.log('Can view all stores:', canViewAllStores);
-          console.log('User id_tienda:', user?.id_tienda);
-          console.log('Permissions:', permissions);
-
           let servicioTiendaList = completeServicio.servicioTiendaList || completeServicio.tiendas_servicio || [];
-          console.log('Original servicioTiendaList length:', servicioTiendaList.length);
           
           // If user cannot view all stores, filter to show only their own store
           if (!canViewAllStores && user?.id_tienda) {
-            console.log('Filtering tiendas_servicio for user store:', user.id_tienda);
             servicioTiendaList = servicioTiendaList.filter(ts => ts.id_tienda === user.id_tienda);
-            console.log('Filtered servicioTiendaList length:', servicioTiendaList.length);
-            console.log('Filtered servicioTiendaList:', servicioTiendaList);
           }
           
           // Calcular precios generales a partir de los precios por tienda
@@ -235,13 +215,9 @@ const ServicioFormContent = () => {
           let costo_usd_general = null;
           
           if (servicioTiendaList.length > 0) {
-            console.log('servicioTiendaList:', servicioTiendaList);
-            
             // Contar cuántas tiendas tienen cada precio CUP
             const preciosCUP = servicioTiendaList.map(item => item.precio_cup);
             const preciosUSD = servicioTiendaList.map(item => item.precio_usd);
-            console.log('preciosCUP:', preciosCUP);
-            console.log('preciosUSD:', preciosUSD);
             
             // Función para encontrar el precio más común (modo)
             const encontrarPrecioMasComun = (precios) => {
@@ -263,22 +239,18 @@ const ServicioFormContent = () => {
             
             const masComunCUP = encontrarPrecioMasComun(preciosCUP);
             const masComunUSD = encontrarPrecioMasComun(preciosUSD);
-            console.log('masComunCUP:', masComunCUP);
-            console.log('masComunUSD:', masComunUSD);
             
             // Si hay un precio que se repite en la mayoría de las tiendas, usarlo como precio general
             if (masComunCUP.precio !== null && masComunUSD.precio !== null && 
                 masComunCUP.conteo > servicioTiendaList.length / 2) {
               precio_cup_general = masComunCUP.precio;
               precio_usd_general = masComunUSD.precio;
-              console.log('Usando precio general por mayoría:', precio_cup_general, precio_usd_general);
             } else {
               // Caso especial: si hay exactamente 2 tiendas con precios diferentes,
               // mostrar uno de ellos como precio general (el primero)
               if (servicioTiendaList.length === 2) {
                 const precioCUP1 = preciosCUP[0];
                 const precioUSD1 = preciosUSD[0];
-                console.log('Caso especial 2 tiendas, usando primera:', precioCUP1, precioUSD1);
                 if (precioCUP1 !== null && precioUSD1 !== null) {
                   precio_cup_general = precioCUP1;
                   precio_usd_general = precioUSD1;
@@ -290,26 +262,20 @@ const ServicioFormContent = () => {
             if (canViewCosts) {
               const costosCUP = servicioTiendaList.map(item => item.costo_cup);
               const costosUSD = servicioTiendaList.map(item => item.costo_usd);
-              console.log('costosCUP:', costosCUP);
-              console.log('costosUSD:', costosUSD);
               
               const masComunCostoCUP = encontrarPrecioMasComun(costosCUP);
               const masComunCostoUSD = encontrarPrecioMasComun(costosUSD);
-              console.log('masComunCostoCUP:', masComunCostoCUP);
-              console.log('masComunCostoUSD:', masComunCostoUSD);
               
               if (masComunCostoCUP.precio !== null && masComunCostoUSD.precio !== null &&
                   masComunCostoCUP.conteo > servicioTiendaList.length / 2) {
                 costo_cup_general = masComunCostoCUP.precio;
                 costo_usd_general = masComunCostoUSD.precio;
-                console.log('Usando costo general por mayoría:', costo_cup_general, costo_usd_general);
               } else {
                 // Caso especial: si hay exactamente 2 tiendas con precios diferentes,
                 // mostrar uno de ellos como precio general (el primero)
                 if (servicioTiendaList.length === 2) {
                   const costoCUP1 = costosCUP[0];
                   const costoUSD1 = costosUSD[0];
-                  console.log('Caso especial 2 tiendas (costos), usando primera:', costoCUP1, costoUSD1);
                   if (costoCUP1 !== null && costoUSD1 !== null) {
                     costo_cup_general = costoCUP1;
                     costo_usd_general = costoUSD1;
@@ -318,7 +284,6 @@ const ServicioFormContent = () => {
               }
             }
           }
-          console.log('Precios calculados:', { precio_cup_general, precio_usd_general, costo_cup_general, costo_usd_general });
           
           setFormData({
             nombre: completeServicio.nombre || '',
@@ -341,7 +306,6 @@ const ServicioFormContent = () => {
             })) || [],
           });
         } catch (err) {
-          console.error('Error fetching complete servicio:', err);
           showToast({ type: 'error', message: 'Error al cargar datos del servicio' });
         } finally {
           setIsFetchingServicio(false);
@@ -362,7 +326,7 @@ const ServicioFormContent = () => {
       const data = await getTiendas({}, 1, 1000);
       setTiendas(data.data || []);
     } catch (err) {
-      console.error('Error fetching tiendas:', err);
+      // Error fetching tiendas
     }
   };
 
@@ -378,7 +342,7 @@ const ServicioFormContent = () => {
         setExchangeRate(data.cupToUsdRate);
       }
     } catch (err) {
-      console.error('Error fetching config:', err);
+      // Error fetching config
     }
   };
 
@@ -396,7 +360,7 @@ const ServicioFormContent = () => {
       const allServicios = [...(dataVendibles.data || []), ...(dataNoVendibles.data || [])];
       setAllServicios(allServicios);
     } catch (err) {
-      console.error('Error fetching servicios:', err);
+      // Error fetching servicios
     }
   };
 
@@ -508,49 +472,20 @@ const ServicioFormContent = () => {
             return isNaN(num) ? 0 : parseFloat(num.toFixed(5));
           };
 
-          // Si hay precios generales definidos, crear entradas para todas las tiendas activas con el precio general
-          let baseList = [];
-          if (formData.precio_cup_general !== null || formData.precio_usd_general !== null || 
-              formData.costo_cup_general !== null || formData.costo_usd_general !== null) {
-            baseList = tiendas.filter(tienda => tienda.activo === true).map(tienda => ({
-              id_tienda: tienda.id_tienda,
-              precio_cup: toFixed5(formData.precio_cup_general),
-              precio_usd: toFixed5(formData.precio_usd_general),
-              costo_cup: toFixed5(formData.costo_cup_general),
-              costo_usd: toFixed5(formData.costo_usd_general),
-            }));
-          }
-          
-          // Si hay precios específicos por tienda, sobrescribir o agregar
-          if (formData.servicioTiendaList.length > 0) {
-            formData.servicioTiendaList.forEach(specific => {
-              // Solo procesar si la tienda tiene un ID válido
-              if (specific.id_tienda === null) return;
-              
-              const existingIndex = baseList.findIndex(item => item.id_tienda === specific.id_tienda);
-              if (existingIndex >= 0) {
-                // Sobrescribir con precios específicos (usar general si específico es null)
-                baseList[existingIndex] = {
-                  ...baseList[existingIndex],
-                  precio_cup: specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general),
-                  precio_usd: specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general),
-                  costo_cup: specific.costo_cup !== null ? toFixed5(specific.costo_cup) : toFixed5(formData.costo_cup_general),
-                  costo_usd: specific.costo_usd !== null ? toFixed5(specific.costo_usd) : toFixed5(formData.costo_usd_general),
-                };
-              } else {
-                // Agregar nueva tienda específica
-                baseList.push({
-                  id_tienda: specific.id_tienda,
-                  precio_cup: specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general),
-                  precio_usd: specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general),
-                  costo_cup: specific.costo_cup !== null ? toFixed5(specific.costo_cup) : toFixed5(formData.costo_cup_general),
-                  costo_usd: specific.costo_usd !== null ? toFixed5(specific.costo_usd) : toFixed5(formData.costo_usd_general),
-                });
-              }
-            });
-          }
-          
-          return baseList;
+          // Solo incluir tiendas que están explícitamente en servicioTiendaList
+          // Usar precios específicos si están disponibles, si no usar precios generales
+          return formData.servicioTiendaList.map(specific => {
+            // Solo procesar si la tienda tiene un ID válido
+            if (specific.id_tienda === null) return null;
+            
+            return {
+              id_tienda: specific.id_tienda,
+              precio_cup: specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general),
+              precio_usd: specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general),
+              costo_cup: specific.costo_cup !== null ? toFixed5(specific.costo_cup) : toFixed5(formData.costo_cup_general),
+              costo_usd: specific.costo_usd !== null ? toFixed5(specific.costo_usd) : toFixed5(formData.costo_usd_general),
+            };
+          }).filter(item => item !== null);
         })(),
         // Incluir ofertaList si hay componentes
         ofertaList: formData.ofertaList.length > 0 ? formData.ofertaList.map(item => ({
@@ -558,7 +493,6 @@ const ServicioFormContent = () => {
           cantidad: item.cantidad || 1.0,
         })) : [],
       };
-      console.log('Data to send:', dataToSend);
 
       if (isEditMode) {
         await updateServicio(servicio.id_servicio, dataToSend);
@@ -607,12 +541,10 @@ const ServicioFormContent = () => {
   };
 
   const handleOpenScanner = async () => {
-    console.log('handleOpenScanner called');
     setShowScannerModal(true);
   };
 
   const handleBarcodeScanned = ({ data }) => {
-    console.log('Barcode scanned:', data);
     setNewCodigo(data);
     setShowScannerModal(false);
     showToast({ type: 'success', message: 'Código escaneado correctamente' });
@@ -1448,7 +1380,6 @@ const ServicioFormContent = () => {
                 />
                 <TouchableOpacity
                   onPress={() => {
-                    console.log('Camera button pressed');
                     handleOpenScanner();
                   }}
                   style={styles.cameraButton}

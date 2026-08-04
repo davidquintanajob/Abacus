@@ -21,7 +21,6 @@ export const configService = {
         }
         return { cupToUsdRate: null };
       } catch (storageError) {
-        console.error('Error leyendo config de AsyncStorage:', storageError);
         return { cupToUsdRate: null };
       }
     }
@@ -33,7 +32,7 @@ export const configService = {
     try {
       await AsyncStorage.setItem(CONFIG_KEY, JSON.stringify(configData));
     } catch (storageError) {
-      console.error('Error guardando config en AsyncStorage:', storageError);
+      // Error guardando config en AsyncStorage
     }
 
     // Luego intenta sincronizar con el backend
@@ -42,7 +41,6 @@ export const configService = {
       return response.data?.data ?? configData;
     } catch (networkError) {
       // Sin conexión: devuelve los datos locales igual para que la UI funcione
-      console.warn('Backend no disponible, config guardada solo localmente.');
       return configData;
     }
   },

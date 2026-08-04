@@ -30,7 +30,7 @@ export const AuthProvider = ({ children }) => {
         }
       }
     } catch (error) {
-      console.error('Error checking auth:', error);
+      // Error checking auth
     } finally {
       setIsLoading(false);
     }
@@ -59,7 +59,6 @@ export const AuthProvider = ({ children }) => {
         setConfig(appConfig);
         await SecureStore.setItemAsync('appConfig', JSON.stringify(appConfig));
       } catch (configError) {
-        console.error('Error fetching config during login:', configError);
         // Don't fail login if config fetch fails
       }
       
@@ -81,7 +80,7 @@ export const AuthProvider = ({ children }) => {
       setConfig(null);
       await SecureStore.deleteItemAsync('appConfig');
     } catch (error) {
-      console.error('Error logging out:', error);
+      // Error logging out
     }
   };
 
