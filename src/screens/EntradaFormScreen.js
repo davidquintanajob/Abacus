@@ -27,7 +27,7 @@ const EntradaFormContent = () => {
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
 
-  const { entrada, mode, productoPreSeleccionado, canViewAllEntradas: canViewAllEntradasParam } = route.params || { mode: 'add' };
+  const { entrada, mode, productoPreSeleccionado, canViewAllEntradas: canViewAllEntradasParam, entradaData } = route.params || { mode: 'add' };
 
   const isViewMode = mode === 'view';
   const isEditMode = mode === 'edit';
@@ -133,6 +133,45 @@ const EntradaFormContent = () => {
       setDisplayCostoUsd(costoUsd ? parseFloat(costoUsd).toFixed(2) : '');
     }
   }, [productoPreSeleccionado, isAddMode]);
+
+  // Efecto para restaurar datos cuando regresa de ProductoFormScreen
+  useEffect(() => {
+    if (entradaData && isAddMode) {
+      const restoreProducto = async () => {
+        try {
+          const productoActualizado = await getProductoById(entradaData.producto.id_servicio);
+          
+          // Buscar la tienda que se agregó en ProductoFormScreen
+          const tiendaRelacion = productoActualizado.tiendas_servicio?.find(
+            ts => ts.id_tienda === entradaData.tienda?.id_tienda
+          );
+
+          if (tiendaRelacion) {
+            setFormData(prev => ({
+              ...prev,
+              producto: productoActualizado,
+              tienda: entradaData.tienda,
+              id_servicio_tienda: tiendaRelacion.id_servicio_tienda,
+              costo_cup: tiendaRelacion.costo_cup?.toString() || '',
+              costo_usd: tiendaRelacion.costo_usd?.toString() || '',
+            }));
+            
+            setDisplayCostoCup(tiendaRelacion.costo_cup ? parseFloat(tiendaRelacion.costo_cup).toFixed(2) : '');
+            setDisplayCostoUsd(tiendaRelacion.costo_usd ? parseFloat(tiendaRelacion.costo_usd).toFixed(2) : '');
+            
+            showToast({ 
+              type: 'success', 
+              message: 'Relación producto-tienda creada correctamente. Ahora puedes crear la entrada.' 
+            });
+          }
+        } catch (err) {
+          showToast({ type: 'error', message: 'Error al cargar producto actualizado' });
+        }
+      };
+
+      restoreProducto();
+    }
+  }, [entradaData, isAddMode]);
 
   const fetchTiendas = async () => {
     try {
@@ -358,6 +397,82 @@ const EntradaFormContent = () => {
     }
   };
 
+  const handleTiendaSelect = (tienda) => {
+    // Verificar si el producto ya tiene una relación con esta tienda
+    if (formData.producto) {
+      const productoTienda = formData.producto.tiendas_servicio?.find(
+        ts => ts.id_tienda === tienda.id_tienda
+      );
+
+      if (!productoTienda) {
+        // No existe relación, mostrar alert para editar producto
+        Alert.alert(
+          'Producto sin relación con tienda',
+          `El producto "${formData.producto.nombre}" no tiene precios y costos configurados para la tienda "${tienda.nombre}". Debes editar el producto para agregar esta relación antes de crear la entrada.`,
+          [
+            {
+              text: 'Cancelar',
+              style: 'cancel',
+            },
+            {
+              text: 'Editar Producto',
+              style: 'default',
+              onPress: () => {
+                navigation.navigate('ProductoForm', {
+                  producto: formData.producto,
+                  mode: 'edit',
+                  tiendaPreSeleccionada: tienda,
+                  returnToEntrada: true,
+                  entradaData: formData
+                });
+              }
+            }
+          ]
+        );
+        return;
+      }
+
+      // Si existe relación, autorellenar los costos
+      const costoCup = productoTienda.costo_cup?.toString() || '';
+      const costoUsd = productoTienda.costo_usd?.toString() || '';
+      
+      setFormData(prev => ({
+        ...prev,
+        tienda,
+        id_servicio_tienda: productoTienda.id_servicio_tienda,
+        costo_cup: costoCup,
+        costo_usd: costoUsd,
+      }));
+      
+      setDisplayCostoCup(costoCup ? parseFloat(costoCup).toFixed(2) : '');
+      setDisplayCostoUsd(costoUsd ? parseFloat(costoUsd).toFixed(2) : '');
+    } else {
+      // Si no hay producto seleccionado, solo actualizar la tienda
+      setFormData(prev => ({ ...prev, tienda }));
+    }
+
+    setShowTiendaDropdown(false);
+    setTiendaSearchText('');
+  };
+
+  const handleEditProducto = () => {
+    setShowProductoEditAlert(false);
+    if (formData.producto && pendingTienda) {
+      navigation.navigate('ProductoForm', {
+        producto: formData.producto,
+        mode: 'edit',
+        tiendaPreSeleccionada: pendingTienda,
+        returnToEntrada: true,
+        entradaData: formData
+      });
+    }
+  };
+
+  const handleCancelEditProducto = () => {
+    setShowProductoEditAlert(false);
+    setPendingTienda(null);
+  };
+
   const handleCostoChange = (field, value) => {
     setFormData(prev => {
       const updated = { ...prev, [field]: value };
@@ -518,11 +633,7 @@ const EntradaFormContent = () => {
                         <TouchableOpacity
                           key={tienda.id_tienda}
                           style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
-                          onPress={() => {
-                            setFormData(prev => ({ ...prev, tienda }));
-                            setShowTiendaDropdown(false);
-                            setTiendaSearchText('');
-                          }}
+                          onPress={() => handleTiendaSelect(tienda)}
                         >
                           <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
                         </TouchableOpacity>
@@ -638,6 +749,7 @@ const EntradaFormContent = () => {
                 </View>
               )}
 
+
               {/* Product Selection Modal */}
               <Modal
                 visible={showProductoModal}
@@ -684,11 +796,22 @@ const EntradaFormContent = () => {
                             key={producto.id_servicio}
                             style={[styles.modalListItem, { borderBottomColor: colors.outlineVariant, backgroundColor: colors.surface }]}
                             onPress={() => {
-                              // Get costs from the first tienda_servicio entry if available
-                              // Only populate costs if weighted average cost is NOT active
-                              const firstTiendaServicio = producto.tiendas_servicio?.[0];
-                              const costoCup = config.applyWeightedAverageCost ? '' : (firstTiendaServicio?.costo_cup || '');
-                              const costoUsd = config.applyWeightedAverageCost ? '' : (firstTiendaServicio?.costo_usd || '');
+                              // Get costs from the tienda_servicio entry that matches the selected tienda
+                              // If no tienda selected, use the first tienda_servicio entry
+                              let costoCup = '';
+                              let costoUsd = '';
+                              
+                              if (formData.tienda && !config.applyWeightedAverageCost) {
+                                const tiendaServicio = producto.tiendas_servicio?.find(
+                                  ts => ts.id_tienda === formData.tienda.id_tienda
+                                );
+                                costoCup = tiendaServicio?.costo_cup?.toString() || '';
+                                costoUsd = tiendaServicio?.costo_usd?.toString() || '';
+                              } else if (!config.applyWeightedAverageCost) {
+                                const firstTiendaServicio = producto.tiendas_servicio?.[0];
+                                costoCup = firstTiendaServicio?.costo_cup?.toString() || '';
+                                costoUsd = firstTiendaServicio?.costo_usd?.toString() || '';
+                              }
                               
                               setFormData(prev => ({
                                 ...prev,
@@ -696,6 +819,9 @@ const EntradaFormContent = () => {
                                 costo_cup: costoCup,
                                 costo_usd: costoUsd,
                               }));
+                              
+                              setDisplayCostoCup(costoCup ? parseFloat(costoCup).toFixed(2) : '');
+                              setDisplayCostoUsd(costoUsd ? parseFloat(costoUsd).toFixed(2) : '');
                               
                               setShowProductoModal(false);
                               setProductoSearchText('');

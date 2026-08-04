@@ -32,7 +32,7 @@ const ProductoFormContent = () => {
   // Initialize Barcode Engine
   const barcodeEngineRef = useRef(null);
 
-  const { producto, mode } = route.params || { mode: 'add' };
+  const { producto, mode, tiendaPreSeleccionada, returnToEntrada, entradaData } = route.params || { mode: 'add' };
 
   const isViewMode = mode === 'view';
   const isEditMode = mode === 'edit';
@@ -271,6 +271,36 @@ const ProductoFormContent = () => {
     fetchCompleteProducto();
   }, [producto?.id_servicio, canViewCosts, user?.id_tienda, permissions, isOfflineMode]);
 
+  // Efecto para agregar tienda pre-seleccionada cuando viene de EntradaForm
+  useEffect(() => {
+    if (tiendaPreSeleccionada && isEditMode) {
+      setFormData(prev => {
+        const tiendaExists = prev.productoTiendaList?.some(
+          ts => ts.id_tienda === tiendaPreSeleccionada.id_tienda
+        );
+
+        if (!tiendaExists) {
+          return {
+            ...prev,
+            productoTiendaList: [
+              ...(prev.productoTiendaList || []),
+              {
+                id_tienda: tiendaPreSeleccionada.id_tienda,
+                precio_cup: 0,
+                precio_usd: 0,
+                costo_cup: 0,
+                costo_usd: 0,
+                cantidad_alerta: null,
+              }
+            ]
+          };
+        }
+        return prev;
+      });
+      setIsPricesExpanded(true);
+    }
+  }, [tiendaPreSeleccionada, isEditMode]);
+
   const fetchTiendas = async () => {
     try {
       if (isOfflineMode) {
@@ -409,7 +439,14 @@ const ProductoFormContent = () => {
         showToast({ type: 'success', message: 'Producto creado correctamente' });
       }
       
-      navigation.goBack();
+      if (returnToEntrada) {
+        navigation.navigate('EntradaForm', {
+          mode: 'add',
+          entradaData: entradaData
+        });
+      } else {
+        navigation.goBack();
+      }
     } catch (err) {
       showToast({ type: 'error', message: err.message, code: err.code });
     } finally {
