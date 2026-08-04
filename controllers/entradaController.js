@@ -140,7 +140,18 @@ const deleteEntrada = async (req, res) => {
 
 const filterEntradas = async (req, res) => {
   try {
-    const { limit, page, id_servicio_tienda, id_usuario, fecha_desde, fecha_hasta, nombre_servicio, codigo_lote } = req.query;
+    const {
+      limit,
+      page,
+      id_servicio_tienda,
+      id_usuario,
+      fecha_desde,
+      fecha_hasta,
+      nombre_servicio,
+      codigo_lote,
+      id_tienda,      // nuevo
+      id_servicio,    // nuevo
+    } = req.query;
 
     let limitNum = parseInt(limit, 10) || 10;
     if (isNaN(limitNum) || limitNum < 1) {
@@ -152,6 +163,8 @@ const filterEntradas = async (req, res) => {
     }
 
     const filters = {};
+
+    // Filtros existentes
     if (id_servicio_tienda) {
       const parsed = parseInt(id_servicio_tienda, 10);
       if (isNaN(parsed) || parsed < 1) throwError("El ID de servicio-tienda debe ser un número entero positivo", 400);
@@ -174,6 +187,18 @@ const filterEntradas = async (req, res) => {
     }
     if (nombre_servicio) filters.nombre_servicio = nombre_servicio.trim();
     if (codigo_lote) filters.codigo_lote = codigo_lote.trim();
+
+    // Nuevos filtros
+    if (id_tienda) {
+      const parsed = parseInt(id_tienda, 10);
+      if (isNaN(parsed) || parsed < 1) throwError("El ID de tienda debe ser un número entero positivo", 400);
+      filters.id_tienda = parsed;
+    }
+    if (id_servicio) {
+      const parsed = parseInt(id_servicio, 10);
+      if (isNaN(parsed) || parsed < 1) throwError("El ID de servicio debe ser un número entero positivo", 400);
+      filters.id_servicio = parsed;
+    }
 
     const offset = (pageNum - 1) * limitNum;
     const { rows, count } = await entradaService.filterEntradas(filters, limitNum, offset);

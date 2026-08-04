@@ -444,7 +444,7 @@ const filterProductos = async (filterCriteria = {}, id_tienda, cantidadMin, cant
   const rows = pagedIds.length > 0
     ? await Servicio.findAll({
         where: { id_servicio: { [Op.in]: pagedIds } },
-        order: [["id_servicio", "ASC"]],
+        order: [["createdAt", "DESC"]],
         include: [
           { model: Producto, as: "producto" },
           { model: Codigo, as: "codigos" },

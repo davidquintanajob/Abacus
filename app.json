@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "7e41482e-280d-42f0-bbe0-b45f59b48f39"
+      }
+    },
+    "android": {
+      "package": "com.dqvaldes0312.proyecto_example"
+    }
+  }
+}

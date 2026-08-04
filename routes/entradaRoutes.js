@@ -63,6 +63,16 @@ const authenticate = require("../helpers/authenticate");
  *         schema:
  *           type: string
  *         description: Buscar por código de lote (coincidencia parcial)
+ *       - in: query
+ *         name: id_tienda
+ *         schema:
+ *           type: integer
+ *         description: Filtrar por ID de tienda (relacionada a través de servicio_tienda)
+ *       - in: query
+ *         name: id_servicio
+ *         schema:
+ *           type: integer
+ *         description: Filtrar por ID de servicio (relacionado a través de servicio_tienda)
  *     responses:
  *       200:
  *         description: Lista de entradas con paginación
@@ -72,7 +82,6 @@ const authenticate = require("../helpers/authenticate");
  *         description: Error interno del servidor
  */
 router.get("/entrada/filter", authenticate(), entradaController.filterEntradas);
-
 /**
  * @swagger
  * /entrada/{id}:

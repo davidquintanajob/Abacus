@@ -181,7 +181,7 @@ const filterUsuarios = async (filterCriteria = {}, limit = 10, offset = 0) => {
 
   const options = {
     where: whereClause,
-    order: [["id_usuario", "ASC"]],
+    order: [["createdAt", "DESC"]],
     limit,
     offset,
     include: [{ model: Tienda, as: 'tienda' }]

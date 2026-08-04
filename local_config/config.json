@@ -2,7 +2,12 @@
   "cupToUsdRate": 600,
   "permissions": {
     "dependiente": false,
-    "almacenero": true,
+    "almacenero": false,
     "economico": true
+  },
+  "entradaPermissions": {
+    "dependiente": true,
+    "almacenero": true,
+    "economico": false
   }
 }

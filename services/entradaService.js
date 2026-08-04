@@ -304,6 +304,11 @@ const filterEntradas = async (filters, limit, offset) => {
     }
   }
 
+  // Construir condiciones para ServicioTienda
+  const servicioTiendaWhere = {};
+  if (filters.id_tienda) servicioTiendaWhere.id_tienda = filters.id_tienda;
+  if (filters.id_servicio) servicioTiendaWhere.id_servicio = filters.id_servicio;
+
   const include = [
     {
       model: ServicioTienda,
@@ -320,6 +325,13 @@ const filterEntradas = async (filters, limit, offset) => {
     { model: Usuario, as: "usuario" },
   ];
 
+  // Si hay filtros sobre ServicioTienda, aplicarlos como INNER JOIN
+  if (Object.keys(servicioTiendaWhere).length > 0) {
+    include[0].required = true;
+    include[0].where = servicioTiendaWhere;
+  }
+
+  // Filtro por nombre de servicio (sobre el modelo Servicio anidado)
   if (filters.nombre_servicio) {
     include[0].include[0].where = {
       nombre: { [Op.iLike]: `%${filters.nombre_servicio}%` },
@@ -334,7 +346,7 @@ const filterEntradas = async (filters, limit, offset) => {
     offset,
     distinct: true,
   });
-
+  
   return { rows, count };
 };
 
