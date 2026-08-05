@@ -215,7 +215,7 @@ const EntradaFormContent = () => {
         return;
       }
       setIsSearchingProductos(true);
-      const data = await getProductos({ nombre: searchTerm, esvendible: 'true' }, 1, 20);
+      const data = await getProductos({ nombre: searchTerm }, 1, 20);
       setProductoSearchResults(data.data || []);
     } catch (err) {
       setProductoSearchResults([]);
