@@ -47,6 +47,23 @@ const EntradasContent = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [userTiendaReady, setUserTiendaReady] = useState(false);
   const hasDoneInitialFetch = useRef(false);
+  const isFirstFocus = useRef(true);
+  const isInitializedRef = useRef(false);
+  const filtersRef = useRef(filters);
+  const userTiendaRef = useRef(user?.id_tienda);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    isInitializedRef.current = isInitialized;
+  }, [isInitialized]);
+
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
+
+  useEffect(() => {
+    userTiendaRef.current = user?.id_tienda;
+  }, [user?.id_tienda]);
 
   // Filter states
   const [filters, setFilters] = useState({ nombre_servicio: '', codigo_lote: '', fecha_desde: '', fecha_hasta: '', id_tienda: '', id_usuario: '' });
@@ -149,10 +166,21 @@ const EntradasContent = () => {
   useFocusEffect(
     React.useCallback(() => {
       // Only fetch on screen focus after initial load
-      if (isInitialized) {
-        fetchEntradas();
+      if (isFirstFocus.current) {
+        isFirstFocus.current = false;
+        return;
       }
-    }, [isInitialized])
+      if (isInitializedRef.current) {
+        // Restore user's tienda filter if it's empty and user has a tienda
+        const shouldRestore = !filtersRef.current.id_tienda && userTiendaRef.current;
+        if (shouldRestore) {
+          setFilters(prev => ({ ...prev, id_tienda: userTiendaRef.current.toString() }));
+          fetchEntradas(userTiendaRef.current.toString());
+        } else {
+          fetchEntradas();
+        }
+      }
+    }, [])
   );
 
   const fetchTiendas = async () => {
@@ -329,7 +357,12 @@ const EntradasContent = () => {
   };
 
   const handleEntradaPress = (entrada) => {
-    navigation.navigate('EntradaForm', { entrada, mode: 'view' });
+    if (isOfflineMode) {
+      navigation.navigate('EntradaForm', { entrada, mode: 'view' });
+      return;
+    }
+    const mode = canManageEntradas ? 'edit' : 'view';
+    navigation.navigate('EntradaForm', { entrada, mode });
   };
 
   const handleEdit = (entrada) => {

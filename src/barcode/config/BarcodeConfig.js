@@ -19,7 +19,7 @@ export const PRODUCT_CREATION = {
   REQUIRE_CHECKSUM: true,           // Validate checksums (this ensures accuracy)
   MIN_READ_INTERVAL: 50,            // Minimum ms between reads (anti-rattle)
   MAX_SESSION_DURATION: 5000,       // Max 5 seconds per session
-  LOG_LEVEL: 'ERROR',               // Only log errors
+  LOG_LEVEL: 'NONE',                // No logging
 };
 
 /**
@@ -35,7 +35,7 @@ export const QUICK_SCAN = {
   REQUIRE_CHECKSUM: true,
   MIN_READ_INTERVAL: 80,
   MAX_SESSION_DURATION: 5000,         // 5 seconds max
-  LOG_LEVEL: 'INFO',
+  LOG_LEVEL: 'NONE',                 // No logging
 };
 
 /**
@@ -51,7 +51,7 @@ export const INVENTORY = {
   REQUIRE_CHECKSUM: true,
   MIN_READ_INTERVAL: 100,
   MAX_SESSION_DURATION: 7000,
-  LOG_LEVEL: 'INFO',
+  LOG_LEVEL: 'NONE',                // No logging
 };
 
 /**

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -38,13 +38,22 @@ const UsuariosContent = () => {
   const [tiendaSearchText, setTiendaSearchText] = useState('');
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
+  const isFirstFocus = useRef(true);
 
   useEffect(() => {
     fetchTiendas();
   }, []);
 
+  useEffect(() => {
+    fetchUsuarios();
+  }, []);
+
   useFocusEffect(
     React.useCallback(() => {
+      if (isFirstFocus.current) {
+        isFirstFocus.current = false;
+        return;
+      }
       fetchUsuarios();
     }, [])
   );

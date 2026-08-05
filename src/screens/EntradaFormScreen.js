@@ -48,13 +48,18 @@ const EntradaFormContent = () => {
   const [showProductoDropdown, setShowProductoDropdown] = useState(false);
   const [config, setConfig] = useState({});
   const [exchangeRate, setExchangeRate] = useState(null);
+  // Tracks raw text while the user is typing in costo fields (avoids .toFixed forcing cursor to end)
   const [costoInputTexts, setCostoInputTexts] = useState({});
+  // Tracks raw text while the user is typing in precio fields
+  const [precioInputTexts, setPrecioInputTexts] = useState({});
   
   const [formData, setFormData] = useState({
     id_servicio_tienda: null,
     cantidad_entrada: '',
     costo_usd: '',
     costo_cup: '',
+    precio_usd: '',
+    precio_cup: '',
     fecha_vencimiento: '',
     nombre_proveedor: '',
     fecha: new Date().toISOString().split('T')[0],
@@ -62,8 +67,6 @@ const EntradaFormContent = () => {
     tienda: null,
   });
 
-  const [displayCostoCup, setDisplayCostoCup] = useState('');
-  const [displayCostoUsd, setDisplayCostoUsd] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
@@ -105,11 +108,10 @@ const EntradaFormContent = () => {
           });
           
           setProductoSearchText(completeEntrada.servicioTienda?.servicio?.nombre || '');
-          
-          setDisplayCostoCup(parseFloat(completeEntrada.costo_cup).toFixed(2));
-          setDisplayCostoUsd(parseFloat(completeEntrada.costo_usd).toFixed(2));
         } catch (err) {
-          showToast({ type: 'error', message: 'Error al cargar datos de la entrada' });
+          console.error('[fetchCompleteEntrada] Error:', err);
+          console.error('[fetchCompleteEntrada] Error message:', err.message);
+          // showToast({ type: 'error', message: 'Error al cargar datos de la entrada' });
         } finally {
           setIsFetchingEntrada(false);
         }
@@ -133,8 +135,6 @@ const EntradaFormContent = () => {
         costo_usd: costoUsd,
       }));
       
-      setDisplayCostoCup(costoCup ? parseFloat(costoCup).toFixed(2) : '');
-      setDisplayCostoUsd(costoUsd ? parseFloat(costoUsd).toFixed(2) : '');
       setProductoSearchText(productoPreSeleccionado.nombre || '');
     }
   }, [productoPreSeleccionado, isAddMode]);
@@ -161,8 +161,6 @@ const EntradaFormContent = () => {
               costo_usd: tiendaRelacion.costo_usd?.toString() || '',
             }));
             
-            setDisplayCostoCup(tiendaRelacion.costo_cup ? parseFloat(tiendaRelacion.costo_cup).toFixed(2) : '');
-            setDisplayCostoUsd(tiendaRelacion.costo_usd ? parseFloat(tiendaRelacion.costo_usd).toFixed(2) : '');
             setProductoSearchText(productoActualizado.nombre || '');
             
             showToast({ 
@@ -171,7 +169,9 @@ const EntradaFormContent = () => {
             });
           }
         } catch (err) {
-          showToast({ type: 'error', message: 'Error al cargar producto actualizado' });
+          console.error('[restoreProducto] Error:', err);
+          console.error('[restoreProducto] Error message:', err.message);
+          // showToast({ type: 'error', message: 'Error al cargar producto actualizado' });
         }
       };
 
@@ -243,6 +243,7 @@ const EntradaFormContent = () => {
     try {
       // Obtener todas las entradas anteriores del producto en esta tienda
       const servicioTienda = producto.tiendas_servicio?.find(ts => ts.id_tienda === tienda.id_tienda);
+      
       if (!servicioTienda) {
         return { costo_cup: nuevoCostoCup, costo_usd: nuevoCostoUsd };
       }
@@ -268,7 +269,6 @@ const EntradaFormContent = () => {
         costo_usd: parseFloat(nuevoCostoPromedioUsd.toFixed(5)),
       };
     } catch (error) {
-      // Error calculando costo promedio
       return { costo_cup: nuevoCostoCup, costo_usd: nuevoCostoUsd };
     }
   };
@@ -286,13 +286,30 @@ const EntradaFormContent = () => {
       showToast({ type: 'warning', message: 'La cantidad debe ser mayor que 0' });
       return;
     }
-    if (!formData.costo_usd || parseFloat(formData.costo_usd) < 0) {
+    if (formData.costo_usd !== '' && parseFloat(formData.costo_usd) < 0) {
       showToast({ type: 'warning', message: 'El costo USD debe ser mayor o igual a 0' });
       return;
     }
-    if (!formData.costo_cup || parseFloat(formData.costo_cup) < 0) {
+    if (formData.costo_cup !== '' && parseFloat(formData.costo_cup) < 0) {
       showToast({ type: 'warning', message: 'El costo CUP debe ser mayor o igual a 0' });
       return;
+    }
+
+    // Validar si el producto tiene relación con la tienda
+    const productoTienda = formData.producto?.tiendas_servicio?.find(
+      ts => ts.id_tienda === formData.tienda?.id_tienda
+    );
+
+    // Si no existe relación, validar que se ingresen los precios
+    if (!productoTienda && formData.producto && formData.tienda) {
+      if (!formData.precio_cup || formData.precio_cup === '') {
+        showToast({ type: 'warning', message: 'Debe ingresar el precio CUP del producto para esta tienda' });
+        return;
+      }
+      if (!formData.precio_usd || formData.precio_usd === '') {
+        showToast({ type: 'warning', message: 'Debe ingresar el precio USD del producto para esta tienda' });
+        return;
+      }
     }
 
     // Validar fecha de vencimiento si el producto es vencible
@@ -300,6 +317,42 @@ const EntradaFormContent = () => {
       showToast({ type: 'warning', message: 'El producto requiere fecha de vencimiento' });
       return;
     }
+
+    // Validar si la fecha de vencimiento es anterior o igual a la fecha de entrada
+    if (formData.producto.producto?.isVencible && formData.fecha_vencimiento) {
+      const fechaVencimiento = new Date(formData.fecha_vencimiento);
+      const fechaEntrada = new Date(formData.fecha);
+      
+      if (fechaVencimiento <= fechaEntrada) {
+        Alert.alert(
+          'Advertencia: Fecha de vencimiento',
+          'La fecha de vencimiento es anterior o igual a la fecha de entrada. Esto puede ocasionar que el producto esté vencido al momento de ingresarlo al inventario. ¿Está seguro que desea continuar con la entrada?',
+          [
+            {
+              text: 'Cancelar',
+              style: 'cancel',
+            },
+            {
+              text: 'Continuar',
+              style: 'destructive',
+              onPress: () => executeSave()
+            }
+          ]
+        );
+        return;
+      }
+    }
+
+    executeSave();
+  };
+
+  const executeSave = async () => {
+    // Helper function to safely convert to number with 5 decimal places
+    const toFixed5 = (value) => {
+      if (value === null || value === undefined || value === '') return 0;
+      const num = typeof value === 'number' ? value : parseFloat(value);
+      return isNaN(num) ? 0 : parseFloat(num.toFixed(5));
+    };
 
     try {
       setIsSaving(true);
@@ -316,10 +369,10 @@ const EntradaFormContent = () => {
         const productoActualizado = await getProductoById(formData.producto.id_servicio);
         const nuevoProductoTienda = {
           id_tienda: formData.tienda.id_tienda,
-          precio_cup: 0, // Precio inicial 0, se puede editar después
-          precio_usd: 0,
-          costo_cup: parseFloat(formData.costo_cup),
-          costo_usd: parseFloat(formData.costo_usd),
+          precio_cup: toFixed5(formData.precio_cup || 0),
+          precio_usd: toFixed5(formData.precio_usd || 0),
+          costo_cup: toFixed5(formData.costo_cup),
+          costo_usd: toFixed5(formData.costo_usd),
         };
 
         const productoTiendaList = [
@@ -351,8 +404,8 @@ const EntradaFormContent = () => {
       }
 
       // Calcular costo promedio ponderado si está activado
-      let costo_cup = parseFloat(formData.costo_cup);
-      let costo_usd = parseFloat(formData.costo_usd);
+      let costo_cup = toFixed5(formData.costo_cup);
+      let costo_usd = toFixed5(formData.costo_usd);
 
       if (config.applyWeightedAverageCost && !isEditMode) {
         const nuevosCostos = await calcularCostoPromedioPonderado(
@@ -365,17 +418,17 @@ const EntradaFormContent = () => {
         costo_cup = nuevosCostos.costo_cup;
         costo_usd = nuevosCostos.costo_usd;
         
-        showToast({ 
-          type: 'info', 
-          message: `Costo promedio calculado: CUP ${costo_cup}, USD ${costo_usd}` 
-        });
+        // showToast({ 
+        //   type: 'info', 
+        //   message: `Costo promedio calculado: CUP ${costo_cup}, USD ${costo_usd}` 
+        // });
       }
 
       const entradaData = {
         id_servicio_tienda,
         cantidad_entrada: parseFloat(formData.cantidad_entrada),
-        costo_usd,
-        costo_cup,
+        costo_usd: toFixed5(costo_usd),
+        costo_cup: toFixed5(costo_cup),
         fecha_vencimiento: formData.fecha_vencimiento || null,
         nombre_proveedor: formData.nombre_proveedor || null,
         fecha: formData.fecha,
@@ -392,7 +445,8 @@ const EntradaFormContent = () => {
       
       navigation.goBack();
     } catch (err) {
-      showToast({ type: 'error', message: err.message, code: err.code });
+      console.error('[executeSave] Error:', err);
+      // showToast({ type: 'error', message: err.message, code: err.code });
     } finally {
       setIsSaving(false);
     }
@@ -413,48 +467,30 @@ const EntradaFormContent = () => {
         ts => ts.id_tienda === tienda.id_tienda
       );
 
-      if (!productoTienda) {
-        // No existe relación, mostrar alert para editar producto
-        Alert.alert(
-          'Producto sin relación con tienda',
-          `El producto "${formData.producto.nombre}" no tiene precios y costos configurados para la tienda "${tienda.nombre}". Debes editar el producto para agregar esta relación antes de crear la entrada.`,
-          [
-            {
-              text: 'Cancelar',
-              style: 'cancel',
-            },
-            {
-              text: 'Editar Producto',
-              style: 'default',
-              onPress: () => {
-                navigation.navigate('ProductoForm', {
-                  producto: formData.producto,
-                  mode: 'edit',
-                  tiendaPreSeleccionada: tienda,
-                  returnToEntrada: true,
-                  entradaData: formData
-                });
-              }
-            }
-          ]
-        );
-        return;
+      if (productoTienda) {
+        // Si existe relación, autorellenar los costos
+        const costoCup = productoTienda.costo_cup?.toString() || '';
+        const costoUsd = productoTienda.costo_usd?.toString() || '';
+        
+        setFormData(prev => ({
+          ...prev,
+          tienda,
+          id_servicio_tienda: productoTienda.id_servicio_tienda,
+          costo_cup: costoCup,
+          costo_usd: costoUsd,
+          precio_cup: '',
+          precio_usd: '',
+        }));
+      } else {
+        // Si no existe relación, solo actualizar la tienda y limpiar precios
+        setFormData(prev => ({
+          ...prev,
+          tienda,
+          id_servicio_tienda: null,
+          precio_cup: '',
+          precio_usd: '',
+        }));
       }
-
-      // Si existe relación, autorellenar los costos
-      const costoCup = productoTienda.costo_cup?.toString() || '';
-      const costoUsd = productoTienda.costo_usd?.toString() || '';
-      
-      setFormData(prev => ({
-        ...prev,
-        tienda,
-        id_servicio_tienda: productoTienda.id_servicio_tienda,
-        costo_cup: costoCup,
-        costo_usd: costoUsd,
-      }));
-      
-      setDisplayCostoCup(costoCup ? parseFloat(costoCup).toFixed(2) : '');
-      setDisplayCostoUsd(costoUsd ? parseFloat(costoUsd).toFixed(2) : '');
     } else {
       // Si no hay producto seleccionado, solo actualizar la tienda
       setFormData(prev => ({ ...prev, tienda }));
@@ -464,48 +500,37 @@ const EntradaFormContent = () => {
     setTiendaSearchText('');
   };
 
-  const handleEditProducto = () => {
-    setShowProductoEditAlert(false);
-    if (formData.producto && pendingTienda) {
-      navigation.navigate('ProductoForm', {
-        producto: formData.producto,
-        mode: 'edit',
-        tiendaPreSeleccionada: pendingTienda,
-        returnToEntrada: true,
-        entradaData: formData
-      });
-    }
-  };
-
-  const handleCancelEditProducto = () => {
-    setShowProductoEditAlert(false);
-    setPendingTienda(null);
-  };
 
   const handleCostoChange = (field, value) => {
     setFormData(prev => {
-      const updated = { ...prev, [field]: value };
+      const updated = { ...prev, [field]: value === '' ? '' : parseFloat(value) };
       
       if (exchangeRate && field === 'costo_cup' && value !== '') {
         const cupValue = parseFloat(value) || 0;
         updated.costo_usd = parseFloat((cupValue / exchangeRate).toFixed(5));
-        setDisplayCostoUsd(parseFloat(updated.costo_usd).toFixed(2));
-        setDisplayCostoCup(value);
       }
       
       if (exchangeRate && field === 'costo_usd' && value !== '') {
         const usdValue = parseFloat(value) || 0;
         updated.costo_cup = parseFloat((usdValue * exchangeRate).toFixed(5));
-        setDisplayCostoCup(parseFloat(updated.costo_cup).toFixed(2));
-        setDisplayCostoUsd(value);
       }
       
-      if (!exchangeRate) {
-        if (field === 'costo_cup') {
-          setDisplayCostoCup(value);
-        } else if (field === 'costo_usd') {
-          setDisplayCostoUsd(value);
-        }
+      return updated;
+    });
+  };
+
+  const handlePrecioChange = (field, value) => {
+    setFormData(prev => {
+      const updated = { ...prev, [field]: value === '' ? '' : parseFloat(value) };
+      
+      if (exchangeRate && field === 'precio_cup' && value !== '') {
+        const cupValue = parseFloat(value) || 0;
+        updated.precio_usd = parseFloat((cupValue / exchangeRate).toFixed(5));
+      }
+      
+      if (exchangeRate && field === 'precio_usd' && value !== '') {
+        const usdValue = parseFloat(value) || 0;
+        updated.precio_cup = parseFloat((usdValue * exchangeRate).toFixed(5));
       }
       
       return updated;
@@ -525,6 +550,31 @@ const EntradaFormContent = () => {
 
     return () => clearTimeout(timeoutId);
   }, [productoSearchText]);
+
+  // Efecto para autorellenar costos cuando la fórmula de costo promedio ponderado está activa
+  useEffect(() => {
+    if (config.applyWeightedAverageCost) {
+      // Cuando la fórmula está activa, NO autorellenar costos (usuario debe ingresar costo de entrada)
+      return;
+    }
+    
+    if (!formData.producto || !formData.tienda) {
+      return;
+    }
+
+    const servicioTienda = formData.producto.tiendas_servicio?.find(
+      ts => ts.id_tienda === formData.tienda.id_tienda
+    );
+
+    if (servicioTienda) {
+      // Cuando la fórmula NO está activa, autorellenar con el costo actual del producto en la tienda
+      setFormData(prev => ({
+        ...prev,
+        costo_cup: servicioTienda.costo_cup?.toString() || '',
+        costo_usd: servicioTienda.costo_usd?.toString() || '',
+      }));
+    }
+  }, [formData.producto, formData.tienda, config.applyWeightedAverageCost]);
 
   const handleProductoSelect = (producto) => {
     let costoCup = '';
@@ -548,9 +598,6 @@ const EntradaFormContent = () => {
       costo_cup: costoCup,
       costo_usd: costoUsd,
     }));
-    
-    setDisplayCostoCup(costoCup ? parseFloat(costoCup).toFixed(2) : '');
-    setDisplayCostoUsd(costoUsd ? parseFloat(costoUsd).toFixed(2) : '');
     
     setProductoSearchText(producto.nombre);
     setShowProductoDropdown(false);
@@ -724,8 +771,26 @@ const EntradaFormContent = () => {
                     style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
                     placeholderTextColor={colors.outline}
                     placeholder="Costo CUP"
-                    value={displayCostoCup}
-                    onChangeText={(text) => handleCostoChange('costo_cup', text)}
+                    value={
+                      costoInputTexts.costo_cup !== undefined
+                        ? costoInputTexts.costo_cup
+                        : (formData.costo_cup !== null && formData.costo_cup !== '' ? parseFloat(formData.costo_cup).toFixed(2) : '')
+                    }
+                    onFocus={() => setCostoInputTexts(prev => ({
+                      ...prev,
+                      costo_cup: formData.costo_cup !== null && formData.costo_cup !== '' ? String(parseFloat(formData.costo_cup)) : ''
+                    }))}
+                    onChangeText={(text) => {
+                      setCostoInputTexts(prev => ({ ...prev, costo_cup: text }));
+                      handleCostoChange('costo_cup', text);
+                    }}
+                    onBlur={() => {
+                      setCostoInputTexts(prev => {
+                        const updated = { ...prev };
+                        delete updated.costo_cup;
+                        return updated;
+                      });
+                    }}
                     keyboardType="decimal-pad"
                     editable={!isReadOnly}
                   />
@@ -737,13 +802,100 @@ const EntradaFormContent = () => {
                     style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
                     placeholderTextColor={colors.outline}
                     placeholder="Costo USD"
-                    value={displayCostoUsd}
-                    onChangeText={(text) => handleCostoChange('costo_usd', text)}
+                    value={
+                      costoInputTexts.costo_usd !== undefined
+                        ? costoInputTexts.costo_usd
+                        : (formData.costo_usd !== null && formData.costo_usd !== '' ? parseFloat(formData.costo_usd).toFixed(2) : '')
+                    }
+                    onFocus={() => setCostoInputTexts(prev => ({
+                      ...prev,
+                      costo_usd: formData.costo_usd !== null && formData.costo_usd !== '' ? String(parseFloat(formData.costo_usd)) : ''
+                    }))}
+                    onChangeText={(text) => {
+                      setCostoInputTexts(prev => ({ ...prev, costo_usd: text }));
+                      handleCostoChange('costo_usd', text);
+                    }}
+                    onBlur={() => {
+                      setCostoInputTexts(prev => {
+                        const updated = { ...prev };
+                        delete updated.costo_usd;
+                        return updated;
+                      });
+                    }}
                     keyboardType="decimal-pad"
                     editable={!isReadOnly}
                   />
                 </View>
               </View>
+
+              {/* Precios (solo cuando no existe relación producto-tienda) */}
+              {formData.producto && formData.tienda && !formData.producto.tiendas_servicio?.find(
+                ts => ts.id_tienda === formData.tienda.id_tienda
+              ) && (
+                <View style={styles.formRow}>
+                  <View style={[styles.formColumn, styles.formGroup]}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Precio CUP *</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                      placeholderTextColor={colors.outline}
+                      placeholder="Precio CUP"
+                      value={
+                        precioInputTexts.precio_cup !== undefined
+                          ? precioInputTexts.precio_cup
+                          : (formData.precio_cup !== null && formData.precio_cup !== '' ? parseFloat(formData.precio_cup).toFixed(2) : '')
+                      }
+                      onFocus={() => setPrecioInputTexts(prev => ({
+                        ...prev,
+                        precio_cup: formData.precio_cup !== null && formData.precio_cup !== '' ? String(parseFloat(formData.precio_cup)) : ''
+                      }))}
+                      onChangeText={(text) => {
+                        setPrecioInputTexts(prev => ({ ...prev, precio_cup: text }));
+                        handlePrecioChange('precio_cup', text);
+                      }}
+                      onBlur={() => {
+                        setPrecioInputTexts(prev => {
+                          const updated = { ...prev };
+                          delete updated.precio_cup;
+                          return updated;
+                        });
+                      }}
+                      keyboardType="decimal-pad"
+                      editable={!isReadOnly}
+                    />
+                  </View>
+
+                  <View style={[styles.formColumn, styles.formGroup]}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Precio USD *</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                      placeholderTextColor={colors.outline}
+                      placeholder="Precio USD"
+                      value={
+                        precioInputTexts.precio_usd !== undefined
+                          ? precioInputTexts.precio_usd
+                          : (formData.precio_usd !== null && formData.precio_usd !== '' ? parseFloat(formData.precio_usd).toFixed(2) : '')
+                      }
+                      onFocus={() => setPrecioInputTexts(prev => ({
+                        ...prev,
+                        precio_usd: formData.precio_usd !== null && formData.precio_usd !== '' ? String(parseFloat(formData.precio_usd)) : ''
+                      }))}
+                      onChangeText={(text) => {
+                        setPrecioInputTexts(prev => ({ ...prev, precio_usd: text }));
+                        handlePrecioChange('precio_usd', text);
+                      }}
+                      onBlur={() => {
+                        setPrecioInputTexts(prev => {
+                          const updated = { ...prev };
+                          delete updated.precio_usd;
+                          return updated;
+                        });
+                      }}
+                      keyboardType="decimal-pad"
+                      editable={!isReadOnly}
+                    />
+                  </View>
+                </View>
+              )}
 
               {/* Fecha de Vencimiento and Fecha de Entrada */}
               {formData.producto?.producto?.isVencible ? (

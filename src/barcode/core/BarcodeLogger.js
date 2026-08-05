@@ -16,7 +16,7 @@ const LOG_LEVELS = {
 
 class BarcodeLogger {
   constructor(config = {}) {
-    this.level = this._parseLevel(config.LOG_LEVEL || 'ERROR');
+    this.level = this._parseLevel(config.LOG_LEVEL || 'NONE');
     this.sessionId = this._generateSessionId();
     this.enabled = config.ENABLE_LOGGING !== false;
   }
