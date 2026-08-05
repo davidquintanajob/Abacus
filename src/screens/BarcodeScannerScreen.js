@@ -717,6 +717,7 @@ const createStyles = (responsive) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: responsive.responsiveWidth(20),
+    paddingBottom: responsive.responsiveHeight(70),
   },
   manualInputTitle: {
     fontSize: responsive.responsiveWidth(16),

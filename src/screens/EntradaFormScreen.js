@@ -43,6 +43,9 @@ const EntradaFormContent = () => {
   const [showProductoModal, setShowProductoModal] = useState(false);
   const [productoSearchText, setProductoSearchText] = useState('');
   const [productos, setProductos] = useState([]);
+  const [productoSearchResults, setProductoSearchResults] = useState([]);
+  const [isSearchingProductos, setIsSearchingProductos] = useState(false);
+  const [showProductoDropdown, setShowProductoDropdown] = useState(false);
   const [config, setConfig] = useState({});
   const [exchangeRate, setExchangeRate] = useState(null);
   const [costoInputTexts, setCostoInputTexts] = useState({});
@@ -68,7 +71,6 @@ const EntradaFormContent = () => {
 
   useEffect(() => {
     fetchTiendas();
-    fetchProductos();
     fetchConfig();
   }, []);
 
@@ -102,6 +104,8 @@ const EntradaFormContent = () => {
             tienda: completeEntrada.servicioTienda?.tienda,
           });
           
+          setProductoSearchText(completeEntrada.servicioTienda?.servicio?.nombre || '');
+          
           setDisplayCostoCup(parseFloat(completeEntrada.costo_cup).toFixed(2));
           setDisplayCostoUsd(parseFloat(completeEntrada.costo_usd).toFixed(2));
         } catch (err) {
@@ -131,6 +135,7 @@ const EntradaFormContent = () => {
       
       setDisplayCostoCup(costoCup ? parseFloat(costoCup).toFixed(2) : '');
       setDisplayCostoUsd(costoUsd ? parseFloat(costoUsd).toFixed(2) : '');
+      setProductoSearchText(productoPreSeleccionado.nombre || '');
     }
   }, [productoPreSeleccionado, isAddMode]);
 
@@ -158,6 +163,7 @@ const EntradaFormContent = () => {
             
             setDisplayCostoCup(tiendaRelacion.costo_cup ? parseFloat(tiendaRelacion.costo_cup).toFixed(2) : '');
             setDisplayCostoUsd(tiendaRelacion.costo_usd ? parseFloat(tiendaRelacion.costo_usd).toFixed(2) : '');
+            setProductoSearchText(productoActualizado.nombre || '');
             
             showToast({ 
               type: 'success', 
@@ -202,16 +208,19 @@ const EntradaFormContent = () => {
     }
   };
 
-  const fetchProductos = async () => {
+  const searchProductos = async (searchTerm) => {
     try {
-      if (isOfflineMode) {
-        setProductos([]);
+      if (isOfflineMode || !searchTerm || searchTerm.length < 2) {
+        setProductoSearchResults([]);
         return;
       }
-      const data = await getProductos({ esvendible: 'true' }, 1, 1000);
-      setProductos(data.data || []);
+      setIsSearchingProductos(true);
+      const data = await getProductos({ nombre: searchTerm, esvendible: 'true' }, 1, 20);
+      setProductoSearchResults(data.data || []);
     } catch (err) {
-      // Error fetching productos
+      setProductoSearchResults([]);
+    } finally {
+      setIsSearchingProductos(false);
     }
   };
 
@@ -503,13 +512,55 @@ const EntradaFormContent = () => {
     });
   };
 
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (productoSearchText.length >= 2) {
+        searchProductos(productoSearchText);
+        setShowProductoDropdown(true);
+      } else {
+        setProductoSearchResults([]);
+        setShowProductoDropdown(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [productoSearchText]);
+
+  const handleProductoSelect = (producto) => {
+    let costoCup = '';
+    let costoUsd = '';
+    
+    if (formData.tienda && !config.applyWeightedAverageCost) {
+      const tiendaServicio = producto.tiendas_servicio?.find(
+        ts => ts.id_tienda === formData.tienda.id_tienda
+      );
+      costoCup = tiendaServicio?.costo_cup?.toString() || '';
+      costoUsd = tiendaServicio?.costo_usd?.toString() || '';
+    } else if (!config.applyWeightedAverageCost) {
+      const firstTiendaServicio = producto.tiendas_servicio?.[0];
+      costoCup = firstTiendaServicio?.costo_cup?.toString() || '';
+      costoUsd = firstTiendaServicio?.costo_usd?.toString() || '';
+    }
+    
+    setFormData(prev => ({
+      ...prev,
+      producto,
+      costo_cup: costoCup,
+      costo_usd: costoUsd,
+    }));
+    
+    setDisplayCostoCup(costoCup ? parseFloat(costoCup).toFixed(2) : '');
+    setDisplayCostoUsd(costoUsd ? parseFloat(costoUsd).toFixed(2) : '');
+    
+    setProductoSearchText(producto.nombre);
+    setShowProductoDropdown(false);
+    setProductoSearchResults([]);
+  };
+
   const filteredTiendas = tiendas.filter(tienda =>
     tienda.nombre.toLowerCase().includes(tiendaSearchText.toLowerCase())
   );
 
-  const filteredProductos = productos.filter(producto =>
-    producto.nombre.toLowerCase().includes(productoSearchText.toLowerCase())
-  );
 
   const styles = createStyles(responsive);
 
@@ -559,22 +610,40 @@ const EntradaFormContent = () => {
               <View style={styles.formRow}>
                 <View style={[styles.formColumn, styles.formGroup]}>
                   <Text style={[styles.label, { color: colors.outline }]}>Producto *</Text>
-                  <TouchableOpacity
-                    style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-                    onPress={() => !isReadOnly && setShowProductoModal(true)}
-                    disabled={isReadOnly}
-                  >
-                    <Text style={[styles.dropdownText, { color: formData.producto ? colors.onSurface : colors.outline }]} numberOfLines={1} ellipsizeMode="tail">
-                      {formData.producto?.nombre || 'Seleccionar...'}
-                    </Text>
-                    {!isReadOnly && (
-                      <Ionicons 
-                        name="chevron-down" 
-                        size={responsive.responsiveWidth(20)} 
-                        color={colors.outline} 
-                      />
+                  <View style={styles.relativeContainer}>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                      placeholderTextColor={colors.outline}
+                      placeholder="Buscar producto..."
+                      value={productoSearchText}
+                      onChangeText={setProductoSearchText}
+                      editable={!isReadOnly}
+                      onBlur={() => setShowProductoDropdown(false)}
+                    />
+                    {showProductoDropdown && !isReadOnly && (
+                      <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                        {isSearchingProductos ? (
+                          <View style={styles.dropdownItem}>
+                            <ActivityIndicator size="small" color={colors.primary} />
+                          </View>
+                        ) : productoSearchResults.length > 0 ? (
+                          productoSearchResults.map((producto, index) => (
+                            <TouchableOpacity
+                              key={producto.id_servicio}
+                              style={[styles.dropdownItem, index === productoSearchResults.length - 1 && styles.dropdownItemLast]}
+                              onPress={() => handleProductoSelect(producto)}
+                            >
+                              <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{producto.nombre}</Text>
+                            </TouchableOpacity>
+                          ))
+                        ) : (
+                          <View style={styles.dropdownItem}>
+                            <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron productos</Text>
+                          </View>
+                        )}
+                      </View>
                     )}
-                  </TouchableOpacity>
+                  </View>
                 </View>
 
                 <View style={[styles.formColumn, styles.formGroup]}>
@@ -584,7 +653,7 @@ const EntradaFormContent = () => {
                     placeholderTextColor={colors.outline}
                     placeholder="Cantidad"
                     value={formData.cantidad_entrada}
-                    onChangeText={(text) => setFormData(prev => ({ ...prev, cantidad_entrada: text }))}
+                    onChangeText={(text) => setFormData(prev => ({ ...prev, cantidad_entrada: text.replace(/-/g, '') }))}
                     keyboardType="decimal-pad"
                     editable={!isReadOnly}
                   />
@@ -750,97 +819,6 @@ const EntradaFormContent = () => {
               )}
 
 
-              {/* Product Selection Modal */}
-              <Modal
-                visible={showProductoModal}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => setShowProductoModal(false)}
-              >
-                <View style={styles.modalOverlay}>
-                  <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
-                    <View style={styles.modalHeader}>
-                      <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Seleccionar Producto</Text>
-                      <TouchableOpacity
-                        style={styles.closeButton}
-                        onPress={() => setShowProductoModal(false)}
-                      >
-                        <Ionicons name="close" size={responsive.responsiveWidth(24)} color={colors.outline} />
-                      </TouchableOpacity>
-                    </View>
-                    
-                    <View style={[styles.modalSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                      <Ionicons 
-                        name="search-outline" 
-                        size={responsive.responsiveWidth(18)} 
-                        color={colors.outline} 
-                        style={styles.searchIcon}
-                      />
-                      <TextInput
-                        style={[styles.modalSearchInputText, { color: colors.onSurface }]}
-                        placeholderTextColor={colors.outline}
-                        placeholder="Buscar producto..."
-                        value={productoSearchText}
-                        onChangeText={setProductoSearchText}
-                      />
-                    </View>
-                    
-                    <ScrollView 
-                      style={styles.modalList}
-                      contentContainerStyle={styles.modalListContent}
-                      showsVerticalScrollIndicator={true}
-                    >
-                      {filteredProductos.length > 0 ? (
-                        filteredProductos.map((producto) => (
-                          <TouchableOpacity
-                            key={producto.id_servicio}
-                            style={[styles.modalListItem, { borderBottomColor: colors.outlineVariant, backgroundColor: colors.surface }]}
-                            onPress={() => {
-                              // Get costs from the tienda_servicio entry that matches the selected tienda
-                              // If no tienda selected, use the first tienda_servicio entry
-                              let costoCup = '';
-                              let costoUsd = '';
-                              
-                              if (formData.tienda && !config.applyWeightedAverageCost) {
-                                const tiendaServicio = producto.tiendas_servicio?.find(
-                                  ts => ts.id_tienda === formData.tienda.id_tienda
-                                );
-                                costoCup = tiendaServicio?.costo_cup?.toString() || '';
-                                costoUsd = tiendaServicio?.costo_usd?.toString() || '';
-                              } else if (!config.applyWeightedAverageCost) {
-                                const firstTiendaServicio = producto.tiendas_servicio?.[0];
-                                costoCup = firstTiendaServicio?.costo_cup?.toString() || '';
-                                costoUsd = firstTiendaServicio?.costo_usd?.toString() || '';
-                              }
-                              
-                              setFormData(prev => ({
-                                ...prev,
-                                producto,
-                                costo_cup: costoCup,
-                                costo_usd: costoUsd,
-                              }));
-                              
-                              setDisplayCostoCup(costoCup ? parseFloat(costoCup).toFixed(2) : '');
-                              setDisplayCostoUsd(costoUsd ? parseFloat(costoUsd).toFixed(2) : '');
-                              
-                              setShowProductoModal(false);
-                              setProductoSearchText('');
-                            }}
-                          >
-                            <Text style={[styles.modalListItemText, { color: colors.onSurface }]}>
-                              {producto.nombre}
-                            </Text>
-                          </TouchableOpacity>
-                        ))
-                      ) : (
-                        <View style={styles.modalEmptyState}>
-                          <Text style={[styles.modalEmptyText, { color: colors.outline }]}>No se encontraron productos</Text>
-                        </View>
-                      )}
-                    </ScrollView>
-                  </View>
-                </View>
-              </Modal>
 
               {/* Action Buttons */}
               {!isReadOnly && (
@@ -912,6 +890,18 @@ const createStyles = (responsive) => StyleSheet.create({
     fontFamily: 'Inter',
     minHeight: responsive.responsiveHeight(50),
   },
+  inputWrapper: {
+    borderWidth: 1,
+    borderRadius: 8,
+    height: responsive.responsiveHeight(50),
+    justifyContent: 'center',
+  },
+  inputInner: {
+    paddingHorizontal: responsive.responsivePadding(16),
+    fontSize: responsive.responsiveFontSize(16),
+    fontFamily: 'Inter',
+    height: responsive.responsiveHeight(50),
+  },
   inputText: {
     fontSize: responsive.responsiveFontSize(16),
     fontFamily: 'Inter',
@@ -922,6 +912,10 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   formColumn: {
     flex: 1,
+  },
+  relativeContainer: {
+    position: 'relative',
+    width: '100%',
   },
   dropdown: {
     flexDirection: 'row',
@@ -948,6 +942,18 @@ const createStyles = (responsive) => StyleSheet.create({
     right: 0,
     zIndex: 10,
     backgroundColor: '#fff',
+    maxHeight: responsive.responsiveHeight(200),
+  },
+  searchDropdown: {
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: responsive.responsiveMargin(4),
+    padding: responsive.responsivePadding(8),
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    zIndex: 10,
     maxHeight: responsive.responsiveHeight(200),
   },
   dropdownSearchInput: {
