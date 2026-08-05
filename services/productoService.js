@@ -185,11 +185,12 @@ const createProducto = async (productoData, productoTiendaList, codigoList) => {
     }
     await validateSufijoUnico(productoData.sufijo);
 
+    // CORREGIDO: usa el valor de productoData.esvendible o true por defecto
     newServicio = await Servicio.create(
       {
         nombre: productoData.nombre,
         categoria: productoData.categoria,
-        esvendible: true,
+        esvendible: productoData.esvendible !== undefined ? productoData.esvendible : true,
         nota: productoData.nota || null,
       },
       { transaction }

@@ -9,5 +9,6 @@
     "dependiente": true,
     "almacenero": true,
     "economico": false
-  }
+  },
+  "applyWeightedAverageCost": true
 }
