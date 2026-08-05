@@ -476,12 +476,12 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
       await validateSufijoUnico(productoData.sufijo, id);
     }
 
-    // 3. Actualizar servicio
+    // 3. Actualizar servicio (CORREGIDO: esvendible ahora se toma del input o se mantiene)
     await servicio.update(
       {
         nombre: productoData.nombre !== undefined ? productoData.nombre : servicio.nombre,
         categoria: productoData.categoria !== undefined ? productoData.categoria : servicio.categoria,
-        esvendible: true,
+        esvendible: productoData.esvendible !== undefined ? productoData.esvendible : servicio.esvendible,
         nota: productoData.nota !== undefined ? productoData.nota : servicio.nota,
       },
       { transaction }
@@ -594,14 +594,7 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
       }
 
       // Verificar si los registros a eliminar tienen dependencias (entradas o salidas)
-      // Usamos el modelo Entrada y Salida (aunque Salida no está en este archivo, podemos importarlo o usar el modelo directamente)
-      // Para evitar importar Salida aquí, podemos hacer una consulta a la tabla entradas y salidas con el id_servicio_tienda
-      // Como tenemos el modelo Entrada disponible, y Salida también debería estarlo si está en models, pero para no complicar, usamos raw queries o contamos entradas.
       const { Entrada } = require("../models/entrada");
-      // También podríamos necesitar Salida, pero como no está importado, usamos Entrada para el ejemplo.
-      // Si también hay salidas, deberíamos verificar ambas. Asumiremos que solo entradas son relevantes.
-      // Pero mejor usamos una consulta genérica: contar cuántos registros en entradas y salidas tienen ese id_servicio_tienda.
-
       if (toDelete.length > 0) {
         const stIdsToDelete = toDelete.map((st) => st.id_servicio_tienda);
 
@@ -635,7 +628,6 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
               tiendasConDependencias.push(st.id_tienda);
             }
           }
-          // Si hay salidas, también podríamos agregarlas, pero por simplicidad mostramos un error genérico.
           throwError(
             `No se pueden eliminar las tiendas con IDs ${tiendasConDependencias.join(", ")} porque tienen entradas asociadas. Elimine las entradas primero o mantenga estas tiendas en la lista.`,
             400
