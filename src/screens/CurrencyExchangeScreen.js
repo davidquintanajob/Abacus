@@ -13,6 +13,53 @@ import { configService } from '../services/configService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 
+const AccessLevelSwitch = ({ value, onChange, colors, responsive }) => {
+  const levels = [
+    { key: 'none', label: 'Sin acceso', icon: 'lock-closed' },
+    { key: 'own_store', label: 'Mi tienda', icon: 'storefront' },
+    { key: 'all_stores', label: 'Todas', icon: 'globe' },
+  ];
+
+  return (
+    <View style={accessLevelSwitchStyles.container}>
+      {levels.map((level, index) => (
+        <TouchableOpacity
+          key={level.key}
+          style={[
+            accessLevelSwitchStyles.iconButton,
+            { 
+              backgroundColor: value === level.key ? colors.primary : 'transparent',
+              borderColor: value === level.key ? colors.primary : colors.outlineVariant,
+            },
+          ]}
+          onPress={() => onChange(level.key)}
+        >
+          <Ionicons 
+            name={level.icon} 
+            size={18} 
+            color={value === level.key ? '#fff' : colors.onSurface} 
+          />
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
+
+const accessLevelSwitchStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
+
 const CurrencyExchangeContent = () => {
   const navigation = useNavigation();
   const { colors, isDark } = useTheme();
@@ -29,15 +76,10 @@ const CurrencyExchangeContent = () => {
     almacenero: false,
     economico: false,
   });
-  const [entradaPermissions, setEntradaPermissions] = useState({
-    dependiente: false,
-    almacenero: false,
-    economico: false,
-  });
-  const [entradaAccessPermissions, setEntradaAccessPermissions] = useState({
-    dependiente: false,
-    almacenero: false,
-    economico: false,
+  const [entradaAccessLevels, setEntradaAccessLevels] = useState({
+    dependiente: 'none',
+    almacenero: 'none',
+    economico: 'none',
   });
   const [entradaManagePermissions, setEntradaManagePermissions] = useState({
     dependiente: false,
@@ -48,7 +90,6 @@ const CurrencyExchangeContent = () => {
   const [showPermissions, setShowPermissions] = useState(false);
   const [showEntradaPermissions, setShowEntradaPermissions] = useState(false);
   const [showEntradaConfig, setShowEntradaConfig] = useState(false);
-  const [showEntradaAccess, setShowEntradaAccess] = useState(false);
   const [showEntradaManage, setShowEntradaManage] = useState(false);
   const [infoModal, setInfoModal] = useState({
     visible: false,
@@ -73,11 +114,8 @@ const CurrencyExchangeContent = () => {
       if (data.permissions) {
         setPermissions(data.permissions);
       }
-      if (data.entradaPermissions) {
-        setEntradaPermissions(data.entradaPermissions);
-      }
-      if (data.entradaAccessPermissions) {
-        setEntradaAccessPermissions(data.entradaAccessPermissions);
+      if (data.entradaAccessLevels) {
+        setEntradaAccessLevels(data.entradaAccessLevels);
       }
       if (data.entradaManagePermissions) {
         setEntradaManagePermissions(data.entradaManagePermissions);
@@ -110,6 +148,9 @@ const CurrencyExchangeContent = () => {
       const updatedConfig = {
         ...config,
         cupToUsdRate: rate,
+        permissions: permissions,
+        entradaAccessLevels: entradaAccessLevels,
+        entradaManagePermissions: entradaManagePermissions,
       };
       await configService.updateConfig(updatedConfig);
       setConfig(updatedConfig);
@@ -147,40 +188,23 @@ const CurrencyExchangeContent = () => {
     }
   };
 
-  const toggleEntradaPermission = async (role) => {
-    const newEntradaPermissions = { ...entradaPermissions, [role]: !entradaPermissions[role] };
+  const updateEntradaAccessLevel = async (role, newLevel) => {
+    const newEntradaAccessLevels = { ...entradaAccessLevels, [role]: newLevel };
+    setEntradaAccessLevels(newEntradaAccessLevels);
     
     try {
       const updatedConfig = {
         ...config,
-        entradaPermissions: newEntradaPermissions,
-      };
-      await configService.updateConfig(updatedConfig);
-      
-      // Recargar configuración desde el backend para asegurar sincronización
-      await fetchConfig();
-      
-      showToast({ type: 'success', message: 'Permiso de entrada actualizado correctamente' });
-    } catch (error) {
-      showToast({ type: 'error', message: 'Error al actualizar permiso de entrada' });
-    }
-  };
-
-  const toggleEntradaAccessPermission = async (role) => {
-    const newEntradaAccessPermissions = { ...entradaAccessPermissions, [role]: !entradaAccessPermissions[role] };
-    
-    try {
-      const updatedConfig = {
-        ...config,
-        entradaAccessPermissions: newEntradaAccessPermissions,
+        entradaAccessLevels: newEntradaAccessLevels,
       };
       await configService.updateConfig(updatedConfig);
       
       await fetchConfig();
       
-      showToast({ type: 'success', message: 'Permiso de acceso a entradas actualizado correctamente' });
+      showToast({ type: 'success', message: 'Nivel de acceso a entradas actualizado correctamente' });
     } catch (error) {
-      showToast({ type: 'error', message: 'Error al actualizar permiso de acceso a entradas' });
+      showToast({ type: 'error', message: 'Error al actualizar nivel de acceso a entradas' });
+      setEntradaAccessLevels(entradaAccessLevels);
     }
   };
 
@@ -319,7 +343,7 @@ const CurrencyExchangeContent = () => {
             <View style={styles.permissionsHeaderLeft}>
               <Ionicons name="shield-checkmark" size={responsive.responsiveWidth(24)} color={colors.primary} />
               <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
-                Permisos de Usuarios
+                Permisos de Productos y Servicios
               </Text>
             </View>
             <TouchableOpacity 
@@ -488,8 +512,29 @@ const CurrencyExchangeContent = () => {
           {showEntradaPermissions && (
             <>
               <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
-                Configura qué roles pueden ver entradas de todas las tiendas (general) o solo la suya (sencillo)
+                Configura el nivel de acceso a las entradas para cada rol
               </Text>
+
+              <View style={styles.accessLevelExplanation}>
+                <View style={styles.accessLevelExplanationItem}>
+                  <Ionicons name="lock-closed" size={16} color={colors.outline} />
+                  <Text style={[styles.accessLevelExplanationText, { color: colors.outline }]}>
+                    <Text style={{ fontWeight: '600' }}>Sin acceso:</Text> No puede ver la pantalla de Entradas ni ninguna entrada del sistema
+                  </Text>
+                </View>
+                <View style={styles.accessLevelExplanationItem}>
+                  <Ionicons name="storefront" size={16} color={colors.outline} />
+                  <Text style={[styles.accessLevelExplanationText, { color: colors.outline }]}>
+                    <Text style={{ fontWeight: '600' }}>Mi tienda:</Text> Puede ver la pantalla de Entradas pero solo las entradas de su tienda
+                  </Text>
+                </View>
+                <View style={styles.accessLevelExplanationItem}>
+                  <Ionicons name="globe" size={16} color={colors.outline} />
+                  <Text style={[styles.accessLevelExplanationText, { color: colors.outline }]}>
+                    <Text style={{ fontWeight: '600' }}>Todas las tiendas:</Text> Puede ver la pantalla de Entradas y las entradas de todas las tiendas
+                  </Text>
+                </View>
+              </View>
 
           <View style={styles.permissionItem}>
             <View style={styles.permissionInfo}>
@@ -499,18 +544,18 @@ const CurrencyExchangeContent = () => {
               <TouchableOpacity 
                 style={[styles.infoButton, { backgroundColor: colors.primary }]}
                 onPress={() => showInfoModal(
-                  'Permiso Entradas - Dependiente',
-                  'Cuando está activo (General), los usuarios con rol Dependiente pueden ver entradas de todas las tiendas. Cuando está desactivado (Sencillo), solo pueden ver entradas de su propia tienda.'
+                  'Acceso a Entradas - Dependiente',
+                  'Define si los usuarios con rol Dependiente no tienen acceso a entradas, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
                 )}
               >
                 <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
               </TouchableOpacity>
             </View>
-            <Switch
-              value={entradaPermissions.dependiente}
-              onValueChange={() => toggleEntradaPermission('dependiente')}
-              trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-              thumbColor={entradaPermissions.dependiente ? '#fff' : colors.outline}
+            <AccessLevelSwitch
+              value={entradaAccessLevels.dependiente}
+              onChange={(newLevel) => updateEntradaAccessLevel('dependiente', newLevel)}
+              colors={colors}
+              responsive={responsive}
             />
           </View>
 
@@ -522,18 +567,18 @@ const CurrencyExchangeContent = () => {
               <TouchableOpacity 
                 style={[styles.infoButton, { backgroundColor: colors.primary }]}
                 onPress={() => showInfoModal(
-                  'Permiso Entradas - Almacenero',
-                  'Cuando está activo (General), los usuarios con rol Almacenero pueden ver entradas de todas las tiendas. Cuando está desactivado (Sencillo), solo pueden ver entradas de su propia tienda.'
+                  'Acceso a Entradas - Almacenero',
+                  'Define si los usuarios con rol Almacenero no tienen acceso a entradas, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
                 )}
               >
                 <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
               </TouchableOpacity>
             </View>
-            <Switch
-              value={entradaPermissions.almacenero}
-              onValueChange={() => toggleEntradaPermission('almacenero')}
-              trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-              thumbColor={entradaPermissions.almacenero ? '#fff' : colors.outline}
+            <AccessLevelSwitch
+              value={entradaAccessLevels.almacenero}
+              onChange={(newLevel) => updateEntradaAccessLevel('almacenero', newLevel)}
+              colors={colors}
+              responsive={responsive}
             />
           </View>
 
@@ -545,202 +590,119 @@ const CurrencyExchangeContent = () => {
               <TouchableOpacity 
                 style={[styles.infoButton, { backgroundColor: colors.primary }]}
                 onPress={() => showInfoModal(
-                  'Permiso Entradas - Económico',
-                  'Cuando está activo (General), los usuarios con rol Económico pueden ver entradas de todas las tiendas. Cuando está desactivado (Sencillo), solo pueden ver entradas de su propia tienda.'
+                  'Acceso a Entradas - Económico',
+                  'Define si los usuarios con rol Económico no tienen acceso a entradas, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
                 )}
               >
                 <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
               </TouchableOpacity>
             </View>
-            <Switch
-              value={entradaPermissions.economico}
-              onValueChange={() => toggleEntradaPermission('economico')}
-              trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-              thumbColor={entradaPermissions.economico ? '#fff' : colors.outline}
+            <AccessLevelSwitch
+              value={entradaAccessLevels.economico}
+              onChange={(newLevel) => updateEntradaAccessLevel('economico', newLevel)}
+              colors={colors}
+              responsive={responsive}
             />
           </View>
 
-          <View style={styles.permissionSection}>
-            <View style={styles.permissionSectionHeader}>
-              <Text style={[styles.permissionSectionTitle, { color: colors.onSurface }]}>
-                Acceso a Pantalla de Entradas
-              </Text>
-              <TouchableOpacity 
-                style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
-                onPress={() => setShowEntradaAccess(!showEntradaAccess)}
-              >
-                <Ionicons 
-                  name={showEntradaAccess ? "chevron-up" : "chevron-down"} 
-                  size={responsive.responsiveWidth(20)} 
-                  color={isDarkMode ? colors.primary : '#1976D2'} 
-                />
-              </TouchableOpacity>
-            </View>
-            {showEntradaAccess && (
-              <>
-                <Text style={[styles.permissionSectionSubtitle, { color: colors.outline }]}>
-                  Configura qué roles pueden ver la opción de navegación "Entradas" en el menú lateral
+          {(entradaAccessLevels.dependiente !== 'none' || entradaAccessLevels.almacenero !== 'none' || entradaAccessLevels.economico !== 'none') && (
+            <View style={styles.permissionSection}>
+              <View style={styles.permissionSectionHeader}>
+                <Text style={[styles.permissionSectionTitle, { color: colors.onSurface }]}>
+                  Gestión de Entradas
                 </Text>
-                <View style={styles.permissionItem}>
-                  <View style={styles.permissionInfo}>
-                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
-                      Dependiente
-                    </Text>
-                    <TouchableOpacity 
-                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
-                      onPress={() => showInfoModal(
-                        'Acceso Entradas - Dependiente',
-                        'Cuando está activo, los usuarios con rol Dependiente pueden ver y acceder a la pantalla de Entradas en el menú lateral.'
-                      )}
-                    >
-                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Switch
-                    value={entradaAccessPermissions.dependiente}
-                    onValueChange={() => toggleEntradaAccessPermission('dependiente')}
-                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-                    thumbColor={entradaAccessPermissions.dependiente ? '#fff' : colors.outline}
+                <TouchableOpacity 
+                  style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+                  onPress={() => setShowEntradaManage(!showEntradaManage)}
+                >
+                  <Ionicons 
+                    name={showEntradaManage ? "chevron-up" : "chevron-down"} 
+                    size={responsive.responsiveWidth(20)} 
+                    color={isDarkMode ? colors.primary : '#1976D2'} 
                   />
-                </View>
-                <View style={styles.permissionItem}>
-                  <View style={styles.permissionInfo}>
-                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
-                      Almacenero
-                    </Text>
-                    <TouchableOpacity 
-                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
-                      onPress={() => showInfoModal(
-                        'Acceso Entradas - Almacenero',
-                        'Cuando está activo, los usuarios con rol Almacenero pueden ver y acceder a la pantalla de Entradas en el menú lateral.'
-                      )}
-                    >
-                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Switch
-                    value={entradaAccessPermissions.almacenero}
-                    onValueChange={() => toggleEntradaAccessPermission('almacenero')}
-                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-                    thumbColor={entradaAccessPermissions.almacenero ? '#fff' : colors.outline}
-                  />
-                </View>
-                <View style={styles.permissionItem}>
-                  <View style={styles.permissionInfo}>
-                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
-                      Económico
-                    </Text>
-                    <TouchableOpacity 
-                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
-                      onPress={() => showInfoModal(
-                        'Acceso Entradas - Económico',
-                        'Cuando está activo, los usuarios con rol Económico pueden ver y acceder a la pantalla de Entradas en el menú lateral.'
-                      )}
-                    >
-                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Switch
-                    value={entradaAccessPermissions.economico}
-                    onValueChange={() => toggleEntradaAccessPermission('economico')}
-                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-                    thumbColor={entradaAccessPermissions.economico ? '#fff' : colors.outline}
-                  />
-                </View>
-              </>
-            )}
-          </View>
-
-          <View style={styles.permissionSection}>
-            <View style={styles.permissionSectionHeader}>
-              <Text style={[styles.permissionSectionTitle, { color: colors.onSurface }]}>
-                Gestión de Entradas
-              </Text>
-              <TouchableOpacity 
-                style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
-                onPress={() => setShowEntradaManage(!showEntradaManage)}
-              >
-                <Ionicons 
-                  name={showEntradaManage ? "chevron-up" : "chevron-down"} 
-                  size={responsive.responsiveWidth(20)} 
-                  color={isDarkMode ? colors.primary : '#1976D2'} 
-                />
-              </TouchableOpacity>
+                </TouchableOpacity>
+              </View>
+              {showEntradaManage && (
+                <>
+                  <Text style={[styles.permissionSectionSubtitle, { color: colors.outline }]}>
+                    Configura qué roles pueden crear, editar y eliminar entradas (solo visible para roles con acceso)
+                  </Text>
+                  {entradaAccessLevels.dependiente !== 'none' && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Dependiente
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Entradas - Dependiente',
+                            'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar entradas. Cuando está desactivado, solo pueden ver la información.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={entradaManagePermissions.dependiente}
+                        onValueChange={() => toggleEntradaManagePermission('dependiente')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={entradaManagePermissions.dependiente ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                  {entradaAccessLevels.almacenero !== 'none' && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Almacenero
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Entradas - Almacenero',
+                            'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar entradas. Cuando está desactivado, solo pueden ver la información.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={entradaManagePermissions.almacenero}
+                        onValueChange={() => toggleEntradaManagePermission('almacenero')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={entradaManagePermissions.almacenero ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                  {entradaAccessLevels.economico !== 'none' && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Económico
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Entradas - Económico',
+                            'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar entradas. Cuando está desactivado, solo pueden ver la información.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={entradaManagePermissions.economico}
+                        onValueChange={() => toggleEntradaManagePermission('economico')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={entradaManagePermissions.economico ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                </>
+              )}
             </View>
-            {showEntradaManage && (
-              <>
-                <Text style={[styles.permissionSectionSubtitle, { color: colors.outline }]}>
-                  Configura qué roles pueden crear, editar y eliminar entradas
-                </Text>
-                <View style={styles.permissionItem}>
-                  <View style={styles.permissionInfo}>
-                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
-                      Dependiente
-                    </Text>
-                    <TouchableOpacity 
-                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
-                      onPress={() => showInfoModal(
-                        'Gestión Entradas - Dependiente',
-                        'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar entradas. Se muestra el botón "Agregar Entrada".'
-                      )}
-                    >
-                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Switch
-                    value={entradaManagePermissions.dependiente}
-                    onValueChange={() => toggleEntradaManagePermission('dependiente')}
-                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-                    thumbColor={entradaManagePermissions.dependiente ? '#fff' : colors.outline}
-                  />
-                </View>
-                <View style={styles.permissionItem}>
-                  <View style={styles.permissionInfo}>
-                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
-                      Almacenero
-                    </Text>
-                    <TouchableOpacity 
-                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
-                      onPress={() => showInfoModal(
-                        'Gestión Entradas - Almacenero',
-                        'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar entradas. Se muestra el botón "Agregar Entrada".'
-                      )}
-                    >
-                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Switch
-                    value={entradaManagePermissions.almacenero}
-                    onValueChange={() => toggleEntradaManagePermission('almacenero')}
-                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-                    thumbColor={entradaManagePermissions.almacenero ? '#fff' : colors.outline}
-                  />
-                </View>
-                <View style={styles.permissionItem}>
-                  <View style={styles.permissionInfo}>
-                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
-                      Económico
-                    </Text>
-                    <TouchableOpacity 
-                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
-                      onPress={() => showInfoModal(
-                        'Gestión Entradas - Económico',
-                        'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar entradas. Se muestra el botón "Agregar Entrada".'
-                      )}
-                    >
-                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Switch
-                    value={entradaManagePermissions.economico}
-                    onValueChange={() => toggleEntradaManagePermission('economico')}
-                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-                    thumbColor={entradaManagePermissions.economico ? '#fff' : colors.outline}
-                  />
-                </View>
-              </>
-            )}
-          </View>
+          )}
 
             </>
           )}
@@ -915,6 +877,24 @@ const createStyles = (responsive) => StyleSheet.create({
     fontFamily: 'Inter',
     marginBottom: responsive.responsiveMargin(20),
   },
+  accessLevelExplanation: {
+    marginBottom: responsive.responsiveMargin(20),
+    padding: responsive.responsivePadding(16),
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+  },
+  accessLevelExplanationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  accessLevelExplanationText: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+    lineHeight: responsive.fontSizes.bodySmall * 1.4,
+    flex: 1,
+  },
   permissionItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -950,6 +930,7 @@ const createStyles = (responsive) => StyleSheet.create({
     alignItems: 'center',
     gap: responsive.responsiveMargin(8),
     flex: 1,
+    marginRight: responsive.responsiveMargin(16),
   },
   permissionLabel: {
     fontSize: responsive.fontSizes.body,

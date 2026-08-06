@@ -99,15 +99,10 @@ export const AuthProvider = ({ children }) => {
       almacenero: false,
       economico: false,
     },
-    entradaPermissions: config?.entradaPermissions || {
-      dependiente: false,
-      almacenero: false,
-      economico: false,
-    },
-    entradaAccessPermissions: config?.entradaAccessPermissions || {
-      dependiente: false,
-      almacenero: false,
-      economico: false,
+    entradaAccessLevels: config?.entradaAccessLevels || {
+      dependiente: 'none',
+      almacenero: 'none',
+      economico: 'none',
     },
     entradaManagePermissions: config?.entradaManagePermissions || {
       dependiente: false,

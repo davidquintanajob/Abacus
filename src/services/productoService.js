@@ -11,13 +11,14 @@ export const getProductos = async (filters = {}, page = 1, limit = 10) => {
     if (filters.nombre) queryParams.append('nombre', filters.nombre);
     if (filters.codigo) queryParams.append('codigo', filters.codigo);
     if (filters.categoria) queryParams.append('categoria', filters.categoria);
-    if (filters.esvendible !== '') queryParams.append('esvendible', filters.esvendible === 'true' ? true : false);
+    if (!filters.skipEsvendible && filters.esvendible !== '') queryParams.append('esvendible', filters.esvendible === 'true' ? true : false);
     if (filters.id_tienda) queryParams.append('id_tienda', filters.id_tienda);
-    if (filters.cantidad_min !== undefined) queryParams.append('cantidad_min', filters.cantidad_min);
-    if (filters.cantidad_max !== undefined) queryParams.append('cantidad_max', filters.cantidad_max);
+    if (filters.cantidad_min !== undefined && filters.cantidad_min !== '') queryParams.append('cantidad_min', filters.cantidad_min);
+    if (filters.cantidad_max !== undefined && filters.cantidad_max !== '') queryParams.append('cantidad_max', filters.cantidad_max);
 
     // If no store filter is selected, add a dummy cantidad_min=0 to force backend to include tiendas_servicio
-    if (!filters.id_tienda && filters.cantidad_min === undefined && filters.cantidad_max === undefined) {
+    // Skip this if skipCantidadMin flag is set (used for product search in entrada form)
+    if (!filters.skipCantidadMin && !filters.id_tienda && filters.cantidad_min === undefined && filters.cantidad_max === undefined) {
       queryParams.append('cantidad_min', '0');
     }
 

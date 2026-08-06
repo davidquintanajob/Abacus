@@ -63,7 +63,7 @@ const ProductosContent = () => {
   }, [user?.id_tienda]);
 
   // Filter states
-  const [filters, setFilters] = useState({ nombre: '', codigo: '', categoria: '', esvendible: '', id_tienda: '' });
+  const [filters, setFilters] = useState({ nombre: '', codigo: '', categoria: '', esvendible: '', id_tienda: '', cantidad_min: '', cantidad_max: '' });
   const [tiendas, setTiendas] = useState([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -371,7 +371,9 @@ const ProductosContent = () => {
       codigo: '', 
       categoria: '', 
       esvendible: '', 
-      id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : '' 
+      id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : '',
+      cantidad_min: '',
+      cantidad_max: ''
     };
     
     setFilters(clearedFilters);
@@ -472,7 +474,9 @@ const ProductosContent = () => {
       codigo: data, 
       categoria: '', 
       esvendible: '', 
-      id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : filters.id_tienda 
+      id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : filters.id_tienda,
+      cantidad_min: '',
+      cantidad_max: ''
     };
     
     setFilters(clearedFilters);
@@ -1981,6 +1985,33 @@ const ProductosContent = () => {
                   </TouchableOpacity>
                 </View>
               </View>
+
+              <View style={styles.filterGroup}>
+                <View style={styles.rowInputs}>
+                  <View style={styles.halfInput}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Cantidad Mínima</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                      placeholderTextColor={colors.outline}
+                      placeholder="Cantidad mínima..."
+                      value={filters.cantidad_min}
+                      onChangeText={(text) => setFilters(prev => ({ ...prev, cantidad_min: text }))}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={styles.halfInput}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Cantidad Máxima</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                      placeholderTextColor={colors.outline}
+                      placeholder="Cantidad máxima..."
+                      value={filters.cantidad_max}
+                      onChangeText={(text) => setFilters(prev => ({ ...prev, cantidad_max: text }))}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+              </View>
             </>
           )}
 
@@ -2533,6 +2564,13 @@ const createStyles = (responsive) => StyleSheet.create({
     padding: responsive.responsivePadding(12),
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
+  },
+  rowInputs: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(8),
+  },
+  halfInput: {
+    flex: 1,
   },
   filterActions: {
     flexDirection: 'row',

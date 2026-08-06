@@ -15,7 +15,7 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
   const responsive = useResponsive();
   const insets = useSafeAreaInsets() || { top: 0, bottom: 0, left: 0, right: 0 };
   const { toast, showToast, hideToast } = useToast();
-  const { user, permissions, entradaAccessPermissions } = useAuth();
+  const { user, permissions, entradaAccessLevels } = useAuth();
   const [isSyncing, setIsSyncing] = useState(false);
 
   const isAdmin = user?.rol === 'Administrador';
@@ -23,9 +23,9 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
 
   const canAccessEntradas = 
     isAdmin ||
-    (userRole === 'dependiente' && entradaAccessPermissions?.dependiente) ||
-    (userRole === 'almacenero' && entradaAccessPermissions?.almacenero) ||
-    (userRole === 'económico' && entradaAccessPermissions?.economico);
+    (userRole === 'dependiente' && entradaAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'almacenero' && entradaAccessLevels?.almacenero !== 'none') ||
+    (userRole === 'económico' && entradaAccessLevels?.economico !== 'none');
 
   const menuItems = [
     { icon: require('../../../assets/bar-chart.png'), label: 'Panel', route: 'Home' },

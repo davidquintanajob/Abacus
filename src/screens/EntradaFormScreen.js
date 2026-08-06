@@ -23,7 +23,7 @@ const EntradaFormContent = () => {
   const route = useRoute();
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
-  const { token, user, permissions, entradaPermissions } = useAuth();
+  const { token, user, permissions, entradaAccessLevels } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
 
@@ -190,9 +190,9 @@ const EntradaFormContent = () => {
       const canViewAllEntradas = 
         canViewAllEntradasParam !== undefined ? canViewAllEntradasParam :
         (userRole === 'administrador' ||
-        (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
-        (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
-        (userRole === 'económico' && entradaPermissions?.economico));
+        (userRole === 'dependiente' && entradaAccessLevels?.dependiente === 'all_stores') ||
+        (userRole === 'almacenero' && entradaAccessLevels?.almacenero === 'all_stores') ||
+        (userRole === 'económico' && entradaAccessLevels?.economico === 'all_stores'));
       
       const data = await getTiendas({}, 1, 1000);
       let allTiendas = data.data?.filter(t => t.activo === true) || [];
@@ -215,7 +215,7 @@ const EntradaFormContent = () => {
         return;
       }
       setIsSearchingProductos(true);
-      const data = await getProductos({ nombre: searchTerm }, 1, 20);
+      const data = await getProductos({ nombre: searchTerm, skipCantidadMin: true, skipEsvendible: true }, 1, 20);
       setProductoSearchResults(data.data || []);
     } catch (err) {
       setProductoSearchResults([]);
@@ -608,6 +608,37 @@ const EntradaFormContent = () => {
     tienda.nombre.toLowerCase().includes(tiendaSearchText.toLowerCase())
   );
 
+  const getCantidadStatus = () => {
+    if (!formData.producto || !formData.tienda) {
+      return null;
+    }
+    
+    // In view/edit mode, use the cantidad_restante from the entrada data
+    // In add mode, use the producto's tiendas_servicio
+    let cantidadActual = 0;
+    
+    if ((isViewMode || isEditMode) && entrada?.cantidad_restante !== undefined) {
+      cantidadActual = parseFloat(entrada.cantidad_restante) || 0;
+    } else {
+      const servicioTienda = formData.producto.tiendas_servicio?.find(
+        ts => ts.id_tienda === formData.tienda.id_tienda
+      );
+      if (servicioTienda) {
+        cantidadActual = parseFloat(servicioTienda.cantidad) || 0;
+      }
+    }
+    
+    const cantidadTotal = parseFloat(formData.cantidad_entrada) || 0;
+    
+    if (cantidadActual === cantidadTotal) {
+      return { color: '#4CAF50', bgColor: isDarkMode ? 'rgba(76, 175, 80, 0.2)' : '#E8F5E9', borderColor: '#4CAF50', label: 'Completo' };
+    } else if (cantidadActual === 0) {
+      return { color: '#F44336', bgColor: isDarkMode ? 'rgba(244, 67, 54, 0.2)' : '#FFEBEE', borderColor: '#F44336', label: 'Agotado' };
+    } else {
+      return { color: '#FF9800', bgColor: isDarkMode ? 'rgba(255, 152, 0, 0.2)' : '#FFF3E0', borderColor: '#FF9800', label: 'Parcial' };
+    }
+  };
+
 
   const styles = createStyles(responsive);
 
@@ -704,6 +735,18 @@ const EntradaFormContent = () => {
                     keyboardType="decimal-pad"
                     editable={!isReadOnly}
                   />
+                  {(isViewMode || isEditMode) && getCantidadStatus() && (
+                    <View style={styles.cantidadInfoRow}>
+                      <Text style={[styles.cantidadInfoLabel, { color: colors.outline }]}>
+                        Cant. Actual:
+                      </Text>
+                      <View style={[styles.cantidadOval, { backgroundColor: getCantidadStatus().bgColor, borderColor: getCantidadStatus().borderColor }]}>
+                        <Text style={[styles.cantidadOvalText, { color: getCantidadStatus().color }]}>
+                          {entrada?.cantidad_restante || 0}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
                 </View>
               </View>
 
@@ -1185,6 +1228,27 @@ const createStyles = (responsive) => StyleSheet.create({
   infoText: {
     flex: 1,
     fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+  },
+  cantidadInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+    marginTop: responsive.responsiveMargin(8),
+  },
+  cantidadInfoLabel: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+  },
+  cantidadOval: {
+    paddingHorizontal: responsive.responsivePadding(10),
+    paddingVertical: responsive.responsivePadding(4),
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  cantidadOvalText: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontWeight: '600',
     fontFamily: 'Inter',
   },
   modalOverlay: {

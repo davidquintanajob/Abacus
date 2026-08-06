@@ -34,7 +34,7 @@ const EntradasContent = () => {
   const barcodeEngineRef = useRef(null);
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
-  const { token, user, permissions, entradaPermissions, entradaManagePermissions } = useAuth();
+  const { token, user, permissions, entradaAccessLevels, entradaManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -188,9 +188,15 @@ const EntradasContent = () => {
       const userRole = user?.rol?.toLowerCase();
       const canViewAllEntradas = 
         userRole === 'administrador' ||
-        (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
-        (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
-        (userRole === 'económico' && entradaPermissions?.economico);
+        (userRole === 'dependiente' && entradaAccessLevels?.dependiente === 'all_stores') ||
+        (userRole === 'almacenero' && entradaAccessLevels?.almacenero === 'all_stores') ||
+        (userRole === 'económico' && entradaAccessLevels?.economico === 'all_stores');
+
+      const canViewOwnStore = 
+        userRole === 'administrador' ||
+        (userRole === 'dependiente' && entradaAccessLevels?.dependiente !== 'none') ||
+        (userRole === 'almacenero' && entradaAccessLevels?.almacenero !== 'none') ||
+        (userRole === 'económico' && entradaAccessLevels?.economico !== 'none');
 
       let allTiendas = [];
       
@@ -201,14 +207,15 @@ const EntradasContent = () => {
         allTiendas = data.data || [];
       }
       
-      if (user?.id_tienda) {
+      if (user?.id_tienda && canViewOwnStore) {
         if (canViewAllEntradas) {
           setTiendas(allTiendas);
         } else {
           const userTienda = allTiendas.find(t => t.id_tienda === user.id_tienda);
           setTiendas(userTienda ? [userTienda] : []);
         }
-        // Note: id_tienda filter is already initialized in useState, no need to set it here
+      } else if (!canViewOwnStore) {
+        setTiendas([]);
       } else {
         setTiendas(allTiendas);
       }
@@ -247,9 +254,9 @@ const EntradasContent = () => {
       const userRole = user?.rol?.toLowerCase();
       const canViewAllEntradas = 
         userRole === 'administrador' ||
-        (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
-        (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
-        (userRole === 'económico' && entradaPermissions?.economico);
+        (userRole === 'dependiente' && entradaAccessLevels?.dependiente === 'all_stores') ||
+        (userRole === 'almacenero' && entradaAccessLevels?.almacenero === 'all_stores') ||
+        (userRole === 'económico' && entradaAccessLevels?.economico === 'all_stores');
 
       const hasActiveFilters = Object.entries(filters).some(([key, value]) => {
         // Don't count id_tienda as an active filter if it's just the user's default store
@@ -308,9 +315,9 @@ const EntradasContent = () => {
     const userRole = user?.rol?.toLowerCase();
     const canViewAllEntradas = 
       userRole === 'administrador' ||
-      (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
-      (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
-      (userRole === 'económico' && entradaPermissions?.economico);
+      (userRole === 'dependiente' && entradaAccessLevels?.dependiente === 'all_stores') ||
+      (userRole === 'almacenero' && entradaAccessLevels?.almacenero === 'all_stores') ||
+      (userRole === 'económico' && entradaAccessLevels?.economico === 'all_stores');
 
     const clearedFilters = { 
       nombre_servicio: '', 
@@ -477,9 +484,9 @@ const EntradasContent = () => {
       const userRole = user?.rol?.toLowerCase();
       const canViewAllEntradas = 
         userRole === 'administrador' ||
-        (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
-        (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
-        (userRole === 'económico' && entradaPermissions?.economico);
+        (userRole === 'dependiente' && entradaAccessLevels?.dependiente === 'all_stores') ||
+        (userRole === 'almacenero' && entradaAccessLevels?.almacenero === 'all_stores') ||
+        (userRole === 'económico' && entradaAccessLevels?.economico === 'all_stores');
 
       // Build filters to send to API
       const apiFilters = { ...filters };
@@ -696,6 +703,19 @@ const EntradasContent = () => {
     userItem.nombre_natural?.toLowerCase().includes(userSearchText.toLowerCase())
   );
 
+  const getCantidadStatus = (entrada) => {
+    const cantidadTotal = parseFloat(entrada.cantidad_entrada) || 0;
+    const cantidadActual = parseFloat(entrada.cantidad_restante) || 0;
+    
+    if (cantidadActual === cantidadTotal) {
+      return { color: '#4CAF50', bgColor: isDarkMode ? 'rgba(76, 175, 80, 0.2)' : '#E8F5E9', borderColor: '#4CAF50', label: 'Completo' };
+    } else if (cantidadActual === 0) {
+      return { color: '#F44336', bgColor: isDarkMode ? 'rgba(244, 67, 54, 0.2)' : '#FFEBEE', borderColor: '#F44336', label: 'Agotado' };
+    } else {
+      return { color: '#FF9800', bgColor: isDarkMode ? 'rgba(255, 152, 0, 0.2)' : '#FFF3E0', borderColor: '#FF9800', label: 'Parcial' };
+    }
+  };
+
   const handleFechaDesdeChange = (event, selectedDate) => {
     setShowFechaDesdePicker(false);
     if (selectedDate) {
@@ -715,9 +735,9 @@ const EntradasContent = () => {
   const userRole = user?.rol?.toLowerCase();
   const canViewAllEntradas = 
     userRole === 'administrador' ||
-    (userRole === 'dependiente' && entradaPermissions?.dependiente) ||
-    (userRole === 'almacenero' && entradaPermissions?.almacenero) ||
-    (userRole === 'económico' && entradaPermissions?.economico);
+    (userRole === 'dependiente' && entradaAccessLevels?.dependiente === 'all_stores') ||
+    (userRole === 'almacenero' && entradaAccessLevels?.almacenero === 'all_stores') ||
+    (userRole === 'económico' && entradaAccessLevels?.economico === 'all_stores');
 
   const canManageEntradas = 
     userRole === 'administrador' ||
@@ -1100,9 +1120,16 @@ const EntradasContent = () => {
                     <Text style={[styles.entradaCosto, { color: colors.primary }]}>
                       CUP: ${parseFloat(entrada.costo_cup).toFixed(2)} | USD: ${parseFloat(entrada.costo_usd).toFixed(2)}
                     </Text>
-                    <Text style={[styles.entradaCantidad, { color: colors.primary }]}>
-                      Cantidad: {entrada.cantidad_entrada}
-                    </Text>
+                    <View style={styles.cantidadRow}>
+                      <Text style={[styles.entradaCantidad, { color: colors.primary }]}>
+                        Inicial: {entrada.cantidad_entrada}
+                      </Text>
+                      <View style={[styles.cantidadOval, { backgroundColor: getCantidadStatus(entrada).bgColor, borderColor: getCantidadStatus(entrada).borderColor }]}>
+                        <Text style={[styles.cantidadOvalText, { color: getCantidadStatus(entrada).color }]}>
+                          Actual: {entrada.cantidad_restante || 0}
+                        </Text>
+                      </View>
+                    </View>
                     <Text style={[styles.entradaFecha, { color: colors.outline }]}>
                       Fecha: {new Date(entrada.fecha).toLocaleDateString()}
                     </Text>
@@ -1616,6 +1643,23 @@ const createStyles = (responsive) => StyleSheet.create({
     fontWeight: '600',
     fontFamily: 'Inter',
     marginTop: responsive.responsiveMargin(2),
+  },
+  cantidadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+    marginTop: responsive.responsiveMargin(2),
+  },
+  cantidadOval: {
+    paddingHorizontal: responsive.responsivePadding(10),
+    paddingVertical: responsive.responsivePadding(4),
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  cantidadOvalText: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '600',
+    fontFamily: 'Inter',
   },
   entradaFecha: {
     fontSize: responsive.fontSizes.bodySmall,

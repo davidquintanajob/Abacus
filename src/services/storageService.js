@@ -188,6 +188,36 @@ export const storageService = {
         );
       }
 
+      if (filters.cantidad_min !== '' && filters.cantidad_min !== undefined) {
+        const minCantidad = parseFloat(filters.cantidad_min);
+        filtered = filtered.filter(p => {
+          if (filters.id_tienda) {
+            // Filter by specific tienda quantity
+            const tiendaServicio = p.tiendas_servicio?.find(ts => ts.id_tienda === parseInt(filters.id_tienda));
+            return tiendaServicio && parseFloat(tiendaServicio.cantidad) >= minCantidad;
+          } else {
+            // Filter by total quantity across all tiendas
+            const totalCantidad = p.tiendas_servicio?.reduce((sum, ts) => sum + (parseFloat(ts.cantidad) || 0), 0) || 0;
+            return totalCantidad >= minCantidad;
+          }
+        });
+      }
+
+      if (filters.cantidad_max !== '' && filters.cantidad_max !== undefined) {
+        const maxCantidad = parseFloat(filters.cantidad_max);
+        filtered = filtered.filter(p => {
+          if (filters.id_tienda) {
+            // Filter by specific tienda quantity
+            const tiendaServicio = p.tiendas_servicio?.find(ts => ts.id_tienda === parseInt(filters.id_tienda));
+            return tiendaServicio && parseFloat(tiendaServicio.cantidad) <= maxCantidad;
+          } else {
+            // Filter by total quantity across all tiendas
+            const totalCantidad = p.tiendas_servicio?.reduce((sum, ts) => sum + (parseFloat(ts.cantidad) || 0), 0) || 0;
+            return totalCantidad <= maxCantidad;
+          }
+        });
+      }
+
       return filtered;
     } catch (error) {
       return [];
