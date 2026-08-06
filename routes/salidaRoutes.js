@@ -30,10 +30,15 @@ const authenticate = require("../helpers/authenticate");
  *           type: integer
  *           default: 1
  *       - in: query
+ *         name: id_tienda
+ *         schema:
+ *           type: integer
+ *         description: Filtrar por ID de tienda (a través de servicio_tienda)
+ *       - in: query
  *         name: id_servicio_tienda
  *         schema:
  *           type: integer
- *         description: Filtrar por ID de servicio-tienda
+ *         description: Filtrar por ID de servicio-tienda (directo)
  *       - in: query
  *         name: id_usuario
  *         schema:

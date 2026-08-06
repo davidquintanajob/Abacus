@@ -375,6 +375,7 @@ const deleteSalida = async (id) => {
  * Filtra salidas con paginación.
  * - Los resultados se ordenan por fecha DESC (más recientes primero).
  * - Incluye todas las relaciones necesarias.
+ * - Soporta filtro por id_tienda (a través de ServicioTienda) y id_servicio_tienda directo.
  */
 const filterSalidas = async (filters, limit, offset) => {
   const where = {};
@@ -394,6 +395,7 @@ const filterSalidas = async (filters, limit, offset) => {
     }
   }
 
+  // Construir include base
   const include = [
     { model: Usuario, as: "usuario" },
     {
@@ -411,10 +413,21 @@ const filterSalidas = async (filters, limit, offset) => {
     },
   ];
 
+  // 🔽 NUEVO: Aplicar filtro por id_tienda en el include de ServicioTienda
+  if (filters.id_tienda) {
+    // Agregamos un where al include de ServicioTienda
+    const servicioTiendaInclude = include.find(
+      (item) => item.model === ServicioTienda && item.as === "servicioTienda"
+    );
+    if (servicioTiendaInclude) {
+      servicioTiendaInclude.where = { id_tienda: filters.id_tienda };
+    }
+  }
+
   const { rows, count } = await Salida.findAndCountAll({
     where,
     include,
-    order: [["fecha", "DESC"]], // ✅ Las salidas más recientes primero
+    order: [["fecha", "DESC"]],
     limit,
     offset,
     distinct: true,

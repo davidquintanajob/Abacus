@@ -134,9 +134,22 @@ const deleteSalida = async (req, res) => {
   }
 };
 
+/**
+ * FILTRO CON PAGINACIÓN – ahora soporta id_tienda
+ */
 const filterSalidas = async (req, res) => {
   try {
-    const { limit, page, id_servicio_tienda, id_usuario, fecha_desde, fecha_hasta, tipo_salida, descripcion } = req.query;
+    const {
+      limit,
+      page,
+      id_tienda,
+      id_servicio_tienda,
+      id_usuario,
+      fecha_desde,
+      fecha_hasta,
+      tipo_salida,
+      descripcion
+    } = req.query;
 
     let limitNum = parseInt(limit, 10) || 10;
     if (isNaN(limitNum) || limitNum < 1) {
@@ -148,6 +161,11 @@ const filterSalidas = async (req, res) => {
     }
 
     const filters = {};
+    if (id_tienda) {
+      const parsed = parseInt(id_tienda, 10);
+      if (isNaN(parsed) || parsed < 1) throwError("El ID de tienda debe ser un número entero positivo", 400);
+      filters.id_tienda = parsed;
+    }
     if (id_servicio_tienda) {
       const parsed = parseInt(id_servicio_tienda, 10);
       if (isNaN(parsed) || parsed < 1) throwError("El ID de servicio-tienda debe ser un número entero positivo", 400);
