@@ -26,6 +26,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { CameraView } from 'expo-camera';
 import * as Camera from 'expo-camera';
 import { BarcodeEngine, ALLOWED_BARCODE_TYPES } from '../barcode';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const EntradasContent = () => {
   const navigation = useNavigation();
@@ -73,8 +74,12 @@ const EntradasContent = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [showTiendaDropdown, setShowTiendaDropdown] = useState(false);
   const [tiendaSearchText, setTiendaSearchText] = useState('');
+  const [isLoadingTiendas, setIsLoadingTiendas] = useState(false);
+  const [hasLoadedAllTiendas, setHasLoadedAllTiendas] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [userSearchText, setUserSearchText] = useState('');
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [hasLoadedAllUsers, setHasLoadedAllUsers] = useState(false);
   const [showFechaDesdePicker, setShowFechaDesdePicker] = useState(false);
   const [showFechaHastaPicker, setShowFechaHastaPicker] = useState(false);
   const [hasShownOfflineToast, setHasShownOfflineToast] = useState(false);
@@ -101,8 +106,6 @@ const EntradasContent = () => {
   const isAdmin = user?.rol === 'Administrador';
 
   useEffect(() => {
-    fetchTiendas();
-    fetchUsers();
     requestCameraPermission();
   }, []);
 
@@ -120,14 +123,30 @@ const EntradasContent = () => {
     };
   }, []);
 
-  // Initialize user's store filter when both user and tiendas are ready
+  // Initialize user's store from session data immediately
   useEffect(() => {
-    if (!isInitialized && user?.id_tienda && tiendas.length > 0) {
+    if (user?.id_tienda) {
+      const userTienda = {
+        id_tienda: user.id_tienda,
+        nombre: user.tienda?.nombre || `Tienda ${user.id_tienda}`
+      };
+      setTiendas([userTienda]);
       setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
       setUserTiendaReady(true);
       setIsInitialized(true);
     }
-  }, [user, tiendas, isInitialized]);
+  }, [user?.id_tienda]);
+
+  // Initialize current user from session data immediately
+  useEffect(() => {
+    if (user?.id_usuario) {
+      const currentUser = {
+        id_usuario: user.id_usuario,
+        nombre_natural: user.nombre_natural || `Usuario ${user.id_usuario}`
+      };
+      setUsers([currentUser]);
+    }
+  }, [user?.id_usuario]);
 
   // Single API call when all data is ready
   useEffect(() => {
@@ -171,20 +190,37 @@ const EntradasContent = () => {
         return;
       }
       if (isInitializedRef.current) {
-        // Restore user's tienda filter if it's empty and user has a tienda
-        const shouldRestore = !filtersRef.current.id_tienda && userTiendaRef.current;
-        if (shouldRestore) {
-          setFilters(prev => ({ ...prev, id_tienda: userTiendaRef.current.toString() }));
-          fetchEntradas(userTiendaRef.current.toString());
-        } else {
-          fetchEntradas();
-        }
+        // Restore saved filters from AsyncStorage
+        const restoreFilters = async () => {
+          try {
+            const savedFilters = await AsyncStorage.getItem('entradas_filters');
+            if (savedFilters) {
+              const parsedFilters = JSON.parse(savedFilters);
+              setFilters(parsedFilters);
+              fetchEntradas(parsedFilters.id_tienda);
+            } else {
+              // Restore user's tienda filter if it's empty and user has a tienda
+              const shouldRestore = !filtersRef.current.id_tienda && userTiendaRef.current;
+              if (shouldRestore) {
+                setFilters(prev => ({ ...prev, id_tienda: userTiendaRef.current.toString() }));
+                fetchEntradas(userTiendaRef.current.toString());
+              } else {
+                fetchEntradas();
+              }
+            }
+          } catch (error) {
+            console.error('Error restoring filters:', error);
+            fetchEntradas();
+          }
+        };
+        restoreFilters();
       }
     }, [])
   );
 
-  const fetchTiendas = async () => {
+  const fetchAllTiendas = async () => {
     try {
+      setIsLoadingTiendas(true);
       const userRole = user?.rol?.toLowerCase();
       const canViewAllEntradas = 
         userRole === 'administrador' ||
@@ -219,23 +255,30 @@ const EntradasContent = () => {
       } else {
         setTiendas(allTiendas);
       }
+      setHasLoadedAllTiendas(true);
     } catch (err) {
       if (!isOfflineMode) {
         setTiendas([]);
       }
+    } finally {
+      setIsLoadingTiendas(false);
     }
   };
 
-  const fetchUsers = async () => {
+  const fetchAllUsers = async () => {
     try {
+      setIsLoadingUsers(true);
       if (isOfflineMode) {
         return;
       }
       const data = await getUsuarios({ activo: true }, 1, 1000);
       setUsers(data.data || []);
+      setHasLoadedAllUsers(true);
     } catch (err) {
       // Error fetching users
       setUsers([]);
+    } finally {
+      setIsLoadingUsers(false);
     }
   };
 
@@ -368,6 +411,12 @@ const EntradasContent = () => {
       navigation.navigate('EntradaForm', { entrada, mode: 'view' });
       return;
     }
+    
+    // Save current filters before navigating
+    AsyncStorage.setItem('entradas_filters', JSON.stringify(filters)).catch(err => {
+      console.error('Error saving filters:', err);
+    });
+    
     const mode = canManageEntradas ? 'edit' : 'view';
     navigation.navigate('EntradaForm', { entrada, mode });
   };
@@ -377,6 +426,12 @@ const EntradasContent = () => {
       showToast({ type: 'warning', message: 'No disponible en modo offline' });
       return;
     }
+    
+    // Save current filters before navigating
+    AsyncStorage.setItem('entradas_filters', JSON.stringify(filters)).catch(err => {
+      console.error('Error saving filters:', err);
+    });
+    
     navigation.navigate('EntradaForm', { entrada, mode: 'edit' });
   };
 
@@ -385,6 +440,11 @@ const EntradasContent = () => {
       showToast({ type: 'warning', message: 'No disponible en modo offline' });
       return;
     }
+    
+    // Save current filters before navigating
+    AsyncStorage.setItem('entradas_filters', JSON.stringify(filters)).catch(err => {
+      console.error('Error saving filters:', err);
+    });
     
     navigation.navigate('EntradaForm', { 
       mode: 'add',
@@ -826,6 +886,10 @@ const EntradasContent = () => {
               onPress={() => {
                 if (canViewAllEntradas) {
                   setShowTiendaDropdown(!showTiendaDropdown);
+                  // Lazy load all tiendas when dropdown is opened
+                  if (!hasLoadedAllTiendas && !isLoadingTiendas) {
+                    fetchAllTiendas();
+                  }
                 }
               }}
             >
@@ -841,21 +905,29 @@ const EntradasContent = () => {
             
             {showTiendaDropdown && (
               <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                  <Ionicons 
-                    name="search-outline" 
-                    size={responsive.responsiveWidth(18)} 
-                    color={colors.outline} 
-                    style={styles.searchIcon}
-                  />
-                  <TextInput
-                    style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
-                    placeholderTextColor={colors.outline}
-                    placeholder="Buscar tienda..."
-                    value={tiendaSearchText}
-                    onChangeText={setTiendaSearchText}
-                  />
-                </View>
+                {isLoadingTiendas && (
+                  <View style={styles.dropdownLoadingContainer}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando tiendas...</Text>
+                  </View>
+                )}
+                {!isLoadingTiendas && (
+                  <>
+                    <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <Ionicons 
+                        name="search-outline" 
+                        size={responsive.responsiveWidth(18)} 
+                        color={colors.outline} 
+                        style={styles.searchIcon}
+                      />
+                      <TextInput
+                        style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
+                        placeholderTextColor={colors.outline}
+                        placeholder="Buscar tienda..."
+                        value={tiendaSearchText}
+                        onChangeText={setTiendaSearchText}
+                      />
+                    </View>
                 {canViewAllEntradas && (
                   <TouchableOpacity
                     style={styles.dropdownItem}
@@ -892,6 +964,8 @@ const EntradasContent = () => {
                     <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
                   </View>
                 )}
+                  </>
+                )}
               </View>
             )}
           </View>
@@ -905,6 +979,10 @@ const EntradasContent = () => {
                   onPress={() => {
                     if (canViewAllEntradas) {
                       setShowUserDropdown(!showUserDropdown);
+                      // Lazy load all users when dropdown is opened
+                      if (!hasLoadedAllUsers && !isLoadingUsers) {
+                        fetchAllUsers();
+                      }
                     }
                   }}
                 >
@@ -920,53 +998,63 @@ const EntradasContent = () => {
                 
                 {showUserDropdown && (
                   <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                      <Ionicons 
-                        name="search-outline" 
-                        size={responsive.responsiveWidth(18)} 
-                        color={colors.outline} 
-                        style={styles.searchIcon}
-                      />
-                      <TextInput
-                        style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
-                        placeholderTextColor={colors.outline}
-                        placeholder="Buscar usuario..."
-                        value={userSearchText}
-                        onChangeText={setUserSearchText}
-                      />
-                    </View>
-                    <TouchableOpacity
-                      style={styles.dropdownItem}
-                      onPress={() => {
-                        setFilters(prev => ({ ...prev, id_usuario: '' }));
-                        setShowUserDropdown(false);
-                        setUserSearchText('');
-                        setPagination(prev => ({ ...prev, currentPage: 1 }));
-                        fetchEntradas();
-                      }}
-                    >
-                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todos los usuarios</Text>
-                    </TouchableOpacity>
-                    {filteredUsers.length > 0 ? (
-                      filteredUsers.map((userItem, index) => (
+                    {isLoadingUsers && (
+                      <View style={styles.dropdownLoadingContainer}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                        <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando usuarios...</Text>
+                      </View>
+                    )}
+                    {!isLoadingUsers && (
+                      <>
+                        <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                          <Ionicons 
+                            name="search-outline" 
+                            size={responsive.responsiveWidth(18)} 
+                            color={colors.outline} 
+                            style={styles.searchIcon}
+                          />
+                          <TextInput
+                            style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
+                            placeholderTextColor={colors.outline}
+                            placeholder="Buscar usuario..."
+                            value={userSearchText}
+                            onChangeText={setUserSearchText}
+                          />
+                        </View>
                         <TouchableOpacity
-                          key={userItem.id_usuario}
-                          style={[styles.dropdownItem, index === filteredUsers.length - 1 && styles.dropdownItemLast]}
+                          style={styles.dropdownItem}
                           onPress={() => {
-                            setFilters(prev => ({ ...prev, id_usuario: userItem.id_usuario.toString() }));
+                            setFilters(prev => ({ ...prev, id_usuario: '' }));
                             setShowUserDropdown(false);
                             setUserSearchText('');
                             setPagination(prev => ({ ...prev, currentPage: 1 }));
                             fetchEntradas();
                           }}
                         >
-                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{userItem.nombre_natural}</Text>
+                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todos los usuarios</Text>
                         </TouchableOpacity>
-                      ))
-                    ) : (
-                      <View style={styles.dropdownItem}>
-                        <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron usuarios</Text>
-                      </View>
+                        {filteredUsers.length > 0 ? (
+                          filteredUsers.map((userItem, index) => (
+                            <TouchableOpacity
+                              key={userItem.id_usuario}
+                              style={[styles.dropdownItem, index === filteredUsers.length - 1 && styles.dropdownItemLast]}
+                              onPress={() => {
+                                setFilters(prev => ({ ...prev, id_usuario: userItem.id_usuario.toString() }));
+                                setShowUserDropdown(false);
+                                setUserSearchText('');
+                                setPagination(prev => ({ ...prev, currentPage: 1 }));
+                                fetchEntradas();
+                              }}
+                            >
+                              <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{userItem.nombre_natural}</Text>
+                            </TouchableOpacity>
+                          ))
+                        ) : (
+                          <View style={styles.dropdownItem}>
+                            <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron usuarios</Text>
+                          </View>
+                        )}
+                      </>
                     )}
                   </View>
                 )}
@@ -1476,6 +1564,17 @@ const createStyles = (responsive) => StyleSheet.create({
     borderBottomWidth: 0,
   },
   dropdownItemText: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+  },
+  dropdownLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: responsive.responsivePadding(16),
+    gap: responsive.responsiveMargin(8),
+  },
+  dropdownLoadingText: {
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
   },

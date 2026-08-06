@@ -51,6 +51,9 @@ const ProductoFormContent = () => {
   const [newNota, setNewNota] = useState('');
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [showImagePickerModal, setShowImagePickerModal] = useState(false);
+  const [cameraModalVisible, setCameraModalVisible] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const cameraRef = useRef(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [apiBaseUrl, setApiBaseUrl] = useState('');
   const [config, setConfig] = useState({});
@@ -717,24 +720,31 @@ const ProductoFormContent = () => {
 
   const handleTakePhoto = async () => {
     setShowImagePickerModal(false);
-    try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission?.granted) {
+      const { status } = await requestPermission();
       if (status !== 'granted') {
-        showToast({ type: 'error', message: 'Se requiere permiso para acceder a la cámara' });
+        showToast({ type: 'error', message: 'Se requiere permiso de cámara para tomar fotos' });
         return;
       }
+    }
+    setCameraModalVisible(true);
+  };
 
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
+  const handleCapture = async () => {
+    if (!cameraRef.current || !cameraReady) {
+      showToast({ type: 'error', message: 'La cámara no está lista' });
+      return;
+    }
+
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
         quality: 0.8,
         base64: true,
       });
 
-      if (!result.cancelled && result.assets && result.assets[0]) {
-        const base64 = result.assets[0].base64;
-        setFormData(prev => ({ ...prev, imagen: `data:image/jpeg;base64,${base64}` }));
+      if (photo && photo.base64) {
+        setFormData(prev => ({ ...prev, imagen: `data:image/jpeg;base64,${photo.base64}` }));
+        setCameraModalVisible(false);
         showToast({ type: 'success', message: 'Foto tomada correctamente' });
       }
     } catch (error) {
@@ -1746,6 +1756,32 @@ const ProductoFormContent = () => {
         </Modal>
       )}
 
+      {/* Camera Modal */}
+      <Modal visible={cameraModalVisible} transparent animationType="slide">
+        <View style={styles.cameraFullScreen}>
+          <View style={styles.cameraHeader}>
+            <TouchableOpacity style={styles.cameraCloseBtn} onPress={() => setCameraModalVisible(false)}>
+              <Text style={styles.cameraCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.cameraContent}>
+            <CameraView
+              ref={cameraRef}
+              style={StyleSheet.absoluteFillObject}
+              facing="back"
+              onCameraReady={() => { setCameraReady(true); }}
+            />
+          </View>
+
+          <View style={styles.cameraFooter}>
+            <TouchableOpacity style={styles.captureBtn} onPress={handleCapture}>
+              <View style={styles.captureBtnInner} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Tienda Dropdown Modal */}
       {showTiendaDropdown && (
         <Modal
@@ -2411,5 +2447,59 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
     lineHeight: 20,
+  },
+  cameraFullScreen: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  cameraHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    paddingTop: responsive.responsivePadding(50),
+    paddingHorizontal: responsive.responsivePadding(20),
+  },
+  cameraCloseBtn: {
+    width: responsive.responsiveWidth(40),
+    height: responsive.responsiveHeight(40),
+    borderRadius: responsive.responsiveWidth(20),
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraCloseText: {
+    color: '#fff',
+    fontSize: responsive.responsiveFontSize(24),
+    fontWeight: 'bold',
+  },
+  cameraContent: {
+    flex: 1,
+  },
+  cameraFooter: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingVertical: responsive.responsivePadding(30),
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  captureBtn: {
+    width: responsive.responsiveWidth(70),
+    height: responsive.responsiveHeight(70),
+    borderRadius: responsive.responsiveWidth(35),
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  captureBtnInner: {
+    width: responsive.responsiveWidth(60),
+    height: responsive.responsiveHeight(60),
+    borderRadius: responsive.responsiveWidth(30),
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#ddd',
   },
 });

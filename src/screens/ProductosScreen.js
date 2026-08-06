@@ -26,6 +26,7 @@ import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import bwipjs from '@bwip-js/react-native';
 import { PDFDocument, rgb } from 'pdf-lib';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ProductosContent = () => {
   const navigation = useNavigation();
@@ -69,6 +70,8 @@ const ProductosContent = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [showTiendaDropdown, setShowTiendaDropdown] = useState(false);
   const [tiendaSearchText, setTiendaSearchText] = useState('');
+  const [isLoadingTiendas, setIsLoadingTiendas] = useState(false);
+  const [hasLoadedAllTiendas, setHasLoadedAllTiendas] = useState(false);
   const [showScannerModal, setShowScannerModal] = useState(false);
   const [cameraPermission, setCameraPermission] = useState(null);
   const [hasShownOfflineToast, setHasShownOfflineToast] = useState(false);
@@ -99,18 +102,22 @@ const ProductosContent = () => {
   const canEdit = isAdmin;
 
   useEffect(() => {
-    fetchTiendas();
     loadApiBaseUrl();
   }, []);
 
-  // Initialize user's store filter when both user and tiendas are ready
+  // Initialize user's store from session data immediately
   useEffect(() => {
-    if (!isInitialized && user?.id_tienda && tiendas.length > 0) {
+    if (user?.id_tienda) {
+      const userTienda = {
+        id_tienda: user.id_tienda,
+        nombre: user.tienda?.nombre || `Tienda ${user.id_tienda}`
+      };
+      setTiendas([userTienda]);
       setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
       setUserTiendaReady(true);
       setIsInitialized(true);
     }
-  }, [user, tiendas, isInitialized]);
+  }, [user?.id_tienda]);
 
   // Single API call when all data is ready
   useEffect(() => {
@@ -154,20 +161,37 @@ const ProductosContent = () => {
         return;
       }
       if (isInitializedRef.current) {
-        // Restore user's tienda filter if it's empty and user has a tienda
-        const shouldRestore = !filtersRef.current.id_tienda && userTiendaRef.current;
-        if (shouldRestore) {
-          setFilters(prev => ({ ...prev, id_tienda: userTiendaRef.current.toString() }));
-          fetchProductos(userTiendaRef.current.toString());
-        } else {
-          fetchProductos();
-        }
+        // Restore saved filters from AsyncStorage
+        const restoreFilters = async () => {
+          try {
+            const savedFilters = await AsyncStorage.getItem('productos_filters');
+            if (savedFilters) {
+              const parsedFilters = JSON.parse(savedFilters);
+              setFilters(parsedFilters);
+              fetchProductos(parsedFilters.id_tienda);
+            } else {
+              // Restore user's tienda filter if it's empty and user has a tienda
+              const shouldRestore = !filtersRef.current.id_tienda && userTiendaRef.current;
+              if (shouldRestore) {
+                setFilters(prev => ({ ...prev, id_tienda: userTiendaRef.current.toString() }));
+                fetchProductos(userTiendaRef.current.toString());
+              } else {
+                fetchProductos();
+              }
+            }
+          } catch (error) {
+            console.error('Error restoring filters:', error);
+            fetchProductos();
+          }
+        };
+        restoreFilters();
       }
     }, [])
   );
 
-  const fetchTiendas = async () => {
+  const fetchAllTiendas = async () => {
     try {
+      setIsLoadingTiendas(true);
       const userRole = user?.rol?.toLowerCase();
       const canViewAllStores = 
         userRole === 'administrador' ||
@@ -196,14 +220,16 @@ const ProductosContent = () => {
           const userTienda = allTiendas.find(t => t.id_tienda === user.id_tienda);
           setTiendas(userTienda ? [userTienda] : []);
         }
-        // Note: id_tienda filter is already initialized in useState, no need to set it here
       } else {
         setTiendas(allTiendas);
       }
+      setHasLoadedAllTiendas(true);
     } catch (err) {
       if (!isOfflineMode) {
         setTiendas([]);
       }
+    } finally {
+      setIsLoadingTiendas(false);
     }
   };
 
@@ -412,6 +438,11 @@ const ProductosContent = () => {
   };
 
   const handleProductoPress = (producto) => {
+    // Save current filters before navigating
+    AsyncStorage.setItem('productos_filters', JSON.stringify(filters)).catch(err => {
+      console.error('Error saving filters:', err);
+    });
+    
     const mode = canEdit ? 'edit' : 'view';
     navigation.navigate('ProductoForm', { producto, mode });
   };
@@ -421,6 +452,12 @@ const ProductosContent = () => {
       showToast({ type: 'warning', message: 'No disponible en modo offline' });
       return;
     }
+    
+    // Save current filters before navigating
+    AsyncStorage.setItem('productos_filters', JSON.stringify(filters)).catch(err => {
+      console.error('Error saving filters:', err);
+    });
+    
     navigation.navigate('ProductoForm', { producto, mode: 'edit' });
   };
 
@@ -429,6 +466,12 @@ const ProductosContent = () => {
       showToast({ type: 'warning', message: 'No disponible en modo offline' });
       return;
     }
+    
+    // Save current filters before navigating
+    AsyncStorage.setItem('productos_filters', JSON.stringify(filters)).catch(err => {
+      console.error('Error saving filters:', err);
+    });
+    
     navigation.navigate('ProductoForm', { mode: 'add' });
   };
 
@@ -1810,6 +1853,10 @@ const ProductosContent = () => {
               onPress={() => {
                 if (canViewAllStores) {
                   setShowTiendaDropdown(!showTiendaDropdown);
+                  // Lazy load all tiendas when dropdown is opened
+                  if (!hasLoadedAllTiendas && !isLoadingTiendas) {
+                    fetchAllTiendas();
+                  }
                 }
               }}
             >
@@ -1825,21 +1872,29 @@ const ProductosContent = () => {
             
             {showTiendaDropdown && (
               <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                  <Ionicons 
-                    name="search-outline" 
-                    size={responsive.responsiveWidth(18)} 
-                    color={colors.outline} 
-                    style={styles.searchIcon}
-                  />
-                  <TextInput
-                    style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
-                    placeholderTextColor={colors.outline}
-                    placeholder="Buscar tienda..."
-                    value={tiendaSearchText}
-                    onChangeText={setTiendaSearchText}
-                  />
-                </View>
+                {isLoadingTiendas && (
+                  <View style={styles.dropdownLoadingContainer}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando tiendas...</Text>
+                  </View>
+                )}
+                {!isLoadingTiendas && (
+                  <>
+                    <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <Ionicons 
+                        name="search-outline" 
+                        size={responsive.responsiveWidth(18)} 
+                        color={colors.outline} 
+                        style={styles.searchIcon}
+                      />
+                      <TextInput
+                        style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
+                        placeholderTextColor={colors.outline}
+                        placeholder="Buscar tienda..."
+                        value={tiendaSearchText}
+                        onChangeText={setTiendaSearchText}
+                      />
+                    </View>
                 {canViewAllStores && (
                   <TouchableOpacity
                     style={styles.dropdownItem}
@@ -1875,6 +1930,8 @@ const ProductosContent = () => {
                   <View style={styles.dropdownItem}>
                     <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
                   </View>
+                )}
+                  </>
                 )}
               </View>
             )}
@@ -2809,6 +2866,17 @@ const createStyles = (responsive) => StyleSheet.create({
     marginRight: responsive.responsiveMargin(4),
   },
   dropdownItemText: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+  },
+  dropdownLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: responsive.responsivePadding(16),
+    gap: responsive.responsiveMargin(8),
+  },
+  dropdownLoadingText: {
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
   },
