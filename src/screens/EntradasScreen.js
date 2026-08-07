@@ -417,8 +417,8 @@ const EntradasContent = () => {
       console.error('Error saving filters:', err);
     });
     
-    const mode = canManageEntradas ? 'edit' : 'view';
-    navigation.navigate('EntradaForm', { entrada, mode });
+    // Always open in view mode when pressing the card
+    navigation.navigate('EntradaForm', { entrada, mode: 'view' });
   };
 
   const handleEdit = (entrada) => {
@@ -581,8 +581,8 @@ const EntradasContent = () => {
         if (selectedFields.producto) row['Nombre'] = entrada.servicioTienda?.servicio?.nombre || 'N/A';
         if (selectedFields.tienda) row['Tienda'] = entrada.servicioTienda?.tienda?.nombre || 'N/A';
         if (selectedFields.cantidad) row['Cantidad'] = entrada.cantidad_entrada;
-        if (selectedFields.costo_cup) row['Costo CUP'] = entrada.costo_cup;
-        if (selectedFields.costo_usd) row['Costo USD'] = entrada.costo_usd;
+        if (canManageEntradas && selectedFields.costo_cup) row['Costo CUP'] = entrada.costo_cup;
+        if (canManageEntradas && selectedFields.costo_usd) row['Costo USD'] = entrada.costo_usd;
         if (selectedFields.fecha) row['Fecha'] = new Date(entrada.fecha).toLocaleDateString();
         if (selectedFields.codigo_lote) row['Código Lote'] = entrada.codigo_lote;
         if (selectedFields.fecha_vencimiento) row['Fecha Vencimiento'] = entrada.fecha_vencimiento ? new Date(entrada.fecha_vencimiento).toLocaleDateString() : 'N/A';
@@ -622,8 +622,8 @@ const EntradasContent = () => {
       if (selectedFields.producto) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Nombre</th>';
       if (selectedFields.tienda) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Tienda</th>';
       if (selectedFields.cantidad) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Cantidad</th>';
-      if (selectedFields.costo_cup) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo CUP</th>';
-      if (selectedFields.costo_usd) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo USD</th>';
+      if (canManageEntradas && selectedFields.costo_cup) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo CUP</th>';
+      if (canManageEntradas && selectedFields.costo_usd) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo USD</th>';
       if (selectedFields.fecha) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Fecha</th>';
       if (selectedFields.codigo_lote) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Código Lote</th>';
       if (selectedFields.fecha_vencimiento) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Fecha Vencimiento</th>';
@@ -637,8 +637,8 @@ const EntradasContent = () => {
         if (selectedFields.producto) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.servicioTienda?.servicio?.nombre || 'N/A'}</td>`;
         if (selectedFields.tienda) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.servicioTienda?.tienda?.nombre || 'N/A'}</td>`;
         if (selectedFields.cantidad) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.cantidad_entrada}</td>`;
-        if (selectedFields.costo_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.costo_cup}</td>`;
-        if (selectedFields.costo_usd) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.costo_usd}</td>`;
+        if (canManageEntradas && selectedFields.costo_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.costo_cup}</td>`;
+        if (canManageEntradas && selectedFields.costo_usd) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.costo_usd}</td>`;
         if (selectedFields.fecha) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${new Date(entrada.fecha).toLocaleDateString()}</td>`;
         if (selectedFields.codigo_lote) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.codigo_lote}</td>`;
         if (selectedFields.fecha_vencimiento) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.fecha_vencimiento ? new Date(entrada.fecha_vencimiento).toLocaleDateString() : 'N/A'}</td>`;
@@ -778,7 +778,7 @@ const EntradasContent = () => {
 
   const handleFechaDesdeChange = (event, selectedDate) => {
     setShowFechaDesdePicker(false);
-    if (selectedDate) {
+    if (event.type === 'set' && selectedDate) {
       const formattedDate = selectedDate.toISOString().split('T')[0];
       setFilters(prev => ({ ...prev, fecha_desde: formattedDate }));
     }
@@ -786,7 +786,7 @@ const EntradasContent = () => {
 
   const handleFechaHastaChange = (event, selectedDate) => {
     setShowFechaHastaPicker(false);
-    if (selectedDate) {
+    if (event.type === 'set' && selectedDate) {
       const formattedDate = selectedDate.toISOString().split('T')[0];
       setFilters(prev => ({ ...prev, fecha_hasta: formattedDate }));
     }
@@ -1071,44 +1071,46 @@ const EntradasContent = () => {
                 />
               </View>
 
-              <View style={styles.filterGroup}>
-                <Text style={[styles.label, { color: colors.outline }]}>Fecha Desde</Text>
-                <TouchableOpacity
-                  style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                  onPress={() => setShowFechaDesdePicker(true)}
-                >
-                  <Text style={[styles.inputText, { color: filters.fecha_desde ? colors.onSurface : colors.outline }]}>
-                    {filters.fecha_desde || 'Seleccionar fecha'}
-                  </Text>
-                </TouchableOpacity>
-                {showFechaDesdePicker && (
-                  <DateTimePicker
-                    value={filters.fecha_desde ? new Date(filters.fecha_desde) : new Date()}
-                    mode="date"
-                    display="default"
-                    onChange={handleFechaDesdeChange}
-                  />
-                )}
-              </View>
+              <View style={styles.filterRow}>
+                <View style={[styles.filterGroup, { flex: 1, marginRight: responsive.responsiveMargin(8) }]}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Fecha Desde</Text>
+                  <TouchableOpacity
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    onPress={() => setShowFechaDesdePicker(true)}
+                  >
+                    <Text style={[styles.inputText, { color: filters.fecha_desde ? colors.onSurface : colors.outline }]}>
+                      {filters.fecha_desde || 'Seleccionar...'}
+                    </Text>
+                  </TouchableOpacity>
+                  {showFechaDesdePicker && (
+                    <DateTimePicker
+                      value={filters.fecha_desde ? new Date(filters.fecha_desde) : new Date()}
+                      mode="date"
+                      display="default"
+                      onChange={handleFechaDesdeChange}
+                    />
+                  )}
+                </View>
 
-              <View style={styles.filterGroup}>
-                <Text style={[styles.label, { color: colors.outline }]}>Fecha Hasta</Text>
-                <TouchableOpacity
-                  style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                  onPress={() => setShowFechaHastaPicker(true)}
-                >
-                  <Text style={[styles.inputText, { color: filters.fecha_hasta ? colors.onSurface : colors.outline }]}>
-                    {filters.fecha_hasta || 'Seleccionar fecha'}
+                <View style={[styles.filterGroup, { flex: 1, marginLeft: responsive.responsiveMargin(8) }]}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Fecha Hasta</Text>
+                  <TouchableOpacity
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    onPress={() => setShowFechaHastaPicker(true)}
+                  >
+                    <Text style={[styles.inputText, { color: filters.fecha_hasta ? colors.onSurface : colors.outline }]}>
+                    {filters.fecha_hasta || 'Seleccionar...'}
                   </Text>
-                </TouchableOpacity>
-                {showFechaHastaPicker && (
-                  <DateTimePicker
-                    value={filters.fecha_hasta ? new Date(filters.fecha_hasta) : new Date()}
-                    mode="date"
-                    display="default"
-                    onChange={handleFechaHastaChange}
-                  />
-                )}
+                  </TouchableOpacity>
+                  {showFechaHastaPicker && (
+                    <DateTimePicker
+                      value={filters.fecha_hasta ? new Date(filters.fecha_hasta) : new Date()}
+                      mode="date"
+                      display="default"
+                      onChange={handleFechaHastaChange}
+                    />
+                  )}
+                </View>
               </View>
             </>
           )}
@@ -1355,6 +1357,10 @@ const EntradasContent = () => {
               <Text style={[styles.exportModalTitle, { color: colors.onSurface }]}>Seleccionar Campos</Text>
               <ScrollView style={styles.fieldSelectionScroll}>
                 {Object.keys(selectedFields).map((field) => {
+                  // Hide cost fields if user doesn't have management permissions
+                  if (!canManageEntradas && (field === 'costo_cup' || field === 'costo_usd')) {
+                    return null;
+                  }
                   const fieldLabel = field === 'producto' ? 'Nombre' : field.charAt(0).toUpperCase() + field.slice(1).replace('_', ' ');
                   return (
                     <TouchableOpacity
@@ -1499,6 +1505,9 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   filterGroup: {
     marginBottom: responsive.responsiveMargin(16),
+  },
+  filterRow: {
+    flexDirection: 'row',
   },
   label: {
     fontSize: responsive.fontSizes.bodySmall,

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, Modal, KeyboardAvoidingView, Platform, FlatList, ToastAndroid } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { Header } from '../components/layout/Header';
 import { Card } from '../components/common/Card';
@@ -18,6 +18,8 @@ import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library';
+import { comprimirImagen, uriToBase64 } from '../utils/imageUtils';
 import { BarcodeEngine, ALLOWED_BARCODE_TYPES } from '../barcode';
 
 const ProductoFormContent = () => {
@@ -31,6 +33,8 @@ const ProductoFormContent = () => {
   
   // Initialize Barcode Engine
   const barcodeEngineRef = useRef(null);
+  // Track if this is the first time the screen is focused (to avoid double API calls on initial load)
+  const isFirstFocus = useRef(true);
 
   const { producto, mode, tiendaPreSeleccionada, returnToEntrada, entradaData } = route.params || { mode: 'add' };
 
@@ -55,6 +59,8 @@ const ProductoFormContent = () => {
   const [cameraReady, setCameraReady] = useState(false);
   const cameraRef = useRef(null);
   const [permission, requestPermission] = useCameraPermissions();
+  const [galleryModalVisible, setGalleryModalVisible] = useState(false);
+  const [mediaAssets, setMediaAssets] = useState([]);
   const [apiBaseUrl, setApiBaseUrl] = useState('');
   const [config, setConfig] = useState({});
   const [exchangeRate, setExchangeRate] = useState(null);
@@ -273,6 +279,62 @@ const ProductoFormContent = () => {
 
     fetchCompleteProducto();
   }, [producto?.id_servicio, canViewCosts, user?.id_tienda, permissions, isOfflineMode]);
+
+  // Refresh product data when screen regains focus (e.g., after returning from EntradaForm)
+  useFocusEffect(
+    React.useCallback(() => {
+      const refreshProductoData = async () => {
+        // Skip the first focus to avoid duplicate API call on initial load
+        if (isFirstFocus.current) {
+          isFirstFocus.current = false;
+          return;
+        }
+
+        if (producto?.id_servicio && !isOfflineMode) {
+          try {
+            setIsFetchingProducto(true);
+            const completeProducto = await getProductoById(producto.id_servicio);
+            
+            const userRole = user?.rol?.toLowerCase();
+            const canViewAllStores = 
+              userRole === 'administrador' ||
+              (userRole === 'dependiente' && permissions?.dependiente) ||
+              (userRole === 'almacenero' && permissions?.almacenero) ||
+              (userRole === 'económico' && permissions?.economico);
+
+            let productoTiendaList = completeProducto.tiendas_servicio || [];
+            
+            if (!canViewAllStores && user?.id_tienda) {
+              productoTiendaList = productoTiendaList.filter(ts => ts.id_tienda === user.id_tienda);
+            }
+            
+            setFormData({
+              nombre: completeProducto.nombre || '',
+              categoria: completeProducto.categoria || '',
+              esvendible: completeProducto.esvendible !== undefined ? completeProducto.esvendible : true,
+              nota: completeProducto.nota || '',
+              imagen: completeProducto.producto?.imagen || '',
+              sufijo: completeProducto.producto?.sufijo || '',
+              isVencible: completeProducto.producto?.isVencible !== undefined ? completeProducto.producto.isVencible : true,
+              unidad_medida: completeProducto.producto?.unidad_medida || '',
+              productoTiendaList: productoTiendaList,
+              codigoList: completeProducto.codigos || [],
+              precio_cup_general: null,
+              precio_usd_general: null,
+              costo_cup_general: null,
+              costo_usd_general: null,
+            });
+          } catch (err) {
+            showToast({ type: 'error', message: 'Error al actualizar datos del producto' });
+          } finally {
+            setIsFetchingProducto(false);
+          }
+        }
+      };
+
+      refreshProductoData();
+    }, [producto?.id_servicio, canViewCosts, user?.id_tienda, permissions, isOfflineMode])
+  );
 
   // Efecto para agregar tienda pre-seleccionada cuando viene de EntradaForm
   useEffect(() => {
@@ -694,27 +756,21 @@ const ProductoFormContent = () => {
   const handlePickFromGallery = async () => {
     setShowImagePickerModal(false);
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         showToast({ type: 'error', message: 'Se requiere permiso para acceder a la galería' });
         return;
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-        base64: true,
+      const assets = await MediaLibrary.getAssetsAsync({
+        mediaType: 'photo',
+        first: 50,
+        sortBy: MediaLibrary.SortBy.creationTime,
       });
-
-      if (!result.cancelled && result.assets && result.assets[0]) {
-        const base64 = result.assets[0].base64;
-        setFormData(prev => ({ ...prev, imagen: `data:image/jpeg;base64,${base64}` }));
-        showToast({ type: 'success', message: 'Imagen seleccionada correctamente' });
-      }
+      setMediaAssets(assets.assets);
+      setGalleryModalVisible(true);
     } catch (error) {
-      showToast({ type: 'error', message: 'Error al seleccionar la imagen' });
+      showToast({ type: 'error', message: 'Error al cargar la galería' });
     }
   };
 
@@ -767,6 +823,73 @@ const ProductoFormContent = () => {
           },
         },
       ]
+    );
+  };
+
+  // Gallery modal similar a historia_clinicaModal
+  const GalleryModal = () => {
+    if (!galleryModalVisible) return null;
+
+    const handleSelect = async (asset) => {
+      try {
+        const compressedResult = await comprimirImagen(asset.uri);
+        if (compressedResult && compressedResult.base64) {
+          setFormData(prev => ({ ...prev, imagen: `data:image/jpeg;base64,${compressedResult.base64}` }));
+          ToastAndroid.show('Foto agregada', ToastAndroid.SHORT);
+        } else {
+          // Fallback a uriToBase64 si ImageManipulator no está disponible (Expo Go)
+          const b = await uriToBase64(asset.uri);
+          if (b) {
+            setFormData(prev => ({ ...prev, imagen: `data:image/jpeg;base64,${b}` }));
+            ToastAndroid.show('Foto agregada (sin compresión - Expo Go)', ToastAndroid.SHORT);
+          } else {
+            Alert.alert('Error', 'No se pudo procesar la imagen');
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Error seleccionando imagen:', err);
+        
+        // Verificar si es el error específico de ImageManipulator en Expo Go
+        if (err.message && err.message.includes('Expo Go')) {
+          ToastAndroid.show('Compresión no disponible en Expo Go. Usará conversión directa.', ToastAndroid.LONG);
+          // Intentar fallback a uriToBase64
+          const b = await uriToBase64(asset.uri);
+          if (b) {
+            setFormData(prev => ({ ...prev, imagen: `data:image/jpeg;base64,${b}` }));
+            ToastAndroid.show('Foto agregada', ToastAndroid.SHORT);
+          } else {
+            Alert.alert('Error', 'No se pudo procesar la imagen');
+          }
+        } else {
+          Alert.alert('Error', 'No se pudo procesar la imagen: ' + err.message);
+        }
+      } finally {
+        setGalleryModalVisible(false);
+      }
+    };
+
+    return (
+      <Modal visible={galleryModalVisible} transparent animationType="slide">
+        <View style={styles.galleryOverlay}>
+          <View style={styles.galleryHeader}>
+            <TouchableOpacity onPress={() => setGalleryModalVisible(false)}>
+              <Text style={styles.notaButtonText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+
+          <FlatList
+            data={mediaAssets}
+            numColumns={4}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity onPress={() => handleSelect(item)} style={{ margin: 4 }}>
+                <Image source={{ uri: item.uri }} style={styles.galleryThumb} />
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      </Modal>
     );
   };
 
@@ -1782,6 +1905,9 @@ const ProductoFormContent = () => {
         </View>
       </Modal>
 
+      {/* Gallery Modal */}
+      <GalleryModal />
+
       {/* Tienda Dropdown Modal */}
       {showTiendaDropdown && (
         <Modal
@@ -2498,8 +2624,29 @@ const createStyles = (responsive) => StyleSheet.create({
     width: responsive.responsiveWidth(60),
     height: responsive.responsiveHeight(60),
     borderRadius: responsive.responsiveWidth(30),
-    backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#ddd',
+    backgroundColor: '#000',
+    borderWidth: 3,
+    borderColor: '#fff',
+  },
+  galleryOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+  },
+  galleryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    padding: responsive.responsivePadding(16),
+    paddingTop: responsive.responsivePadding(50),
+  },
+  notaButtonText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    color: '#fff',
+  },
+  galleryThumb: {
+    width: responsive.responsiveWidth(80),
+    height: responsive.responsiveHeight(80),
+    borderRadius: 8,
   },
 });

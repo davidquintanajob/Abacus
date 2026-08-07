@@ -23,7 +23,7 @@ const EntradaFormContent = () => {
   const route = useRoute();
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
-  const { token, user, permissions, entradaAccessLevels } = useAuth();
+  const { token, user, permissions, entradaAccessLevels, entradaManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
 
@@ -68,9 +68,27 @@ const EntradaFormContent = () => {
   });
 
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showFechaEntradaPicker, setShowFechaEntradaPicker] = useState(false);
+
+  // Helper function to format date correctly without timezone issues
+  const formatDateToLocal = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
+
+  const userRole = user?.rol?.toLowerCase();
+  const canManageEntradas = 
+    userRole === 'administrador' ||
+    (userRole === 'dependiente' && entradaManagePermissions?.dependiente) ||
+    (userRole === 'almacenero' && entradaManagePermissions?.almacenero) ||
+    (userRole === 'económico' && entradaManagePermissions?.economico);
 
   useEffect(() => {
     fetchTiendas();
@@ -100,9 +118,11 @@ const EntradaFormContent = () => {
             cantidad_entrada: completeEntrada.cantidad_entrada.toString(),
             costo_usd: completeEntrada.costo_usd.toString(),
             costo_cup: completeEntrada.costo_cup.toString(),
-            fecha_vencimiento: completeEntrada.fecha_vencimiento ? completeEntrada.fecha_vencimiento.split('T')[0] : '',
+            precio_usd: '',
+            precio_cup: '',
+            fecha_vencimiento: completeEntrada.fecha_vencimiento ? formatDateToLocal(completeEntrada.fecha_vencimiento) : '',
             nombre_proveedor: completeEntrada.nombre_proveedor || '',
-            fecha: completeEntrada.fecha ? completeEntrada.fecha.split('T')[0] : new Date().toISOString().split('T')[0],
+            fecha: completeEntrada.fecha ? formatDateToLocal(completeEntrada.fecha) : formatDateToLocal(new Date().toISOString()),
             producto: completeEntrada.servicioTienda?.servicio,
             tienda: completeEntrada.servicioTienda?.tienda,
           });
@@ -455,8 +475,22 @@ const EntradaFormContent = () => {
   const handleDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
     if (selectedDate) {
-      const formattedDate = selectedDate.toISOString().split('T')[0];
+      const year = selectedDate.getFullYear();
+      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getDate()).padStart(2, '0');
+      const formattedDate = `${year}-${month}-${day}`;
       setFormData(prev => ({ ...prev, fecha_vencimiento: formattedDate }));
+    }
+  };
+
+  const handleFechaEntradaChange = (event, selectedDate) => {
+    setShowFechaEntradaPicker(false);
+    if (selectedDate) {
+      const year = selectedDate.getFullYear();
+      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getDate()).padStart(2, '0');
+      const formattedDate = `${year}-${month}-${day}`;
+      setFormData(prev => ({ ...prev, fecha: formattedDate }));
     }
   };
 
@@ -539,7 +573,11 @@ const EntradaFormContent = () => {
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (productoSearchText.length >= 2) {
+      // Don't show dropdown if the text matches the selected product (editing mode)
+      const isMatchingSelectedProduct = formData.producto && 
+        productoSearchText === formData.producto.nombre;
+      
+      if (productoSearchText.length >= 2 && !isMatchingSelectedProduct) {
         searchProductos(productoSearchText);
         setShowProductoDropdown(true);
       } else {
@@ -549,7 +587,7 @@ const EntradaFormContent = () => {
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [productoSearchText]);
+  }, [productoSearchText, formData.producto]);
 
   // Efecto para autorellenar costos cuando la fórmula de costo promedio ponderado está activa
   useEffect(() => {
@@ -639,6 +677,60 @@ const EntradaFormContent = () => {
     }
   };
 
+  const getFinancialInfo = () => {
+    if (!formData.cantidad_entrada) {
+      return null;
+    }
+
+    const cantidad = parseFloat(formData.cantidad_entrada) || 0;
+    const costoCup = parseFloat(formData.costo_cup) || 0;
+    const costoUsd = parseFloat(formData.costo_usd) || 0;
+
+    let precioCup = 0;
+    let precioUsd = 0;
+
+    // In view/edit mode, use the servicioTienda from the entrada data
+    if ((isViewMode || isEditMode) && entrada?.servicioTienda) {
+      const parsedPrecioCup = parseFloat(entrada.servicioTienda.precio_cup);
+      const parsedPrecioUsd = parseFloat(entrada.servicioTienda.precio_usd);
+      precioCup = !isNaN(parsedPrecioCup) ? parsedPrecioCup : 0;
+      precioUsd = !isNaN(parsedPrecioUsd) ? parsedPrecioUsd : 0;
+    } 
+    // In add mode, use the product's tiendas_servicio
+    else if (formData.producto && formData.tienda) {
+      const servicioTienda = formData.producto.tiendas_servicio?.find(
+        ts => ts.id_tienda === formData.tienda.id_tienda
+      );
+      const parsedPrecioCup = parseFloat(servicioTienda?.precio_cup);
+      const parsedPrecioUsd = parseFloat(servicioTienda?.precio_usd);
+      precioCup = !isNaN(parsedPrecioCup) ? parsedPrecioCup : 0;
+      precioUsd = !isNaN(parsedPrecioUsd) ? parsedPrecioUsd : 0;
+    }
+
+    // Calculate total cost
+    const costoTotalCup = costoCup * cantidad;
+    const costoTotalUsd = costoUsd * cantidad;
+
+    // Calculate expected profit
+    const gananciaCup = precioCup - costoCup;
+    const gananciaUsd = precioUsd - costoUsd;
+
+    // Calculate profit percentage
+    const porcentajeGananciaCup = precioCup > 0 ? (gananciaCup / precioCup) * 100 : 0;
+    const porcentajeGananciaUsd = precioUsd > 0 ? (gananciaUsd / precioUsd) * 100 : 0;
+
+    return {
+      costoTotalCup: !isNaN(costoTotalCup) ? costoTotalCup : 0,
+      costoTotalUsd: !isNaN(costoTotalUsd) ? costoTotalUsd : 0,
+      precioCup: !isNaN(precioCup) ? precioCup : 0,
+      precioUsd: !isNaN(precioUsd) ? precioUsd : 0,
+      gananciaCup: !isNaN(gananciaCup) ? gananciaCup : 0,
+      gananciaUsd: !isNaN(gananciaUsd) ? gananciaUsd : 0,
+      porcentajeGananciaCup: !isNaN(porcentajeGananciaCup) ? porcentajeGananciaCup : 0,
+      porcentajeGananciaUsd: !isNaN(porcentajeGananciaUsd) ? porcentajeGananciaUsd : 0
+    };
+  };
+
 
   const styles = createStyles(responsive);
 
@@ -684,48 +776,104 @@ const EntradaFormContent = () => {
             </View>
           ) : (
             <>
-              {/* Producto Selection and Cantidad */}
+              {/* Producto Selection */}
+              <View style={styles.formGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Producto *</Text>
+                <View style={styles.relativeContainer}>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Buscar producto..."
+                    value={productoSearchText}
+                    onChangeText={setProductoSearchText}
+                    editable={!isReadOnly}
+                    onBlur={() => setShowProductoDropdown(false)}
+                  />
+                  {showProductoDropdown && !isReadOnly && (
+                    <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                      {isSearchingProductos ? (
+                        <View style={styles.dropdownItem}>
+                          <ActivityIndicator size="small" color={colors.primary} />
+                        </View>
+                      ) : productoSearchResults.length > 0 ? (
+                        productoSearchResults.map((producto, index) => (
+                          <TouchableOpacity
+                            key={producto.id_servicio}
+                            style={[styles.dropdownItem, index === productoSearchResults.length - 1 && styles.dropdownItemLast]}
+                            onPress={() => handleProductoSelect(producto)}
+                          >
+                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{producto.nombre}</Text>
+                          </TouchableOpacity>
+                        ))
+                      ) : (
+                        <View style={styles.dropdownItem}>
+                          <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron productos</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Tienda Selection and Cantidad Entrante */}
               <View style={styles.formRow}>
-                <View style={[styles.formColumn, styles.formGroup]}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Producto *</Text>
-                  <View style={styles.relativeContainer}>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                      placeholderTextColor={colors.outline}
-                      placeholder="Buscar producto..."
-                      value={productoSearchText}
-                      onChangeText={setProductoSearchText}
-                      editable={!isReadOnly}
-                      onBlur={() => setShowProductoDropdown(false)}
-                    />
-                    {showProductoDropdown && !isReadOnly && (
-                      <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                        {isSearchingProductos ? (
-                          <View style={styles.dropdownItem}>
-                            <ActivityIndicator size="small" color={colors.primary} />
-                          </View>
-                        ) : productoSearchResults.length > 0 ? (
-                          productoSearchResults.map((producto, index) => (
-                            <TouchableOpacity
-                              key={producto.id_servicio}
-                              style={[styles.dropdownItem, index === productoSearchResults.length - 1 && styles.dropdownItemLast]}
-                              onPress={() => handleProductoSelect(producto)}
-                            >
-                              <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{producto.nombre}</Text>
-                            </TouchableOpacity>
-                          ))
-                        ) : (
-                          <View style={styles.dropdownItem}>
-                            <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron productos</Text>
-                          </View>
-                        )}
-                      </View>
+                <View style={[styles.formColumn60, styles.formGroup]}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Tienda *</Text>
+                  <TouchableOpacity
+                    style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                    onPress={() => !isReadOnly && setShowTiendaDropdown(!showTiendaDropdown)}
+                    disabled={isReadOnly}
+                  >
+                    <Text style={[styles.dropdownText, { color: formData.tienda ? colors.onSurface : colors.outline }]}>
+                      {formData.tienda?.nombre || 'Seleccionar...'}
+                    </Text>
+                    {!isReadOnly && (
+                      <Ionicons 
+                        name={showTiendaDropdown ? "chevron-up" : "chevron-down"} 
+                        size={responsive.responsiveWidth(20)} 
+                        color={colors.outline} 
+                      />
                     )}
-                  </View>
+                  </TouchableOpacity>
+                  
+                  {showTiendaDropdown && !isReadOnly && (
+                    <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                      <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                        <Ionicons 
+                          name="search-outline" 
+                          size={responsive.responsiveWidth(18)} 
+                          color={colors.outline} 
+                          style={styles.searchIcon}
+                        />
+                        <TextInput
+                          style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
+                          placeholderTextColor={colors.outline}
+                          placeholder="Buscar tienda..."
+                          value={tiendaSearchText}
+                          onChangeText={setTiendaSearchText}
+                        />
+                      </View>
+                      {filteredTiendas.length > 0 ? (
+                        filteredTiendas.map((tienda, index) => (
+                          <TouchableOpacity
+                            key={tienda.id_tienda}
+                            style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
+                            onPress={() => handleTiendaSelect(tienda)}
+                          >
+                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
+                          </TouchableOpacity>
+                        ))
+                      ) : (
+                        <View style={styles.dropdownItem}>
+                          <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
                 </View>
 
-                <View style={[styles.formColumn, styles.formGroup]}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Cantidad Entrante *</Text>
+                <View style={[styles.formColumn40, styles.formGroup]}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Cant.Entrante *</Text>
                   <TextInput
                     style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
                     placeholderTextColor={colors.outline}
@@ -748,62 +896,6 @@ const EntradaFormContent = () => {
                     </View>
                   )}
                 </View>
-              </View>
-
-              {/* Tienda Selection */}
-              <View style={styles.formGroup}>
-                <Text style={[styles.label, { color: colors.outline }]}>Tienda *</Text>
-                <TouchableOpacity
-                  style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={() => !isReadOnly && setShowTiendaDropdown(!showTiendaDropdown)}
-                  disabled={isReadOnly}
-                >
-                  <Text style={[styles.dropdownText, { color: formData.tienda ? colors.onSurface : colors.outline }]}>
-                    {formData.tienda?.nombre || 'Seleccionar tienda'}
-                  </Text>
-                  {!isReadOnly && (
-                    <Ionicons 
-                      name={showTiendaDropdown ? "chevron-up" : "chevron-down"} 
-                      size={responsive.responsiveWidth(20)} 
-                      color={colors.outline} 
-                    />
-                  )}
-                </TouchableOpacity>
-                
-                {showTiendaDropdown && !isReadOnly && (
-                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                      <Ionicons 
-                        name="search-outline" 
-                        size={responsive.responsiveWidth(18)} 
-                        color={colors.outline} 
-                        style={styles.searchIcon}
-                      />
-                      <TextInput
-                        style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
-                        placeholderTextColor={colors.outline}
-                        placeholder="Buscar tienda..."
-                        value={tiendaSearchText}
-                        onChangeText={setTiendaSearchText}
-                      />
-                    </View>
-                    {filteredTiendas.length > 0 ? (
-                      filteredTiendas.map((tienda, index) => (
-                        <TouchableOpacity
-                          key={tienda.id_tienda}
-                          style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
-                          onPress={() => handleTiendaSelect(tienda)}
-                        >
-                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
-                        </TouchableOpacity>
-                      ))
-                    ) : (
-                      <View style={styles.dropdownItem}>
-                        <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
-                      </View>
-                    )}
-                  </View>
-                )}
               </View>
 
               {/* Costos */}
@@ -871,8 +963,8 @@ const EntradaFormContent = () => {
                 </View>
               </View>
 
-              {/* Precios (solo cuando no existe relación producto-tienda) */}
-              {formData.producto && formData.tienda && !formData.producto.tiendas_servicio?.find(
+              {/* Precios (solo cuando no existe relación producto-tienda en add mode) */}
+              {isAddMode && formData.producto && formData.tienda && !formData.producto.tiendas_servicio?.find(
                 ts => ts.id_tienda === formData.tienda.id_tienda
               ) && (
                 <View style={styles.formRow}>
@@ -966,27 +1058,45 @@ const EntradaFormContent = () => {
 
                   <View style={[styles.formColumn, styles.formGroup]}>
                     <Text style={[styles.label, { color: colors.outline }]}>Fecha de Entrada</Text>
-                    <TextInput
+                    <TouchableOpacity
                       style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                      placeholderTextColor={colors.outline}
-                      placeholder="YYYY-MM-DD"
-                      value={formData.fecha}
-                      onChangeText={(text) => setFormData(prev => ({ ...prev, fecha: text }))}
-                      editable={false}
-                    />
+                      onPress={() => !isReadOnly && setShowFechaEntradaPicker(true)}
+                      disabled={isReadOnly}
+                    >
+                      <Text style={[styles.inputText, { color: formData.fecha ? colors.onSurface : colors.outline }]}>
+                        {formData.fecha || 'Seleccionar...'}
+                      </Text>
+                    </TouchableOpacity>
+                    {showFechaEntradaPicker && (
+                      <DateTimePicker
+                        value={formData.fecha ? new Date(formData.fecha) : new Date()}
+                        mode="date"
+                        display="default"
+                        onChange={handleFechaEntradaChange}
+                      />
+                    )}
                   </View>
                 </View>
               ) : (
                 <View style={styles.formGroup}>
                   <Text style={[styles.label, { color: colors.outline }]}>Fecha de Entrada</Text>
-                  <TextInput
+                  <TouchableOpacity
                     style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    placeholderTextColor={colors.outline}
-                    placeholder="YYYY-MM-DD"
-                    value={formData.fecha}
-                    onChangeText={(text) => setFormData(prev => ({ ...prev, fecha: text }))}
-                    editable={false}
-                  />
+                    onPress={() => !isReadOnly && setShowFechaEntradaPicker(true)}
+                    disabled={isReadOnly}
+                  >
+                    <Text style={[styles.inputText, { color: formData.fecha ? colors.onSurface : colors.outline }]}>
+                      {formData.fecha || 'Seleccionar...'}
+                    </Text>
+                  </TouchableOpacity>
+                  {showFechaEntradaPicker && (
+                    <DateTimePicker
+                      value={formData.fecha ? new Date(formData.fecha) : new Date()}
+                      mode="date"
+                      display="default"
+                      onChange={handleFechaEntradaChange}
+                    />
+                  )}
                 </View>
               )}
 
@@ -1013,10 +1123,114 @@ const EntradaFormContent = () => {
                 </View>
               )}
 
+              {/* Financial Information Section (View Mode Only) */}
+              {isViewMode && getFinancialInfo() && (
+                <View style={[styles.financialInfoSection, { backgroundColor: isDarkMode ? 'rgba(30, 41, 59, 0.8)' : 'rgba(248, 250, 252, 0.8)', borderColor: isDarkMode ? 'rgba(148, 163, 184, 0.3)' : 'rgba(203, 213, 225, 0.5)' }]}>
+                  <View style={styles.financialInfoHeader}>
+                    <Ionicons name="trending-up-outline" size={responsive.responsiveWidth(20)} color={colors.primary} />
+                    <Text style={[styles.financialInfoTitle, { color: colors.onSurface }]}>
+                      Información Financiera
+                    </Text>
+                  </View>
+                  
+                  <View style={[styles.financialInfoDivider, { backgroundColor: colors.outlineVariant }]} />
+                  
+                  <View style={styles.financialInfoRow}>
+                    <View style={styles.financialInfoColumn}>
+                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Costo Total CUP</Text>
+                      <Text style={[styles.financialInfoValue, { color: colors.primary }]}>
+                        ${getFinancialInfo().costoTotalCup.toFixed(2)}
+                      </Text>
+                    </View>
+                    <View style={styles.financialInfoColumn}>
+                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Costo Total USD</Text>
+                      <Text style={[styles.financialInfoValue, { color: colors.primary }]}>
+                        ${getFinancialInfo().costoTotalUsd.toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
 
+                  <View style={[styles.financialInfoDivider, { backgroundColor: colors.outlineVariant }]} />
+
+                  <View style={styles.financialInfoRow}>
+                    <View style={styles.financialInfoColumn}>
+                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Precio CUP en Tienda</Text>
+                      <Text style={[styles.financialInfoValue, { color: colors.onSurface }]}>
+                        ${getFinancialInfo().precioCup.toFixed(2)}
+                      </Text>
+                    </View>
+                    <View style={styles.financialInfoColumn}>
+                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Precio USD en Tienda</Text>
+                      <Text style={[styles.financialInfoValue, { color: colors.onSurface }]}>
+                        ${getFinancialInfo().precioUsd.toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={[styles.financialInfoDivider, { backgroundColor: colors.outlineVariant }]} />
+
+                  <View style={styles.financialInfoRow}>
+                    <View style={styles.financialInfoColumn}>
+                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Ganancia Esperada CUP</Text>
+                      <View style={[styles.profitBadge, { backgroundColor: getFinancialInfo().gananciaCup >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: getFinancialInfo().gananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                        <Text style={[styles.financialInfoValue, { color: getFinancialInfo().gananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                          ${getFinancialInfo().gananciaCup.toFixed(2)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.financialInfoColumn}>
+                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Ganancia Esperada USD</Text>
+                      <View style={[styles.profitBadge, { backgroundColor: getFinancialInfo().gananciaUsd >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: getFinancialInfo().gananciaUsd >= 0 ? '#4CAF50' : '#F44336' }]}>
+                        <Text style={[styles.financialInfoValue, { color: getFinancialInfo().gananciaUsd >= 0 ? '#4CAF50' : '#F44336' }]}>
+                          ${getFinancialInfo().gananciaUsd.toFixed(2)}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={[styles.financialInfoDivider, { backgroundColor: colors.outlineVariant }]} />
+
+                  <View style={styles.financialInfoRow}>
+                    <View style={styles.financialInfoColumn}>
+                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>% Ganancia CUP</Text>
+                      <View style={[styles.profitBadge, { backgroundColor: getFinancialInfo().porcentajeGananciaCup >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: getFinancialInfo().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                        <Text style={[styles.financialInfoValue, { color: getFinancialInfo().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                          {getFinancialInfo().porcentajeGananciaCup.toFixed(2)}%
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.financialInfoColumn}>
+                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>% Ganancia USD</Text>
+                      <View style={[styles.profitBadge, { backgroundColor: getFinancialInfo().porcentajeGananciaUsd >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: getFinancialInfo().porcentajeGananciaUsd >= 0 ? '#4CAF50' : '#F44336' }]}>
+                        <Text style={[styles.financialInfoValue, { color: getFinancialInfo().porcentajeGananciaUsd >= 0 ? '#4CAF50' : '#F44336' }]}>
+                          {getFinancialInfo().porcentajeGananciaUsd.toFixed(2)}%
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )}
 
               {/* Action Buttons */}
-              {!isReadOnly && (
+              {isViewMode && canManageEntradas && (
+                <View style={styles.buttonGroup}>
+                  <TouchableOpacity
+                    style={[styles.button, styles.editButton, { backgroundColor: colors.primary }]}
+                    onPress={() => {
+                      if (isOfflineMode) {
+                        showToast({ type: 'warning', message: 'No disponible en modo offline' });
+                        return;
+                      }
+                      navigation.setParams({ mode: 'edit' });
+                    }}
+                  >
+                    <Ionicons name="create-outline" size={responsive.responsiveWidth(20)} color="#fff" />
+                    <Text style={[styles.buttonText, { color: '#fff' }]}>Editar</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {!isReadOnly && !isViewMode && (
                 <View style={styles.buttonGroup}>
                   <TouchableOpacity
                     style={[styles.button, styles.cancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
@@ -1107,6 +1321,12 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   formColumn: {
     flex: 1,
+  },
+  formColumn60: {
+    flex: 0.6,
+  },
+  formColumn40: {
+    flex: 0.4,
   },
   relativeContainer: {
     position: 'relative',
@@ -1250,6 +1470,57 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(12),
     fontWeight: '600',
     fontFamily: 'Inter',
+  },
+  financialInfoSection: {
+    padding: responsive.responsivePadding(16),
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: responsive.responsiveMargin(16),
+  },
+  financialInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  financialInfoTitle: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+  },
+  financialInfoDivider: {
+    height: 1,
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  financialInfoRow: {
+    flexDirection: 'row',
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  financialInfoColumn: {
+    flex: 1,
+  },
+  financialInfoLabel: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  financialInfoValue: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  profitBadge: {
+    paddingHorizontal: responsive.responsivePadding(12),
+    paddingVertical: responsive.responsivePadding(6),
+    borderRadius: 8,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: responsive.responsiveMargin(8),
   },
   modalOverlay: {
     flex: 1,
