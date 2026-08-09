@@ -899,69 +899,71 @@ const EntradaFormContent = () => {
               </View>
 
               {/* Costos */}
-              <View style={styles.formRow}>
-                <View style={[styles.formColumn, styles.formGroup]}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Costo CUP *</Text>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    placeholderTextColor={colors.outline}
-                    placeholder="Costo CUP"
-                    value={
-                      costoInputTexts.costo_cup !== undefined
-                        ? costoInputTexts.costo_cup
-                        : (formData.costo_cup !== null && formData.costo_cup !== '' ? parseFloat(formData.costo_cup).toFixed(2) : '')
-                    }
-                    onFocus={() => setCostoInputTexts(prev => ({
-                      ...prev,
-                      costo_cup: formData.costo_cup !== null && formData.costo_cup !== '' ? String(parseFloat(formData.costo_cup)) : ''
-                    }))}
-                    onChangeText={(text) => {
-                      setCostoInputTexts(prev => ({ ...prev, costo_cup: text }));
-                      handleCostoChange('costo_cup', text);
-                    }}
-                    onBlur={() => {
-                      setCostoInputTexts(prev => {
-                        const updated = { ...prev };
-                        delete updated.costo_cup;
-                        return updated;
-                      });
-                    }}
-                    keyboardType="decimal-pad"
-                    editable={!isReadOnly}
-                  />
-                </View>
+              {canManageEntradas && (
+                <View style={styles.formRow}>
+                  <View style={[styles.formColumn, styles.formGroup]}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Costo CUP *</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                      placeholderTextColor={colors.outline}
+                      placeholder="Costo CUP"
+                      value={
+                        costoInputTexts.costo_cup !== undefined
+                          ? costoInputTexts.costo_cup
+                          : (formData.costo_cup !== null && formData.costo_cup !== '' ? parseFloat(formData.costo_cup).toFixed(2) : '')
+                      }
+                      onFocus={() => setCostoInputTexts(prev => ({
+                        ...prev,
+                        costo_cup: formData.costo_cup !== null && formData.costo_cup !== '' ? String(parseFloat(formData.costo_cup)) : ''
+                      }))}
+                      onChangeText={(text) => {
+                        setCostoInputTexts(prev => ({ ...prev, costo_cup: text }));
+                        handleCostoChange('costo_cup', text);
+                      }}
+                      onBlur={() => {
+                        setCostoInputTexts(prev => {
+                          const updated = { ...prev };
+                          delete updated.costo_cup;
+                          return updated;
+                        });
+                      }}
+                      keyboardType="decimal-pad"
+                      editable={!isReadOnly}
+                    />
+                  </View>
 
-                <View style={[styles.formColumn, styles.formGroup]}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Costo USD *</Text>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    placeholderTextColor={colors.outline}
-                    placeholder="Costo USD"
-                    value={
-                      costoInputTexts.costo_usd !== undefined
-                        ? costoInputTexts.costo_usd
-                        : (formData.costo_usd !== null && formData.costo_usd !== '' ? parseFloat(formData.costo_usd).toFixed(2) : '')
-                    }
-                    onFocus={() => setCostoInputTexts(prev => ({
-                      ...prev,
-                      costo_usd: formData.costo_usd !== null && formData.costo_usd !== '' ? String(parseFloat(formData.costo_usd)) : ''
-                    }))}
-                    onChangeText={(text) => {
-                      setCostoInputTexts(prev => ({ ...prev, costo_usd: text }));
-                      handleCostoChange('costo_usd', text);
-                    }}
-                    onBlur={() => {
-                      setCostoInputTexts(prev => {
-                        const updated = { ...prev };
-                        delete updated.costo_usd;
-                        return updated;
-                      });
-                    }}
-                    keyboardType="decimal-pad"
-                    editable={!isReadOnly}
-                  />
+                  <View style={[styles.formColumn, styles.formGroup]}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Costo USD *</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                      placeholderTextColor={colors.outline}
+                      placeholder="Costo USD"
+                      value={
+                        costoInputTexts.costo_usd !== undefined
+                          ? costoInputTexts.costo_usd
+                          : (formData.costo_usd !== null && formData.costo_usd !== '' ? parseFloat(formData.costo_usd).toFixed(2) : '')
+                      }
+                      onFocus={() => setCostoInputTexts(prev => ({
+                        ...prev,
+                        costo_usd: formData.costo_usd !== null && formData.costo_usd !== '' ? String(parseFloat(formData.costo_usd)) : ''
+                      }))}
+                      onChangeText={(text) => {
+                        setCostoInputTexts(prev => ({ ...prev, costo_usd: text }));
+                        handleCostoChange('costo_usd', text);
+                      }}
+                      onBlur={() => {
+                        setCostoInputTexts(prev => {
+                          const updated = { ...prev };
+                          delete updated.costo_usd;
+                          return updated;
+                        });
+                      }}
+                      keyboardType="decimal-pad"
+                      editable={!isReadOnly}
+                    />
+                  </View>
                 </View>
-              </View>
+              )}
 
               {/* Precios (solo cuando no existe relación producto-tienda en add mode) */}
               {isAddMode && formData.producto && formData.tienda && !formData.producto.tiendas_servicio?.find(
@@ -1135,22 +1137,26 @@ const EntradaFormContent = () => {
                   
                   <View style={[styles.financialInfoDivider, { backgroundColor: colors.outlineVariant }]} />
                   
-                  <View style={styles.financialInfoRow}>
-                    <View style={styles.financialInfoColumn}>
-                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Costo Total CUP</Text>
-                      <Text style={[styles.financialInfoValue, { color: colors.primary }]}>
-                        ${getFinancialInfo().costoTotalCup.toFixed(2)}
-                      </Text>
-                    </View>
-                    <View style={styles.financialInfoColumn}>
-                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Costo Total USD</Text>
-                      <Text style={[styles.financialInfoValue, { color: colors.primary }]}>
-                        ${getFinancialInfo().costoTotalUsd.toFixed(2)}
-                      </Text>
-                    </View>
-                  </View>
+                  {canManageEntradas && (
+                    <>
+                      <View style={styles.financialInfoRow}>
+                        <View style={styles.financialInfoColumn}>
+                          <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Costo Total CUP</Text>
+                          <Text style={[styles.financialInfoValue, { color: colors.primary }]}>
+                            ${getFinancialInfo().costoTotalCup.toFixed(2)}
+                          </Text>
+                        </View>
+                        <View style={styles.financialInfoColumn}>
+                          <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Costo Total USD</Text>
+                          <Text style={[styles.financialInfoValue, { color: colors.primary }]}>
+                            ${getFinancialInfo().costoTotalUsd.toFixed(2)}
+                          </Text>
+                        </View>
+                      </View>
 
-                  <View style={[styles.financialInfoDivider, { backgroundColor: colors.outlineVariant }]} />
+                      <View style={[styles.financialInfoDivider, { backgroundColor: colors.outlineVariant }]} />
+                    </>
+                  )}
 
                   <View style={styles.financialInfoRow}>
                     <View style={styles.financialInfoColumn}>
@@ -1190,22 +1196,12 @@ const EntradaFormContent = () => {
 
                   <View style={[styles.financialInfoDivider, { backgroundColor: colors.outlineVariant }]} />
 
-                  <View style={styles.financialInfoRow}>
-                    <View style={styles.financialInfoColumn}>
-                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>% Ganancia CUP</Text>
-                      <View style={[styles.profitBadge, { backgroundColor: getFinancialInfo().porcentajeGananciaCup >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: getFinancialInfo().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
-                        <Text style={[styles.financialInfoValue, { color: getFinancialInfo().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
-                          {getFinancialInfo().porcentajeGananciaCup.toFixed(2)}%
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.financialInfoColumn}>
-                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>% Ganancia USD</Text>
-                      <View style={[styles.profitBadge, { backgroundColor: getFinancialInfo().porcentajeGananciaUsd >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: getFinancialInfo().porcentajeGananciaUsd >= 0 ? '#4CAF50' : '#F44336' }]}>
-                        <Text style={[styles.financialInfoValue, { color: getFinancialInfo().porcentajeGananciaUsd >= 0 ? '#4CAF50' : '#F44336' }]}>
-                          {getFinancialInfo().porcentajeGananciaUsd.toFixed(2)}%
-                        </Text>
-                      </View>
+                  <View style={styles.financialInfoColumn}>
+                    <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>% Ganancia CUP y USD</Text>
+                    <View style={[styles.profitBadge, { backgroundColor: getFinancialInfo().porcentajeGananciaCup >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: getFinancialInfo().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                      <Text style={[styles.financialInfoValue, { color: getFinancialInfo().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                        {getFinancialInfo().porcentajeGananciaCup.toFixed(2)}%
+                      </Text>
                     </View>
                   </View>
                 </View>
@@ -1513,8 +1509,8 @@ const createStyles = (responsive) => StyleSheet.create({
     paddingHorizontal: responsive.responsivePadding(12),
     paddingVertical: responsive.responsivePadding(6),
     borderRadius: 8,
-    borderWidth: 1,
     alignSelf: 'flex-start',
+    borderWidth: 1,
   },
   editButton: {
     flexDirection: 'row',

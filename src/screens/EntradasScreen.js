@@ -1195,9 +1195,11 @@ const EntradasContent = () => {
                     <Text style={[styles.entradaTienda, { color: colors.outline }]}>
                       Tienda: {entrada.servicioTienda?.tienda?.nombre || 'N/A'}
                     </Text>
-                    <Text style={[styles.entradaCosto, { color: colors.primary }]}>
-                      CUP: ${parseFloat(entrada.costo_cup).toFixed(2)} | USD: ${parseFloat(entrada.costo_usd).toFixed(2)}
-                    </Text>
+                    {canManageEntradas && (
+                      <Text style={[styles.entradaCosto, { color: colors.primary }]}>
+                        CUP: ${parseFloat(entrada.costo_cup).toFixed(2)} | USD: ${parseFloat(entrada.costo_usd).toFixed(2)}
+                      </Text>
+                    )}
                     <View style={styles.cantidadRow}>
                       <Text style={[styles.entradaCantidad, { color: colors.primary }]}>
                         Inicial: {entrada.cantidad_entrada}

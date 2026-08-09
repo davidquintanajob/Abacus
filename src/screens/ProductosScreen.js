@@ -64,7 +64,7 @@ const ProductosContent = () => {
   }, [user?.id_tienda]);
 
   // Filter states
-  const [filters, setFilters] = useState({ nombre: '', codigo: '', categoria: '', esvendible: '', id_tienda: '', cantidad_min: '', cantidad_max: '' });
+  const [filters, setFilters] = useState({ nombre: '', codigo: '', categoria: '', esvendible: '', id_tienda: '', cantidad_min: '0.01', cantidad_max: '' });
   const [tiendas, setTiendas] = useState([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -330,10 +330,6 @@ const ProductosContent = () => {
           apiFilters.id_tienda = overrideIdTienda;
         }
         
-        // Send default '0.01' for cantidad_min if empty
-        if (!apiFilters.cantidad_min) {
-          apiFilters.cantidad_min = '0.01';
-        }
         
         const data = await getProductos(apiFilters, fetchPage, fetchLimit);
         let productos = data.data || [];
@@ -387,7 +383,7 @@ const ProductosContent = () => {
       categoria: '', 
       esvendible: '', 
       id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : '',
-      cantidad_min: '',
+      cantidad_min: '0.01',
       cantidad_max: ''
     };
     
@@ -507,7 +503,7 @@ const ProductosContent = () => {
       categoria: '', 
       esvendible: '', 
       id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : filters.id_tienda,
-      cantidad_min: '',
+      cantidad_min: '0.01',
       cantidad_max: ''
     };
     
