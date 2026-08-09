@@ -1486,7 +1486,7 @@ const ProductoFormContent = () => {
                           <TextInput
                             style={[
                               styles.input, 
-                              { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant },
+                              { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
                               isReadOnly && styles.inputDisabled
                             ]}
                             value={
@@ -1516,7 +1516,7 @@ const ProductoFormContent = () => {
                           <TextInput
                             style={[
                               styles.input, 
-                              { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant },
+                              { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
                               isReadOnly && styles.inputDisabled
                             ]}
                             value={
@@ -1548,7 +1548,7 @@ const ProductoFormContent = () => {
                               <TextInput
                                 style={[
                                   styles.input, 
-                                  { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant },
+                                  { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
                                   isReadOnly && styles.inputDisabled
                                 ]}
                                 value={
@@ -1578,7 +1578,7 @@ const ProductoFormContent = () => {
                               <TextInput
                                 style={[
                                   styles.input, 
-                                  { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant },
+                                  { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
                                   isReadOnly && styles.inputDisabled
                                 ]}
                                 value={
@@ -2077,7 +2077,6 @@ const createStyles = (responsive) => StyleSheet.create({
     fontFamily: 'Inter',
   },
   inputDisabled: {
-    backgroundColor: '#F5F5F5',
     opacity: 0.7,
   },
   imageContainer: {

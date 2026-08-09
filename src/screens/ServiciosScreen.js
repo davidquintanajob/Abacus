@@ -262,10 +262,9 @@ const ServiciosContent = () => {
           return value !== '' && value !== null && value !== undefined;
         });
         
-        // If filters are active, fetch all data to ensure accurate pagination
-        // Otherwise, use paginated fetch from backend
-        const fetchLimit = hasActiveFilters ? 10000 : pagination.limit;
-        const fetchPage = hasActiveFilters ? 1 : pagination.currentPage;
+        // Always use standard pagination from backend
+        const fetchLimit = pagination.limit;
+        const fetchPage = pagination.currentPage;
         
         // Use overrideIdTienda if provided (for immediate filter changes)
         const apiFilters = { ...filters };
@@ -292,26 +291,8 @@ const ServiciosContent = () => {
           });
         }
 
-        // If filters are active, paginate client-side
-        if (hasActiveFilters) {
-          const totalFilteredItems = servicios.length;
-          const totalFilteredPages = Math.ceil(totalFilteredItems / pagination.limit);
-          const startIndex = (pagination.currentPage - 1) * pagination.limit;
-          const endIndex = startIndex + pagination.limit;
-          const paginatedServicios = servicios.slice(startIndex, endIndex);
-          
-          setServicios(paginatedServicios);
-          setPagination({
-            currentPage: pagination.currentPage,
-            limit: pagination.limit,
-            totalPages: totalFilteredPages,
-            totalItems: totalFilteredItems
-          });
-        } else {
-          // No filters active, use backend pagination
-          setServicios(servicios);
-          setPagination(data.pagination || pagination);
-        }
+        setServicios(servicios);
+        setPagination(data.pagination || pagination);
       }
     } catch (err) {
       setError(err.message);

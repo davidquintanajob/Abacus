@@ -282,7 +282,7 @@ const EntradasContent = () => {
     }
   };
 
-  const fetchEntradas = async (overrideIdTienda = null) => {
+  const fetchEntradas = async (overrideIdTienda = null, overrideFilters = null) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -301,18 +301,21 @@ const EntradasContent = () => {
         (userRole === 'almacenero' && entradaAccessLevels?.almacenero === 'all_stores') ||
         (userRole === 'económico' && entradaAccessLevels?.economico === 'all_stores');
 
-      const hasActiveFilters = Object.entries(filters).some(([key, value]) => {
+      // Use override filters if provided, otherwise use current state
+      const filtersToUse = overrideFilters || filters;
+      
+      const hasActiveFilters = Object.entries(filtersToUse).some(([key, value]) => {
         // Don't count id_tienda as an active filter if it's just the user's default store
         if (key === 'id_tienda' && value === user?.id_tienda?.toString()) {
           return false;
         }
         return value !== '' && value !== null && value !== undefined;
       });
-      const fetchLimit = hasActiveFilters ? 10000 : pagination.limit;
-      const fetchPage = hasActiveFilters ? 1 : pagination.currentPage;
+      const fetchLimit = pagination.limit;
+      const fetchPage = pagination.currentPage;
       
       // Build filters to send to API
-      const apiFilters = { ...filters };
+      const apiFilters = { ...filtersToUse };
       
       // Use overrideIdTienda if provided (for immediate filter changes)
       if (overrideIdTienda !== null) {
@@ -322,24 +325,8 @@ const EntradasContent = () => {
       const data = await getEntradas(apiFilters, fetchPage, fetchLimit);
       let entradas = data.data || [];
 
-      if (hasActiveFilters) {
-        const totalFilteredItems = entradas.length;
-        const totalFilteredPages = Math.ceil(totalFilteredItems / pagination.limit);
-        const startIndex = (pagination.currentPage - 1) * pagination.limit;
-        const endIndex = startIndex + pagination.limit;
-        const paginatedEntradas = entradas.slice(startIndex, endIndex);
-        
-        setEntradas(paginatedEntradas);
-        setPagination({
-          currentPage: pagination.currentPage,
-          limit: pagination.limit,
-          totalPages: totalFilteredPages,
-          totalItems: totalFilteredItems
-        });
-      } else {
-        setEntradas(entradas);
-        setPagination(data.pagination || pagination);
-      }
+      setEntradas(entradas);
+      setPagination(data.pagination || pagination);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -375,8 +362,8 @@ const EntradasContent = () => {
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
     
-    // Pass cleared filters directly to avoid stale state
-    fetchEntradas(clearedFilters.id_tienda);
+    // Pass entire cleared filters object to ensure all filters are properly sent to API
+    fetchEntradas(null, clearedFilters);
   };
 
   const handleDelete = (entrada) => {
@@ -417,8 +404,9 @@ const EntradasContent = () => {
       console.error('Error saving filters:', err);
     });
     
-    // Always open in view mode when pressing the card
-    navigation.navigate('EntradaForm', { entrada, mode: 'view' });
+    // Open in edit mode if user has permissions, otherwise open in view mode
+    const openMode = canManageEntradas ? 'edit' : 'view';
+    navigation.navigate('EntradaForm', { entrada, mode: openMode });
   };
 
   const handleEdit = (entrada) => {

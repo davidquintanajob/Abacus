@@ -1123,8 +1123,8 @@ const EntradaFormContent = () => {
                 </View>
               )}
 
-              {/* Financial Information Section (View Mode Only) */}
-              {isViewMode && getFinancialInfo() && (
+              {/* Financial Information Section (View Mode, Edit Mode, and Add Mode) */}
+              {(isViewMode || isEditMode || isAddMode) && getFinancialInfo() && (
                 <View style={[styles.financialInfoSection, { backgroundColor: isDarkMode ? 'rgba(30, 41, 59, 0.8)' : 'rgba(248, 250, 252, 0.8)', borderColor: isDarkMode ? 'rgba(148, 163, 184, 0.3)' : 'rgba(203, 213, 225, 0.5)' }]}>
                   <View style={styles.financialInfoHeader}>
                     <Ionicons name="trending-up-outline" size={responsive.responsiveWidth(20)} color={colors.primary} />

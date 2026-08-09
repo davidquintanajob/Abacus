@@ -168,7 +168,7 @@ const ProductosContent = () => {
             if (savedFilters) {
               const parsedFilters = JSON.parse(savedFilters);
               setFilters(parsedFilters);
-              fetchProductos(parsedFilters.id_tienda);
+              fetchProductos(null, parsedFilters);
             } else {
               // Restore user's tienda filter if it's empty and user has a tienda
               const shouldRestore = !filtersRef.current.id_tienda && userTiendaRef.current;
@@ -233,25 +233,28 @@ const ProductosContent = () => {
     }
   };
 
-  const fetchProductos = async (overrideIdTienda = null) => {
+  const fetchProductos = async (overrideIdTienda = null, overrideFilters = null) => {
     try {
       setIsLoading(true);
       setError(null);
+
+      // Use override filters if provided, otherwise use current state
+      const currentFilters = overrideFilters || filters;
 
       // Modo offline: usar datos de AsyncStorage
       if (isOfflineMode) {
         const allProductos = await storageService.getProductos();
         
-        if (filters.codigo) {
+        if (currentFilters.codigo) {
           // Buscar por código específico en el array de códigos
           const filtered = allProductos.filter(p => 
-            p.codigos?.some(c => c.codigo_barras_ean?.toLowerCase() === filters.codigo.toLowerCase())
+            p.codigos?.some(c => c.codigo_barras_ean?.toLowerCase() === currentFilters.codigo.toLowerCase())
           );
           setProductos(filtered);
           setPagination({ currentPage: 1, limit: 10, totalPages: 1, totalItems: filtered.length });
         } else {
           // Aplicar filtros localmente
-          const filteredProductos = await storageService.filterProductosLocal(filters);
+          const filteredProductos = await storageService.filterProductosLocal(currentFilters);
           
           // Paginación cliente
           const totalFilteredItems = filteredProductos.length;
@@ -275,9 +278,9 @@ const ProductosContent = () => {
 
       // Modo online: usar API
       // Si hay código, usar el endpoint específico
-      if (filters.codigo) {
+      if (currentFilters.codigo) {
         try {
-          const producto = await getProductoByCodigo(filters.codigo);
+          const producto = await getProductoByCodigo(currentFilters.codigo);
           
           // Apply store visibility permissions
           const userRole = user?.rol?.toLowerCase();
@@ -309,7 +312,7 @@ const ProductosContent = () => {
         }
       } else {
         // Check if any filters are active (excluding id_tienda if it's just the user's default store)
-        const hasActiveFilters = Object.entries(filters).some(([key, value]) => {
+        const hasActiveFilters = Object.entries(currentFilters).some(([key, value]) => {
           // Don't count id_tienda as an active filter if it's just the user's default store
           if (key === 'id_tienda' && value === user?.id_tienda?.toString()) {
             return false;
@@ -317,15 +320,19 @@ const ProductosContent = () => {
           return value !== '' && value !== null && value !== undefined;
         });
         
-        // If filters are active, fetch all data to ensure accurate pagination
-        // Otherwise, use paginated fetch from backend
-        const fetchLimit = hasActiveFilters ? 10000 : pagination.limit;
-        const fetchPage = hasActiveFilters ? 1 : pagination.currentPage;
+        // Always use standard pagination from backend
+        const fetchLimit = pagination.limit;
+        const fetchPage = pagination.currentPage;
         
         // Use overrideIdTienda if provided (for immediate filter changes)
-        const apiFilters = { ...filters };
+        const apiFilters = { ...currentFilters };
         if (overrideIdTienda !== null) {
           apiFilters.id_tienda = overrideIdTienda;
+        }
+        
+        // Send default '0.01' for cantidad_min if empty
+        if (!apiFilters.cantidad_min) {
+          apiFilters.cantidad_min = '0.01';
         }
         
         const data = await getProductos(apiFilters, fetchPage, fetchLimit);
@@ -347,26 +354,8 @@ const ProductosContent = () => {
           });
         }
 
-        // If filters are active, paginate client-side
-        if (hasActiveFilters) {
-          const totalFilteredItems = productos.length;
-          const totalFilteredPages = Math.ceil(totalFilteredItems / pagination.limit);
-          const startIndex = (pagination.currentPage - 1) * pagination.limit;
-          const endIndex = startIndex + pagination.limit;
-          const paginatedProductos = productos.slice(startIndex, endIndex);
-          
-          setProductos(paginatedProductos);
-          setPagination({
-            currentPage: pagination.currentPage,
-            limit: pagination.limit,
-            totalPages: totalFilteredPages,
-            totalItems: totalFilteredItems
-          });
-        } else {
-          // No filters active, use backend pagination
-          setProductos(productos);
-          setPagination(data.pagination || pagination);
-        }
+        setProductos(productos);
+        setPagination(data.pagination || pagination);
       }
     } catch (err) {
       setError(err.message);
@@ -407,7 +396,7 @@ const ProductosContent = () => {
     setIsSearching(true);
     
     // Pass cleared filters directly to avoid stale state
-    fetchProductos(clearedFilters.id_tienda);
+    fetchProductos(null, clearedFilters);
   };
 
   const handleDelete = (producto) => {
