@@ -8,6 +8,7 @@ import { navigationRef } from '../../navigationRef';
 import { Toast } from '../common/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useAuth } from '../../context/AuthContext';
+import { useOffline } from '../../context/OfflineContext';
 import { storageService } from '../../services/storageService';
 
 export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'Home' }) => {
@@ -16,16 +17,18 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
   const insets = useSafeAreaInsets() || { top: 0, bottom: 0, left: 0, right: 0 };
   const { toast, showToast, hideToast } = useToast();
   const { user, permissions, entradaAccessLevels } = useAuth();
+  const { isOfflineMode } = useOffline();
   const [isSyncing, setIsSyncing] = useState(false);
 
   const isAdmin = user?.rol === 'Administrador';
   const userRole = user?.rol?.toLowerCase();
 
   const canAccessEntradas = 
-    isAdmin ||
+    !isOfflineMode &&
+    (isAdmin ||
     (userRole === 'dependiente' && entradaAccessLevels?.dependiente !== 'none') ||
     (userRole === 'almacenero' && entradaAccessLevels?.almacenero !== 'none') ||
-    (userRole === 'económico' && entradaAccessLevels?.economico !== 'none');
+    (userRole === 'económico' && entradaAccessLevels?.economico !== 'none'));
 
   const menuItems = [
     { icon: require('../../../assets/bar-chart.png'), label: 'Panel', route: 'Home' },

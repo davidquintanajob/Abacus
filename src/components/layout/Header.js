@@ -6,15 +6,14 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useResponsive } from '../../hooks/useResponsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export const Header = ({ 
-  onMenuPress, 
-  onProfilePress, 
-  onThemePress, 
-  onSettingsPress, 
-  onNotificationsPress, 
-  showBackButton = false, 
-  onBackPress, 
-  isDark = false, 
+export const Header = ({
+  onMenuPress,
+  onProfilePress,
+  onThemePress,
+  onNotificationsPress,
+  showBackButton = false,
+  onBackPress,
+  isDark = false,
   title = 'abacus',
   showLogo = false
 }) => {
@@ -82,21 +81,12 @@ export const Header = ({
           </TouchableOpacity>
         )}
         {onThemePress && (
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={onThemePress}
             style={styles.iconButton}
             activeOpacity={0.7}
           >
             <Ionicons name={isDarkMode ? "sunny" : "moon"} size={responsive.responsiveWidth(24)} color={colors.primary} />
-          </TouchableOpacity>
-        )}
-        {onSettingsPress && (
-          <TouchableOpacity 
-            onPress={onSettingsPress}
-            style={styles.iconButton}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="settings-outline" size={responsive.responsiveWidth(24)} color={colors.primary} />
           </TouchableOpacity>
         )}
         {onProfilePress && (
