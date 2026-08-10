@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
+import { useViewMode } from '../context/ViewModeContext';
 import { getProductos, getProductoByCodigo, deleteProducto } from '../services/productoService';
 import { getTiendas } from '../services/tiendaService';
 import { getApiBaseUrl } from '../services/api';
@@ -35,6 +36,7 @@ const ProductosContent = () => {
   const { token, user, permissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
+  const { viewMode, toggleViewMode } = useViewMode();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -1778,6 +1780,8 @@ const ProductosContent = () => {
         onSettingsPress={handleSettingsPress}
         onNotificationsPress={handleNotificationsPress}
         onProfilePress={handleProfilePress}
+        onViewModeToggle={toggleViewMode}
+        showViewToggle={true}
         isDark={isDarkMode}
         title="Abacus"
         showLogo={true}
@@ -2130,94 +2134,178 @@ const ProductosContent = () => {
           </Card>
         ) : (
           <>
-            {productos.map((producto) => {
-              const totalQuantity = calculateTotalQuantity(producto);
-              const productImage = producto.producto?.imagen;
-              const fullImageUrl = productImage && apiBaseUrl ? `${apiBaseUrl}${productImage}` : productImage;
+            {viewMode === 'card' ? (
+              productos.map((producto) => {
+                const totalQuantity = calculateTotalQuantity(producto);
+                const productImage = producto.producto?.imagen;
+                const fullImageUrl = productImage && apiBaseUrl ? `${apiBaseUrl}${productImage}` : null;
 
-              return (
-                <TouchableOpacity
-                  key={producto.id_servicio}
-                  onPress={() => handleProductoPress(producto)}
-                  activeOpacity={0.7}
-                >
-                  <Card style={[styles.productoCard, { backgroundColor: colors.surface }]}>
-                    <View style={styles.productoImageContainer}>
-                      {fullImageUrl ? (
-                        <Image
-                          source={{ uri: fullImageUrl }}
-                          style={styles.productoImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={[styles.productoImage, styles.productoImagePlaceholder, { backgroundColor: colors.surfaceVariant }]}>
-                          <Ionicons name="cube-outline" size={responsive.responsiveWidth(30)} color={colors.outline} />
+                return (
+                  <TouchableOpacity
+                    key={producto.id_servicio}
+                    onPress={() => handleProductoPress(producto)}
+                    activeOpacity={0.7}
+                  >
+                    <Card style={[styles.productoCard, { backgroundColor: colors.surface }]}>
+                      <View style={styles.productoImageContainer}>
+                        {fullImageUrl ? (
+                          <Image
+                            source={{ uri: fullImageUrl }}
+                            style={styles.productoImage}
+                            resizeMode="cover"
+                            onError={(error) => {
+                              console.log('Error loading image for product:', producto.nombre, 'URL:', fullImageUrl, 'Error:', error.nativeEvent);
+                            }}
+                          />
+                        ) : (
+                          <View style={[styles.productoImage, styles.productoImagePlaceholder, { backgroundColor: colors.surfaceVariant }]}>
+                            <Ionicons name="cube-outline" size={responsive.responsiveWidth(30)} color={colors.outline} />
+                          </View>
+                        )}
+                      </View>
+                      <View style={styles.productoInfo}>
+                        <View style={styles.productoHeader}>
+                          <Text style={[styles.productoName, { color: colors.onSurface }]} numberOfLines={2} ellipsizeMode="tail">
+                            {wrapTextByWords(producto.nombre, 10)}
+                        </Text>
+                          <View style={[
+                            styles.statusBadge,
+                            { backgroundColor: producto.esvendible ? '#E8F5E9' : '#FFEBEE' }
+                          ]}>
+                            <Text style={[styles.statusText, { color: producto.esvendible ? '#2E7D32' : '#C62828' }]}>
+                              {producto.esvendible ? 'Vendible' : 'No vendible'}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.productoDetails, { color: colors.outline }]}>Categoría: {producto.categoria}</Text>
+                        {filters.id_tienda && (
+                          <>
+                            <Text style={[styles.productoDetails, { color: colors.primary }]}>
+                              Precio CUP: ${parseFloat(getProductPrice(producto)).toFixed(2)}
+                            </Text>
+                            <Text style={[styles.productoDetails, { color: colors.primary }]}>
+                              Precio USD: ${parseFloat(getProductPriceUSD(producto)).toFixed(2)}
+                            </Text>
+                          </>
+                        )}
+                        <Text style={[styles.productoQuantity, { color: colors.primary }]}>
+                          Cantidad: {parseFloat(totalQuantity).toFixed(2)}
+                        </Text>
+                      </View>
+                      {canEdit && (
+                        <View style={styles.productoActions}>
+                          <TouchableOpacity
+                            style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleEdit(producto);
+                            }}
+                          >
+                            <Image
+                              source={require('../../assets/editar.png')}
+                              style={styles.actionIconSmall}
+                              resizeMode="contain"
+                            />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleDelete(producto);
+                            }}
+                          >
+                            <Image
+                              source={require('../../assets/basura.png')}
+                              style={styles.actionIconSmall}
+                              resizeMode="contain"
+                            />
+                          </TouchableOpacity>
                         </View>
                       )}
-                    </View>
-                    <View style={styles.productoInfo}>
-                      <View style={styles.productoHeader}>
-                        <Text style={[styles.productoName, { color: colors.onSurface }]} numberOfLines={2} ellipsizeMode="tail">
-                          {wrapTextByWords(producto.nombre, 10)}
-                      </Text>
-                        <View style={[
-                          styles.statusBadge,
-                          { backgroundColor: producto.esvendible ? '#E8F5E9' : '#FFEBEE' }
-                        ]}>
-                          <Text style={[styles.statusText, { color: producto.esvendible ? '#2E7D32' : '#C62828' }]}>
+                    </Card>
+                  </TouchableOpacity>
+                );
+              })
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.tableScrollView}>
+                <View style={styles.tableContainer}>
+                  <View style={[styles.tableHeader, { backgroundColor: colors.primary }]}>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(200) }]}>Nombre</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Categoría</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80) }]}>Estado</Text>
+                    {filters.id_tienda && (
+                      <>
+                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Precio CUP</Text>
+                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Precio USD</Text>
+                      </>
+                    )}
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Cantidad</Text>
+                    {canEdit && (
+                      <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Acciones</Text>
+                    )}
+                  </View>
+                  {productos.map((producto, index) => {
+                    const totalQuantity = calculateTotalQuantity(producto);
+                    return (
+                      <TouchableOpacity
+                        key={producto.id_servicio}
+                        onPress={() => handleProductoPress(producto)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? colors.surface : colors.surfaceVariant }]}>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(200) }]} numberOfLines={2}>
+                            {producto.nombre}
+                          </Text>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(120) }]}>
+                            {producto.categoria || 'N/A'}
+                          </Text>
+                          <Text style={[styles.tableCellText, { color: producto.esvendible ? '#4CAF50' : '#F44336', width: responsive.responsiveWidth(80) }]}>
                             {producto.esvendible ? 'Vendible' : 'No vendible'}
                           </Text>
+                          {filters.id_tienda && (
+                            <>
+                              <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100) }]}>
+                                ${parseFloat(getProductPrice(producto)).toFixed(2)}
+                              </Text>
+                              <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100) }]}>
+                                ${parseFloat(getProductPriceUSD(producto)).toFixed(2)}
+                              </Text>
+                            </>
+                          )}
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100) }]}>
+                            {parseFloat(totalQuantity).toFixed(2)}
+                          </Text>
+                          {canEdit && (
+                            <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(100) }]}>
+                              <View style={styles.tableActionsRow}>
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableEditButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleEdit(producto);
+                                  }}
+                                >
+                                  <Ionicons name="create-outline" size={responsive.responsiveWidth(18)} color={colors.primary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableDeleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(producto);
+                                  }}
+                                >
+                                  <Ionicons name="trash-outline" size={responsive.responsiveWidth(18)} color={colors.error} />
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          )}
                         </View>
-                      </View>
-                      <Text style={[styles.productoDetails, { color: colors.outline }]}>Categoría: {producto.categoria}</Text>
-                      {filters.id_tienda && (
-                        <>
-                          <Text style={[styles.productoDetails, { color: colors.primary }]}>
-                            Precio CUP: ${parseFloat(getProductPrice(producto)).toFixed(2)}
-                          </Text>
-                          <Text style={[styles.productoDetails, { color: colors.primary }]}>
-                            Precio USD: ${parseFloat(getProductPriceUSD(producto)).toFixed(2)}
-                          </Text>
-                        </>
-                      )}
-                      <Text style={[styles.productoQuantity, { color: colors.primary }]}>
-                        Cantidad: {parseFloat(totalQuantity).toFixed(2)}
-                      </Text>
-                    </View>
-                    {canEdit && (
-                      <View style={styles.productoActions}>
-                        <TouchableOpacity
-                          style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleEdit(producto);
-                          }}
-                        >
-                          <Image
-                            source={require('../../assets/editar.png')}
-                            style={styles.actionIconSmall}
-                            resizeMode="contain"
-                          />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleDelete(producto);
-                          }}
-                        >
-                          <Image
-                            source={require('../../assets/basura.png')}
-                            style={styles.actionIconSmall}
-                            resizeMode="contain"
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </Card>
-                </TouchableOpacity>
-              );
-            })}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            )}
 
             {/* Pagination */}
             {pagination.totalPages > 1 && (
@@ -2920,6 +3008,76 @@ const createStyles = (responsive) => StyleSheet.create({
   paginationSubtext: {
     fontSize: responsive.fontSizes.bodySmall,
     marginTop: responsive.responsiveMargin(2),
+  },
+  tableScrollView: {
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  tableContainer: {
+    minWidth: '100%',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    overflow: 'hidden',
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(8),
+    borderBottomWidth: 2,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  tableHeaderText: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableRow: {
+    flexDirection: 'row',
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(8),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+    alignItems: 'center',
+  },
+  tableCellText: {
+    fontSize: responsive.responsiveFontSize(13),
+    fontFamily: 'Inter',
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableStatusCell: {
+    paddingHorizontal: responsive.responsivePadding(10),
+    paddingVertical: responsive.responsivePadding(4),
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  tableStatusText: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  tableActionsCell: {
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableActionsRow: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(8),
+  },
+  tableActionButton: {
+    width: responsive.responsiveWidth(32),
+    height: responsive.responsiveHeight(32),
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tableEditButton: {
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  tableDeleteButton: {
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   inputWithIcon: {
     flexDirection: 'row',

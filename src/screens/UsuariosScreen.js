@@ -10,6 +10,7 @@ import { Card } from '../components/common/Card';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
+import { useViewMode } from '../context/ViewModeContext';
 import { getUsuarios, deleteUsuario } from '../services/usuarioService';
 import { getTiendas } from '../services/tiendaService';
 import { Toast } from '../components/common/Toast';
@@ -20,6 +21,7 @@ const UsuariosContent = () => {
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
   const { token, user, permissions } = useAuth();
+  const { viewMode, toggleViewMode } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -235,6 +237,8 @@ const UsuariosContent = () => {
         onSettingsPress={handleSettingsPress}
         onNotificationsPress={handleNotificationsPress}
         onProfilePress={handleProfilePress}
+        onViewModeToggle={toggleViewMode}
+        showViewToggle={true}
         isDark={isDarkMode}
         title="Abacus"
         showLogo={true}
@@ -537,67 +541,131 @@ const UsuariosContent = () => {
           </Card>
         ) : (
           <>
-            {usuarios.map((usuario) => (
-              <TouchableOpacity
-                key={usuario.id_usuario}
-                onPress={() => handleUsuarioPress(usuario)}
-                activeOpacity={0.7}
-              >
-                <Card style={[styles.usuarioCard, { backgroundColor: colors.surface }]}>
-                  <View style={styles.usuarioInfo}>
-                    <View style={styles.usuarioHeader}>
-                      <Text style={[styles.usuarioName, { color: colors.onSurface }]} numberOfLines={1} ellipsizeMode="tail">
-                        {usuario.nombre_natural.length > 15 ? usuario.nombre_natural.substring(0, 15) + '...' : usuario.nombre_natural}
-                      </Text>
-                      <View style={[
-                        styles.statusBadge,
-                        { backgroundColor: usuario.activo ? '#E8F5E9' : '#FFEBEE' }
-                      ]}>
-                        <Text style={[styles.statusText, { color: usuario.activo ? '#2E7D32' : '#C62828' }]}>
-                          {usuario.activo ? 'Activo' : 'Inactivo'}
+            {viewMode === 'card' ? (
+              usuarios.map((usuario) => (
+                <TouchableOpacity
+                  key={usuario.id_usuario}
+                  onPress={() => handleUsuarioPress(usuario)}
+                  activeOpacity={0.7}
+                >
+                  <Card style={[styles.usuarioCard, { backgroundColor: colors.surface }]}>
+                    <View style={styles.usuarioInfo}>
+                      <View style={styles.usuarioHeader}>
+                        <Text style={[styles.usuarioName, { color: colors.onSurface }]} numberOfLines={1} ellipsizeMode="tail">
+                          {usuario.nombre_natural.length > 15 ? usuario.nombre_natural.substring(0, 15) + '...' : usuario.nombre_natural}
                         </Text>
+                        <View style={[
+                          styles.statusBadge,
+                          { backgroundColor: usuario.activo ? '#E8F5E9' : '#FFEBEE' }
+                        ]}>
+                          <Text style={[styles.statusText, { color: usuario.activo ? '#2E7D32' : '#C62828' }]}>
+                            {usuario.activo ? 'Activo' : 'Inactivo'}
+                          </Text>
+                        </View>
                       </View>
+                      {usuario.tienda && (
+                        <Text style={[styles.usuarioDetails, { color: colors.outline }]}>Tienda: {usuario.tienda.nombre}</Text>
+                      )}
+                      {usuario.rol && (
+                        <Text style={[styles.usuarioDetails, { color: colors.outline }]}>Rol: {usuario.rol}</Text>
+                      )}
                     </View>
-                    {usuario.tienda && (
-                      <Text style={[styles.usuarioDetails, { color: colors.outline }]}>Tienda: {usuario.tienda.nombre}</Text>
+                    {isAdmin && (
+                      <View style={styles.usuarioActions}>
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.editButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleEdit(usuario);
+                          }}
+                        >
+                          <Image
+                            source={require('../../assets/editar.png')}
+                            style={styles.actionIcon}
+                            resizeMode="contain"
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.deleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleDelete(usuario);
+                          }}
+                        >
+                          <Image
+                            source={require('../../assets/basura.png')}
+                            style={styles.actionIcon}
+                            resizeMode="contain"
+                          />
+                        </TouchableOpacity>
+                      </View>
                     )}
-                    {usuario.rol && (
-                      <Text style={[styles.usuarioDetails, { color: colors.outline }]}>Rol: {usuario.rol}</Text>
+                  </Card>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.tableScrollView}>
+                <View style={styles.tableContainer}>
+                  <View style={[styles.tableHeader, { backgroundColor: colors.primary }]}>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(200) }]}>Nombre</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Tienda</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Rol</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Estado</Text>
+                    {isAdmin && (
+                      <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Acciones</Text>
                     )}
                   </View>
-                  {isAdmin && (
-                    <View style={styles.usuarioActions}>
+                  {usuarios.map((usuario, index) => {
+                    return (
                       <TouchableOpacity
-                        style={[styles.actionButton, styles.editButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleEdit(usuario);
-                        }}
+                        key={usuario.id_usuario}
+                        onPress={() => handleUsuarioPress(usuario)}
+                        activeOpacity={0.7}
                       >
-                        <Image
-                          source={require('../../assets/editar.png')}
-                          style={styles.actionIcon}
-                          resizeMode="contain"
-                        />
+                        <View style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? colors.surface : colors.surfaceVariant }]}>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(200) }]} numberOfLines={2}>
+                            {usuario.nombre_natural}
+                          </Text>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
+                            {usuario.tienda?.nombre || 'N/A'}
+                          </Text>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(120) }]}>
+                            {usuario.rol || 'N/A'}
+                          </Text>
+                          <Text style={[styles.tableCellText, { color: usuario.activo ? '#4CAF50' : '#F44336', width: responsive.responsiveWidth(100) }]}>
+                            {usuario.activo ? 'Activo' : 'Inactivo'}
+                          </Text>
+                          {isAdmin && (
+                            <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(100) }]}>
+                              <View style={styles.tableActionsRow}>
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableEditButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleEdit(usuario);
+                                  }}
+                                >
+                                  <Ionicons name="create-outline" size={responsive.responsiveWidth(18)} color={colors.primary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableDeleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(usuario);
+                                  }}
+                                >
+                                  <Ionicons name="trash-outline" size={responsive.responsiveWidth(18)} color={colors.error} />
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          )}
+                        </View>
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.actionButton, styles.deleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleDelete(usuario);
-                        }}
-                      >
-                        <Image
-                          source={require('../../assets/basura.png')}
-                          style={styles.actionIcon}
-                          resizeMode="contain"
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </Card>
-              </TouchableOpacity>
-            ))}
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            )}
 
             {/* Pagination */}
             {pagination.totalPages > 1 && (
@@ -978,6 +1046,61 @@ const createStyles = (responsive) => StyleSheet.create({
   tiendaDropdown: {
     marginTop: responsive.responsiveMargin(8),
     maxHeight: responsive.responsiveHeight(40),
+  },
+  tableScrollView: {
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  tableContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(8),
+    borderBottomWidth: 2,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  tableHeaderText: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableRow: {
+    flexDirection: 'row',
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(8),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+    alignItems: 'center',
+  },
+  tableCellText: {
+    fontSize: responsive.responsiveFontSize(13),
+    fontFamily: 'Inter',
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableActionsCell: {
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableActionsRow: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(8),
+  },
+  tableActionButton: {
+    width: responsive.responsiveWidth(32),
+    height: responsive.responsiveHeight(32),
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tableEditButton: {
+    // Style handled inline
+  },
+  tableDeleteButton: {
+    // Style handled inline
   },
   tiendaChip: {
     paddingHorizontal: responsive.responsivePadding(12),

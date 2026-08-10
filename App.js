@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { OfflineProvider } from './src/context/OfflineContext';
+import { ViewModeProvider } from './src/context/ViewModeContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -89,11 +90,13 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <OfflineProvider>
-          <ThemeProvider>
-            <NavigationContainer ref={navigationRef}>
-              <RootNavigator />
-            </NavigationContainer>
-          </ThemeProvider>
+          <ViewModeProvider>
+            <ThemeProvider>
+              <NavigationContainer ref={navigationRef}>
+                <RootNavigator />
+              </NavigationContainer>
+            </ThemeProvider>
+          </ViewModeProvider>
         </OfflineProvider>
       </AuthProvider>
     </SafeAreaProvider>

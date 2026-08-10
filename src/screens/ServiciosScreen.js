@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
+import { useViewMode } from '../context/ViewModeContext';
 import { getServicios, getServicioByCodigo, deleteServicio } from '../services/servicioService';
 import { getTiendas } from '../services/tiendaService';
 import { Toast } from '../components/common/Toast';
@@ -27,6 +28,7 @@ const ServiciosContent = () => {
   const { token, user, permissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
+  const { viewMode, toggleViewMode } = useViewMode();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -531,6 +533,8 @@ const ServiciosContent = () => {
         onSettingsPress={handleSettingsPress}
         onNotificationsPress={handleNotificationsPress}
         onProfilePress={handleProfilePress}
+        onViewModeToggle={toggleViewMode}
+        showViewToggle={true}
         isDark={isDarkMode}
         title="Abacus"
         showLogo={true}
@@ -850,84 +854,174 @@ const ServiciosContent = () => {
           </Card>
         ) : (
           <>
-            {servicios.map((servicio) => {
-              return (
-                <TouchableOpacity
-                  key={servicio.id_servicio}
-                  onPress={() => handleServicioPress(servicio)}
-                  activeOpacity={0.7}
-                >
-                  <Card style={[styles.servicioCard, { backgroundColor: colors.surface }]}>
-                    {servicio.componentes && servicio.componentes.length > 0 && (
-                      <View style={[styles.offerFlag, { backgroundColor: '#4CAF50' }]}>
-                        <Ionicons name="pricetag-outline" size={responsive.responsiveWidth(14)} color="#fff" />
+            {viewMode === 'card' ? (
+              servicios.map((servicio) => {
+                return (
+                  <TouchableOpacity
+                    key={servicio.id_servicio}
+                    onPress={() => handleServicioPress(servicio)}
+                    activeOpacity={0.7}
+                  >
+                    <Card style={[styles.servicioCard, { backgroundColor: colors.surface }]}>
+                      {servicio.componentes && servicio.componentes.length > 0 && (
+                        <View style={[styles.offerFlag, { backgroundColor: '#4CAF50' }]}>
+                          <Ionicons name="pricetag-outline" size={responsive.responsiveWidth(14)} color="#fff" />
+                        </View>
+                      )}
+                      {servicio.nota && (
+                        <View style={[styles.noteFlag, { backgroundColor: '#2196F3' }]}>
+                          <Ionicons name="document-text-outline" size={responsive.responsiveWidth(14)} color="#fff" />
+                        </View>
+                      )}
+                      <View style={styles.servicioInfo}>
+                        <View style={styles.servicioHeader}>
+                          <Text style={[styles.servicioName, { color: colors.onSurface }]} numberOfLines={1} ellipsizeMode="tail">
+                            {servicio.nombre.length > 15 ? servicio.nombre.substring(0, 15) + '...' : servicio.nombre}
+                          </Text>
+                          <View style={[
+                            styles.statusBadge,
+                            { backgroundColor: servicio.esvendible ? '#E8F5E9' : '#FFEBEE' }
+                          ]}>
+                            <Text style={[styles.statusText, { color: servicio.esvendible ? '#2E7D32' : '#C62828' }]}>
+                              {servicio.esvendible ? 'Vendible' : 'No vendible'}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.servicioDetails, { color: colors.outline }]}>Categoría: {servicio.categoria}</Text>
+                        {filters.id_tienda && (
+                          <>
+                            <Text style={[styles.servicioDetails, { color: colors.primary }]}>
+                              Precio CUP: ${parseFloat(getServicePrice(servicio)).toFixed(2)}
+                            </Text>
+                            <Text style={[styles.servicioDetails, { color: colors.primary }]}>
+                              Precio USD: ${parseFloat(getServicePriceUSD(servicio)).toFixed(2)}
+                            </Text>
+                          </>
+                        )}
                       </View>
+                      {canEdit && (
+                        <View style={styles.servicioActions}>
+                          <TouchableOpacity
+                            style={[styles.actionButton, styles.editButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleEdit(servicio);
+                            }}
+                          >
+                            <Image
+                              source={require('../../assets/editar.png')}
+                              style={styles.actionIcon}
+                              resizeMode="contain"
+                            />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.actionButton, styles.deleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleDelete(servicio);
+                            }}
+                          >
+                            <Image
+                              source={require('../../assets/basura.png')}
+                              style={styles.actionIcon}
+                              resizeMode="contain"
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </Card>
+                  </TouchableOpacity>
+                );
+              })
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.tableScrollView}>
+                <View style={styles.tableContainer}>
+                  <View style={[styles.tableHeader, { backgroundColor: colors.primary }]}>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(200) }]}>Nombre</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Categoría</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80) }]}>Estado</Text>
+                    {filters.id_tienda && (
+                      <>
+                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Precio CUP</Text>
+                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Precio USD</Text>
+                      </>
                     )}
-                    {servicio.nota && (
-                      <View style={[styles.noteFlag, { backgroundColor: '#2196F3' }]}>
-                        <Ionicons name="document-text-outline" size={responsive.responsiveWidth(14)} color="#fff" />
-                      </View>
+                    {canEdit && (
+                      <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Acciones</Text>
                     )}
-                    <View style={styles.servicioInfo}>
-                      <View style={styles.servicioHeader}>
-                        <Text style={[styles.servicioName, { color: colors.onSurface }]} numberOfLines={1} ellipsizeMode="tail">
-                          {servicio.nombre.length > 15 ? servicio.nombre.substring(0, 15) + '...' : servicio.nombre}
-                        </Text>
-                        <View style={[
-                          styles.statusBadge,
-                          { backgroundColor: servicio.esvendible ? '#E8F5E9' : '#FFEBEE' }
-                        ]}>
-                          <Text style={[styles.statusText, { color: servicio.esvendible ? '#2E7D32' : '#C62828' }]}>
+                  </View>
+                  {servicios.map((servicio, index) => {
+                    return (
+                      <TouchableOpacity
+                        key={servicio.id_servicio}
+                        onPress={() => handleServicioPress(servicio)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? colors.surface : colors.surfaceVariant }]}>
+                          <View style={[styles.tableCellWithFlags, { width: responsive.responsiveWidth(200) }]}>
+                            <View style={styles.tableFlagsContainer}>
+                              {servicio.componentes && servicio.componentes.length > 0 && (
+                                <View style={[styles.tableOfferFlag, { backgroundColor: '#4CAF50' }]}>
+                                  <Ionicons name="pricetag-outline" size={responsive.responsiveWidth(12)} color="#fff" />
+                                </View>
+                              )}
+                              {servicio.nota && (
+                                <View style={[styles.tableNoteFlag, { backgroundColor: '#2196F3' }]}>
+                                  <Ionicons name="document-text-outline" size={responsive.responsiveWidth(12)} color="#fff" />
+                                </View>
+                              )}
+                            </View>
+                            <Text style={[styles.tableCellText, { color: colors.onSurface }]} numberOfLines={2}>
+                              {servicio.nombre}
+                            </Text>
+                          </View>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(120) }]}>
+                            {servicio.categoria || 'N/A'}
+                          </Text>
+                          <Text style={[styles.tableCellText, { color: servicio.esvendible ? '#4CAF50' : '#F44336', width: responsive.responsiveWidth(80) }]}>
                             {servicio.esvendible ? 'Vendible' : 'No vendible'}
                           </Text>
+                          {filters.id_tienda && (
+                            <>
+                              <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100) }]}>
+                                ${parseFloat(getServicePrice(servicio)).toFixed(2)}
+                              </Text>
+                              <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100) }]}>
+                                ${parseFloat(getServicePriceUSD(servicio)).toFixed(2)}
+                              </Text>
+                            </>
+                          )}
+                          {canEdit && (
+                            <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(100) }]}>
+                              <View style={styles.tableActionsRow}>
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableEditButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleEdit(servicio);
+                                  }}
+                                >
+                                  <Ionicons name="create-outline" size={responsive.responsiveWidth(18)} color={colors.primary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableDeleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(servicio);
+                                  }}
+                                >
+                                  <Ionicons name="trash-outline" size={responsive.responsiveWidth(18)} color={colors.error} />
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          )}
                         </View>
-                      </View>
-                      <Text style={[styles.servicioDetails, { color: colors.outline }]}>Categoría: {servicio.categoria}</Text>
-                      {filters.id_tienda && (
-                        <>
-                          <Text style={[styles.servicioDetails, { color: colors.primary }]}>
-                            Precio CUP: ${parseFloat(getServicePrice(servicio)).toFixed(2)}
-                          </Text>
-                          <Text style={[styles.servicioDetails, { color: colors.primary }]}>
-                            Precio USD: ${parseFloat(getServicePriceUSD(servicio)).toFixed(2)}
-                          </Text>
-                        </>
-                      )}
-                    </View>
-                    {canEdit && (
-                      <View style={styles.servicioActions}>
-                        <TouchableOpacity
-                          style={[styles.actionButton, styles.editButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleEdit(servicio);
-                          }}
-                        >
-                          <Image
-                            source={require('../../assets/editar.png')}
-                            style={styles.actionIcon}
-                            resizeMode="contain"
-                          />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.actionButton, styles.deleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleDelete(servicio);
-                          }}
-                        >
-                          <Image
-                            source={require('../../assets/basura.png')}
-                            style={styles.actionIcon}
-                            resizeMode="contain"
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </Card>
-                </TouchableOpacity>
-              );
-            })}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            )}
 
             {/* Pagination */}
             {pagination.totalPages > 1 && (
@@ -1396,6 +1490,100 @@ const createStyles = (responsive) => StyleSheet.create({
   paginationSubtext: {
     fontSize: responsive.fontSizes.bodySmall,
     marginTop: responsive.responsiveMargin(2),
+  },
+  tableScrollView: {
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  tableContainer: {
+    minWidth: '100%',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    overflow: 'hidden',
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(8),
+    borderBottomWidth: 2,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  tableHeaderText: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableRow: {
+    flexDirection: 'row',
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(8),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+    alignItems: 'center',
+  },
+  tableCellText: {
+    fontSize: responsive.responsiveFontSize(13),
+    fontFamily: 'Inter',
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableCellWithFlags: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableFlagsContainer: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(4),
+    marginRight: responsive.responsiveMargin(6),
+  },
+  tableOfferFlag: {
+    width: responsive.responsiveWidth(18),
+    height: responsive.responsiveHeight(18),
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tableNoteFlag: {
+    width: responsive.responsiveWidth(18),
+    height: responsive.responsiveHeight(18),
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tableStatusCell: {
+    paddingHorizontal: responsive.responsivePadding(10),
+    paddingVertical: responsive.responsivePadding(4),
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  tableStatusText: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  tableActionsCell: {
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableActionsRow: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(8),
+  },
+  tableActionButton: {
+    width: responsive.responsiveWidth(32),
+    height: responsive.responsiveHeight(32),
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tableEditButton: {
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  tableDeleteButton: {
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   inputWithIcon: {
     flexDirection: 'row',

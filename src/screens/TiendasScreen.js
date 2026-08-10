@@ -10,6 +10,7 @@ import { Card } from '../components/common/Card';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
+import { useViewMode } from '../context/ViewModeContext';
 import { getTiendas, deleteTienda } from '../services/tiendaService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
@@ -19,6 +20,7 @@ const TiendasContent = () => {
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
   const { token, user } = useAuth();
+  const { viewMode, toggleViewMode } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -180,6 +182,8 @@ const TiendasContent = () => {
         onSettingsPress={handleSettingsPress}
         onNotificationsPress={handleNotificationsPress}
         onProfilePress={handleProfilePress}
+        onViewModeToggle={toggleViewMode}
+        showViewToggle={true}
         isDark={isDarkMode}
         title="Abacus"
         showLogo={true}
@@ -373,60 +377,120 @@ const TiendasContent = () => {
           </Card>
         ) : (
           <>
-            {tiendas.map((tienda) => (
-              <TouchableOpacity
-                key={tienda.id_tienda}
-                onPress={() => handleTiendaPress(tienda)}
-                activeOpacity={0.7}
-              >
-                <Card style={[styles.tiendaCard, { backgroundColor: colors.surface }]}>
-                  <View style={styles.tiendaInfo}>
-                    <View style={styles.tiendaHeader}>
-                      <Text style={[styles.tiendaName, { color: colors.onSurface }]}>{tienda.nombre}</Text>
-                      <View style={[
-                        styles.statusBadge,
-                        { backgroundColor: tienda.activo ? '#E8F5E9' : '#FFEBEE' }
-                      ]}>
-                        <Text style={[styles.statusText, { color: tienda.activo ? '#2E7D32' : '#C62828' }]}>
-                          {tienda.activo ? 'Activo' : 'Inactivo'}
-                        </Text>
+            {viewMode === 'card' ? (
+              tiendas.map((tienda) => (
+                <TouchableOpacity
+                  key={tienda.id_tienda}
+                  onPress={() => handleTiendaPress(tienda)}
+                  activeOpacity={0.7}
+                >
+                  <Card style={[styles.tiendaCard, { backgroundColor: colors.surface }]}>
+                    <View style={styles.tiendaInfo}>
+                      <View style={styles.tiendaHeader}>
+                        <Text style={[styles.tiendaName, { color: colors.onSurface }]}>{tienda.nombre}</Text>
+                        <View style={[
+                          styles.statusBadge,
+                          { backgroundColor: tienda.activo ? '#E8F5E9' : '#FFEBEE' }
+                        ]}>
+                          <Text style={[styles.statusText, { color: tienda.activo ? '#2E7D32' : '#C62828' }]}>
+                            {tienda.activo ? 'Activo' : 'Inactivo'}
+                          </Text>
+                        </View>
                       </View>
+                      <Text style={[styles.tiendaType, { color: colors.outline }]}>Tipo: {tienda.tipo}</Text>
                     </View>
-                    <Text style={[styles.tiendaType, { color: colors.outline }]}>Tipo: {tienda.tipo}</Text>
+                    {isAdmin && (
+                      <View style={styles.tiendaActions}>
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.editButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleEdit(tienda);
+                          }}
+                        >
+                          <Image
+                            source={require('../../assets/editar.png')}
+                            style={styles.actionIcon}
+                            resizeMode="contain"
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.actionButton, styles.deleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleDelete(tienda);
+                          }}
+                        >
+                          <Image
+                            source={require('../../assets/basura.png')}
+                            style={styles.actionIcon}
+                            resizeMode="contain"
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </Card>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.tableScrollView}>
+                <View style={styles.tableContainer}>
+                  <View style={[styles.tableHeader, { backgroundColor: colors.primary }]}>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(250) }]}>Nombre</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Tipo</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Estado</Text>
+                    {isAdmin && (
+                      <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Acciones</Text>
+                    )}
                   </View>
-                  {isAdmin && (
-                    <View style={styles.tiendaActions}>
+                  {tiendas.map((tienda, index) => {
+                    return (
                       <TouchableOpacity
-                        style={[styles.actionButton, styles.editButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleEdit(tienda);
-                        }}
+                        key={tienda.id_tienda}
+                        onPress={() => handleTiendaPress(tienda)}
+                        activeOpacity={0.7}
                       >
-                        <Image
-                          source={require('../../assets/editar.png')}
-                          style={styles.actionIcon}
-                          resizeMode="contain"
-                        />
+                        <View style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? colors.surface : colors.surfaceVariant }]}>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(250) }]} numberOfLines={2}>
+                            {tienda.nombre}
+                          </Text>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
+                            {tienda.tipo || 'N/A'}
+                          </Text>
+                          <Text style={[styles.tableCellText, { color: tienda.activo ? '#4CAF50' : '#F44336', width: responsive.responsiveWidth(100) }]}>
+                            {tienda.activo ? 'Activo' : 'Inactivo'}
+                          </Text>
+                          {isAdmin && (
+                            <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(100) }]}>
+                              <View style={styles.tableActionsRow}>
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableEditButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleEdit(tienda);
+                                  }}
+                                >
+                                  <Ionicons name="create-outline" size={responsive.responsiveWidth(18)} color={colors.primary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableDeleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(tienda);
+                                  }}
+                                >
+                                  <Ionicons name="trash-outline" size={responsive.responsiveWidth(18)} color={colors.error} />
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          )}
+                        </View>
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.actionButton, styles.deleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleDelete(tienda);
-                        }}
-                      >
-                        <Image
-                          source={require('../../assets/basura.png')}
-                          style={styles.actionIcon}
-                          resizeMode="contain"
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </Card>
-              </TouchableOpacity>
-            ))}
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            )}
 
             {/* Pagination */}
             {pagination.totalPages > 1 && (
@@ -803,5 +867,64 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.body,
     fontWeight: '500',
     fontFamily: 'Inter',
+  },
+  paginationSubtext: {
+    fontSize: responsive.fontSizes.caption,
+    fontFamily: 'Inter',
+  },
+  tableScrollView: {
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  tableContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(8),
+    borderBottomWidth: 2,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  tableHeaderText: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableRow: {
+    flexDirection: 'row',
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(8),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+    alignItems: 'center',
+  },
+  tableCellText: {
+    fontSize: responsive.responsiveFontSize(13),
+    fontFamily: 'Inter',
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableActionsCell: {
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableActionsRow: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(8),
+  },
+  tableActionButton: {
+    width: responsive.responsiveWidth(32),
+    height: responsive.responsiveHeight(32),
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tableEditButton: {
+    // Style handled inline
+  },
+  tableDeleteButton: {
+    // Style handled inline
   },
 });

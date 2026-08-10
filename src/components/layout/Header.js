@@ -15,7 +15,9 @@ export const Header = ({
   onBackPress,
   isDark = false,
   title = 'abacus',
-  showLogo = false
+  showLogo = false,
+  onViewModeToggle,
+  showViewToggle = false
 }) => {
   const { isOfflineMode } = useOffline();
   const { colors } = useTheme();
@@ -70,6 +72,15 @@ export const Header = ({
               color={colors.primary} 
             />
           </View>
+        )}
+        {showViewToggle && onViewModeToggle && (
+          <TouchableOpacity 
+            onPress={onViewModeToggle}
+            style={styles.iconButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="grid-outline" size={responsive.responsiveWidth(24)} color={colors.primary} />
+          </TouchableOpacity>
         )}
         {onNotificationsPress && (
           <TouchableOpacity 

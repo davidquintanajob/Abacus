@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
+import { useViewMode } from '../context/ViewModeContext';
 import { getEntradas, deleteEntrada } from '../services/entradaService';
 import { getTiendas } from '../services/tiendaService';
 import { getUsuarios } from '../services/usuarioService';
@@ -38,6 +39,7 @@ const EntradasContent = () => {
   const { token, user, permissions, entradaAccessLevels, entradaManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
+  const { viewMode, toggleViewMode } = useViewMode();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -815,6 +817,8 @@ const EntradasContent = () => {
         onSettingsPress={handleSettingsPress}
         onNotificationsPress={handleNotificationsPress}
         onProfilePress={handleProfilePress}
+        onViewModeToggle={toggleViewMode}
+        showViewToggle={true}
         isDark={isDarkMode}
         title="Abacus"
         showLogo={true}
@@ -1176,77 +1180,175 @@ const EntradasContent = () => {
           </Card>
         ) : (
           <>
-            {entradas.map((entrada) => (
-              <TouchableOpacity
-                key={entrada.id_entrada}
-                onPress={() => handleEntradaPress(entrada)}
-                activeOpacity={0.7}
-              >
-                <Card style={[styles.entradaCard, { backgroundColor: colors.surface }]}>
-                  <View style={styles.entradaInfo}>
-                    <View style={styles.entradaHeader}>
-                      <Text style={[styles.entradaNombre, { color: colors.onSurface }]} numberOfLines={2} ellipsizeMode="tail">
-                        {entrada.servicioTienda?.servicio?.nombre || 'N/A'}
-                      </Text>
-                    </View>
-                    <Text style={[styles.entradaProducto, { color: colors.outline }]}>
-                      Código Lote: {entrada.codigo_lote}
-                    </Text>
-                    <Text style={[styles.entradaTienda, { color: colors.outline }]}>
-                      Tienda: {entrada.servicioTienda?.tienda?.nombre || 'N/A'}
-                    </Text>
-                    {canManageEntradas && (
-                      <Text style={[styles.entradaCosto, { color: colors.primary }]}>
-                        CUP: ${parseFloat(entrada.costo_cup).toFixed(2)} | USD: ${parseFloat(entrada.costo_usd).toFixed(2)}
-                      </Text>
-                    )}
-                    <View style={styles.cantidadRow}>
-                      <Text style={[styles.entradaCantidad, { color: colors.primary }]}>
-                        Inicial: {entrada.cantidad_entrada}
-                      </Text>
-                      <View style={[styles.cantidadOval, { backgroundColor: getCantidadStatus(entrada).bgColor, borderColor: getCantidadStatus(entrada).borderColor }]}>
-                        <Text style={[styles.cantidadOvalText, { color: getCantidadStatus(entrada).color }]}>
-                          Actual: {entrada.cantidad_restante || 0}
+            {viewMode === 'card' ? (
+              entradas.map((entrada) => (
+                <TouchableOpacity
+                  key={entrada.id_entrada}
+                  onPress={() => handleEntradaPress(entrada)}
+                  activeOpacity={0.7}
+                >
+                  <Card style={[styles.entradaCard, { backgroundColor: colors.surface }]}>
+                    <View style={styles.entradaInfo}>
+                      <View style={styles.entradaHeader}>
+                        <Text style={[styles.entradaNombre, { color: colors.onSurface }]} numberOfLines={2} ellipsizeMode="tail">
+                          {entrada.servicioTienda?.servicio?.nombre || 'N/A'}
                         </Text>
                       </View>
+                      <Text style={[styles.entradaProducto, { color: colors.outline }]}>
+                        Código Lote: {entrada.codigo_lote}
+                      </Text>
+                      <Text style={[styles.entradaTienda, { color: colors.outline }]}>
+                        Tienda: {entrada.servicioTienda?.tienda?.nombre || 'N/A'}
+                      </Text>
+                      {canManageEntradas && (
+                        <Text style={[styles.entradaCosto, { color: colors.primary }]}>
+                          CUP: ${parseFloat(entrada.costo_cup).toFixed(2)} | USD: ${parseFloat(entrada.costo_usd).toFixed(2)}
+                        </Text>
+                      )}
+                      <View style={styles.cantidadRow}>
+                        <Text style={[styles.entradaCantidad, { color: colors.primary }]}>
+                          Inicial: {entrada.cantidad_entrada}
+                        </Text>
+                        <View style={[styles.cantidadOval, { backgroundColor: getCantidadStatus(entrada).bgColor, borderColor: getCantidadStatus(entrada).borderColor }]}>
+                          <Text style={[styles.cantidadOvalText, { color: getCantidadStatus(entrada).color }]}>
+                            Actual: {entrada.cantidad_restante || 0}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.entradaFecha, { color: colors.outline }]}>
+                        Fecha: {new Date(entrada.fecha).toLocaleDateString()}
+                      </Text>
                     </View>
-                    <Text style={[styles.entradaFecha, { color: colors.outline }]}>
-                      Fecha: {new Date(entrada.fecha).toLocaleDateString()}
-                    </Text>
+                    {canManageEntradas && (
+                      <View style={styles.entradaActions}>
+                        <TouchableOpacity
+                          style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleEdit(entrada);
+                          }}
+                        >
+                          <Image
+                            source={require('../../assets/editar.png')}
+                            style={styles.actionIconSmall}
+                            resizeMode="contain"
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleDelete(entrada);
+                          }}
+                        >
+                          <Image
+                            source={require('../../assets/basura.png')}
+                            style={styles.actionIconSmall}
+                            resizeMode="contain"
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </Card>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.tableScrollView}>
+                <View style={styles.tableContainer}>
+                  <View style={[styles.tableHeader, { backgroundColor: colors.primary }]}>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(200) }]}>Producto</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Código Lote</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Tienda</Text>
+                    {canManageEntradas && (
+                      <>
+                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Costo CUP</Text>
+                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Costo USD</Text>
+                      </>
+                    )}
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80) }]}>Inicial</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80) }]}>Actual</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Fecha</Text>
+                    {canManageEntradas && (
+                      <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Acciones</Text>
+                    )}
                   </View>
-                  {canManageEntradas && (
-                    <View style={styles.entradaActions}>
+                  {entradas.map((entrada, index) => {
+                    const cantidadActual = entrada.cantidad_restante || 0;
+                    const cantidadInicial = entrada.cantidad_entrada;
+                    let actualColor = colors.onSurface;
+                    if (cantidadActual === 0) {
+                      actualColor = '#F44336'; // rojo
+                    } else if (cantidadActual === cantidadInicial) {
+                      actualColor = '#4CAF50'; // verde
+                    } else {
+                      actualColor = '#FF9800'; // naranja
+                    }
+                    return (
                       <TouchableOpacity
-                        style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleEdit(entrada);
-                        }}
+                        key={entrada.id_entrada}
+                        onPress={() => handleEntradaPress(entrada)}
+                        activeOpacity={0.7}
                       >
-                        <Image
-                          source={require('../../assets/editar.png')}
-                          style={styles.actionIconSmall}
-                          resizeMode="contain"
-                        />
+                        <View style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? colors.surface : colors.surfaceVariant }]}>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(200) }]} numberOfLines={2}>
+                            {entrada.servicioTienda?.servicio?.nombre || 'N/A'}
+                          </Text>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(120) }]}>
+                            {entrada.codigo_lote}
+                          </Text>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
+                            {entrada.servicioTienda?.tienda?.nombre || 'N/A'}
+                          </Text>
+                          {canManageEntradas && (
+                            <>
+                              <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100) }]}>
+                                ${parseFloat(entrada.costo_cup).toFixed(2)}
+                              </Text>
+                              <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100) }]}>
+                                ${parseFloat(entrada.costo_usd).toFixed(2)}
+                              </Text>
+                            </>
+                          )}
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(80) }]}>
+                            {entrada.cantidad_entrada}
+                          </Text>
+                          <Text style={[styles.tableCellText, { color: actualColor, width: responsive.responsiveWidth(80) }]}>
+                            {cantidadActual}
+                          </Text>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(120) }]}>
+                            {new Date(entrada.fecha).toLocaleDateString()}
+                          </Text>
+                          {canManageEntradas && (
+                            <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(100) }]}>
+                              <View style={styles.tableActionsRow}>
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableEditButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleEdit(entrada);
+                                  }}
+                                >
+                                  <Ionicons name="create-outline" size={responsive.responsiveWidth(18)} color={colors.primary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableDeleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(entrada);
+                                  }}
+                                >
+                                  <Ionicons name="trash-outline" size={responsive.responsiveWidth(18)} color={colors.error} />
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          )}
+                        </View>
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleDelete(entrada);
-                        }}
-                      >
-                        <Image
-                          source={require('../../assets/basura.png')}
-                          style={styles.actionIconSmall}
-                          resizeMode="contain"
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </Card>
-              </TouchableOpacity>
-            ))}
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            )}
 
             {/* Pagination */}
             {pagination.totalPages > 1 && (
@@ -1812,6 +1914,76 @@ const createStyles = (responsive) => StyleSheet.create({
   paginationSubtext: {
     fontSize: responsive.responsiveFontSize(12),
     marginTop: responsive.responsiveMargin(4),
+  },
+  tableScrollView: {
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  tableContainer: {
+    minWidth: '100%',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    overflow: 'hidden',
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(8),
+    borderBottomWidth: 2,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  tableHeaderText: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableRow: {
+    flexDirection: 'row',
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(8),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+    alignItems: 'center',
+  },
+  tableCellText: {
+    fontSize: responsive.responsiveFontSize(13),
+    fontFamily: 'Inter',
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableStatusCell: {
+    paddingHorizontal: responsive.responsivePadding(10),
+    paddingVertical: responsive.responsivePadding(4),
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  tableStatusText: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  tableActionsCell: {
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableActionsRow: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(8),
+  },
+  tableActionButton: {
+    width: responsive.responsiveWidth(32),
+    height: responsive.responsiveHeight(32),
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tableEditButton: {
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  tableDeleteButton: {
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   modalOverlay: {
     flex: 1,
