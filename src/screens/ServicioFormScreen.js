@@ -108,9 +108,7 @@ const ServicioFormContent = () => {
       formData.precio_cup_general !== null && 
       formData.precio_cup_general !== '' &&
       formData.precio_usd_general !== null && 
-      formData.precio_usd_general !== '' &&
-      (formData.costo_cup_general !== null && formData.costo_cup_general !== '' || !canViewCosts) &&
-      (formData.costo_usd_general !== null && formData.costo_usd_general !== '' || !canViewCosts);
+      formData.precio_usd_general !== '';
 
     if (hasAllGeneralPrices && formData.servicioTiendaList.length === 0) {
       // Auto-populate all active tiendas with general prices
@@ -206,13 +204,16 @@ const ServicioFormContent = () => {
             servicioTiendaList = servicioTiendaList.filter(ts => ts.id_tienda === user.id_tienda);
           }
           
+          // Extract cost from first tienda (all tiendas should have the same cost now)
+          const firstTienda = servicioTiendaList[0];
+          const costoCupGeneral = firstTienda?.costo_cup || null;
+          const costoUsdGeneral = firstTienda?.costo_usd || null;
+          
           // Calcular precios generales a partir de los precios por tienda
           // Si todas las tiendas tienen el mismo precio, usarlo como precio general
           // Si algunas tiendas tienen precios diferentes, inferir cuál es el precio general
           let precio_cup_general = null;
           let precio_usd_general = null;
-          let costo_cup_general = null;
-          let costo_usd_general = null;
           
           if (servicioTiendaList.length > 0) {
             // Contar cuántas tiendas tienen cada precio CUP
@@ -257,32 +258,6 @@ const ServicioFormContent = () => {
                 }
               }
             }
-            
-            // Lo mismo para costos si es que tienen y el usuario puede verlos
-            if (canViewCosts) {
-              const costosCUP = servicioTiendaList.map(item => item.costo_cup);
-              const costosUSD = servicioTiendaList.map(item => item.costo_usd);
-              
-              const masComunCostoCUP = encontrarPrecioMasComun(costosCUP);
-              const masComunCostoUSD = encontrarPrecioMasComun(costosUSD);
-              
-              if (masComunCostoCUP.precio !== null && masComunCostoUSD.precio !== null &&
-                  masComunCostoCUP.conteo > servicioTiendaList.length / 2) {
-                costo_cup_general = masComunCostoCUP.precio;
-                costo_usd_general = masComunCostoUSD.precio;
-              } else {
-                // Caso especial: si hay exactamente 2 tiendas con precios diferentes,
-                // mostrar uno de ellos como precio general (el primero)
-                if (servicioTiendaList.length === 2) {
-                  const costoCUP1 = costosCUP[0];
-                  const costoUSD1 = costosUSD[0];
-                  if (costoCUP1 !== null && costoUSD1 !== null) {
-                    costo_cup_general = costoCUP1;
-                    costo_usd_general = costoUSD1;
-                  }
-                }
-              }
-            }
           }
           
           setFormData({
@@ -295,8 +270,8 @@ const ServicioFormContent = () => {
             // Precios y costos generales
             precio_cup_general: precio_cup_general,
             precio_usd_general: precio_usd_general,
-            costo_cup_general: costo_cup_general,
-            costo_usd_general: costo_usd_general,
+            costo_cup_general: costoCupGeneral,
+            costo_usd_general: costoUsdGeneral,
             // Lista de componentes para la oferta
             ofertaList: completeServicio.componentes?.map(c => ({
               id_servicio_componente: c.id_servicio,
@@ -474,7 +449,7 @@ const ServicioFormContent = () => {
 
           // Solo incluir tiendas que están explícitamente en servicioTiendaList
           // Usar precios específicos si están disponibles, si no usar precios generales
-          return formData.servicioTiendaList.map(specific => {
+          const baseList = formData.servicioTiendaList.map(specific => {
             // Solo procesar si la tienda tiene un ID válido
             if (specific.id_tienda === null) return null;
             
@@ -482,10 +457,18 @@ const ServicioFormContent = () => {
               id_tienda: specific.id_tienda,
               precio_cup: specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general),
               precio_usd: specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general),
-              costo_cup: specific.costo_cup !== null ? toFixed5(specific.costo_cup) : toFixed5(formData.costo_cup_general),
-              costo_usd: specific.costo_usd !== null ? toFixed5(specific.costo_usd) : toFixed5(formData.costo_usd_general),
             };
           }).filter(item => item !== null);
+          
+          // Apply global cost fields to all stores
+          const costoCup = toFixed5(formData.costo_cup_general);
+          const costoUsd = toFixed5(formData.costo_usd_general);
+          
+          return baseList.map(item => ({
+            ...item,
+            costo_cup: costoCup,
+            costo_usd: costoUsd,
+          }));
         })(),
         // Incluir ofertaList si hay componentes
         ofertaList: formData.ofertaList.length > 0 ? formData.ofertaList.map(item => ({
@@ -587,8 +570,6 @@ const ServicioFormContent = () => {
       id_tienda: tienda.id_tienda,
       precio_cup: formData.precio_cup_general,
       precio_usd: formData.precio_usd_general,
-      costo_cup: formData.costo_cup_general,
-      costo_usd: formData.costo_usd_general,
     }));
 
     setFormData(prev => ({
@@ -639,21 +620,11 @@ const ServicioFormContent = () => {
             updatedItem.precio_usd = parseFloat((cupValue / exchangeRate).toFixed(5));
           }
           
-          if (exchangeRate && field === 'costo_cup' && value !== null) {
-            const cupValue = parseFloat(value) || 0;
-            updatedItem.costo_usd = parseFloat((cupValue / exchangeRate).toFixed(5));
-          }
-          
           // Auto-calculate CUP from USD if exchange rate is configured and value is not null
           // exchangeRate represents: 1 USD = X CUP
           if (exchangeRate && field === 'precio_usd' && value !== null) {
             const usdValue = parseFloat(value) || 0;
             updatedItem.precio_cup = parseFloat((usdValue * exchangeRate).toFixed(5));
-          }
-          
-          if (exchangeRate && field === 'costo_usd' && value !== null) {
-            const usdValue = parseFloat(value) || 0;
-            updatedItem.costo_cup = parseFloat((usdValue * exchangeRate).toFixed(5));
           }
           
           return updatedItem;
@@ -810,6 +781,79 @@ const ServicioFormContent = () => {
               </View>
             </TouchableOpacity>
           </View>
+
+          {canViewCosts && (
+            <View style={styles.formRow}>
+              <View style={[styles.formColumn, styles.formGroup]}>
+                <Text style={[styles.label, { color: colors.outline }]}>Costo CUP</Text>
+                <TextInput
+                  style={[
+                    styles.input, 
+                    { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                    isReadOnly && styles.inputDisabled
+                  ]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Costo CUP"
+                  value={
+                    generalPriceInputTexts.costo_cup !== undefined
+                      ? generalPriceInputTexts.costo_cup
+                      : (formData.costo_cup_general !== null && formData.costo_cup_general !== '' ? parseFloat(formData.costo_cup_general).toFixed(2) : '')
+                  }
+                  onFocus={() => setGeneralPriceInputTexts(prev => ({
+                    ...prev,
+                    costo_cup: formData.costo_cup_general !== null && formData.costo_cup_general !== '' ? String(parseFloat(formData.costo_cup_general)) : ''
+                  }))}
+                  onChangeText={(text) => {
+                    setGeneralPriceInputTexts(prev => ({ ...prev, costo_cup: text }));
+                    handleGeneralPriceChange('costo_cup_general', text === '' ? null : parseFloat(text));
+                  }}
+                  onBlur={() => {
+                    setGeneralPriceInputTexts(prev => {
+                      const updated = { ...prev };
+                      delete updated.costo_cup;
+                      return updated;
+                    });
+                  }}
+                  keyboardType="decimal-pad"
+                  editable={!isViewMode || canEditService}
+                />
+              </View>
+              <View style={[styles.formColumn, styles.formGroup]}>
+                <Text style={[styles.label, { color: colors.outline }]}>Costo USD</Text>
+                <TextInput
+                  style={[
+                    styles.input, 
+                    { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                    isReadOnly && styles.inputDisabled
+                  ]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Costo USD"
+                  value={
+                    generalPriceInputTexts.costo_usd !== undefined
+                      ? generalPriceInputTexts.costo_usd
+                      : (formData.costo_usd_general !== null && formData.costo_usd_general !== '' ? parseFloat(formData.costo_usd_general).toFixed(2) : '')
+                  }
+                  onFocus={() => setGeneralPriceInputTexts(prev => ({
+                    ...prev,
+                    costo_usd: formData.costo_usd_general !== null && formData.costo_usd_general !== '' ? String(parseFloat(formData.costo_usd_general)) : ''
+                  }))}
+                  onChangeText={(text) => {
+                    setGeneralPriceInputTexts(prev => ({ ...prev, costo_usd: text }));
+                    handleGeneralPriceChange('costo_usd_general', text === '' ? null : parseFloat(text));
+                  }}
+                  onBlur={() => {
+                    setGeneralPriceInputTexts(prev => {
+                      const updated = { ...prev };
+                      delete updated.costo_usd;
+                      return updated;
+                    });
+                  }}
+                  keyboardType="decimal-pad"
+                  editable={!isViewMode || canEditService}
+                />
+              </View>
+            </View>
+          )}
 
           {/* Códigos Section */}
           <View style={styles.section}>
@@ -1034,80 +1078,6 @@ const ServicioFormContent = () => {
                     editable={!isReadOnly}
                   />
                 </View>
-                {canViewCosts && (
-                  <>
-                    <View style={styles.priceField}>
-                      <Text style={[styles.label, { color: colors.outline }]}>Costo CUP</Text>
-                      <TextInput
-                        style={[
-                          styles.input, 
-                          { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                          isReadOnly && styles.inputDisabled
-                        ]}
-                        placeholderTextColor={colors.outline}
-                        placeholder="Costo CUP"
-                        value={
-                          generalPriceInputTexts.costo_cup !== undefined
-                            ? generalPriceInputTexts.costo_cup
-                            : (formData.costo_cup_general !== null && formData.costo_cup_general !== '' ? parseFloat(formData.costo_cup_general).toFixed(2) : '')
-                        }
-                        onFocus={() => setGeneralPriceInputTexts(prev => ({
-                          ...prev,
-                          costo_cup: formData.costo_cup_general !== null && formData.costo_cup_general !== '' ? String(parseFloat(formData.costo_cup_general)) : ''
-                        }))}
-                        onChangeText={(text) => {
-                          setGeneralPriceInputTexts(prev => ({ ...prev, costo_cup: text }));
-                          handleGeneralPriceChange('costo_cup_general', text === '' ? null : parseFloat(text));
-                        }}
-                        onBlur={() => {
-                          setGeneralPriceInputTexts(prev => {
-                            const updated = { ...prev };
-                            delete updated.costo_cup;
-                            return updated;
-                          });
-                          handleGeneralPriceBlur();
-                        }}
-                        keyboardType="decimal-pad"
-                        editable={!isViewMode || canEditService}
-                      />
-                    </View>
-                    <View style={styles.priceField}>
-                      <Text style={[styles.label, { color: colors.outline }]}>Costo USD</Text>
-                      <TextInput
-                        style={[
-                          styles.input, 
-                          { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                          isReadOnly && styles.inputDisabled
-                        ]}
-                        placeholderTextColor={colors.outline}
-                        placeholder="Costo USD"
-                        value={
-                          generalPriceInputTexts.costo_usd !== undefined
-                            ? generalPriceInputTexts.costo_usd
-                            : (formData.costo_usd_general !== null && formData.costo_usd_general !== '' ? parseFloat(formData.costo_usd_general).toFixed(2) : '')
-                        }
-                        onFocus={() => setGeneralPriceInputTexts(prev => ({
-                          ...prev,
-                          costo_usd: formData.costo_usd_general !== null && formData.costo_usd_general !== '' ? String(parseFloat(formData.costo_usd_general)) : ''
-                        }))}
-                        onChangeText={(text) => {
-                          setGeneralPriceInputTexts(prev => ({ ...prev, costo_usd: text }));
-                          handleGeneralPriceChange('costo_usd_general', text === '' ? null : parseFloat(text));
-                        }}
-                        onBlur={() => {
-                          setGeneralPriceInputTexts(prev => {
-                            const updated = { ...prev };
-                            delete updated.costo_usd;
-                            return updated;
-                          });
-                          handleGeneralPriceBlur();
-                        }}
-                        keyboardType="decimal-pad"
-                        editable={!isViewMode || canEditService}
-                      />
-                    </View>
-                  </>
-                )}
               </View>
             )}
           </View>
@@ -1240,70 +1210,6 @@ const ServicioFormContent = () => {
                             editable={!isViewMode || canEditService}
                           />
                         </View>
-                        {canViewCosts && (
-                          <>
-                            <View style={styles.priceField}>
-                              <Text style={[styles.label, { color: colors.outline }]}>Costo CUP</Text>
-                              <TextInput
-                                style={[
-                                  styles.input, 
-                                  { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant },
-                                  isReadOnly && styles.inputDisabled
-                                ]}
-                                value={
-                                  priceInputTexts[index]?.costo_cup !== undefined
-                                    ? priceInputTexts[index].costo_cup
-                                    : (tiendaServicio.costo_cup !== null && tiendaServicio.costo_cup !== '' ? parseFloat(tiendaServicio.costo_cup).toFixed(2) : '')
-                                }
-                                onFocus={() => setPriceInputTexts(prev => ({
-                                  ...prev,
-                                  [index]: { ...prev[index], costo_cup: tiendaServicio.costo_cup !== null && tiendaServicio.costo_cup !== '' ? String(parseFloat(tiendaServicio.costo_cup)) : '' }
-                                }))}
-                                onChangeText={(text) => {
-                                  setPriceInputTexts(prev => ({ ...prev, [index]: { ...prev[index], costo_cup: text } }));
-                                  handleTiendaServicioChange(index, 'costo_cup', text === '' ? null : parseFloat(text));
-                                }}
-                                onBlur={() => setPriceInputTexts(prev => {
-                                  const updated = { ...prev[index] };
-                                  delete updated.costo_cup;
-                                  return { ...prev, [index]: updated };
-                                })}
-                                keyboardType="decimal-pad"
-                                editable={!isViewMode || canEditService}
-                              />
-                            </View>
-                            <View style={styles.priceField}>
-                              <Text style={[styles.label, { color: colors.outline }]}>Costo USD</Text>
-                              <TextInput
-                                style={[
-                                  styles.input, 
-                                  { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant },
-                                  isReadOnly && styles.inputDisabled
-                                ]}
-                                value={
-                                  priceInputTexts[index]?.costo_usd !== undefined
-                                    ? priceInputTexts[index].costo_usd
-                                    : (tiendaServicio.costo_usd !== null && tiendaServicio.costo_usd !== '' ? parseFloat(tiendaServicio.costo_usd).toFixed(2) : '')
-                                }
-                                onFocus={() => setPriceInputTexts(prev => ({
-                                  ...prev,
-                                  [index]: { ...prev[index], costo_usd: tiendaServicio.costo_usd !== null && tiendaServicio.costo_usd !== '' ? String(parseFloat(tiendaServicio.costo_usd)) : '' }
-                                }))}
-                                onChangeText={(text) => {
-                                  setPriceInputTexts(prev => ({ ...prev, [index]: { ...prev[index], costo_usd: text } }));
-                                  handleTiendaServicioChange(index, 'costo_usd', text === '' ? null : parseFloat(text));
-                                }}
-                                onBlur={() => setPriceInputTexts(prev => {
-                                  const updated = { ...prev[index] };
-                                  delete updated.costo_usd;
-                                  return { ...prev, [index]: updated };
-                                })}
-                                keyboardType="decimal-pad"
-                                editable={!isViewMode || canEditService}
-                              />
-                            </View>
-                          </>
-                        )}
                       </View>
                       
                       {(!isViewMode || canEditService) && (
@@ -1599,6 +1505,13 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   formGroup: {
     marginBottom: responsive.responsiveMargin(20),
+  },
+  formRow: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(12),
+  },
+  formColumn: {
+    flex: 1,
   },
   label: {
     fontSize: responsive.fontSizes.bodySmall,
