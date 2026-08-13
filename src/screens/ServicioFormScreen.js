@@ -393,6 +393,44 @@ const ServicioFormContent = () => {
     });
   };
 
+  const calculateOfertaCosts = () => {
+    if (!isOferta || formData.ofertaList.length === 0) {
+      return { costo_cup: 0, costo_usd: 0 };
+    }
+
+    let totalCostoCup = 0;
+    let totalCostoUsd = 0;
+
+    formData.ofertaList.forEach(componente => {
+      const servicioComponente = allServicios.find(s => s.id_servicio === componente.id_servicio_componente);
+      if (servicioComponente) {
+        // Get cost from the first tienda of the servicio component
+        const tiendasServicio = servicioComponente.tiendas_servicio || servicioComponente.servicioTiendaList || [];
+        const firstTienda = tiendasServicio[0];
+        const costoCup = firstTienda?.costo_cup || 0;
+        const costoUsd = firstTienda?.costo_usd || 0;
+        
+        const cantidad = componente.cantidad || 1;
+        totalCostoCup += costoCup * cantidad;
+        totalCostoUsd += costoUsd * cantidad;
+      }
+    });
+
+    return { costo_cup: totalCostoCup, costo_usd: totalCostoUsd };
+  };
+
+  // Update cost fields when oferta components change
+  useEffect(() => {
+    if (isOferta) {
+      const { costo_cup, costo_usd } = calculateOfertaCosts();
+      setFormData(prev => ({
+        ...prev,
+        costo_cup_general: costo_cup,
+        costo_usd_general: costo_usd,
+      }));
+    }
+  }, [formData.ofertaList, allServicios, isOferta]);
+
   const handleSave = async () => {
     // Validation
     if (!formData.nombre.trim()) {
@@ -815,7 +853,7 @@ const ServicioFormContent = () => {
                     });
                   }}
                   keyboardType="decimal-pad"
-                  editable={!isViewMode || canEditService}
+                  editable={!isViewMode && !isOferta && canEditService}
                 />
               </View>
               <View style={[styles.formColumn, styles.formGroup]}>
@@ -849,7 +887,7 @@ const ServicioFormContent = () => {
                     });
                   }}
                   keyboardType="decimal-pad"
-                  editable={!isViewMode || canEditService}
+                  editable={!isViewMode && !isOferta && canEditService}
                 />
               </View>
             </View>
