@@ -73,6 +73,16 @@ const authenticate = require("../helpers/authenticate");
  *         schema:
  *           type: integer
  *         description: Filtrar por ID de servicio (relacionado a través de servicio_tienda)
+ *       - in: query
+ *         name: cantidad_restante_min
+ *         schema:
+ *           type: number
+ *         description: Cantidad restante mínima (incluye)
+ *       - in: query
+ *         name: cantidad_restante_max
+ *         schema:
+ *           type: number
+ *         description: Cantidad restante máxima (incluye)
  *     responses:
  *       200:
  *         description: Lista de entradas con paginación

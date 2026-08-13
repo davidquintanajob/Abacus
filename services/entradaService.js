@@ -341,6 +341,15 @@ const filterEntradas = async (filters, limit, offset) => {
     }
   }
 
+  // Nuevas condiciones para cantidad_restante
+  if (filters.cantidad_restante_min !== undefined && filters.cantidad_restante_max !== undefined) {
+    where.cantidad_restante = { [Op.between]: [filters.cantidad_restante_min, filters.cantidad_restante_max] };
+  } else if (filters.cantidad_restante_min !== undefined) {
+    where.cantidad_restante = { [Op.gte]: filters.cantidad_restante_min };
+  } else if (filters.cantidad_restante_max !== undefined) {
+    where.cantidad_restante = { [Op.lte]: filters.cantidad_restante_max };
+  }
+
   const servicioTiendaWhere = {};
   if (filters.id_tienda) servicioTiendaWhere.id_tienda = filters.id_tienda;
   if (filters.id_servicio) servicioTiendaWhere.id_servicio = filters.id_servicio;

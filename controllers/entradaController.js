@@ -252,6 +252,8 @@ const filterEntradas = async (req, res) => {
       codigo_lote,
       id_tienda,
       id_servicio,
+      cantidad_restante_min, // nuevo
+      cantidad_restante_max, // nuevo
     } = req.query;
 
     let limitNum = parseInt(limit, 10) || 10;
@@ -296,6 +298,27 @@ const filterEntradas = async (req, res) => {
       const parsed = parseInt(id_servicio, 10);
       if (isNaN(parsed) || parsed < 1) throwError("El ID de servicio debe ser un número entero positivo", 400);
       filters.id_servicio = parsed;
+    }
+
+    // Nuevos filtros de cantidad_restante
+    if (cantidad_restante_min !== undefined) {
+      const parsed = parseFloat(cantidad_restante_min);
+      if (isNaN(parsed) || parsed < 0) {
+        throwError("El parámetro 'cantidad_restante_min' debe ser un número mayor o igual a cero", 400);
+      }
+      filters.cantidad_restante_min = parsed;
+    }
+    if (cantidad_restante_max !== undefined) {
+      const parsed = parseFloat(cantidad_restante_max);
+      if (isNaN(parsed) || parsed < 0) {
+        throwError("El parámetro 'cantidad_restante_max' debe ser un número mayor o igual a cero", 400);
+      }
+      filters.cantidad_restante_max = parsed;
+    }
+    if (filters.cantidad_restante_min !== undefined && filters.cantidad_restante_max !== undefined) {
+      if (filters.cantidad_restante_min > filters.cantidad_restante_max) {
+        throwError("La cantidad restante mínima no puede ser mayor que la máxima", 400);
+      }
     }
 
     const offset = (pageNum - 1) * limitNum;
