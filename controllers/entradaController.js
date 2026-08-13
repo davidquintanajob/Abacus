@@ -60,6 +60,107 @@ const createEntrada = async (req, res) => {
   }
 };
 
+const createEntradasBulk = async (req, res) => {
+  try {
+    const { entradas } = req.body;
+
+    if (!Array.isArray(entradas) || entradas.length === 0) {
+      throwError("El campo 'entradas' debe ser un arreglo no vacío.", 400);
+    }
+
+    const entradasData = [];
+    const errors = [];
+
+    entradas.forEach((item, index) => {
+      if (!item || typeof item !== 'object') {
+        errors.push(`Entrada ${index + 1}: El objeto de entrada es inválido.`);
+        return;
+      }
+
+      const {
+        id_servicio_tienda,
+        cantidad_entrada,
+        costo_usd,
+        costo_cup,
+        fecha_vencimiento,
+        nombre_proveedor,
+        id_usuario,
+        fecha
+      } = item;
+
+      const localErrors = [];
+
+      // Validar campos requeridos (id_usuario es obligatorio aquí)
+      if (id_servicio_tienda === undefined || id_servicio_tienda === null) {
+        localErrors.push("El campo id_servicio_tienda es obligatorio.");
+      }
+      if (cantidad_entrada === undefined || cantidad_entrada === null) {
+        localErrors.push("La cantidad de entrada es obligatoria.");
+      }
+      if (costo_usd === undefined || costo_usd === null) {
+        localErrors.push("El costo en USD es obligatorio.");
+      }
+      if (costo_cup === undefined || costo_cup === null) {
+        localErrors.push("El costo en CUP es obligatorio.");
+      }
+      if (id_usuario === undefined || id_usuario === null) {
+        localErrors.push("El ID de usuario es obligatorio.");
+      }
+
+      // Validar tipos y valores
+      if (id_servicio_tienda !== undefined && (isNaN(id_servicio_tienda) || id_servicio_tienda <= 0)) {
+        localErrors.push("El ID de servicio-tienda debe ser un número entero positivo.");
+      }
+      if (cantidad_entrada !== undefined && (isNaN(cantidad_entrada) || cantidad_entrada <= 0)) {
+        localErrors.push("La cantidad de entrada debe ser un número mayor que cero.");
+      }
+      if (costo_usd !== undefined && (isNaN(costo_usd) || costo_usd < 0)) {
+        localErrors.push("El costo en USD no puede ser negativo.");
+      }
+      if (costo_cup !== undefined && (isNaN(costo_cup) || costo_cup < 0)) {
+        localErrors.push("El costo en CUP no puede ser negativo.");
+      }
+      if (id_usuario !== undefined && (isNaN(id_usuario) || id_usuario <= 0)) {
+        localErrors.push("El ID de usuario debe ser un número entero positivo.");
+      }
+      if (fecha !== undefined) {
+        const fechaObj = new Date(fecha);
+        if (isNaN(fechaObj.getTime())) {
+          localErrors.push("La fecha proporcionada no es válida.");
+        }
+      }
+
+      if (localErrors.length > 0) {
+        errors.push(`Entrada ${index + 1}: ${localErrors.join(' ')}`);
+        return;
+      }
+
+      entradasData.push({
+        id_servicio_tienda,
+        cantidad_entrada,
+        costo_usd,
+        costo_cup,
+        fecha_vencimiento: fecha_vencimiento || null,
+        nombre_proveedor: nombre_proveedor || null,
+        id_usuario: id_usuario, // siempre debe estar presente
+        fecha: fecha || null,
+      });
+    });
+
+    if (errors.length > 0) {
+      throwError("Datos inválidos en algunas entradas", 400, errors);
+    }
+
+    const newEntradas = await entradaService.createEntradasBulk(entradasData);
+    res.status(201).json({
+      message: "Entradas creadas exitosamente",
+      data: newEntradas,
+    });
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
 const getEntradaById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -149,8 +250,8 @@ const filterEntradas = async (req, res) => {
       fecha_hasta,
       nombre_servicio,
       codigo_lote,
-      id_tienda,      // nuevo
-      id_servicio,    // nuevo
+      id_tienda,
+      id_servicio,
     } = req.query;
 
     let limitNum = parseInt(limit, 10) || 10;
@@ -164,7 +265,6 @@ const filterEntradas = async (req, res) => {
 
     const filters = {};
 
-    // Filtros existentes
     if (id_servicio_tienda) {
       const parsed = parseInt(id_servicio_tienda, 10);
       if (isNaN(parsed) || parsed < 1) throwError("El ID de servicio-tienda debe ser un número entero positivo", 400);
@@ -187,8 +287,6 @@ const filterEntradas = async (req, res) => {
     }
     if (nombre_servicio) filters.nombre_servicio = nombre_servicio.trim();
     if (codigo_lote) filters.codigo_lote = codigo_lote.trim();
-
-    // Nuevos filtros
     if (id_tienda) {
       const parsed = parseInt(id_tienda, 10);
       if (isNaN(parsed) || parsed < 1) throwError("El ID de tienda debe ser un número entero positivo", 400);
@@ -220,6 +318,7 @@ const filterEntradas = async (req, res) => {
 
 module.exports = {
   createEntrada,
+  createEntradasBulk,
   getEntradaById,
   updateEntrada,
   deleteEntrada,

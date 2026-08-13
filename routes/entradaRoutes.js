@@ -82,6 +82,7 @@ const authenticate = require("../helpers/authenticate");
  *         description: Error interno del servidor
  */
 router.get("/entrada/filter", authenticate(), entradaController.filterEntradas);
+
 /**
  * @swagger
  * /entrada/{id}:
@@ -162,6 +163,64 @@ router.get("/entrada/:id", authenticate(), entradaController.getEntradaById);
  *         description: Error interno del servidor
  */
 router.post("/entrada", authenticate(), entradaController.createEntrada);
+
+/**
+ * @swagger
+ * /entrada/bulk:
+ *   post:
+ *     summary: Crear múltiples entradas en lote
+ *     tags: [Entradas]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - entradas
+ *             properties:
+ *               entradas:
+ *                 type: array
+ *                 description: Lista de entradas a crear
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - id_servicio_tienda
+ *                     - cantidad_entrada
+ *                     - costo_usd
+ *                     - costo_cup
+ *                   properties:
+ *                     id_servicio_tienda:
+ *                       type: integer
+ *                     cantidad_entrada:
+ *                       type: number
+ *                     costo_usd:
+ *                       type: number
+ *                     costo_cup:
+ *                       type: number
+ *                     fecha_vencimiento:
+ *                       type: string
+ *                       format: date
+ *                     nombre_proveedor:
+ *                       type: string
+ *                     id_usuario:
+ *                       type: integer
+ *                       description: Si no se envía, se toma del token (aplica a todas las entradas)
+ *                     fecha:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Si no se envía, se usa la fecha actual (aplica a todas)
+ *     responses:
+ *       201:
+ *         description: Entradas creadas exitosamente
+ *       400:
+ *         description: Datos inválidos
+ *       500:
+ *         description: Error interno del servidor
+ */
+router.post("/entrada/bulk", authenticate(), entradaController.createEntradasBulk);
 
 /**
  * @swagger

@@ -87,49 +87,104 @@ const validateUsuarioExists = async (id_usuario) => {
   }
 };
 
+// ===== FUNCIÓN AUXILIAR PARA CREAR UNA SOLA ENTRADA (usada por createEntrada y createEntradasBulk) =====
+const createSingleEntrada = async (entradaData, transaction) => {
+  const { id_servicio_tienda, cantidad_entrada, costo_usd, costo_cup, fecha_vencimiento, nombre_proveedor, id_usuario, fecha } = entradaData;
+
+  await validateUsuarioExists(id_usuario);
+
+  const { st, isVencible } = await validateServicioTiendaProducto(id_servicio_tienda);
+
+  if (isVencible && !fecha_vencimiento) {
+    throwError("El producto requiere fecha de vencimiento, este campo es obligatorio.", 400);
+  }
+
+  const sufijo = st.servicio.producto.sufijo;
+  const codigo_lote = await generateCodigoLote(sufijo);
+
+  const fechaRegistro = fecha ? new Date(fecha) : new Date();
+
+  const nuevaEntrada = await Entrada.create(
+    {
+      id_usuario,
+      id_servicio_tienda,
+      codigo_lote,
+      cantidad_entrada,
+      cantidad_restante: cantidad_entrada,
+      costo_usd,
+      costo_cup,
+      fecha: fechaRegistro,
+      fecha_vencimiento: fecha_vencimiento || null,
+      nombre_proveedor: nombre_proveedor || null,
+    },
+    { transaction }
+  );
+
+  await updateCantidadServicioTienda(id_servicio_tienda, cantidad_entrada, transaction);
+
+  return nuevaEntrada;
+};
+
 // ========== FUNCIONES PRINCIPALES ==========
 
 const createEntrada = async (entradaData) => {
-  const { id_servicio_tienda, cantidad_entrada, costo_usd, costo_cup, fecha_vencimiento, nombre_proveedor, id_usuario, fecha } = entradaData;
-
+  const { id_usuario } = entradaData;
   if (!id_usuario) throwError("El ID de usuario es requerido.", 400);
   await validateUsuarioExists(id_usuario);
 
   const transaction = await Entrada.sequelize.transaction();
 
   try {
-    const { st, isVencible } = await validateServicioTiendaProducto(id_servicio_tienda);
+    const nuevaEntrada = await createSingleEntrada(entradaData, transaction);
+    await transaction.commit();
+    return await getEntradaWithRelations(nuevaEntrada.id_entrada);
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
 
-    if (isVencible && !fecha_vencimiento) {
-      throwError("El producto requiere fecha de vencimiento, este campo es obligatorio.", 400);
+const createEntradasBulk = async (entradasData) => {
+  if (!Array.isArray(entradasData) || entradasData.length === 0) {
+    throwError("La lista de entradas no puede estar vacía.", 400);
+  }
+
+  // Validar que todos los usuarios existan
+  const userIds = entradasData.map(item => item.id_usuario);
+  for (const uid of userIds) {
+    if (!uid) {
+      throwError("Todas las entradas deben tener un ID de usuario válido.", 400);
     }
+    await validateUsuarioExists(uid);
+  }
 
-    const sufijo = st.servicio.producto.sufijo;
-    const codigo_lote = await generateCodigoLote(sufijo);
+  const transaction = await Entrada.sequelize.transaction();
 
-    const fechaRegistro = fecha ? new Date(fecha) : new Date();
-
-    const nuevaEntrada = await Entrada.create(
-      {
-        id_usuario,
-        id_servicio_tienda,
-        codigo_lote,
-        cantidad_entrada,
-        cantidad_restante: cantidad_entrada,
-        costo_usd,
-        costo_cup,
-        fecha: fechaRegistro,
-        fecha_vencimiento: fecha_vencimiento || null,
-        nombre_proveedor: nombre_proveedor || null,
-      },
-      { transaction }
-    );
-
-    await updateCantidadServicioTienda(id_servicio_tienda, cantidad_entrada, transaction);
-
+  try {
+    const createdEntradas = [];
+    for (const data of entradasData) {
+      const nuevaEntrada = await createSingleEntrada(data, transaction);
+      createdEntradas.push(nuevaEntrada);
+    }
     await transaction.commit();
 
-    return await getEntradaWithRelations(nuevaEntrada.id_entrada);
+    const ids = createdEntradas.map(e => e.id_entrada);
+    const entradasConRelaciones = await Entrada.findAll({
+      where: { id_entrada: { [Op.in]: ids } },
+      include: [
+        { model: Usuario, as: "usuario" },
+        {
+          model: ServicioTienda,
+          as: "servicioTienda",
+          include: [
+            { model: Tienda, as: "tienda" },
+            { model: Servicio, as: "servicio", include: [{ model: Producto, as: "producto" }] },
+          ],
+        },
+      ],
+      order: [["id_entrada", "ASC"]],
+    });
+    return entradasConRelaciones;
   } catch (error) {
     await transaction.rollback();
     throw error;
@@ -144,11 +199,9 @@ const updateEntrada = async (id, updateData) => {
   const transaction = await Entrada.sequelize.transaction();
 
   try {
-    // 1. Obtener la entrada actual
     const entrada = await Entrada.findByPk(id, { transaction });
     if (!entrada) throwError("Entrada no encontrada.", 404);
 
-    // 2. No se permite modificar codigo_lote ni cantidad_restante
     if (updateData.codigo_lote !== undefined) {
       throwError("No se puede modificar el código de lote.", 400);
     }
@@ -156,28 +209,24 @@ const updateEntrada = async (id, updateData) => {
       throwError("No se puede modificar la cantidad restante manualmente.", 400);
     }
 
-    // 3. Validar usuario si se envía
     if (updateData.id_usuario) {
       await validateUsuarioExists(updateData.id_usuario);
     }
 
-    // 4. Variables para manejar el cambio de servicio_tienda
     let currentServicioTiendaId = entrada.id_servicio_tienda;
     let newServicioTiendaId = currentServicioTiendaId;
     let isChangingServicioTienda = false;
 
     if (updateData.id_servicio_tienda !== undefined) {
       if (updateData.id_servicio_tienda === currentServicioTiendaId) {
-        // Si es el mismo, no hacemos nada
+        // mismo, no hacer nada
       } else {
         newServicioTiendaId = updateData.id_servicio_tienda;
         isChangingServicioTienda = true;
-        // Validar que el nuevo servicio_tienda exista y sea producto
         await validateServicioTiendaProducto(newServicioTiendaId);
       }
     }
 
-    // 5. Validar fecha de vencimiento según producto del servicio_tienda (nuevo o actual)
     let targetServicioTiendaId = isChangingServicioTienda ? newServicioTiendaId : currentServicioTiendaId;
     const { isVencible } = await validateServicioTiendaProducto(targetServicioTiendaId);
 
@@ -186,7 +235,6 @@ const updateEntrada = async (id, updateData) => {
       throwError("El producto requiere fecha de vencimiento, este campo es obligatorio.", 400);
     }
 
-    // 6. Preparar campos a actualizar
     const updateFields = {};
     let deltaCantidad = 0;
     let cantidadEntradaActual = parseFloat(entrada.cantidad_entrada);
@@ -238,26 +286,15 @@ const updateEntrada = async (id, updateData) => {
       throwError("No se proporcionaron campos válidos para actualizar.", 400);
     }
 
-    // 7. Aplicar cambios en orden:
-    // - Si cambia servicio_tienda:
-    //   a) Restar cantidad_entrada (la actual o la nueva si cambia) del antiguo
-    //   b) Sumar cantidad_entrada (la nueva) al nuevo
-    // - Si no cambia, solo ajustar la cantidad si cambia cantidad_entrada
-
-    // Determinar la cantidad a usar para las operaciones de inventario
     const cantidadAUsar = deltaCantidad !== 0 ? nuevaCantidadEntrada : cantidadEntradaActual;
 
     if (isChangingServicioTienda) {
-      // Restar del antiguo
       await updateCantidadServicioTienda(currentServicioTiendaId, -cantidadAUsar, transaction);
-      // Sumar al nuevo
       await updateCantidadServicioTienda(newServicioTiendaId, cantidadAUsar, transaction);
     } else if (deltaCantidad !== 0) {
-      // Solo ajustar la cantidad en el mismo servicio_tienda
       await updateCantidadServicioTienda(currentServicioTiendaId, deltaCantidad, transaction);
     }
 
-    // 8. Actualizar la entrada
     await entrada.update(updateFields, { transaction });
 
     await transaction.commit();
@@ -304,7 +341,6 @@ const filterEntradas = async (filters, limit, offset) => {
     }
   }
 
-  // Construir condiciones para ServicioTienda
   const servicioTiendaWhere = {};
   if (filters.id_tienda) servicioTiendaWhere.id_tienda = filters.id_tienda;
   if (filters.id_servicio) servicioTiendaWhere.id_servicio = filters.id_servicio;
@@ -325,13 +361,11 @@ const filterEntradas = async (filters, limit, offset) => {
     { model: Usuario, as: "usuario" },
   ];
 
-  // Si hay filtros sobre ServicioTienda, aplicarlos como INNER JOIN
   if (Object.keys(servicioTiendaWhere).length > 0) {
     include[0].required = true;
     include[0].where = servicioTiendaWhere;
   }
 
-  // Filtro por nombre de servicio (sobre el modelo Servicio anidado)
   if (filters.nombre_servicio) {
     include[0].include[0].where = {
       nombre: { [Op.iLike]: `%${filters.nombre_servicio}%` },
@@ -346,12 +380,13 @@ const filterEntradas = async (filters, limit, offset) => {
     offset,
     distinct: true,
   });
-  
+
   return { rows, count };
 };
 
 module.exports = {
   createEntrada,
+  createEntradasBulk,
   getEntradaById,
   updateEntrada,
   deleteEntrada,
