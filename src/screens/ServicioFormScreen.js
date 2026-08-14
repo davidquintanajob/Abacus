@@ -86,7 +86,6 @@ const ServicioFormContent = () => {
   // Estado para controlar si las secciones están expandidas o colapsadas
   // Por defecto, todas contraídas al entrar (tanto en modo add como edit)
   const [isCodesExpanded, setIsCodesExpanded] = useState(false);
-  const [isGeneralPricesExpanded, setIsGeneralPricesExpanded] = useState(false);
   const [isPricesExpanded, setIsPricesExpanded] = useState(false);
 
   // Auto-expand sections when they have elements
@@ -1043,26 +1042,10 @@ const ServicioFormContent = () => {
           </View>
           )}
 
-          {/* Precios Generales Section */}
+          {/* Precios Generales */}
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Precios Generales</Text>
-              <View style={styles.sectionActions}>
-                <TouchableOpacity
-                  style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
-                  onPress={() => setIsGeneralPricesExpanded(!isGeneralPricesExpanded)}
-                >
-                  <Ionicons 
-                    name={isGeneralPricesExpanded ? "chevron-up" : "chevron-down"} 
-                    size={responsive.responsiveWidth(18)} 
-                    color={isDarkMode ? colors.primary : '#1976D2'} 
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-            
-            {isGeneralPricesExpanded && (
-              <View style={styles.pricesGrid}>
+            <Text style={[styles.sectionTitle, { color: colors.onSurface, marginBottom: responsive.responsiveHeight(12) }]}>Precios Generales</Text>
+            <View style={styles.pricesGrid}>
                 <View style={styles.priceField}>
                   <Text style={[styles.label, { color: colors.outline }]}>Precio CUP</Text>
                   <TextInput
@@ -1133,8 +1116,7 @@ const ServicioFormContent = () => {
                     editable={!isReadOnly}
                   />
                 </View>
-              </View>
-            )}
+            </View>
           </View>
 
           {/* Tienda Servicios Section */}
