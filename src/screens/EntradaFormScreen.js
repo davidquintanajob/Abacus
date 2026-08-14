@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
-import { createEntrada, updateEntrada, getEntradaById, getEntradas } from '../services/entradaService';
+import { createEntrada, updateEntrada, getEntradaById, getEntradas, createEntradasBulk } from '../services/entradaService';
 import { getProductos, getProductoById, updateProducto } from '../services/productoService';
 import { getTiendas } from '../services/tiendaService';
 import { configService } from '../services/configService';
@@ -52,6 +52,15 @@ const EntradaFormContent = () => {
   const [costoInputTexts, setCostoInputTexts] = useState({});
   // Tracks raw text while the user is typing in precio fields
   const [precioInputTexts, setPrecioInputTexts] = useState({});
+  
+  // Estado para modo múltiple
+  const [isMultipleMode, setIsMultipleMode] = useState(false);
+  const [multipleEntradas, setMultipleEntradas] = useState([]);
+  const [multipleProductoSearchResults, setMultipleProductoSearchResults] = useState({});
+  const [multipleShowProductoDropdown, setMultipleShowProductoDropdown] = useState({});
+  const [multipleIsSearchingProductos, setMultipleIsSearchingProductos] = useState({});
+  const [multipleCostoInputTexts, setMultipleCostoInputTexts] = useState({});
+  const [multipleShowDatePicker, setMultipleShowDatePicker] = useState({});
   
   const [formData, setFormData] = useState({
     id_servicio_tienda: null,
@@ -294,6 +303,65 @@ const EntradaFormContent = () => {
   };
 
   const handleSave = async () => {
+    // Validaciones para modo múltiple
+    if (isMultipleMode) {
+      if (!formData.tienda) {
+        showToast({ type: 'warning', message: 'Debe seleccionar una tienda' });
+        return;
+      }
+      if (multipleEntradas.length === 0) {
+        showToast({ type: 'warning', message: 'Debe agregar al menos un producto' });
+        return;
+      }
+      
+      // Validar cada entrada
+      for (let i = 0; i < multipleEntradas.length; i++) {
+        const entrada = multipleEntradas[i];
+        if (!entrada.producto) {
+          showToast({ type: 'warning', message: `El producto ${i + 1} no está seleccionado` });
+          return;
+        }
+        if (!entrada.cantidad_entrada || parseFloat(entrada.cantidad_entrada) <= 0) {
+          showToast({ type: 'warning', message: `La cantidad del producto ${i + 1} debe ser mayor que 0` });
+          return;
+        }
+        if (entrada.costo_usd !== '' && parseFloat(entrada.costo_usd) < 0) {
+          showToast({ type: 'warning', message: `El costo USD del producto ${i + 1} debe ser mayor o igual a 0` });
+          return;
+        }
+        if (entrada.costo_cup !== '' && parseFloat(entrada.costo_cup) < 0) {
+          showToast({ type: 'warning', message: `El costo CUP del producto ${i + 1} debe ser mayor o igual a 0` });
+          return;
+        }
+        
+        // Validar relación producto-tienda
+        const productoTienda = entrada.producto?.tiendas_servicio?.find(
+          ts => ts.id_tienda === formData.tienda?.id_tienda
+        );
+        
+        if (!productoTienda) {
+          if (!entrada.precio_cup || entrada.precio_cup === '') {
+            showToast({ type: 'warning', message: `Debe ingresar el precio CUP del producto ${i + 1} para esta tienda` });
+            return;
+          }
+          if (!entrada.precio_usd || entrada.precio_usd === '') {
+            showToast({ type: 'warning', message: `Debe ingresar el precio USD del producto ${i + 1} para esta tienda` });
+            return;
+          }
+        }
+        
+        // Validar fecha de vencimiento
+        if (entrada.producto.producto?.isVencible && !entrada.fecha_vencimiento) {
+          showToast({ type: 'warning', message: `El producto ${i + 1} requiere fecha de vencimiento` });
+          return;
+        }
+      }
+      
+      executeSaveMultiple();
+      return;
+    }
+    
+    // Validaciones para modo individual
     if (!formData.producto) {
       showToast({ type: 'warning', message: 'Debe seleccionar un producto' });
       return;
@@ -472,6 +540,106 @@ const EntradaFormContent = () => {
     }
   };
 
+  const executeSaveMultiple = async () => {
+    const toFixed5 = (value) => {
+      if (value === null || value === undefined || value === '') return 0;
+      const num = typeof value === 'number' ? value : parseFloat(value);
+      return isNaN(num) ? 0 : parseFloat(num.toFixed(5));
+    };
+
+    try {
+      setIsSaving(true);
+
+      const entradasToCreate = [];
+
+      // Procesar cada entrada
+      for (const entrada of multipleEntradas) {
+        // Verificar si el producto existe en la tienda
+        const productoTienda = entrada.producto?.tiendas_servicio?.find(
+          ts => ts.id_tienda === formData.tienda?.id_tienda
+        );
+
+        let id_servicio_tienda = productoTienda?.id_servicio_tienda;
+
+        // Si no existe relación, crearla
+        if (!productoTienda) {
+          const productoActualizado = await getProductoById(entrada.producto.id_servicio);
+          const nuevoProductoTienda = {
+            id_tienda: formData.tienda.id_tienda,
+            precio_cup: toFixed5(entrada.precio_cup || 0),
+            precio_usd: toFixed5(entrada.precio_usd || 0),
+            costo_cup: toFixed5(entrada.costo_cup),
+            costo_usd: toFixed5(entrada.costo_usd),
+          };
+
+          const productoTiendaList = [
+            ...(productoActualizado.tiendas_servicio || []).map(ts => ({
+              id_tienda: ts.id_tienda,
+              precio_cup: ts.precio_cup,
+              precio_usd: ts.precio_usd,
+              costo_cup: ts.costo_cup,
+              costo_usd: ts.costo_usd,
+              cantidad_alerta: ts.cantidad_alerta,
+            })),
+            nuevoProductoTienda
+          ];
+          
+          await updateProducto(entrada.producto.id_servicio, {
+            productoTiendaList: productoTiendaList,
+          });
+
+          const productoActualizado2 = await getProductoById(entrada.producto.id_servicio);
+          const nuevoProductoTiendaCreado = productoActualizado2.tiendas_servicio?.find(
+            ts => ts.id_tienda === formData.tienda.id_tienda
+          );
+          id_servicio_tienda = nuevoProductoTiendaCreado?.id_servicio_tienda;
+
+          if (!id_servicio_tienda) {
+            throw new Error('Error al crear relación producto-tienda');
+          }
+        }
+
+        // Calcular costo promedio ponderado si está activado
+        let costo_cup = toFixed5(entrada.costo_cup);
+        let costo_usd = toFixed5(entrada.costo_usd);
+
+        if (config.applyWeightedAverageCost) {
+          const nuevosCostos = await calcularCostoPromedioPonderado(
+            entrada.producto,
+            formData.tienda,
+            entrada.cantidad_entrada,
+            costo_cup,
+            costo_usd
+          );
+          costo_cup = nuevosCostos.costo_cup;
+          costo_usd = nuevosCostos.costo_usd;
+        }
+
+        entradasToCreate.push({
+          id_servicio_tienda,
+          cantidad_entrada: parseFloat(entrada.cantidad_entrada),
+          costo_usd: toFixed5(costo_usd),
+          costo_cup: toFixed5(costo_cup),
+          fecha_vencimiento: entrada.fecha_vencimiento || null,
+          nombre_proveedor: formData.nombre_proveedor || null,
+          fecha: formData.fecha,
+          id_usuario: user.id_usuario,
+        });
+      }
+
+      // Crear todas las entradas en bulk
+      await createEntradasBulk(entradasToCreate);
+      showToast({ type: 'success', message: `${entradasToCreate.length} entradas creadas correctamente` });
+      
+      navigation.goBack();
+    } catch (err) {
+      console.error('[executeSaveMultiple] Error:', err);
+      showToast({ type: 'error', message: err.message || 'Error al crear entradas múltiples' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
     if (selectedDate) {
@@ -614,6 +782,34 @@ const EntradaFormContent = () => {
     }
   }, [formData.producto, formData.tienda, config.applyWeightedAverageCost]);
 
+  // Efecto para manejar el dropdown de búsqueda de productos en modo múltiple
+  useEffect(() => {
+    const timeouts = {};
+    
+    multipleEntradas.forEach(entrada => {
+      if (timeouts[entrada.id]) {
+        clearTimeout(timeouts[entrada.id]);
+      }
+      
+      timeouts[entrada.id] = setTimeout(() => {
+        const isMatchingSelectedProduct = entrada.producto && 
+          entrada.productoSearchText === entrada.producto.nombre;
+        
+        if (entrada.productoSearchText && entrada.productoSearchText.length >= 2 && !isMatchingSelectedProduct) {
+          searchProductosMultiple(entrada.id, entrada.productoSearchText);
+          setMultipleShowProductoDropdown(prev => ({ ...prev, [entrada.id]: true }));
+        } else {
+          setMultipleProductoSearchResults(prev => ({ ...prev, [entrada.id]: [] }));
+          setMultipleShowProductoDropdown(prev => ({ ...prev, [entrada.id]: false }));
+        }
+      }, 500);
+    });
+    
+    return () => {
+      Object.values(timeouts).forEach(timeout => clearTimeout(timeout));
+    };
+  }, [multipleEntradas.map(e => e.productoSearchText).join(','), multipleEntradas.map(e => e.producto?.nombre).join(',')]);
+
   const handleProductoSelect = (producto) => {
     let costoCup = '';
     let costoUsd = '';
@@ -640,6 +836,111 @@ const EntradaFormContent = () => {
     setProductoSearchText(producto.nombre);
     setShowProductoDropdown(false);
     setProductoSearchResults([]);
+  };
+
+  // Funciones para modo múltiple
+  const addNewEntrada = () => {
+    const newEntrada = {
+      id: Date.now(), // ID temporal
+      producto: null,
+      cantidad_entrada: '',
+      costo_usd: '',
+      costo_cup: '',
+      precio_usd: '',
+      precio_cup: '',
+      fecha_vencimiento: '',
+      productoSearchText: '',
+    };
+    setMultipleEntradas(prev => [...prev, newEntrada]);
+  };
+
+  const removeEntrada = (id) => {
+    setMultipleEntradas(prev => prev.filter(e => e.id !== id));
+  };
+
+  const updateMultipleEntrada = (id, field, value) => {
+    setMultipleEntradas(prev => prev.map(e => {
+      if (e.id === id) {
+        return { ...e, [field]: value };
+      }
+      return e;
+    }));
+  };
+
+  const handleProductoSelectMultiple = (id, producto) => {
+    let costoCup = '';
+    let costoUsd = '';
+    
+    if (formData.tienda && !config.applyWeightedAverageCost) {
+      const tiendaServicio = producto.tiendas_servicio?.find(
+        ts => ts.id_tienda === formData.tienda.id_tienda
+      );
+      costoCup = tiendaServicio?.costo_cup?.toString() || '';
+      costoUsd = tiendaServicio?.costo_usd?.toString() || '';
+    } else if (!config.applyWeightedAverageCost) {
+      const firstTiendaServicio = producto.tiendas_servicio?.[0];
+      costoCup = firstTiendaServicio?.costo_cup?.toString() || '';
+      costoUsd = firstTiendaServicio?.costo_usd?.toString() || '';
+    }
+    
+    updateMultipleEntrada(id, 'producto', producto);
+    updateMultipleEntrada(id, 'costo_cup', costoCup);
+    updateMultipleEntrada(id, 'costo_usd', costoUsd);
+    updateMultipleEntrada(id, 'productoSearchText', producto.nombre);
+    
+    // Cerrar dropdown para esta entrada específica
+    setMultipleShowProductoDropdown(prev => ({ ...prev, [id]: false }));
+    setMultipleProductoSearchResults(prev => ({ ...prev, [id]: [] }));
+  };
+
+  const searchProductosMultiple = async (id, searchTerm) => {
+    try {
+      if (isOfflineMode || !searchTerm || searchTerm.length < 2) {
+        setMultipleProductoSearchResults(prev => ({ ...prev, [id]: [] }));
+        return;
+      }
+      setMultipleIsSearchingProductos(prev => ({ ...prev, [id]: true }));
+      const data = await getProductos({ nombre: searchTerm, skipCantidadMin: true, skipEsvendible: true }, 1, 20);
+      setMultipleProductoSearchResults(prev => ({ ...prev, [id]: data.data || [] }));
+    } catch (err) {
+      setMultipleProductoSearchResults(prev => ({ ...prev, [id]: [] }));
+    } finally {
+      setMultipleIsSearchingProductos(prev => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const handleCostoChangeMultiple = (id, field, value) => {
+    const entrada = multipleEntradas.find(e => e.id === id);
+    if (!entrada) return;
+    
+    let updatedCostoCup = entrada.costo_cup;
+    let updatedCostoUsd = entrada.costo_usd;
+    
+    if (exchangeRate) {
+      if (field === 'costo_cup' && value !== '') {
+        const cupValue = parseFloat(value) || 0;
+        updatedCostoUsd = parseFloat((cupValue / exchangeRate).toFixed(5));
+      }
+      
+      if (field === 'costo_usd' && value !== '') {
+        const usdValue = parseFloat(value) || 0;
+        updatedCostoCup = parseFloat((usdValue * exchangeRate).toFixed(5));
+      }
+    }
+    
+    updateMultipleEntrada(id, 'costo_cup', updatedCostoCup);
+    updateMultipleEntrada(id, 'costo_usd', updatedCostoUsd);
+  };
+
+  const handleDateChangeMultiple = (id, event, selectedDate) => {
+    setMultipleShowDatePicker(prev => ({ ...prev, [id]: false }));
+    if (selectedDate) {
+      const year = selectedDate.getFullYear();
+      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getDate()).padStart(2, '0');
+      const formattedDate = `${year}-${month}-${day}`;
+      updateMultipleEntrada(id, 'fecha_vencimiento', formattedDate);
+    }
   };
 
   const filteredTiendas = tiendas.filter(tienda =>
@@ -731,6 +1032,65 @@ const EntradaFormContent = () => {
     };
   };
 
+  const getMultipleFinancialInfo = () => {
+    if (multipleEntradas.length === 0) {
+      return null;
+    }
+
+    let costoTotalCup = 0;
+    let costoTotalUsd = 0;
+    let precioTotalCup = 0;
+    let precioTotalUsd = 0;
+    let cantidadTotal = 0;
+
+    multipleEntradas.forEach(entrada => {
+      const cantidad = parseFloat(entrada.cantidad_entrada) || 0;
+      const costoCup = parseFloat(entrada.costo_cup) || 0;
+      const costoUsd = parseFloat(entrada.costo_usd) || 0;
+
+      // Get prices from producto-tienda relationship
+      let precioCup = 0;
+      let precioUsd = 0;
+
+      if (entrada.producto && formData.tienda) {
+        const servicioTienda = entrada.producto.tiendas_servicio?.find(
+          ts => ts.id_tienda === formData.tienda.id_tienda
+        );
+        precioCup = parseFloat(servicioTienda?.precio_cup) || 0;
+        precioUsd = parseFloat(servicioTienda?.precio_usd) || 0;
+      }
+
+      costoTotalCup += costoCup * cantidad;
+      costoTotalUsd += costoUsd * cantidad;
+      precioTotalCup += precioCup * cantidad;
+      precioTotalUsd += precioUsd * cantidad;
+      cantidadTotal += cantidad;
+    });
+
+    // Calculate average prices
+    const precioPromedioCup = cantidadTotal > 0 ? precioTotalCup / cantidadTotal : 0;
+    const precioPromedioUsd = cantidadTotal > 0 ? precioTotalUsd / cantidadTotal : 0;
+
+    // Calculate total expected profit (using average prices)
+    const gananciaTotalCup = precioTotalCup - costoTotalCup;
+    const gananciaTotalUsd = precioTotalUsd - costoTotalUsd;
+
+    // Calculate average profit percentage
+    const porcentajeGananciaCup = precioTotalCup > 0 ? (gananciaTotalCup / precioTotalCup) * 100 : 0;
+    const porcentajeGananciaUsd = precioTotalUsd > 0 ? (gananciaTotalUsd / precioTotalUsd) * 100 : 0;
+
+    return {
+      costoTotalCup: !isNaN(costoTotalCup) ? costoTotalCup : 0,
+      costoTotalUsd: !isNaN(costoTotalUsd) ? costoTotalUsd : 0,
+      precioCup: !isNaN(precioPromedioCup) ? precioPromedioCup : 0,
+      precioUsd: !isNaN(precioPromedioUsd) ? precioPromedioUsd : 0,
+      gananciaCup: !isNaN(gananciaTotalCup) ? gananciaTotalCup : 0,
+      gananciaUsd: !isNaN(gananciaTotalUsd) ? gananciaTotalUsd : 0,
+      porcentajeGananciaCup: !isNaN(porcentajeGananciaCup) ? porcentajeGananciaCup : 0,
+      porcentajeGananciaUsd: !isNaN(porcentajeGananciaUsd) ? porcentajeGananciaUsd : 0
+    };
+  };
+
 
   const styles = createStyles(responsive);
 
@@ -776,289 +1136,433 @@ const EntradaFormContent = () => {
             </View>
           ) : (
             <>
-              {/* Producto Selection */}
-              <View style={styles.formGroup}>
-                <Text style={[styles.label, { color: colors.outline }]}>Producto *</Text>
-                <View style={styles.relativeContainer}>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    placeholderTextColor={colors.outline}
-                    placeholder="Buscar producto..."
-                    value={productoSearchText}
-                    onChangeText={setProductoSearchText}
-                    editable={!isReadOnly}
-                    onBlur={() => setShowProductoDropdown(false)}
-                  />
-                  {showProductoDropdown && !isReadOnly && (
-                    <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                      {isSearchingProductos ? (
-                        <View style={styles.dropdownItem}>
-                          <ActivityIndicator size="small" color={colors.primary} />
-                        </View>
-                      ) : productoSearchResults.length > 0 ? (
-                        productoSearchResults.map((producto, index) => (
-                          <TouchableOpacity
-                            key={producto.id_servicio}
-                            style={[styles.dropdownItem, index === productoSearchResults.length - 1 && styles.dropdownItemLast]}
-                            onPress={() => handleProductoSelect(producto)}
-                          >
-                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{producto.nombre}</Text>
-                          </TouchableOpacity>
-                        ))
-                      ) : (
-                        <View style={styles.dropdownItem}>
-                          <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron productos</Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                </View>
-              </View>
-
-              {/* Tienda Selection and Cantidad Entrante */}
-              <View style={styles.formRow}>
-                <View style={[styles.formColumn60, styles.formGroup]}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Tienda *</Text>
-                  <TouchableOpacity
-                    style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-                    onPress={() => !isReadOnly && setShowTiendaDropdown(!showTiendaDropdown)}
-                    disabled={isReadOnly}
-                  >
-                    <Text style={[styles.dropdownText, { color: formData.tienda ? colors.onSurface : colors.outline }]}>
-                      {formData.tienda?.nombre || 'Seleccionar...'}
-                    </Text>
-                    {!isReadOnly && (
-                      <Ionicons 
-                        name={showTiendaDropdown ? "chevron-up" : "chevron-down"} 
-                        size={responsive.responsiveWidth(20)} 
-                        color={colors.outline} 
-                      />
-                    )}
-                  </TouchableOpacity>
-                  
-                  {showTiendaDropdown && !isReadOnly && (
-                    <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                      <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                        <Ionicons 
-                          name="search-outline" 
-                          size={responsive.responsiveWidth(18)} 
-                          color={colors.outline} 
-                          style={styles.searchIcon}
-                        />
-                        <TextInput
-                          style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
-                          placeholderTextColor={colors.outline}
-                          placeholder="Buscar tienda..."
-                          value={tiendaSearchText}
-                          onChangeText={setTiendaSearchText}
-                        />
-                      </View>
-                      {filteredTiendas.length > 0 ? (
-                        filteredTiendas.map((tienda, index) => (
-                          <TouchableOpacity
-                            key={tienda.id_tienda}
-                            style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
-                            onPress={() => handleTiendaSelect(tienda)}
-                          >
-                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
-                          </TouchableOpacity>
-                        ))
-                      ) : (
-                        <View style={styles.dropdownItem}>
-                          <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                </View>
-
-                <View style={[styles.formColumn40, styles.formGroup]}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Cant.Entrante *</Text>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    placeholderTextColor={colors.outline}
-                    placeholder="Cantidad"
-                    value={formData.cantidad_entrada}
-                    onChangeText={(text) => setFormData(prev => ({ ...prev, cantidad_entrada: text.replace(/-/g, '') }))}
-                    keyboardType="decimal-pad"
-                    editable={!isReadOnly}
-                  />
-                  {(isViewMode || isEditMode) && getCantidadStatus() && (
-                    <View style={styles.cantidadInfoRow}>
-                      <Text style={[styles.cantidadInfoLabel, { color: colors.outline }]}>
-                        Cant. Actual:
-                      </Text>
-                      <View style={[styles.cantidadOval, { backgroundColor: getCantidadStatus().bgColor, borderColor: getCantidadStatus().borderColor }]}>
-                        <Text style={[styles.cantidadOvalText, { color: getCantidadStatus().color }]}>
-                          {entrada?.cantidad_restante || 0}
-                        </Text>
-                      </View>
-                    </View>
-                  )}
-                </View>
-              </View>
-
-              {/* Costos */}
-              {canManageEntradas && (
-                <View style={styles.formRow}>
-                  <View style={[styles.formColumn, styles.formGroup]}>
-                    <Text style={[styles.label, { color: colors.outline }]}>Costo CUP *</Text>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                      placeholderTextColor={colors.outline}
-                      placeholder="Costo CUP"
-                      value={
-                        costoInputTexts.costo_cup !== undefined
-                          ? costoInputTexts.costo_cup
-                          : (formData.costo_cup !== null && formData.costo_cup !== '' ? parseFloat(formData.costo_cup).toFixed(2) : '')
-                      }
-                      onFocus={() => setCostoInputTexts(prev => ({
-                        ...prev,
-                        costo_cup: formData.costo_cup !== null && formData.costo_cup !== '' ? String(parseFloat(formData.costo_cup)) : ''
-                      }))}
-                      onChangeText={(text) => {
-                        setCostoInputTexts(prev => ({ ...prev, costo_cup: text }));
-                        handleCostoChange('costo_cup', text);
-                      }}
-                      onBlur={() => {
-                        setCostoInputTexts(prev => {
-                          const updated = { ...prev };
-                          delete updated.costo_cup;
-                          return updated;
-                        });
-                      }}
-                      keyboardType="decimal-pad"
-                      editable={!isReadOnly}
-                    />
-                  </View>
-
-                  <View style={[styles.formColumn, styles.formGroup]}>
-                    <Text style={[styles.label, { color: colors.outline }]}>Costo USD *</Text>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                      placeholderTextColor={colors.outline}
-                      placeholder="Costo USD"
-                      value={
-                        costoInputTexts.costo_usd !== undefined
-                          ? costoInputTexts.costo_usd
-                          : (formData.costo_usd !== null && formData.costo_usd !== '' ? parseFloat(formData.costo_usd).toFixed(2) : '')
-                      }
-                      onFocus={() => setCostoInputTexts(prev => ({
-                        ...prev,
-                        costo_usd: formData.costo_usd !== null && formData.costo_usd !== '' ? String(parseFloat(formData.costo_usd)) : ''
-                      }))}
-                      onChangeText={(text) => {
-                        setCostoInputTexts(prev => ({ ...prev, costo_usd: text }));
-                        handleCostoChange('costo_usd', text);
-                      }}
-                      onBlur={() => {
-                        setCostoInputTexts(prev => {
-                          const updated = { ...prev };
-                          delete updated.costo_usd;
-                          return updated;
-                        });
-                      }}
-                      keyboardType="decimal-pad"
-                      editable={!isReadOnly}
-                    />
-                  </View>
-                </View>
-              )}
-
-              {/* Precios (solo cuando no existe relación producto-tienda en add mode) */}
-              {isAddMode && formData.producto && formData.tienda && !formData.producto.tiendas_servicio?.find(
-                ts => ts.id_tienda === formData.tienda.id_tienda
-              ) && (
-                <View style={styles.formRow}>
-                  <View style={[styles.formColumn, styles.formGroup]}>
-                    <Text style={[styles.label, { color: colors.outline }]}>Precio CUP *</Text>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                      placeholderTextColor={colors.outline}
-                      placeholder="Precio CUP"
-                      value={
-                        precioInputTexts.precio_cup !== undefined
-                          ? precioInputTexts.precio_cup
-                          : (formData.precio_cup !== null && formData.precio_cup !== '' ? parseFloat(formData.precio_cup).toFixed(2) : '')
-                      }
-                      onFocus={() => setPrecioInputTexts(prev => ({
-                        ...prev,
-                        precio_cup: formData.precio_cup !== null && formData.precio_cup !== '' ? String(parseFloat(formData.precio_cup)) : ''
-                      }))}
-                      onChangeText={(text) => {
-                        setPrecioInputTexts(prev => ({ ...prev, precio_cup: text }));
-                        handlePrecioChange('precio_cup', text);
-                      }}
-                      onBlur={() => {
-                        setPrecioInputTexts(prev => {
-                          const updated = { ...prev };
-                          delete updated.precio_cup;
-                          return updated;
-                        });
-                      }}
-                      keyboardType="decimal-pad"
-                      editable={!isReadOnly}
-                    />
-                  </View>
-
-                  <View style={[styles.formColumn, styles.formGroup]}>
-                    <Text style={[styles.label, { color: colors.outline }]}>Precio USD *</Text>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                      placeholderTextColor={colors.outline}
-                      placeholder="Precio USD"
-                      value={
-                        precioInputTexts.precio_usd !== undefined
-                          ? precioInputTexts.precio_usd
-                          : (formData.precio_usd !== null && formData.precio_usd !== '' ? parseFloat(formData.precio_usd).toFixed(2) : '')
-                      }
-                      onFocus={() => setPrecioInputTexts(prev => ({
-                        ...prev,
-                        precio_usd: formData.precio_usd !== null && formData.precio_usd !== '' ? String(parseFloat(formData.precio_usd)) : ''
-                      }))}
-                      onChangeText={(text) => {
-                        setPrecioInputTexts(prev => ({ ...prev, precio_usd: text }));
-                        handlePrecioChange('precio_usd', text);
-                      }}
-                      onBlur={() => {
-                        setPrecioInputTexts(prev => {
-                          const updated = { ...prev };
-                          delete updated.precio_usd;
-                          return updated;
-                        });
-                      }}
-                      keyboardType="decimal-pad"
-                      editable={!isReadOnly}
-                    />
-                  </View>
-                </View>
-              )}
-
-              {/* Fecha de Vencimiento and Fecha de Entrada */}
-              {formData.producto?.producto?.isVencible ? (
-                <View style={styles.formRow}>
-                  <View style={[styles.formColumn, styles.formGroup]}>
-                    <Text style={[styles.label, { color: colors.outline }]}>Fecha Vencimiento *</Text>
+              {/* Interruptor de modo de entrada (solo visible en add mode) */}
+              {isAddMode && !isReadOnly && (
+                <View style={styles.modeSwitchContainer}>
+                  <Text style={[styles.modeSwitchTitle, { color: colors.onSurface }]}>Entradas</Text>
+                  <View style={[styles.modeSwitch, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
                     <TouchableOpacity
-                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                      onPress={() => !isReadOnly && setShowDatePicker(true)}
-                      disabled={isReadOnly}
+                      style={[styles.modeSwitchButton, !isMultipleMode && styles.modeSwitchButtonActive, !isMultipleMode && { backgroundColor: colors.primary }]}
+                      onPress={() => {
+                        if (isMultipleMode) {
+                          setIsMultipleMode(false);
+                          setMultipleEntradas([]);
+                        }
+                      }}
                     >
-                      <Text style={[styles.inputText, { color: formData.fecha_vencimiento ? colors.onSurface : colors.outline }]}>
-                        {formData.fecha_vencimiento || 'Seleccionar...'}
+                      <Text style={[styles.modeSwitchButtonText, !isMultipleMode && { color: '#fff' }, { color: !isMultipleMode ? '#fff' : colors.outline }]}>
+                        Simples
                       </Text>
                     </TouchableOpacity>
-                    {showDatePicker && (
-                      <DateTimePicker
-                        value={formData.fecha_vencimiento ? new Date(formData.fecha_vencimiento) : new Date()}
-                        mode="date"
-                        display="default"
-                        onChange={handleDateChange}
+                    <TouchableOpacity
+                      style={[styles.modeSwitchButton, isMultipleMode && styles.modeSwitchButtonActive, isMultipleMode && { backgroundColor: colors.primary }]}
+                      onPress={() => {
+                        if (!isMultipleMode) {
+                          setIsMultipleMode(true);
+                          addNewEntrada();
+                        }
+                      }}
+                    >
+                      <Text style={[styles.modeSwitchButtonText, isMultipleMode && { color: '#fff' }, { color: isMultipleMode ? '#fff' : colors.outline }]}>
+                        Múltiples
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {/* Formulario individual (solo visible cuando NO está en modo múltiple) */}
+              {!isMultipleMode && (
+                <>
+                  {/* Producto Selection */}
+                  <View style={styles.formGroup}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Producto *</Text>
+                    <View style={styles.relativeContainer}>
+                      <TextInput
+                        style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                        placeholderTextColor={colors.outline}
+                        placeholder="Buscar producto..."
+                        value={productoSearchText}
+                        onChangeText={setProductoSearchText}
+                        editable={!isReadOnly}
+                        onBlur={() => setShowProductoDropdown(false)}
                       />
+                      {showProductoDropdown && !isReadOnly && (
+                        <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                          {isSearchingProductos ? (
+                            <View style={styles.dropdownItem}>
+                              <ActivityIndicator size="small" color={colors.primary} />
+                            </View>
+                          ) : productoSearchResults.length > 0 ? (
+                            productoSearchResults.map((producto, index) => (
+                              <TouchableOpacity
+                                key={producto.id_servicio}
+                                style={[styles.dropdownItem, index === productoSearchResults.length - 1 && styles.dropdownItemLast]}
+                                onPress={() => handleProductoSelect(producto)}
+                              >
+                                <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{producto.nombre}</Text>
+                              </TouchableOpacity>
+                            ))
+                          ) : (
+                            <View style={styles.dropdownItem}>
+                              <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron productos</Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Tienda Selection and Cantidad Entrante */}
+                  <View style={styles.formRow}>
+                    <View style={[styles.formColumn60, styles.formGroup]}>
+                      <Text style={[styles.label, { color: colors.outline }]}>Tienda *</Text>
+                      <TouchableOpacity
+                        style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                        onPress={() => !isReadOnly && setShowTiendaDropdown(!showTiendaDropdown)}
+                        disabled={isReadOnly}
+                      >
+                        <Text style={[styles.dropdownText, { color: formData.tienda ? colors.onSurface : colors.outline }]}>
+                          {formData.tienda?.nombre || 'Seleccionar...'}
+                        </Text>
+                        {!isReadOnly && (
+                          <Ionicons 
+                            name={showTiendaDropdown ? "chevron-up" : "chevron-down"} 
+                            size={responsive.responsiveWidth(20)} 
+                            color={colors.outline} 
+                          />
+                        )}
+                      </TouchableOpacity>
+                      
+                      {showTiendaDropdown && !isReadOnly && (
+                        <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                          <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                            <Ionicons 
+                              name="search-outline" 
+                              size={responsive.responsiveWidth(18)} 
+                              color={colors.outline} 
+                              style={styles.searchIcon}
+                            />
+                            <TextInput
+                              style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
+                              placeholderTextColor={colors.outline}
+                              placeholder="Buscar tienda..."
+                              value={tiendaSearchText}
+                              onChangeText={setTiendaSearchText}
+                            />
+                          </View>
+                          {filteredTiendas.length > 0 ? (
+                            filteredTiendas.map((tienda, index) => (
+                              <TouchableOpacity
+                                key={tienda.id_tienda}
+                                style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
+                                onPress={() => handleTiendaSelect(tienda)}
+                              >
+                                <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
+                              </TouchableOpacity>
+                            ))
+                          ) : (
+                            <View style={styles.dropdownItem}>
+                              <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={[styles.formColumn40, styles.formGroup]}>
+                      <Text style={[styles.label, { color: colors.outline }]}>Cant.Entrante *</Text>
+                      <TextInput
+                        style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                        placeholderTextColor={colors.outline}
+                        placeholder="Cantidad"
+                        value={formData.cantidad_entrada}
+                        onChangeText={(text) => setFormData(prev => ({ ...prev, cantidad_entrada: text.replace(/-/g, '') }))}
+                        keyboardType="decimal-pad"
+                        editable={!isReadOnly}
+                      />
+                      {(isViewMode || isEditMode) && getCantidadStatus() && (
+                        <View style={styles.cantidadInfoRow}>
+                          <Text style={[styles.cantidadInfoLabel, { color: colors.outline }]}>
+                            Cant. Actual:
+                          </Text>
+                          <View style={[styles.cantidadOval, { backgroundColor: getCantidadStatus().bgColor, borderColor: getCantidadStatus().borderColor }]}>
+                            <Text style={[styles.cantidadOvalText, { color: getCantidadStatus().color }]}>
+                              {entrada?.cantidad_restante || 0}
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Costos */}
+                  {canManageEntradas && (
+                    <View style={styles.formRow}>
+                      <View style={[styles.formColumn, styles.formGroup]}>
+                        <Text style={[styles.label, { color: colors.outline }]}>Costo CUP *</Text>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                          placeholderTextColor={colors.outline}
+                          placeholder="Costo CUP"
+                          value={
+                            costoInputTexts.costo_cup !== undefined
+                              ? costoInputTexts.costo_cup
+                              : (formData.costo_cup !== null && formData.costo_cup !== '' ? parseFloat(formData.costo_cup).toFixed(2) : '')
+                          }
+                          onFocus={() => setCostoInputTexts(prev => ({
+                            ...prev,
+                            costo_cup: formData.costo_cup !== null && formData.costo_cup !== '' ? String(parseFloat(formData.costo_cup)) : ''
+                          }))}
+                          onChangeText={(text) => {
+                            setCostoInputTexts(prev => ({ ...prev, costo_cup: text }));
+                            handleCostoChange('costo_cup', text);
+                          }}
+                          onBlur={() => {
+                            setCostoInputTexts(prev => {
+                              const updated = { ...prev };
+                              delete updated.costo_cup;
+                              return updated;
+                            });
+                          }}
+                          keyboardType="decimal-pad"
+                          editable={!isReadOnly}
+                        />
+                      </View>
+
+                      <View style={[styles.formColumn, styles.formGroup]}>
+                        <Text style={[styles.label, { color: colors.outline }]}>Costo USD *</Text>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                          placeholderTextColor={colors.outline}
+                          placeholder="Costo USD"
+                          value={
+                            costoInputTexts.costo_usd !== undefined
+                              ? costoInputTexts.costo_usd
+                              : (formData.costo_usd !== null && formData.costo_usd !== '' ? parseFloat(formData.costo_usd).toFixed(2) : '')
+                          }
+                          onFocus={() => setCostoInputTexts(prev => ({
+                            ...prev,
+                            costo_usd: formData.costo_usd !== null && formData.costo_usd !== '' ? String(parseFloat(formData.costo_usd)) : ''
+                          }))}
+                          onChangeText={(text) => {
+                            setCostoInputTexts(prev => ({ ...prev, costo_usd: text }));
+                            handleCostoChange('costo_usd', text);
+                          }}
+                          onBlur={() => {
+                            setCostoInputTexts(prev => {
+                              const updated = { ...prev };
+                              delete updated.costo_usd;
+                              return updated;
+                            });
+                          }}
+                          keyboardType="decimal-pad"
+                          editable={!isReadOnly}
+                        />
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Precios (solo cuando no existe relación producto-tienda en add mode) */}
+                  {isAddMode && formData.producto && formData.tienda && !formData.producto.tiendas_servicio?.find(
+                    ts => ts.id_tienda === formData.tienda.id_tienda
+                  ) && (
+                    <View style={styles.formRow}>
+                      <View style={[styles.formColumn, styles.formGroup]}>
+                        <Text style={[styles.label, { color: colors.outline }]}>Precio CUP *</Text>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                          placeholderTextColor={colors.outline}
+                          placeholder="Precio CUP"
+                          value={
+                            precioInputTexts.precio_cup !== undefined
+                              ? precioInputTexts.precio_cup
+                              : (formData.precio_cup !== null && formData.precio_cup !== '' ? parseFloat(formData.precio_cup).toFixed(2) : '')
+                          }
+                          onFocus={() => setPrecioInputTexts(prev => ({
+                            ...prev,
+                            precio_cup: formData.precio_cup !== null && formData.precio_cup !== '' ? String(parseFloat(formData.precio_cup)) : ''
+                          }))}
+                          onChangeText={(text) => {
+                            setPrecioInputTexts(prev => ({ ...prev, precio_cup: text }));
+                            handlePrecioChange('precio_cup', text);
+                          }}
+                          onBlur={() => {
+                            setPrecioInputTexts(prev => {
+                              const updated = { ...prev };
+                              delete updated.precio_cup;
+                              return updated;
+                            });
+                          }}
+                          keyboardType="decimal-pad"
+                          editable={!isReadOnly}
+                        />
+                      </View>
+
+                      <View style={[styles.formColumn, styles.formGroup]}>
+                        <Text style={[styles.label, { color: colors.outline }]}>Precio USD *</Text>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                          placeholderTextColor={colors.outline}
+                          placeholder="Precio USD"
+                          value={
+                            precioInputTexts.precio_usd !== undefined
+                              ? precioInputTexts.precio_usd
+                              : (formData.precio_usd !== null && formData.precio_usd !== '' ? parseFloat(formData.precio_usd).toFixed(2) : '')
+                          }
+                          onFocus={() => setPrecioInputTexts(prev => ({
+                            ...prev,
+                            precio_usd: formData.precio_usd !== null && formData.precio_usd !== '' ? String(parseFloat(formData.precio_usd)) : ''
+                          }))}
+                          onChangeText={(text) => {
+                            setPrecioInputTexts(prev => ({ ...prev, precio_usd: text }));
+                            handlePrecioChange('precio_usd', text);
+                          }}
+                          onBlur={() => {
+                            setPrecioInputTexts(prev => {
+                              const updated = { ...prev };
+                              delete updated.precio_usd;
+                              return updated;
+                            });
+                          }}
+                          keyboardType="decimal-pad"
+                          editable={!isReadOnly}
+                        />
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Fecha de Vencimiento and Fecha de Entrada */}
+                  {formData.producto?.producto?.isVencible ? (
+                    <View style={styles.formRow}>
+                      <View style={[styles.formColumn, styles.formGroup]}>
+                        <Text style={[styles.label, { color: colors.outline }]}>Fecha Vencimiento *</Text>
+                        <TouchableOpacity
+                          style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                          onPress={() => !isReadOnly && setShowDatePicker(true)}
+                          disabled={isReadOnly}
+                        >
+                          <Text style={[styles.inputText, { color: formData.fecha_vencimiento ? colors.onSurface : colors.outline }]}>
+                            {formData.fecha_vencimiento || 'Seleccionar...'}
+                          </Text>
+                        </TouchableOpacity>
+                        {showDatePicker && (
+                          <DateTimePicker
+                            value={formData.fecha_vencimiento ? new Date(formData.fecha_vencimiento) : new Date()}
+                            mode="date"
+                            display="default"
+                            onChange={handleDateChange}
+                          />
+                        )}
+                      </View>
+
+                      <View style={[styles.formColumn, styles.formGroup]}>
+                        <Text style={[styles.label, { color: colors.outline }]}>Fecha de Entrada</Text>
+                        <TouchableOpacity
+                          style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                          onPress={() => !isReadOnly && setShowFechaEntradaPicker(true)}
+                          disabled={isReadOnly}
+                        >
+                          <Text style={[styles.inputText, { color: formData.fecha ? colors.onSurface : colors.outline }]}>
+                            {formData.fecha || 'Seleccionar...'}
+                          </Text>
+                        </TouchableOpacity>
+                        {showFechaEntradaPicker && (
+                          <DateTimePicker
+                            value={formData.fecha ? new Date(formData.fecha) : new Date()}
+                            mode="date"
+                            display="default"
+                            onChange={handleFechaEntradaChange}
+                          />
+                        )}
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.formGroup}>
+                      <Text style={[styles.label, { color: colors.outline }]}>Fecha de Entrada</Text>
+                      <TouchableOpacity
+                        style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                        onPress={() => !isReadOnly && setShowFechaEntradaPicker(true)}
+                        disabled={isReadOnly}
+                      >
+                        <Text style={[styles.inputText, { color: formData.fecha ? colors.onSurface : colors.outline }]}>
+                          {formData.fecha || 'Seleccionar...'}
+                        </Text>
+                      </TouchableOpacity>
+                      {showFechaEntradaPicker && (
+                        <DateTimePicker
+                          value={formData.fecha ? new Date(formData.fecha) : new Date()}
+                          mode="date"
+                          display="default"
+                          onChange={handleFechaEntradaChange}
+                        />
+                      )}
+                    </View>
+                  )}
+                </>
+              )}
+
+              {/* Campos comunes (tienda, fecha, proveedor) - siempre visibles */}
+              {isMultipleMode && (
+                <>
+                  {/* Tienda Selection (común para todas las entradas) */}
+                  <View style={styles.formGroup}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Tienda *</Text>
+                    <TouchableOpacity
+                      style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                      onPress={() => !isReadOnly && setShowTiendaDropdown(!showTiendaDropdown)}
+                      disabled={isReadOnly}
+                    >
+                      <Text style={[styles.dropdownText, { color: formData.tienda ? colors.onSurface : colors.outline }]}>
+                        {formData.tienda?.nombre || 'Seleccionar...'}
+                      </Text>
+                      {!isReadOnly && (
+                        <Ionicons 
+                          name={showTiendaDropdown ? "chevron-up" : "chevron-down"} 
+                          size={responsive.responsiveWidth(20)} 
+                          color={colors.outline} 
+                        />
+                      )}
+                    </TouchableOpacity>
+                    
+                    {showTiendaDropdown && !isReadOnly && (
+                      <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                        <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                          <Ionicons 
+                            name="search-outline" 
+                            size={responsive.responsiveWidth(18)} 
+                            color={colors.outline} 
+                            style={styles.searchIcon}
+                          />
+                          <TextInput
+                            style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
+                            placeholderTextColor={colors.outline}
+                            placeholder="Buscar tienda..."
+                            value={tiendaSearchText}
+                            onChangeText={setTiendaSearchText}
+                          />
+                        </View>
+                        {filteredTiendas.length > 0 ? (
+                          filteredTiendas.map((tienda, index) => (
+                            <TouchableOpacity
+                              key={tienda.id_tienda}
+                              style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
+                              onPress={() => handleTiendaSelect(tienda)}
+                            >
+                              <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
+                            </TouchableOpacity>
+                          ))
+                        ) : (
+                          <View style={styles.dropdownItem}>
+                            <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
+                          </View>
+                        )}
+                      </View>
                     )}
                   </View>
 
-                  <View style={[styles.formColumn, styles.formGroup]}>
+                  {/* Fecha de Entrada (común para todas las entradas) */}
+                  <View style={styles.formGroup}>
                     <Text style={[styles.label, { color: colors.outline }]}>Fecha de Entrada</Text>
                     <TouchableOpacity
                       style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
@@ -1078,28 +1582,7 @@ const EntradaFormContent = () => {
                       />
                     )}
                   </View>
-                </View>
-              ) : (
-                <View style={styles.formGroup}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Fecha de Entrada</Text>
-                  <TouchableOpacity
-                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    onPress={() => !isReadOnly && setShowFechaEntradaPicker(true)}
-                    disabled={isReadOnly}
-                  >
-                    <Text style={[styles.inputText, { color: formData.fecha ? colors.onSurface : colors.outline }]}>
-                      {formData.fecha || 'Seleccionar...'}
-                    </Text>
-                  </TouchableOpacity>
-                  {showFechaEntradaPicker && (
-                    <DateTimePicker
-                      value={formData.fecha ? new Date(formData.fecha) : new Date()}
-                      mode="date"
-                      display="default"
-                      onChange={handleFechaEntradaChange}
-                    />
-                  )}
-                </View>
+                </>
               )}
 
               {/* Proveedor */}
@@ -1114,6 +1597,314 @@ const EntradaFormContent = () => {
                   editable={!isReadOnly}
                 />
               </View>
+
+              {/* Lista de entradas múltiples */}
+              {isMultipleMode && multipleEntradas.map((entrada, index) => (
+                <View key={entrada.id} style={[styles.multipleEntradaCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                  <View style={styles.multipleEntradaHeader}>
+                    <Text style={[styles.multipleEntradaTitle, { color: colors.onSurface }]}>
+                      Producto {index + 1}
+                    </Text>
+                    {multipleEntradas.length > 1 && (
+                      <TouchableOpacity
+                        onPress={() => removeEntrada(entrada.id)}
+                        style={styles.removeButton}
+                      >
+                        <Ionicons name="close-circle" size={responsive.responsiveWidth(24)} color="#F44336" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {/* Producto Selection */}
+                  <View style={styles.formGroup}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Producto *</Text>
+                    <View style={styles.relativeContainer}>
+                      <TextInput
+                        style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                        placeholderTextColor={colors.outline}
+                        placeholder="Buscar producto..."
+                        value={entrada.productoSearchText}
+                        onChangeText={(text) => updateMultipleEntrada(entrada.id, 'productoSearchText', text)}
+                        editable={!isReadOnly}
+                        onBlur={() => setMultipleShowProductoDropdown(prev => ({ ...prev, [entrada.id]: false }))}
+                      />
+                      {multipleShowProductoDropdown[entrada.id] && !isReadOnly && (
+                        <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                          {multipleIsSearchingProductos[entrada.id] ? (
+                            <View style={styles.dropdownItem}>
+                              <ActivityIndicator size="small" color={colors.primary} />
+                            </View>
+                          ) : (multipleProductoSearchResults[entrada.id] || []).length > 0 ? (
+                            (multipleProductoSearchResults[entrada.id] || []).map((producto, index) => (
+                              <TouchableOpacity
+                                key={producto.id_servicio}
+                                style={[styles.dropdownItem, index === (multipleProductoSearchResults[entrada.id] || []).length - 1 && styles.dropdownItemLast]}
+                                onPress={() => handleProductoSelectMultiple(entrada.id, producto)}
+                              >
+                                <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{producto.nombre}</Text>
+                              </TouchableOpacity>
+                            ))
+                          ) : (
+                            <View style={styles.dropdownItem}>
+                              <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron productos</Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Cantidad */}
+                  <View style={styles.formGroup}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Cantidad *</Text>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                      placeholderTextColor={colors.outline}
+                      placeholder="Cantidad"
+                      value={entrada.cantidad_entrada}
+                      onChangeText={(text) => updateMultipleEntrada(entrada.id, 'cantidad_entrada', text.replace(/-/g, ''))}
+                      keyboardType="decimal-pad"
+                      editable={!isReadOnly}
+                    />
+                  </View>
+
+                  {/* Costos */}
+                  {canManageEntradas && (
+                    <View style={styles.formRow}>
+                      <View style={[styles.formColumn, styles.formGroup]}>
+                        <Text style={[styles.label, { color: colors.outline }]}>Costo CUP *</Text>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                          placeholderTextColor={colors.outline}
+                          placeholder="Costo CUP"
+                          value={
+                            multipleCostoInputTexts[entrada.id]?.costo_cup !== undefined
+                              ? multipleCostoInputTexts[entrada.id].costo_cup
+                              : (entrada.costo_cup !== null && entrada.costo_cup !== '' ? parseFloat(entrada.costo_cup).toFixed(2) : '')
+                          }
+                          onFocus={() => setMultipleCostoInputTexts(prev => ({
+                            ...prev,
+                            [entrada.id]: {
+                              ...prev[entrada.id],
+                              costo_cup: entrada.costo_cup !== null && entrada.costo_cup !== '' ? String(parseFloat(entrada.costo_cup)) : ''
+                            }
+                          }))}
+                          onChangeText={(text) => {
+                            setMultipleCostoInputTexts(prev => ({
+                              ...prev,
+                              [entrada.id]: {
+                                ...prev[entrada.id],
+                                costo_cup: text
+                              }
+                            }));
+                            handleCostoChangeMultiple(entrada.id, 'costo_cup', text);
+                          }}
+                          onBlur={() => {
+                            setMultipleCostoInputTexts(prev => {
+                              const updated = { ...prev };
+                              if (updated[entrada.id]) {
+                                delete updated[entrada.id].costo_cup;
+                              }
+                              return updated;
+                            });
+                          }}
+                          keyboardType="decimal-pad"
+                          editable={!isReadOnly}
+                        />
+                      </View>
+
+                      <View style={[styles.formColumn, styles.formGroup]}>
+                        <Text style={[styles.label, { color: colors.outline }]}>Costo USD *</Text>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                          placeholderTextColor={colors.outline}
+                          placeholder="Costo USD"
+                          value={
+                            multipleCostoInputTexts[entrada.id]?.costo_usd !== undefined
+                              ? multipleCostoInputTexts[entrada.id].costo_usd
+                              : (entrada.costo_usd !== null && entrada.costo_usd !== '' ? parseFloat(entrada.costo_usd).toFixed(2) : '')
+                          }
+                          onFocus={() => setMultipleCostoInputTexts(prev => ({
+                            ...prev,
+                            [entrada.id]: {
+                              ...prev[entrada.id],
+                              costo_usd: entrada.costo_usd !== null && entrada.costo_usd !== '' ? String(parseFloat(entrada.costo_usd)) : ''
+                            }
+                          }))}
+                          onChangeText={(text) => {
+                            setMultipleCostoInputTexts(prev => ({
+                              ...prev,
+                              [entrada.id]: {
+                                ...prev[entrada.id],
+                                costo_usd: text
+                              }
+                            }));
+                            handleCostoChangeMultiple(entrada.id, 'costo_usd', text);
+                          }}
+                          onBlur={() => {
+                            setMultipleCostoInputTexts(prev => {
+                              const updated = { ...prev };
+                              if (updated[entrada.id]) {
+                                delete updated[entrada.id].costo_usd;
+                              }
+                              return updated;
+                            });
+                          }}
+                          keyboardType="decimal-pad"
+                          editable={!isReadOnly}
+                        />
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Precios (solo cuando no existe relación producto-tienda) */}
+                  {entrada.producto && formData.tienda && !entrada.producto.tiendas_servicio?.find(
+                    ts => ts.id_tienda === formData.tienda.id_tienda
+                  ) && (
+                    <View style={styles.formRow}>
+                      <View style={[styles.formColumn, styles.formGroup]}>
+                        <Text style={[styles.label, { color: colors.outline }]}>Precio CUP *</Text>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                          placeholderTextColor={colors.outline}
+                          placeholder="Precio CUP"
+                          value={entrada.precio_cup}
+                          onChangeText={(text) => updateMultipleEntrada(entrada.id, 'precio_cup', text)}
+                          keyboardType="decimal-pad"
+                          editable={!isReadOnly}
+                        />
+                      </View>
+
+                      <View style={[styles.formColumn, styles.formGroup]}>
+                        <Text style={[styles.label, { color: colors.outline }]}>Precio USD *</Text>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                          placeholderTextColor={colors.outline}
+                          placeholder="Precio USD"
+                          value={entrada.precio_usd}
+                          onChangeText={(text) => updateMultipleEntrada(entrada.id, 'precio_usd', text)}
+                          keyboardType="decimal-pad"
+                          editable={!isReadOnly}
+                        />
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Fecha de Vencimiento */}
+                  {entrada.producto?.producto?.isVencible && (
+                    <View style={styles.formGroup}>
+                      <Text style={[styles.label, { color: colors.outline }]}>Fecha Vencimiento *</Text>
+                      <TouchableOpacity
+                        style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                        onPress={() => !isReadOnly && setMultipleShowDatePicker(prev => ({ ...prev, [entrada.id]: true }))}
+                        disabled={isReadOnly}
+                      >
+                        <Text style={[styles.inputText, { color: entrada.fecha_vencimiento ? colors.onSurface : colors.outline }]}>
+                          {entrada.fecha_vencimiento || 'Seleccionar...'}
+                        </Text>
+                      </TouchableOpacity>
+                      {multipleShowDatePicker[entrada.id] && (
+                        <DateTimePicker
+                          value={entrada.fecha_vencimiento ? new Date(entrada.fecha_vencimiento) : new Date()}
+                          mode="date"
+                          display="default"
+                          onChange={(event, date) => handleDateChangeMultiple(entrada.id, event, date)}
+                        />
+                      )}
+                    </View>
+                  )}
+                </View>
+              ))}
+
+              {/* Botón agregar más productos (solo en modo múltiple) */}
+              {isMultipleMode && !isReadOnly && (
+                <TouchableOpacity
+                  style={[styles.addProductButton, { backgroundColor: colors.primaryContainer, borderColor: colors.primary }]}
+                  onPress={addNewEntrada}
+                >
+                  <Ionicons name="add-circle" size={responsive.responsiveWidth(20)} color={colors.primary} />
+                  <Text style={[styles.addProductButtonText, { color: colors.primary }]}>
+                    Agregar otro producto
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Info de cantidad de productos (solo en modo múltiple) */}
+              {isMultipleMode && (
+                <View style={[styles.productCountInfo, { backgroundColor: colors.primaryContainer }]}>
+                  <Ionicons name="information-circle" size={responsive.responsiveWidth(18)} color={colors.primary} />
+                  <Text style={[styles.productCountInfoText, { color: colors.primary }]}>
+                    Total: {multipleEntradas.length} {multipleEntradas.length === 1 ? 'producto' : 'productos'}
+                  </Text>
+                </View>
+              )}
+
+              {/* Financial Information Section (Multiple Mode) */}
+              {isMultipleMode && getMultipleFinancialInfo() && canManageEntradas && (
+                <View style={[styles.financialInfoSection, { backgroundColor: isDarkMode ? 'rgba(30, 41, 59, 0.8)' : 'rgba(248, 250, 252, 0.8)', borderColor: isDarkMode ? 'rgba(148, 163, 184, 0.3)' : 'rgba(203, 213, 225, 0.5)' }]}>
+                  <View style={styles.financialInfoHeader}>
+                    <Ionicons name="trending-up-outline" size={responsive.responsiveWidth(20)} color={colors.primary} />
+                    <Text style={[styles.financialInfoTitle, { color: colors.onSurface }]}>
+                      Información Financiera
+                    </Text>
+                  </View>
+                  
+                  <View style={[styles.financialInfoDivider, { backgroundColor: colors.outlineVariant }]} />
+                  
+                  {canManageEntradas && (
+                    <>
+                      <View style={styles.financialInfoRow}>
+                        <View style={styles.financialInfoColumn}>
+                          <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Costo Total CUP</Text>
+                          <Text style={[styles.financialInfoValue, { color: colors.primary }]}>
+                            ${getMultipleFinancialInfo().costoTotalCup.toFixed(2)}
+                          </Text>
+                        </View>
+                        <View style={styles.financialInfoColumn}>
+                          <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Costo Total USD</Text>
+                          <Text style={[styles.financialInfoValue, { color: colors.primary }]}>
+                            ${getMultipleFinancialInfo().costoTotalUsd.toFixed(2)}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={[styles.financialInfoDivider, { backgroundColor: colors.outlineVariant }]} />
+                    </>
+                  )}
+
+                  <View style={styles.financialInfoRow}>
+                    <View style={styles.financialInfoColumn}>
+                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Ganancia Esperada CUP</Text>
+                      <View style={[styles.profitBadge, { backgroundColor: getMultipleFinancialInfo().gananciaCup >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: getMultipleFinancialInfo().gananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                        <Text style={[styles.financialInfoValue, { color: getMultipleFinancialInfo().gananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                          ${getMultipleFinancialInfo().gananciaCup.toFixed(2)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.financialInfoColumn}>
+                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Ganancia Esperada USD</Text>
+                      <View style={[styles.profitBadge, { backgroundColor: getMultipleFinancialInfo().gananciaUsd >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: getMultipleFinancialInfo().gananciaUsd >= 0 ? '#4CAF50' : '#F44336' }]}>
+                        <Text style={[styles.financialInfoValue, { color: getMultipleFinancialInfo().gananciaUsd >= 0 ? '#4CAF50' : '#F44336' }]}>
+                          ${getMultipleFinancialInfo().gananciaUsd.toFixed(2)}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={[styles.financialInfoDivider, { backgroundColor: colors.outlineVariant }]} />
+
+                  <View style={styles.financialInfoRow}>
+                    <View style={styles.financialInfoColumn}>
+                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Margen Ganancia</Text>
+                      <View style={[styles.profitBadge, { backgroundColor: getMultipleFinancialInfo().porcentajeGananciaCup >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: getMultipleFinancialInfo().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                        <Text style={[styles.financialInfoValue, { color: getMultipleFinancialInfo().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                          {getMultipleFinancialInfo().porcentajeGananciaCup.toFixed(2)}%
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )}
 
               {/* Info about weighted average */}
               {config.applyWeightedAverageCost && isAddMode && (
@@ -1242,7 +2033,9 @@ const EntradaFormContent = () => {
                     {isSaving ? (
                       <ActivityIndicator color="#fff" size="small" />
                     ) : (
-                      <Text style={[styles.buttonText, { color: '#fff' }]}>Guardar</Text>
+                      <Text style={[styles.buttonText, { color: '#fff' }]}>
+                        Guardar
+                      </Text>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -1405,8 +2198,11 @@ const createStyles = (responsive) => StyleSheet.create({
   button: {
     flex: 1,
     paddingVertical: responsive.responsivePadding(14),
+    paddingHorizontal: responsive.responsivePadding(16),
     borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: responsive.responsiveHeight(50),
   },
   cancelButton: {
     borderWidth: 1,
@@ -1422,6 +2218,7 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(16),
     fontWeight: '600',
     fontFamily: 'Inter',
+    textAlign: 'center',
   },
   loadingContainer: {
     alignItems: 'center',
@@ -1588,6 +2385,88 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   modalEmptyText: {
     fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+  },
+  modeSwitchContainer: {
+    marginBottom: responsive.responsiveMargin(24),
+  },
+  modeSwitchTitle: {
+    fontSize: responsive.responsiveFontSize(18),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+    marginBottom: responsive.responsiveMargin(12),
+    textAlign: 'center',
+  },
+  modeSwitch: {
+    flexDirection: 'row',
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: responsive.responsivePadding(4),
+  },
+  modeSwitchButton: {
+    flex: 1,
+    paddingVertical: responsive.responsivePadding(12),
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  modeSwitchButtonActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  modeSwitchButtonText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  multipleEntradaCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: responsive.responsivePadding(16),
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  multipleEntradaHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  multipleEntradaTitle: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  removeButton: {
+    padding: responsive.responsivePadding(4),
+  },
+  addProductButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: responsive.responsiveMargin(8),
+    paddingVertical: responsive.responsivePadding(14),
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: responsive.responsiveMargin(16),
+  },
+  addProductButtonText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  productCountInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+    padding: responsive.responsivePadding(12),
+    borderRadius: 8,
+    marginTop: responsive.responsiveMargin(12),
+  },
+  productCountInfoText: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '500',
     fontFamily: 'Inter',
   },
 });

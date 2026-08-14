@@ -69,7 +69,7 @@ const EntradasContent = () => {
   }, [user?.id_tienda]);
 
   // Filter states
-  const [filters, setFilters] = useState({ nombre_servicio: '', codigo_lote: '', fecha_desde: '', fecha_hasta: '', id_tienda: '', id_usuario: '' });
+  const [filters, setFilters] = useState({ nombre_servicio: '', codigo_lote: '', fecha_desde: '', fecha_hasta: '', id_tienda: '', id_usuario: '', cantidad_restante_min: '0.01', cantidad_restante_max: '' });
   const [tiendas, setTiendas] = useState([]);
   const [users, setUsers] = useState([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -199,7 +199,7 @@ const EntradasContent = () => {
             if (savedFilters) {
               const parsedFilters = JSON.parse(savedFilters);
               setFilters(parsedFilters);
-              fetchEntradas(parsedFilters.id_tienda);
+              fetchEntradas(null, parsedFilters);
             } else {
               // Restore user's tienda filter if it's empty and user has a tienda
               const shouldRestore = !filtersRef.current.id_tienda && userTiendaRef.current;
@@ -357,7 +357,9 @@ const EntradasContent = () => {
       fecha_desde: '', 
       fecha_hasta: '', 
       id_tienda: (!canViewAllEntradas && user?.id_tienda) ? user.id_tienda.toString() : '',
-      id_usuario: ''
+      id_usuario: '',
+      cantidad_restante_min: '0.01',
+      cantidad_restante_max: ''
     };
     
     setFilters(clearedFilters);
@@ -495,7 +497,9 @@ const EntradasContent = () => {
           fecha_desde: '',
           fecha_hasta: '',
           id_tienda: '',
-          id_usuario: ''
+          id_usuario: '',
+          cantidad_restante_min: '0.01',
+          cantidad_restante_max: ''
         };
         
         setFilters({ ...clearedFilters, codigo_lote: result.code });
@@ -819,6 +823,7 @@ const EntradasContent = () => {
         onProfilePress={handleProfilePress}
         onViewModeToggle={toggleViewMode}
         showViewToggle={true}
+        viewMode={viewMode}
         isDark={isDarkMode}
         title="Abacus"
         showLogo={true}
@@ -1065,6 +1070,32 @@ const EntradasContent = () => {
 
               <View style={styles.filterRow}>
                 <View style={[styles.filterGroup, { flex: 1, marginRight: responsive.responsiveMargin(8) }]}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Cant.Restante Mínima</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Cantidad mínima..."
+                    value={filters.cantidad_restante_min}
+                    onChangeText={(text) => setFilters(prev => ({ ...prev, cantidad_restante_min: text }))}
+                    keyboardType="numeric"
+                  />
+                </View>
+
+                <View style={[styles.filterGroup, { flex: 1, marginLeft: responsive.responsiveMargin(8) }]}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Cant.Restante Máxima</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Cantidad máxima..."
+                    value={filters.cantidad_restante_max}
+                    onChangeText={(text) => setFilters(prev => ({ ...prev, cantidad_restante_max: text }))}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.filterRow}>
+                <View style={[styles.filterGroup, { flex: 1, marginRight: responsive.responsiveMargin(8) }]}>
                   <Text style={[styles.label, { color: colors.outline }]}>Fecha Desde</Text>
                   <TouchableOpacity
                     style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
@@ -1259,14 +1290,15 @@ const EntradasContent = () => {
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(200) }]}>Producto</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Código Lote</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Tienda</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Proveedor</Text>
                     {canManageEntradas && (
                       <>
-                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Costo CUP</Text>
-                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Costo USD</Text>
+                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100), textAlign: 'center' }]}>Costo CUP</Text>
+                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100), textAlign: 'center' }]}>Costo USD</Text>
                       </>
                     )}
-                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80) }]}>Inicial</Text>
-                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80) }]}>Actual</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80), textAlign: 'center' }]}>Inicial</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80), textAlign: 'center' }]}>Actual</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Fecha</Text>
                     {canManageEntradas && (
                       <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Acciones</Text>
@@ -1299,20 +1331,23 @@ const EntradasContent = () => {
                           <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
                             {entrada.servicioTienda?.tienda?.nombre || 'N/A'}
                           </Text>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
+                            {entrada.nombre_proveedor || '-'}
+                          </Text>
                           {canManageEntradas && (
                             <>
-                              <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100) }]}>
+                              <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
                                 ${parseFloat(entrada.costo_cup).toFixed(2)}
                               </Text>
-                              <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100) }]}>
+                              <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
                                 ${parseFloat(entrada.costo_usd).toFixed(2)}
                               </Text>
                             </>
                           )}
-                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(80) }]}>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(80), textAlign: 'center' }]}>
                             {entrada.cantidad_entrada}
                           </Text>
-                          <Text style={[styles.tableCellText, { color: actualColor, width: responsive.responsiveWidth(80) }]}>
+                          <Text style={[styles.tableCellText, { color: actualColor, width: responsive.responsiveWidth(80), textAlign: 'center' }]}>
                             {cantidadActual}
                           </Text>
                           <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(120) }]}>

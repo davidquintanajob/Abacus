@@ -17,7 +17,8 @@ export const Header = ({
   title = 'abacus',
   showLogo = false,
   onViewModeToggle,
-  showViewToggle = false
+  showViewToggle = false,
+  viewMode = 'table'
 }) => {
   const { isOfflineMode } = useOffline();
   const { colors } = useTheme();
@@ -79,7 +80,11 @@ export const Header = ({
             style={styles.iconButton}
             activeOpacity={0.7}
           >
-            <Ionicons name="grid-outline" size={responsive.responsiveWidth(24)} color={colors.primary} />
+            <Ionicons 
+              name={viewMode === 'table' ? "grid-outline" : "list-outline"} 
+              size={responsive.responsiveWidth(24)} 
+              color={colors.primary} 
+            />
           </TouchableOpacity>
         )}
         {onNotificationsPress && (

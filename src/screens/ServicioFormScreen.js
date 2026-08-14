@@ -820,7 +820,7 @@ const ServicioFormContent = () => {
             </TouchableOpacity>
           </View>
 
-          {canViewCosts && (
+          {canViewCosts && !isOferta && (
             <View style={styles.formRow}>
               <View style={[styles.formColumn, styles.formGroup]}>
                 <Text style={[styles.label, { color: colors.outline }]}>Costo CUP</Text>
@@ -853,7 +853,7 @@ const ServicioFormContent = () => {
                     });
                   }}
                   keyboardType="decimal-pad"
-                  editable={!isViewMode && !isOferta && canEditService}
+                  editable={!isViewMode && canEditService}
                 />
               </View>
               <View style={[styles.formColumn, styles.formGroup]}>
@@ -887,7 +887,7 @@ const ServicioFormContent = () => {
                     });
                   }}
                   keyboardType="decimal-pad"
-                  editable={!isViewMode && !isOferta && canEditService}
+                  editable={!isViewMode && canEditService}
                 />
               </View>
             </View>
@@ -1020,6 +1020,23 @@ const ServicioFormContent = () => {
                       )}
                     </View>
                   ))
+                )}
+                {canViewCosts && formData.ofertaList.length > 0 && (
+                  <View style={[styles.costSummary, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                    <Text style={[styles.costSummaryTitle, { color: colors.onSurface }]}>Costo Total de la Oferta</Text>
+                    <View style={styles.costSummaryRow}>
+                      <Text style={[styles.costSummaryLabel, { color: colors.outline }]}>Costo CUP:</Text>
+                      <Text style={[styles.costSummaryValue, { color: colors.onSurface }]}>
+                        {formData.costo_cup_general !== null && formData.costo_cup_general !== '' ? parseFloat(formData.costo_cup_general).toFixed(2) : '0.00'}
+                      </Text>
+                    </View>
+                    <View style={styles.costSummaryRow}>
+                      <Text style={[styles.costSummaryLabel, { color: colors.outline }]}>Costo USD:</Text>
+                      <Text style={[styles.costSummaryValue, { color: colors.onSurface }]}>
+                        {formData.costo_usd_general !== null && formData.costo_usd_general !== '' ? parseFloat(formData.costo_usd_general).toFixed(2) : '0.00'}
+                      </Text>
+                    </View>
+                  </View>
                 )}
               </>
             )}
@@ -1895,13 +1912,49 @@ const createStyles = (responsive) => StyleSheet.create({
     fontFamily: 'Inter',
   },
   componenteCantidadInput: {
-    width: responsive.responsiveWidth(80),
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 6,
     padding: responsive.responsivePadding(8),
-    fontSize: responsive.fontSizes.body,
-    fontFamily: 'Inter',
+    width: responsive.responsiveWidth(80),
     textAlign: 'center',
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+  },
+  costSummary: {
+    marginTop: responsive.responsiveMargin(16),
+    padding: responsive.responsivePadding(16),
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  costSummaryTitle: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  costSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  costSummaryLabel: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+  },
+  costSummaryValue: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '700',
+    fontFamily: 'Inter',
+  },
+  deleteButtonSmall: {
+    width: responsive.responsiveWidth(32),
+    height: responsive.responsiveHeight(32),
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: responsive.responsiveMargin(8),
   },
   scannerContainer: {
     flex: 1,

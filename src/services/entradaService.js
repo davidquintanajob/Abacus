@@ -15,6 +15,8 @@ export const getEntradas = async (filters = {}, page = 1, limit = 10) => {
     if (filters.nombre_servicio) queryParams.append('nombre_servicio', filters.nombre_servicio);
     if (filters.codigo_lote) queryParams.append('codigo_lote', filters.codigo_lote);
     if (filters.id_tienda) queryParams.append('id_tienda', filters.id_tienda);
+    if (filters.cantidad_restante_min) queryParams.append('cantidad_restante_min', filters.cantidad_restante_min);
+    if (filters.cantidad_restante_max) queryParams.append('cantidad_restante_max', filters.cantidad_restante_max);
 
     const response = await api.get(`/entrada/filter?${queryParams}`);
     return response.data;
@@ -83,6 +85,21 @@ export const deleteEntrada = async (id) => {
                         error.response?.data?.message || 
                         error.message ||
                         'Error al eliminar entrada';
+    const err = new Error(errorMessage);
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
+  }
+};
+
+export const createEntradasBulk = async (entradasData) => {
+  try {
+    const response = await api.post('/entrada/bulk', { entradas: entradasData });
+    return response.data;
+  } catch (error) {
+    const errorMessage = error.response?.data?.errors?.[0] || 
+                        error.response?.data?.message || 
+                        error.message ||
+                        'Error al crear entradas múltiples';
     const err = new Error(errorMessage);
     err.code = error.response?.status ?? error.code ?? null;
     throw err;

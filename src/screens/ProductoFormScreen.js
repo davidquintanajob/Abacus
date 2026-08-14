@@ -74,7 +74,7 @@ const ProductoFormContent = () => {
     nota: producto?.nota || '',
     imagen: producto?.producto?.imagen || '',
     sufijo: producto?.producto?.sufijo || '',
-    isVencible: producto?.producto?.isVencible !== undefined ? producto.producto.isVencible : true,
+    isVencible: producto?.producto?.isVencible !== undefined ? producto.producto.isVencible : false,
     unidad_medida: producto?.producto?.unidad_medida || '',
     productoTiendaList: producto?.tiendas_servicio || [],
     codigoList: producto?.codigos || [],
@@ -1029,7 +1029,7 @@ const ProductoFormContent = () => {
             </View>
 
             <View style={[styles.formColumn, styles.formGroup]}>
-              <Text style={[styles.label, { color: colors.outline }]}>Sufijo *</Text>
+              <Text style={[styles.label, { color: colors.outline }]}>Código interno (Sufijo) *</Text>
               <TextInput
                 style={[
                   styles.input, 
@@ -1260,7 +1260,7 @@ const ProductoFormContent = () => {
           {/* Códigos Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Códigos</Text>
+              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Códigos de los productos</Text>
               <View style={styles.sectionActions}>
                 {canEditCodes && (
                   <TouchableOpacity

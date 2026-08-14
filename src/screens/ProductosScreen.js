@@ -1782,6 +1782,7 @@ const ProductosContent = () => {
         onProfilePress={handleProfilePress}
         onViewModeToggle={toggleViewMode}
         showViewToggle={true}
+        viewMode={viewMode}
         isDark={isDarkMode}
         title="Abacus"
         showLogo={true}
