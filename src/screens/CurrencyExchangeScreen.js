@@ -87,6 +87,7 @@ const CurrencyExchangeContent = () => {
     economico: false,
   });
   const [applyWeightedAverageCost, setApplyWeightedAverageCost] = useState(false);
+  const [showEntradaModalAfterProductCreation, setShowEntradaModalAfterProductCreation] = useState(false);
   const [showPermissions, setShowPermissions] = useState(false);
   const [showEntradaPermissions, setShowEntradaPermissions] = useState(false);
   const [showEntradaConfig, setShowEntradaConfig] = useState(false);
@@ -122,6 +123,9 @@ const CurrencyExchangeContent = () => {
       }
       if (data.applyWeightedAverageCost !== undefined) {
         setApplyWeightedAverageCost(data.applyWeightedAverageCost);
+      }
+      if (data.showEntradaModalAfterProductCreation !== undefined) {
+        setShowEntradaModalAfterProductCreation(data.showEntradaModalAfterProductCreation);
       }
     } catch (error) {
       showToast({ type: 'error', message: 'Error al cargar configuración' });
@@ -241,6 +245,24 @@ const CurrencyExchangeContent = () => {
     } catch (error) {
       showToast({ type: 'error', message: 'Error al actualizar configuración de costo promedio' });
       setApplyWeightedAverageCost(applyWeightedAverageCost);
+    }
+  };
+
+  const toggleEntradaModalAfterProductCreation = async () => {
+    const newValue = !showEntradaModalAfterProductCreation;
+    setShowEntradaModalAfterProductCreation(newValue);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        showEntradaModalAfterProductCreation: newValue,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Configuración de pregunta de entrada actualizada correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar configuración de pregunta de entrada' });
+      setShowEntradaModalAfterProductCreation(showEntradaModalAfterProductCreation);
     }
   };
 
@@ -460,7 +482,7 @@ const CurrencyExchangeContent = () => {
           {showEntradaConfig && (
             <>
               <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
-                Configura el cálculo automático de costo promedio ponderado para las entradas
+                Configura el cálculo automático de costo promedio ponderado y el modal de entrada para nuevos productos
               </Text>
 
               <View style={styles.permissionItem}>
@@ -483,6 +505,29 @@ const CurrencyExchangeContent = () => {
                   onValueChange={toggleWeightedAverageCost}
                   trackColor={{ false: colors.outlineVariant, true: colors.primary }}
                   thumbColor={applyWeightedAverageCost ? '#fff' : colors.outline}
+                />
+              </View>
+
+              <View style={styles.permissionItem}>
+                <View style={styles.permissionInfo}>
+                  <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                    Preguntar si Agregar Entrada al Crear Producto
+                  </Text>
+                  <TouchableOpacity 
+                    style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                    onPress={() => showInfoModal(
+                      'Pregunta de Entrada al Crear Producto',
+                      'Cuando está activo, después de crear un nuevo producto se preguntará si deseas agregar una entrada de stock para ese producto (solo para usuarios con permisos de gestión de entradas).'
+                    )}
+                  >
+                    <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                  </TouchableOpacity>
+                </View>
+                <Switch
+                  value={showEntradaModalAfterProductCreation}
+                  onValueChange={toggleEntradaModalAfterProductCreation}
+                  trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                  thumbColor={showEntradaModalAfterProductCreation ? '#fff' : colors.outline}
                 />
               </View>
             </>

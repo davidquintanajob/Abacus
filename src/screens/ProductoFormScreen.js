@@ -89,6 +89,8 @@ const ProductoFormContent = () => {
   const [isPricesExpanded, setIsPricesExpanded] = useState(false);
   const [isStockExpanded, setIsStockExpanded] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showAddEntradaModal, setShowAddEntradaModal] = useState(false);
+  const [createdProducto, setCreatedProducto] = useState(null);
 
   useEffect(() => {
     if (formData.codigoList.length > 0) {
@@ -506,18 +508,42 @@ const ProductoFormContent = () => {
       if (isEditMode) {
         await updateProducto(producto.id_servicio, dataToSend);
         showToast({ type: 'success', message: 'Producto actualizado correctamente' });
+        
+        if (returnToEntrada) {
+          navigation.navigate('EntradaForm', {
+            mode: 'add',
+            entradaData: entradaData
+          });
+        } else {
+          navigation.goBack();
+        }
       } else {
-        await createProducto(dataToSend);
+        const createdProduct = await createProducto(dataToSend);
         showToast({ type: 'success', message: 'Producto creado correctamente' });
-      }
-      
-      if (returnToEntrada) {
-        navigation.navigate('EntradaForm', {
-          mode: 'add',
-          entradaData: entradaData
-        });
-      } else {
-        navigation.goBack();
+        
+        // Extract the actual product from the response
+        const actualProduct = createdProduct?.data || createdProduct;
+        
+        // Check if user has entradaManagePermissions
+        const userRole = user?.rol?.toLowerCase();
+        const canManageEntradas = 
+          userRole === 'administrador' ||
+          (userRole === 'dependiente' && entradaManagePermissions?.dependiente) ||
+          (userRole === 'almacenero' && entradaManagePermissions?.almacenero) ||
+          (userRole === 'económico' && entradaManagePermissions?.economico);
+        
+        if (returnToEntrada) {
+          navigation.navigate('EntradaForm', {
+            mode: 'add',
+            entradaData: entradaData
+          });
+        } else if (canManageEntradas && !isOfflineMode && config.showEntradaModalAfterProductCreation) {
+          // Show modal asking if user wants to add an entrada
+          setCreatedProducto(actualProduct);
+          setShowAddEntradaModal(true);
+        } else {
+          navigation.goBack();
+        }
       }
     } catch (err) {
       showToast({ type: 'error', message: err.message, code: err.code });
@@ -1945,6 +1971,57 @@ const ProductoFormContent = () => {
                   onPress={() => setShowInfoModal(false)}
                 >
                   <Text style={[styles.modalButtonText, { color: colors.onSurface }]}>Cerrar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Add Entrada Modal */}
+      {showAddEntradaModal && (
+        <Modal
+          visible={showAddEntradaModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowAddEntradaModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowAddEntradaModal(false)}
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.surface }]} activeOpacity={1}>
+              <View style={styles.modalHeader}>
+                <Ionicons name="arrow-down-circle-outline" size={responsive.responsiveWidth(28)} color={colors.primary} />
+                <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Agregar Entrada</Text>
+              </View>
+              <Text style={[styles.modalDescription, { color: colors.outline }]}>
+                ¿Deseas agregar una entrada de stock para este nuevo producto?
+              </Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalCancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
+                  onPress={() => {
+                    setShowAddEntradaModal(false);
+                    setCreatedProducto(null);
+                    navigation.goBack();
+                  }}
+                >
+                  <Text style={[styles.modalButtonText, { color: colors.onSurface }]}>No</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.confirmButton, { backgroundColor: colors.primary }]}
+                  onPress={() => {
+                    setShowAddEntradaModal(false);
+                    navigation.navigate('EntradaForm', { 
+                      mode: 'add', 
+                      productoPreSeleccionado: createdProducto,
+                      fromModal: true
+                    });
+                  }}
+                >
+                  <Text style={[styles.modalButtonText, { color: '#fff' }]}>Sí</Text>
                 </TouchableOpacity>
               </View>
             </View>

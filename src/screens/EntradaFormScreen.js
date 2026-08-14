@@ -27,7 +27,7 @@ const EntradaFormContent = () => {
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
 
-  const { entrada, mode, productoPreSeleccionado, canViewAllEntradas: canViewAllEntradasParam, entradaData } = route.params || { mode: 'add' };
+  const { entrada, mode, productoPreSeleccionado, canViewAllEntradas: canViewAllEntradasParam, entradaData, fromModal } = route.params || { mode: 'add' };
 
   const isViewMode = mode === 'view';
   const isEditMode = mode === 'edit';
@@ -152,16 +152,9 @@ const EntradaFormContent = () => {
 
   useEffect(() => {
     if (productoPreSeleccionado && isAddMode) {
-      // Get costs from the first tienda_servicio entry if available
-      const firstTiendaServicio = productoPreSeleccionado.tiendas_servicio?.[0];
-      const costoCup = firstTiendaServicio?.costo_cup || '';
-      const costoUsd = firstTiendaServicio?.costo_usd || '';
-      
       setFormData(prev => ({
         ...prev,
         producto: productoPreSeleccionado,
-        costo_cup: costoCup,
-        costo_usd: costoUsd,
       }));
       
       setProductoSearchText(productoPreSeleccionado.nombre || '');
@@ -531,7 +524,15 @@ const EntradaFormContent = () => {
         showToast({ type: 'success', message: 'Entrada creada correctamente' });
       }
       
-      navigation.goBack();
+      // If coming from modal, navigate to ProductosScreen instead of going back
+      if (fromModal) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Productos' }],
+        });
+      } else {
+        navigation.goBack();
+      }
     } catch (err) {
       console.error('[executeSave] Error:', err);
       // showToast({ type: 'error', message: err.message, code: err.code });
@@ -631,7 +632,15 @@ const EntradaFormContent = () => {
       await createEntradasBulk(entradasToCreate);
       showToast({ type: 'success', message: `${entradasToCreate.length} entradas creadas correctamente` });
       
-      navigation.goBack();
+      // If coming from modal, navigate to ProductosScreen instead of going back
+      if (fromModal) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Productos' }],
+        });
+      } else {
+        navigation.goBack();
+      }
     } catch (err) {
       console.error('[executeSaveMultiple] Error:', err);
       showToast({ type: 'error', message: err.message || 'Error al crear entradas múltiples' });
@@ -1110,7 +1119,16 @@ const EntradaFormContent = () => {
       
       <Header 
         showBackButton={true}
-        onBackPress={() => navigation.goBack()}
+        onBackPress={() => {
+          if (fromModal) {
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Productos' }],
+            });
+          } else {
+            navigation.goBack();
+          }
+        }}
         isDark={isDarkMode}
         title={isViewMode ? 'Información de Entrada' : isEditMode ? 'Editar Entrada' : 'Agregar Entrada'}
       />
@@ -2021,7 +2039,16 @@ const EntradaFormContent = () => {
                 <View style={styles.buttonGroup}>
                   <TouchableOpacity
                     style={[styles.button, styles.cancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
-                    onPress={() => navigation.goBack()}
+                    onPress={() => {
+                      if (fromModal) {
+                        navigation.reset({
+                          index: 0,
+                          routes: [{ name: 'Productos' }],
+                        });
+                      } else {
+                        navigation.goBack();
+                      }
+                    }}
                   >
                     <Text style={[styles.buttonText, { color: colors.onSurface }]}>Cancelar</Text>
                   </TouchableOpacity>
