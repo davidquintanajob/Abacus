@@ -109,6 +109,16 @@ export const AuthProvider = ({ children }) => {
       almacenero: false,
       economico: false,
     },
+    salidaAccessLevels: config?.salidaAccessLevels || {
+      dependiente: 'none',
+      almacenero: 'none',
+      economico: 'none',
+    },
+    salidaManagePermissions: config?.salidaManagePermissions || {
+      dependiente: false,
+      almacenero: false,
+      economico: false,
+    },
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

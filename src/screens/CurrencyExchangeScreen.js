@@ -86,12 +86,25 @@ const CurrencyExchangeContent = () => {
     almacenero: false,
     economico: false,
   });
+  const [salidaAccessLevels, setSalidaAccessLevels] = useState({
+    dependiente: 'none',
+    almacenero: 'none',
+    economico: 'none',
+  });
+  const [salidaManagePermissions, setSalidaManagePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
   const [applyWeightedAverageCost, setApplyWeightedAverageCost] = useState(false);
   const [showEntradaModalAfterProductCreation, setShowEntradaModalAfterProductCreation] = useState(false);
   const [showPermissions, setShowPermissions] = useState(false);
   const [showEntradaPermissions, setShowEntradaPermissions] = useState(false);
   const [showEntradaConfig, setShowEntradaConfig] = useState(false);
   const [showEntradaManage, setShowEntradaManage] = useState(false);
+  const [showSalidaPermissions, setShowSalidaPermissions] = useState(false);
+  const [showSalidaManage, setShowSalidaManage] = useState(false);
+  const [customSalidaTypes, setCustomSalidaTypes] = useState([]);
   const [infoModal, setInfoModal] = useState({
     visible: false,
     title: '',
@@ -121,11 +134,20 @@ const CurrencyExchangeContent = () => {
       if (data.entradaManagePermissions) {
         setEntradaManagePermissions(data.entradaManagePermissions);
       }
+      if (data.salidaAccessLevels) {
+        setSalidaAccessLevels(data.salidaAccessLevels);
+      }
+      if (data.salidaManagePermissions) {
+        setSalidaManagePermissions(data.salidaManagePermissions);
+      }
       if (data.applyWeightedAverageCost !== undefined) {
         setApplyWeightedAverageCost(data.applyWeightedAverageCost);
       }
       if (data.showEntradaModalAfterProductCreation !== undefined) {
         setShowEntradaModalAfterProductCreation(data.showEntradaModalAfterProductCreation);
+      }
+      if (data.customSalidaTypes) {
+        setCustomSalidaTypes(data.customSalidaTypes);
       }
     } catch (error) {
       showToast({ type: 'error', message: 'Error al cargar configuración' });
@@ -155,6 +177,9 @@ const CurrencyExchangeContent = () => {
         permissions: permissions,
         entradaAccessLevels: entradaAccessLevels,
         entradaManagePermissions: entradaManagePermissions,
+        salidaAccessLevels: salidaAccessLevels,
+        salidaManagePermissions: salidaManagePermissions,
+        customSalidaTypes: customSalidaTypes,
       };
       await configService.updateConfig(updatedConfig);
       setConfig(updatedConfig);
@@ -263,6 +288,44 @@ const CurrencyExchangeContent = () => {
     } catch (error) {
       showToast({ type: 'error', message: 'Error al actualizar configuración de pregunta de entrada' });
       setShowEntradaModalAfterProductCreation(showEntradaModalAfterProductCreation);
+    }
+  };
+
+  const updateSalidaAccessLevel = async (role, newLevel) => {
+    const newSalidaAccessLevels = { ...salidaAccessLevels, [role]: newLevel };
+    setSalidaAccessLevels(newSalidaAccessLevels);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        salidaAccessLevels: newSalidaAccessLevels,
+      };
+      await configService.updateConfig(updatedConfig);
+      
+      await fetchConfig();
+      
+      showToast({ type: 'success', message: 'Nivel de acceso a salidas actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar nivel de acceso a salidas' });
+      setSalidaAccessLevels(salidaAccessLevels);
+    }
+  };
+
+  const toggleSalidaManagePermission = async (role) => {
+    const newSalidaManagePermissions = { ...salidaManagePermissions, [role]: !salidaManagePermissions[role] };
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        salidaManagePermissions: newSalidaManagePermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      
+      await fetchConfig();
+      
+      showToast({ type: 'success', message: 'Permiso de gestión de salidas actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de gestión de salidas' });
     }
   };
 
@@ -682,7 +745,7 @@ const CurrencyExchangeContent = () => {
                           style={[styles.infoButton, { backgroundColor: colors.primary }]}
                           onPress={() => showInfoModal(
                             'Gestión Entradas - Dependiente',
-                            'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar entradas. Cuando está desactivado, solo pueden ver la información.'
+                            'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar entradas y ver los costos de los productos. Cuando está desactivado, solo pueden ver la información sin acceso a los costos.'
                           )}
                         >
                           <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
@@ -706,7 +769,7 @@ const CurrencyExchangeContent = () => {
                           style={[styles.infoButton, { backgroundColor: colors.primary }]}
                           onPress={() => showInfoModal(
                             'Gestión Entradas - Almacenero',
-                            'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar entradas. Cuando está desactivado, solo pueden ver la información.'
+                            'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar entradas y ver los costos de los productos. Cuando está desactivado, solo pueden ver la información sin acceso a los costos.'
                           )}
                         >
                           <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
@@ -730,7 +793,7 @@ const CurrencyExchangeContent = () => {
                           style={[styles.infoButton, { backgroundColor: colors.primary }]}
                           onPress={() => showInfoModal(
                             'Gestión Entradas - Económico',
-                            'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar entradas. Cuando está desactivado, solo pueden ver la información.'
+                            'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar entradas y ver los costos de los productos. Cuando está desactivado, solo pueden ver la información sin acceso a los costos.'
                           )}
                         >
                           <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
@@ -741,6 +804,225 @@ const CurrencyExchangeContent = () => {
                         onValueChange={() => toggleEntradaManagePermission('economico')}
                         trackColor={{ false: colors.outlineVariant, true: colors.primary }}
                         thumbColor={entradaManagePermissions.economico ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+          )}
+
+            </>
+          )}
+        </Card>
+
+        <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
+          <View style={styles.permissionsHeader}>
+            <View style={styles.permissionsHeaderLeft}>
+              <Ionicons name="shield-checkmark" size={responsive.responsiveWidth(24)} color={colors.primary} />
+              <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
+                Permisos de Salidas
+              </Text>
+            </View>
+            <TouchableOpacity 
+              style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+              onPress={() => setShowSalidaPermissions(!showSalidaPermissions)}
+            >
+              <Ionicons 
+                name={showSalidaPermissions ? "chevron-up" : "chevron-down"} 
+                size={responsive.responsiveWidth(24)} 
+                color={isDarkMode ? colors.primary : '#1976D2'} 
+              />
+            </TouchableOpacity>
+          </View>
+
+          {showSalidaPermissions && (
+            <>
+              <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                Configura el nivel de acceso a las salidas para cada rol
+              </Text>
+
+              <View style={styles.accessLevelExplanation}>
+                <View style={styles.accessLevelExplanationItem}>
+                  <Ionicons name="lock-closed" size={16} color={colors.outline} />
+                  <Text style={[styles.accessLevelExplanationText, { color: colors.outline }]}>
+                    <Text style={{ fontWeight: '600' }}>Sin acceso:</Text> No puede ver la pantalla de Salidas ni ninguna salida del sistema
+                  </Text>
+                </View>
+                <View style={styles.accessLevelExplanationItem}>
+                  <Ionicons name="storefront" size={16} color={colors.outline} />
+                  <Text style={[styles.accessLevelExplanationText, { color: colors.outline }]}>
+                    <Text style={{ fontWeight: '600' }}>Mi tienda:</Text> Puede ver la pantalla de Salidas pero solo las salidas de su tienda
+                  </Text>
+                </View>
+                <View style={styles.accessLevelExplanationItem}>
+                  <Ionicons name="globe" size={16} color={colors.outline} />
+                  <Text style={[styles.accessLevelExplanationText, { color: colors.outline }]}>
+                    <Text style={{ fontWeight: '600' }}>Todas las tiendas:</Text> Puede ver la pantalla de Salidas y las salidas de todas las tiendas
+                  </Text>
+                </View>
+              </View>
+
+          <View style={styles.permissionItem}>
+            <View style={styles.permissionInfo}>
+              <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                Dependiente
+              </Text>
+              <TouchableOpacity 
+                style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                onPress={() => showInfoModal(
+                  'Acceso a Salidas - Dependiente',
+                  'Define si los usuarios con rol Dependiente no tienen acceso a salidas, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
+                )}
+              >
+                <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+              </TouchableOpacity>
+            </View>
+            <AccessLevelSwitch
+              value={salidaAccessLevels.dependiente}
+              onChange={(newLevel) => updateSalidaAccessLevel('dependiente', newLevel)}
+              colors={colors}
+              responsive={responsive}
+            />
+          </View>
+
+          <View style={styles.permissionItem}>
+            <View style={styles.permissionInfo}>
+              <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                Almacenero
+              </Text>
+              <TouchableOpacity 
+                style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                onPress={() => showInfoModal(
+                  'Acceso a Salidas - Almacenero',
+                  'Define si los usuarios con rol Almacenero no tienen acceso a salidas, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
+                )}
+              >
+                <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+              </TouchableOpacity>
+            </View>
+            <AccessLevelSwitch
+              value={salidaAccessLevels.almacenero}
+              onChange={(newLevel) => updateSalidaAccessLevel('almacenero', newLevel)}
+              colors={colors}
+              responsive={responsive}
+            />
+          </View>
+
+          <View style={styles.permissionItem}>
+            <View style={styles.permissionInfo}>
+              <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                Económico
+              </Text>
+              <TouchableOpacity 
+                style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                onPress={() => showInfoModal(
+                  'Acceso a Salidas - Económico',
+                  'Define si los usuarios con rol Económico no tienen acceso a salidas, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
+                )}
+              >
+                <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+              </TouchableOpacity>
+            </View>
+            <AccessLevelSwitch
+              value={salidaAccessLevels.economico}
+              onChange={(newLevel) => updateSalidaAccessLevel('economico', newLevel)}
+              colors={colors}
+              responsive={responsive}
+            />
+          </View>
+
+          {(salidaAccessLevels.dependiente !== 'none' || salidaAccessLevels.almacenero !== 'none' || salidaAccessLevels.economico !== 'none') && (
+            <View style={styles.permissionSection}>
+              <View style={styles.permissionSectionHeader}>
+                <Text style={[styles.permissionSectionTitle, { color: colors.onSurface }]}>
+                  Gestión de Salidas
+                </Text>
+                <TouchableOpacity 
+                  style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+                  onPress={() => setShowSalidaManage(!showSalidaManage)}
+                >
+                  <Ionicons 
+                    name={showSalidaManage ? "chevron-up" : "chevron-down"} 
+                    size={responsive.responsiveWidth(20)} 
+                    color={isDarkMode ? colors.primary : '#1976D2'} 
+                  />
+                </TouchableOpacity>
+              </View>
+              {showSalidaManage && (
+                <>
+                  <Text style={[styles.permissionSectionSubtitle, { color: colors.outline }]}>
+                    Configura qué roles pueden crear, editar y eliminar salidas (solo visible para roles con acceso)
+                  </Text>
+                  {salidaAccessLevels.dependiente !== 'none' && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Dependiente
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Salidas - Dependiente',
+                            'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar salidas y ver los costos de los productos. Cuando está desactivado, solo pueden ver la información sin acceso a los costos.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={salidaManagePermissions.dependiente}
+                        onValueChange={() => toggleSalidaManagePermission('dependiente')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={salidaManagePermissions.dependiente ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                  {salidaAccessLevels.almacenero !== 'none' && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Almacenero
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Salidas - Almacenero',
+                            'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar salidas y ver los costos de los productos. Cuando está desactivado, solo pueden ver la información sin acceso a los costos.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={salidaManagePermissions.almacenero}
+                        onValueChange={() => toggleSalidaManagePermission('almacenero')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={salidaManagePermissions.almacenero ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                  {salidaAccessLevels.economico !== 'none' && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Económico
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Salidas - Económico',
+                            'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar salidas y ver los costos de los productos. Cuando está desactivado, solo pueden ver la información sin acceso a los costos.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={salidaManagePermissions.economico}
+                        onValueChange={() => toggleSalidaManagePermission('economico')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={salidaManagePermissions.economico ? '#fff' : colors.outline}
                       />
                     </View>
                   )}

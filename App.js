@@ -24,6 +24,8 @@ import { BarcodeScannerScreen } from './src/screens/BarcodeScannerScreen';
 import { CurrencyExchangeScreen } from './src/screens/CurrencyExchangeScreen';
 import { EntradasScreen } from './src/screens/EntradasScreen';
 import { EntradaFormScreen } from './src/screens/EntradaFormScreen';
+import { SalidasScreen } from './src/screens/SalidasScreen';
+import { SalidaFormScreen } from './src/screens/SalidaFormScreen';
 import { navigationRef } from './src/navigationRef';
 
 const Stack = createNativeStackNavigator();
@@ -60,6 +62,8 @@ const AppStack = ({ initialRoute }) => (
     <Stack.Screen name="ProductoForm" component={ProductoFormScreen} />
     <Stack.Screen name="Entradas" component={EntradasScreen} />
     <Stack.Screen name="EntradaForm" component={EntradaFormScreen} />
+    <Stack.Screen name="Salidas" component={SalidasScreen} />
+    <Stack.Screen name="SalidaForm" component={SalidaFormScreen} />
     <Stack.Screen name="BarcodeScanner" component={BarcodeScannerScreen} />
     <Stack.Screen name="CurrencyExchange" component={CurrencyExchangeScreen} />
   </Stack.Navigator>

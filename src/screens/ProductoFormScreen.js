@@ -27,7 +27,7 @@ const ProductoFormContent = () => {
   const route = useRoute();
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
-  const { token, user, permissions, entradaManagePermissions } = useAuth();
+  const { token, user, permissions, entradaManagePermissions, salidaManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
   
@@ -951,7 +951,7 @@ const ProductoFormContent = () => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-        {/* Action Buttons Section - For Admin and users with entradaManagePermissions */}
+        {/* Action Buttons Section - For Admin and users with entradaManagePermissions or salidaManagePermissions */}
         {(() => {
           const userRole = user?.rol?.toLowerCase();
           const canManageEntradas = 
@@ -960,7 +960,13 @@ const ProductoFormContent = () => {
             (userRole === 'almacenero' && entradaManagePermissions?.almacenero) ||
             (userRole === 'económico' && entradaManagePermissions?.economico);
           
-          if (!canManageEntradas || !(isViewMode || isEditMode)) return null;
+          const canManageSalidas = 
+            userRole === 'administrador' ||
+            (userRole === 'dependiente' && salidaManagePermissions?.dependiente) ||
+            (userRole === 'almacenero' && salidaManagePermissions?.almacenero) ||
+            (userRole === 'económico' && salidaManagePermissions?.economico);
+          
+          if ((!canManageEntradas && !canManageSalidas) || !(isViewMode || isEditMode)) return null;
           
           return (
           <View style={[styles.actionButtonsSection, { backgroundColor: colors.surface }]}>
@@ -996,12 +1002,31 @@ const ProductoFormContent = () => {
               >
                 <Ionicons name="swap-horizontal-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? '#64B5F6' : '#1976D2'} />
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#B71C1C' : '#FFEBEE' }]}
-                onPress={() => {}}
-              >
-                <Ionicons name="arrow-up-circle-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? '#E57373' : '#C62828'} />
-              </TouchableOpacity>
+              {(() => {
+                const userRole = user?.rol?.toLowerCase();
+                const canManageSalidas = 
+                  userRole === 'administrador' ||
+                  (userRole === 'dependiente' && salidaManagePermissions?.dependiente) ||
+                  (userRole === 'almacenero' && salidaManagePermissions?.almacenero) ||
+                  (userRole === 'económico' && salidaManagePermissions?.economico);
+                
+                if (!canManageSalidas) return null;
+                
+                return (
+                  <TouchableOpacity
+                    style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#B71C1C' : '#FFEBEE' }]}
+                    onPress={() => {
+                      if (isOfflineMode) {
+                        showToast({ type: 'warning', message: 'No disponible en modo offline' });
+                        return;
+                      }
+                      navigation.navigate('SalidaForm', { mode: 'add', productoPreSeleccionado: producto });
+                    }}
+                  >
+                    <Ionicons name="arrow-up-circle-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? '#E57373' : '#C62828'} />
+                  </TouchableOpacity>
+                );
+              })()}
               <TouchableOpacity
                 style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#F57C00' : '#FFF3E0' }]}
                 onPress={() => {}}
@@ -1915,37 +1940,60 @@ const ProductoFormContent = () => {
             <View style={[styles.modalContent, { backgroundColor: colors.surface }]} activeOpacity={1}>
               <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Información de Acciones</Text>
               
-              <View style={styles.infoItem}>
-                <Ionicons name="arrow-down-circle-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#81C784' : '#2E7D32'} />
-                <View style={styles.infoItemText}>
-                  <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Agregar Entrada</Text>
-                  <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra la entrada de stock al inventario del producto.</Text>
-                </View>
-              </View>
+              {(() => {
+                const userRole = user?.rol?.toLowerCase();
+                const canManageEntradas = 
+                  userRole === 'administrador' ||
+                  (userRole === 'dependiente' && entradaManagePermissions?.dependiente) ||
+                  (userRole === 'almacenero' && entradaManagePermissions?.almacenero) ||
+                  (userRole === 'económico' && entradaManagePermissions?.economico);
+                
+                const canManageSalidas = 
+                  userRole === 'administrador' ||
+                  (userRole === 'dependiente' && salidaManagePermissions?.dependiente) ||
+                  (userRole === 'almacenero' && salidaManagePermissions?.almacenero) ||
+                  (userRole === 'económico' && salidaManagePermissions?.economico);
+                
+                return (
+                  <>
+                    {canManageEntradas && (
+                      <View style={styles.infoItem}>
+                        <Ionicons name="arrow-down-circle-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#81C784' : '#2E7D32'} />
+                        <View style={styles.infoItemText}>
+                          <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Agregar Entrada</Text>
+                          <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra la entrada de stock al inventario del producto.</Text>
+                        </View>
+                      </View>
+                    )}
 
-              <View style={styles.infoItem}>
-                <Ionicons name="swap-horizontal-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#64B5F6' : '#1976D2'} />
-                <View style={styles.infoItemText}>
-                  <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Movimiento</Text>
-                  <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Realiza transferencias de stock entre tiendas o almacenes.</Text>
-                </View>
-              </View>
+                    <View style={styles.infoItem}>
+                      <Ionicons name="swap-horizontal-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#64B5F6' : '#1976D2'} />
+                      <View style={styles.infoItemText}>
+                        <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Movimiento</Text>
+                        <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Realiza transferencias de stock entre tiendas o almacenes.</Text>
+                      </View>
+                    </View>
 
-              <View style={styles.infoItem}>
-                <Ionicons name="arrow-up-circle-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#E57373' : '#C62828'} />
-                <View style={styles.infoItemText}>
-                  <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Hacer Salida</Text>
-                  <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra la salida de stock del inventario del producto.</Text>
-                </View>
-              </View>
+                    {canManageSalidas && (
+                      <View style={styles.infoItem}>
+                        <Ionicons name="arrow-up-circle-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#E57373' : '#C62828'} />
+                        <View style={styles.infoItemText}>
+                          <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Hacer Salida</Text>
+                          <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra la salida de stock del inventario del producto.</Text>
+                        </View>
+                      </View>
+                    )}
 
-              <View style={styles.infoItem}>
-                <Ionicons name="cart-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#FFB74D' : '#E65100'} />
-                <View style={styles.infoItemText}>
-                  <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Vender</Text>
-                  <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra una venta del producto reduciendo el stock disponible.</Text>
-                </View>
-              </View>
+                    <View style={styles.infoItem}>
+                      <Ionicons name="cart-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#FFB74D' : '#E65100'} />
+                      <View style={styles.infoItemText}>
+                        <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Vender</Text>
+                        <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra una venta del producto reduciendo el stock disponible.</Text>
+                      </View>
+                    </View>
+                  </>
+                );
+              })()}
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity
