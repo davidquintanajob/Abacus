@@ -61,6 +61,8 @@ const EntradaFormContent = () => {
   const [multipleIsSearchingProductos, setMultipleIsSearchingProductos] = useState({});
   const [multipleCostoInputTexts, setMultipleCostoInputTexts] = useState({});
   const [multipleShowDatePicker, setMultipleShowDatePicker] = useState({});
+  // Tracks if user has manually modified costos (to prevent auto-fill from overwriting)
+  const [hasManuallyModifiedCostos, setHasManuallyModifiedCostos] = useState(false);
   
   const [formData, setFormData] = useState({
     id_servicio_tienda: null,
@@ -302,18 +304,18 @@ const EntradaFormContent = () => {
         showToast({ type: 'warning', message: 'Debe seleccionar una tienda' });
         return;
       }
-      if (multipleEntradas.length === 0) {
+      
+      // Filter out empty entries (without product selected)
+      const validEntradas = multipleEntradas.filter(e => e.producto !== null);
+      
+      if (validEntradas.length === 0) {
         showToast({ type: 'warning', message: 'Debe agregar al menos un producto' });
         return;
       }
       
-      // Validar cada entrada
-      for (let i = 0; i < multipleEntradas.length; i++) {
-        const entrada = multipleEntradas[i];
-        if (!entrada.producto) {
-          showToast({ type: 'warning', message: `El producto ${i + 1} no está seleccionado` });
-          return;
-        }
+      // Validar cada entrada válida
+      for (let i = 0; i < validEntradas.length; i++) {
+        const entrada = validEntradas[i];
         if (!entrada.cantidad_entrada || parseFloat(entrada.cantidad_entrada) <= 0) {
           showToast({ type: 'warning', message: `La cantidad del producto ${i + 1} debe ser mayor que 0` });
           return;
@@ -553,8 +555,11 @@ const EntradaFormContent = () => {
 
       const entradasToCreate = [];
 
-      // Procesar cada entrada
-      for (const entrada of multipleEntradas) {
+      // Filter out empty entries (without product selected) and process only valid entries
+      const validEntradas = multipleEntradas.filter(e => e.producto !== null);
+
+      // Procesar cada entrada válida
+      for (const entrada of validEntradas) {
         // Verificar si el producto existe en la tienda
         const productoTienda = entrada.producto?.tiendas_servicio?.find(
           ts => ts.id_tienda === formData.tienda?.id_tienda
@@ -672,6 +677,9 @@ const EntradaFormContent = () => {
   };
 
   const handleTiendaSelect = (tienda) => {
+    // Reset manual modification flag when selecting a new tienda
+    setHasManuallyModifiedCostos(false);
+    
     // Verificar si el producto ya tiene una relación con esta tienda
     if (formData.producto) {
       const productoTienda = formData.producto.tiendas_servicio?.find(
@@ -713,6 +721,7 @@ const EntradaFormContent = () => {
 
 
   const handleCostoChange = (field, value) => {
+    setHasManuallyModifiedCostos(true);
     setFormData(prev => {
       const updated = { ...prev, [field]: value === '' ? '' : parseFloat(value) };
       
@@ -777,6 +786,11 @@ const EntradaFormContent = () => {
       return;
     }
 
+    // Si el usuario ya modificó manualmente los costos, no sobrescribir
+    if (hasManuallyModifiedCostos) {
+      return;
+    }
+
     const servicioTienda = formData.producto.tiendas_servicio?.find(
       ts => ts.id_tienda === formData.tienda.id_tienda
     );
@@ -789,7 +803,7 @@ const EntradaFormContent = () => {
         costo_usd: servicioTienda.costo_usd?.toString() || '',
       }));
     }
-  }, [formData.producto, formData.tienda, config.applyWeightedAverageCost]);
+  }, [formData.producto, formData.tienda, config.applyWeightedAverageCost, hasManuallyModifiedCostos]);
 
   // Efecto para manejar el dropdown de búsqueda de productos en modo múltiple
   useEffect(() => {
@@ -820,6 +834,9 @@ const EntradaFormContent = () => {
   }, [multipleEntradas.map(e => e.productoSearchText).join(','), multipleEntradas.map(e => e.producto?.nombre).join(',')]);
 
   const handleProductoSelect = (producto) => {
+    // Reset manual modification flag when selecting a new product
+    setHasManuallyModifiedCostos(false);
+    
     let costoCup = '';
     let costoUsd = '';
     
@@ -848,7 +865,14 @@ const EntradaFormContent = () => {
   };
 
   // Funciones para modo múltiple
-  const addNewEntrada = () => {
+  const addNewEntrada = (isAutoAdd = false) => {
+    // Check if all previous entries have a product selected (skip check if auto-add after product selection)
+    const allPreviousHaveProduct = multipleEntradas.every(e => e.producto !== null);
+    
+    if (!isAutoAdd && !allPreviousHaveProduct && multipleEntradas.length > 0) {
+      return; // Don't add if previous entry doesn't have product (only for manual adds)
+    }
+    
     const newEntrada = {
       id: Date.now(), // ID temporal
       producto: null,
@@ -859,6 +883,7 @@ const EntradaFormContent = () => {
       precio_cup: '',
       fecha_vencimiento: '',
       productoSearchText: '',
+      hasManuallyModifiedCostos: false, // Track manual cost modifications per entry
     };
     setMultipleEntradas(prev => [...prev, newEntrada]);
   };
@@ -877,6 +902,9 @@ const EntradaFormContent = () => {
   };
 
   const handleProductoSelectMultiple = (id, producto) => {
+    // Reset manual modification flag when selecting a new product
+    updateMultipleEntrada(id, 'hasManuallyModifiedCostos', false);
+    
     let costoCup = '';
     let costoUsd = '';
     
@@ -900,6 +928,9 @@ const EntradaFormContent = () => {
     // Cerrar dropdown para esta entrada específica
     setMultipleShowProductoDropdown(prev => ({ ...prev, [id]: false }));
     setMultipleProductoSearchResults(prev => ({ ...prev, [id]: [] }));
+    
+    // Automatically add a new entry after selecting a product
+    addNewEntrada(true);
   };
 
   const searchProductosMultiple = async (id, searchTerm) => {
@@ -922,9 +953,20 @@ const EntradaFormContent = () => {
     const entrada = multipleEntradas.find(e => e.id === id);
     if (!entrada) return;
     
+    // Mark as manually modified when user changes costos
+    updateMultipleEntrada(id, 'hasManuallyModifiedCostos', true);
+    
     let updatedCostoCup = entrada.costo_cup;
     let updatedCostoUsd = entrada.costo_usd;
     
+    // First, update the field being edited with the user's typed value
+    if (field === 'costo_cup') {
+      updatedCostoCup = value === '' ? '' : parseFloat(value);
+    } else if (field === 'costo_usd') {
+      updatedCostoUsd = value === '' ? '' : parseFloat(value);
+    }
+    
+    // Then, calculate the exchange rate conversion
     if (exchangeRate) {
       if (field === 'costo_cup' && value !== '') {
         const cupValue = parseFloat(value) || 0;
@@ -1337,6 +1379,10 @@ const EntradaFormContent = () => {
                             handleCostoChange('costo_cup', text);
                           }}
                           onBlur={() => {
+                            // Update formData with the value the user typed before clearing costoInputTexts
+                            if (costoInputTexts.costo_cup !== undefined) {
+                              handleCostoChange('costo_cup', costoInputTexts.costo_cup);
+                            }
                             setCostoInputTexts(prev => {
                               const updated = { ...prev };
                               delete updated.costo_cup;
@@ -1368,6 +1414,10 @@ const EntradaFormContent = () => {
                             handleCostoChange('costo_usd', text);
                           }}
                           onBlur={() => {
+                            // Update formData with the value the user typed before clearing costoInputTexts
+                            if (costoInputTexts.costo_usd !== undefined) {
+                              handleCostoChange('costo_usd', costoInputTexts.costo_usd);
+                            }
                             setCostoInputTexts(prev => {
                               const updated = { ...prev };
                               delete updated.costo_usd;
@@ -1718,6 +1768,10 @@ const EntradaFormContent = () => {
                             handleCostoChangeMultiple(entrada.id, 'costo_cup', text);
                           }}
                           onBlur={() => {
+                            // Update formData with the value the user typed before clearing multipleCostoInputTexts
+                            if (multipleCostoInputTexts[entrada.id]?.costo_cup !== undefined) {
+                              handleCostoChangeMultiple(entrada.id, 'costo_cup', multipleCostoInputTexts[entrada.id].costo_cup);
+                            }
                             setMultipleCostoInputTexts(prev => {
                               const updated = { ...prev };
                               if (updated[entrada.id]) {
@@ -1760,6 +1814,10 @@ const EntradaFormContent = () => {
                             handleCostoChangeMultiple(entrada.id, 'costo_usd', text);
                           }}
                           onBlur={() => {
+                            // Update formData with the value the user typed before clearing multipleCostoInputTexts
+                            if (multipleCostoInputTexts[entrada.id]?.costo_usd !== undefined) {
+                              handleCostoChangeMultiple(entrada.id, 'costo_usd', multipleCostoInputTexts[entrada.id].costo_usd);
+                            }
                             setMultipleCostoInputTexts(prev => {
                               const updated = { ...prev };
                               if (updated[entrada.id]) {
@@ -1834,25 +1892,13 @@ const EntradaFormContent = () => {
                 </View>
               ))}
 
-              {/* Botón agregar más productos (solo en modo múltiple) */}
-              {isMultipleMode && !isReadOnly && (
-                <TouchableOpacity
-                  style={[styles.addProductButton, { backgroundColor: colors.primaryContainer, borderColor: colors.primary }]}
-                  onPress={addNewEntrada}
-                >
-                  <Ionicons name="add-circle" size={responsive.responsiveWidth(20)} color={colors.primary} />
-                  <Text style={[styles.addProductButtonText, { color: colors.primary }]}>
-                    Agregar otro producto
-                  </Text>
-                </TouchableOpacity>
-              )}
 
               {/* Info de cantidad de productos (solo en modo múltiple) */}
               {isMultipleMode && (
                 <View style={[styles.productCountInfo, { backgroundColor: colors.primaryContainer }]}>
-                  <Ionicons name="information-circle" size={responsive.responsiveWidth(18)} color={colors.primary} />
-                  <Text style={[styles.productCountInfoText, { color: colors.primary }]}>
-                    Total: {multipleEntradas.length} {multipleEntradas.length === 1 ? 'producto' : 'productos'}
+                  <Ionicons name="information-circle" size={responsive.responsiveWidth(18)} color={!isDark ? '#FFFFFF' : colors.primary} />
+                  <Text style={[styles.productCountInfoText, { color: !isDark ? '#FFFFFF' : colors.primary }]}>
+                    Total: {multipleEntradas.filter(e => e.producto !== null).length} {multipleEntradas.filter(e => e.producto !== null).length === 1 ? 'producto' : 'productos'}
                   </Text>
                 </View>
               )}

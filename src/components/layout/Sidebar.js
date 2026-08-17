@@ -42,7 +42,7 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
     { icon: require('../../../assets/lanza-libre.png'), label: 'Servicios y Ofertas', route: 'Servicios' },
     { icon: require('../../../assets/product.png'), label: 'Productos', route: 'Productos' },
     ...(canAccessEntradas ? [{ icon: require('../../../assets/package-add.png'), label: 'Entradas', route: 'Entradas' }] : []),
-    ...(canAccessSalidas ? [{ icon: require('../../../assets/package-minus.png'), label: 'Salidas', route: 'Salidas' }] : []),
+    ...(canAccessSalidas ? [{ icon: require('../../../assets/box.png'), label: 'Salidas', route: 'Salidas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/tienda.png'), label: 'Tiendas', route: 'Tiendas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/usuarios.png'), label: 'Usuarios', route: 'Usuarios' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/Servicios.png'), label: 'Configuraciones del Administrador', route: 'CurrencyExchange' }] : []),

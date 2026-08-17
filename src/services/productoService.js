@@ -2,27 +2,32 @@ import api from './api';
 
 export const getProductos = async (filters = {}, page = 1, limit = 10) => {
   try {
-    const queryParams = new URLSearchParams({
-      limit: limit.toString(),
-      page: page.toString(),
-    });
+    // Build query params manually to avoid double encoding with URLSearchParams
+    const params = new Map();
+    params.set('limit', limit.toString());
+    params.set('page', page.toString());
 
-    // Add filters
-    if (filters.nombre) queryParams.append('nombre', filters.nombre);
-    if (filters.codigo) queryParams.append('codigo', filters.codigo);
-    if (filters.categoria) queryParams.append('categoria', filters.categoria);
-    if (!filters.skipEsvendible && filters.esvendible !== '') queryParams.append('esvendible', filters.esvendible === 'true' ? true : false);
-    if (filters.id_tienda) queryParams.append('id_tienda', filters.id_tienda);
-    if (filters.cantidad_min !== undefined && filters.cantidad_min !== '') queryParams.append('cantidad_min', filters.cantidad_min);
-    if (filters.cantidad_max !== undefined && filters.cantidad_max !== '') queryParams.append('cantidad_max', filters.cantidad_max);
+    // Add filters with proper encoding
+    if (filters.nombre) params.set('nombre', encodeURIComponent(filters.nombre));
+    if (filters.codigo) params.set('codigo', encodeURIComponent(filters.codigo));
+    if (filters.categoria) params.set('categoria', encodeURIComponent(filters.categoria));
+    if (!filters.skipEsvendible && filters.esvendible !== '') params.set('esvendible', filters.esvendible === 'true' ? true : false);
+    if (filters.id_tienda) params.set('id_tienda', filters.id_tienda);
+    if (filters.cantidad_min !== undefined && filters.cantidad_min !== '') params.set('cantidad_min', filters.cantidad_min);
+    if (filters.cantidad_max !== undefined && filters.cantidad_max !== '') params.set('cantidad_max', filters.cantidad_max);
 
     // If no store filter is selected, add a dummy cantidad_min=0 to force backend to include tiendas_servicio
     // Skip this if skipCantidadMin flag is set (used for product search in entrada form)
     if (!filters.skipCantidadMin && !filters.id_tienda && filters.cantidad_min === undefined && filters.cantidad_max === undefined) {
-      queryParams.append('cantidad_min', '0');
+      params.set('cantidad_min', '0');
     }
 
-    const response = await api.get(`/producto/filter?${queryParams}`);
+    // Convert Map to query string manually
+    const queryString = Array.from(params.entries())
+      .map(([key, value]) => `${key}=${value}`)
+      .join('&');
+
+    const response = await api.get(`/producto/filter?${queryString}`);
     return response.data;
   } catch (error) {
     const errorMessage = error.response?.data?.errors?.[0] || 
