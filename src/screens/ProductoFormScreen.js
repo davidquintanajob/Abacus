@@ -458,33 +458,27 @@ const ProductoFormContent = () => {
           };
 
           let baseList = [];
-          if (formData.precio_cup_general !== null || formData.precio_usd_general !== null) {
+          
+          // If user has configured specific stores in productoTiendaList, only include those stores
+          // This respects the user's decision to remove stores from the form
+          if (formData.productoTiendaList.length > 0) {
+            formData.productoTiendaList.forEach(specific => {
+              if (specific.id_tienda === null) return;
+              
+              baseList.push({
+                id_tienda: specific.id_tienda,
+                precio_cup: specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general),
+                precio_usd: specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general),
+              });
+            });
+          } 
+          // If no specific stores configured but general prices exist, apply to all active stores
+          else if (formData.precio_cup_general !== null || formData.precio_usd_general !== null) {
             baseList = tiendas.filter(tienda => tienda.activo === true).map(tienda => ({
               id_tienda: tienda.id_tienda,
               precio_cup: toFixed5(formData.precio_cup_general),
               precio_usd: toFixed5(formData.precio_usd_general),
             }));
-          }
-          
-          if (formData.productoTiendaList.length > 0) {
-            formData.productoTiendaList.forEach(specific => {
-              if (specific.id_tienda === null) return;
-              
-              const existingIndex = baseList.findIndex(item => item.id_tienda === specific.id_tienda);
-              if (existingIndex >= 0) {
-                baseList[existingIndex] = {
-                  ...baseList[existingIndex],
-                  precio_cup: specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general),
-                  precio_usd: specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general),
-                };
-              } else {
-                baseList.push({
-                  id_tienda: specific.id_tienda,
-                  precio_cup: specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general),
-                  precio_usd: specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general),
-                });
-              }
-            });
           }
           
           // Apply global cost fields to all stores

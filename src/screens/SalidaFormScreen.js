@@ -463,19 +463,29 @@ const SalidaFormContent = () => {
       );
     }
     
-    if (!servicioTienda) {
-      return { cantidad: 0, costo_cup: 0, costo_usd: 0 };
+    // If no relationship exists, use costs from any tienda (cost is unique across all tiendas)
+    let costoCup = 0;
+    let costoUsd = 0;
+    
+    if (servicioTienda) {
+      costoCup = parseFloat(servicioTienda.costo_cup) || 0;
+      costoUsd = parseFloat(servicioTienda.costo_usd) || 0;
+    } else {
+      // Use costs from first available tienda (cost is unique)
+      const firstTiendaServicio = formData.producto.tiendas_servicio?.[0];
+      costoCup = parseFloat(firstTiendaServicio?.costo_cup) || 0;
+      costoUsd = parseFloat(firstTiendaServicio?.costo_usd) || 0;
     }
     
-    const currentStock = parseFloat(servicioTienda.cantidad) || 0;
+    const currentStock = servicioTienda ? (parseFloat(servicioTienda.cantidad) || 0) : 0;
     const newCantidad = parseFloat(formData.cantidad_total) || 0;
     const cantidadDiff = originalCantidad - newCantidad;
     
     return {
       cantidad: currentStock,
       cantidadDiff: cantidadDiff,
-      costo_cup: parseFloat(servicioTienda.costo_cup) || 0,
-      costo_usd: parseFloat(servicioTienda.costo_usd) || 0,
+      costo_cup: costoCup,
+      costo_usd: costoUsd,
     };
   };
 

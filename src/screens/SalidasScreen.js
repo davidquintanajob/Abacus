@@ -1151,14 +1151,14 @@ const SalidasContent = () => {
                       <Text style={[styles.salidaTienda, { color: colors.outline }]}>
                         Tienda: {salida.servicioTienda?.tienda?.nombre || 'N/A'}
                       </Text>
-                      {canManageSalidas && (
-                        <Text style={[styles.salidaCosto, { color: colors.primary }]}>
-                          CUP: ${parseFloat(salida.costo_cup).toFixed(2)} | USD: ${parseFloat(salida.costo_usd).toFixed(2)}
-                        </Text>
-                      )}
                       <Text style={[styles.salidaCantidad, { color: colors.primary }]}>
                         Cantidad: {salida.cantidad_total}
                       </Text>
+                      {canManageSalidas && (
+                        <Text style={[styles.salidaCosto, { color: colors.primary }]}>
+                          Total CUP: ${(parseFloat(salida.costo_cup) * parseFloat(salida.cantidad_total)).toFixed(2)} | Total USD: ${(parseFloat(salida.costo_usd) * parseFloat(salida.cantidad_total)).toFixed(2)}
+                        </Text>
+                      )}
                       <Text style={[styles.salidaFecha, { color: colors.outline }]}>
                         Fecha: {new Date(salida.fecha).toLocaleDateString()}
                       </Text>
@@ -1204,13 +1204,13 @@ const SalidasContent = () => {
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Tipo Salida</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Tienda</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(200) }]}>Descripción</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80), textAlign: 'center' }]}>Cantidad</Text>
                     {canManageSalidas && (
                       <>
-                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100), textAlign: 'center' }]}>Costo CUP</Text>
-                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100), textAlign: 'center' }]}>Costo USD</Text>
+                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100), textAlign: 'center' }]}>Total CUP</Text>
+                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100), textAlign: 'center' }]}>Total USD</Text>
                       </>
                     )}
-                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80), textAlign: 'center' }]}>Cantidad</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Fecha</Text>
                     {canManageSalidas && (
                       <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Acciones</Text>
@@ -1235,19 +1235,19 @@ const SalidasContent = () => {
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(200) }]} numberOfLines={2}>
                           {salida.descripcion || '-'}
                         </Text>
-                        {canManageSalidas && (
-                          <>
-                            <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
-                              ${parseFloat(salida.costo_cup).toFixed(2)}
-                            </Text>
-                            <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
-                              ${parseFloat(salida.costo_usd).toFixed(2)}
-                            </Text>
-                          </>
-                        )}
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(80), textAlign: 'center' }]}>
                           {salida.cantidad_total}
                         </Text>
+                        {canManageSalidas && (
+                          <>
+                            <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
+                              ${(parseFloat(salida.costo_cup) * parseFloat(salida.cantidad_total)).toFixed(2)}
+                            </Text>
+                            <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
+                              ${(parseFloat(salida.costo_usd) * parseFloat(salida.cantidad_total)).toFixed(2)}
+                            </Text>
+                          </>
+                        )}
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(120) }]}>
                           {new Date(salida.fecha).toLocaleDateString()}
                         </Text>

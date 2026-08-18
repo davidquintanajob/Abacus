@@ -1231,11 +1231,6 @@ const EntradasContent = () => {
                       <Text style={[styles.entradaTienda, { color: colors.outline }]}>
                         Tienda: {entrada.servicioTienda?.tienda?.nombre || 'N/A'}
                       </Text>
-                      {canManageEntradas && (
-                        <Text style={[styles.entradaCosto, { color: colors.primary }]}>
-                          CUP: ${parseFloat(entrada.costo_cup).toFixed(2)} | USD: ${parseFloat(entrada.costo_usd).toFixed(2)}
-                        </Text>
-                      )}
                       <View style={styles.cantidadRow}>
                         <Text style={[styles.entradaCantidad, { color: colors.primary }]}>
                           Inicial: {entrada.cantidad_entrada}
@@ -1246,6 +1241,11 @@ const EntradasContent = () => {
                           </Text>
                         </View>
                       </View>
+                      {canManageEntradas && (
+                        <Text style={[styles.entradaCosto, { color: colors.primary }]}>
+                          Total CUP: ${(parseFloat(entrada.costo_cup) * parseFloat(entrada.cantidad_entrada)).toFixed(2)} | Total USD: ${(parseFloat(entrada.costo_usd) * parseFloat(entrada.cantidad_entrada)).toFixed(2)}
+                        </Text>
+                      )}
                       <Text style={[styles.entradaFecha, { color: colors.outline }]}>
                         Fecha: {new Date(entrada.fecha).toLocaleDateString()}
                       </Text>
@@ -1291,14 +1291,14 @@ const EntradasContent = () => {
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Código Lote</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Tienda</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Proveedor</Text>
-                    {canManageEntradas && (
-                      <>
-                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100), textAlign: 'center' }]}>Costo CUP</Text>
-                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100), textAlign: 'center' }]}>Costo USD</Text>
-                      </>
-                    )}
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80), textAlign: 'center' }]}>Inicial</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80), textAlign: 'center' }]}>Actual</Text>
+                    {canManageEntradas && (
+                      <>
+                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100), textAlign: 'center' }]}>Total CUP</Text>
+                        <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100), textAlign: 'center' }]}>Total USD</Text>
+                      </>
+                    )}
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Fecha</Text>
                     {canManageEntradas && (
                       <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Acciones</Text>
@@ -1334,22 +1334,22 @@ const EntradasContent = () => {
                           <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
                             {entrada.nombre_proveedor || '-'}
                           </Text>
-                          {canManageEntradas && (
-                            <>
-                              <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
-                                ${parseFloat(entrada.costo_cup).toFixed(2)}
-                              </Text>
-                              <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
-                                ${parseFloat(entrada.costo_usd).toFixed(2)}
-                              </Text>
-                            </>
-                          )}
                           <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(80), textAlign: 'center' }]}>
                             {entrada.cantidad_entrada}
                           </Text>
                           <Text style={[styles.tableCellText, { color: actualColor, width: responsive.responsiveWidth(80), textAlign: 'center' }]}>
                             {cantidadActual}
                           </Text>
+                          {canManageEntradas && (
+                            <>
+                              <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
+                                ${(parseFloat(entrada.costo_cup) * parseFloat(entrada.cantidad_entrada)).toFixed(2)}
+                              </Text>
+                              <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
+                                ${(parseFloat(entrada.costo_usd) * parseFloat(entrada.cantidad_entrada)).toFixed(2)}
+                              </Text>
+                            </>
+                          )}
                           <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(120) }]}>
                             {new Date(entrada.fecha).toLocaleDateString()}
                           </Text>

@@ -64,6 +64,14 @@ const EntradaFormContent = () => {
   // Tracks if user has manually modified costos (to prevent auto-fill from overwriting)
   const [hasManuallyModifiedCostos, setHasManuallyModifiedCostos] = useState(false);
   
+  // Estado para el modal de costos sugeridos
+  const [showCostSuggestionModal, setShowCostSuggestionModal] = useState(false);
+  const [suggestedCosts, setSuggestedCosts] = useState(null);
+  const [currentCosts, setCurrentCosts] = useState(null);
+  const [isMultipleCostSuggestion, setIsMultipleCostSuggestion] = useState(false);
+  const [multipleSuggestedCosts, setMultipleSuggestedCosts] = useState([]);
+  const [multipleCurrentCosts, setMultipleCurrentCosts] = useState([]);
+  
   const [formData, setFormData] = useState({
     id_servicio_tienda: null,
     cantidad_entrada: '',
@@ -269,6 +277,7 @@ const EntradaFormContent = () => {
       const servicioTienda = producto.tiendas_servicio?.find(ts => ts.id_tienda === tienda.id_tienda);
       
       if (!servicioTienda) {
+        console.log('No servicioTienda found, returning new costs');
         return { costo_cup: nuevoCostoCup, costo_usd: nuevoCostoUsd };
       }
 
@@ -279,20 +288,39 @@ const EntradaFormContent = () => {
       const cantidadActual = parseFloat(servicioTienda.cantidad) || 0;
       const costoActualCup = parseFloat(servicioTienda.costo_cup) || 0;
       const costoActualUsd = parseFloat(servicioTienda.costo_usd) || 0;
+      const nuevaCantidadNum = parseFloat(nuevaCantidad);
+
+      console.log('CalcularCostoPromedioPonderado - Inputs:', {
+        cantidadActual,
+        costoActualCup,
+        costoActualUsd,
+        nuevaCantidad: nuevaCantidadNum,
+        nuevoCostoCup,
+        nuevoCostoUsd,
+      });
 
       // Calcular costo promedio ponderado
-      const cantidadTotal = cantidadActual + parseFloat(nuevaCantidad);
-      const costoTotalCup = (costoActualCup * cantidadActual) + (nuevoCostoCup * parseFloat(nuevaCantidad));
-      const costoTotalUsd = (costoActualUsd * cantidadActual) + (nuevoCostoUsd * parseFloat(nuevaCantidad));
+      const cantidadTotal = cantidadActual + nuevaCantidadNum;
+      const costoTotalCup = (costoActualCup * cantidadActual) + (nuevoCostoCup * nuevaCantidadNum);
+      const costoTotalUsd = (costoActualUsd * cantidadActual) + (nuevoCostoUsd * nuevaCantidadNum);
 
       const nuevoCostoPromedioCup = costoTotalCup / cantidadTotal;
       const nuevoCostoPromedioUsd = costoTotalUsd / cantidadTotal;
+
+      console.log('CalcularCostoPromedioPonderado - Results:', {
+        cantidadTotal,
+        costoTotalCup,
+        costoTotalUsd,
+        nuevoCostoPromedioCup,
+        nuevoCostoPromedioUsd,
+      });
 
       return {
         costo_cup: parseFloat(nuevoCostoPromedioCup.toFixed(5)),
         costo_usd: parseFloat(nuevoCostoPromedioUsd.toFixed(5)),
       };
     } catch (error) {
+      console.error('Error in calcularCostoPromedioPonderado:', error);
       return { costo_cup: nuevoCostoCup, costo_usd: nuevoCostoUsd };
     }
   };
@@ -352,7 +380,7 @@ const EntradaFormContent = () => {
         }
       }
       
-      executeSaveMultiple();
+      checkAndShowCostSuggestionMultiple();
       return;
     }
     
@@ -418,7 +446,7 @@ const EntradaFormContent = () => {
             {
               text: 'Continuar',
               style: 'destructive',
-              onPress: () => executeSave()
+              onPress: () => checkAndShowCostSuggestion()
             }
           ]
         );
@@ -426,7 +454,138 @@ const EntradaFormContent = () => {
       }
     }
 
+    checkAndShowCostSuggestion();
+  };
+
+  const checkAndShowCostSuggestion = async () => {
+    // Si la fórmula de costo promedio ponderado está activa y estamos en modo add
+    if (config.applyWeightedAverageCost && isAddMode && !isEditMode) {
+      try {
+        const costoCup = parseFloat(formData.costo_cup) || 0;
+        const costoUsd = parseFloat(formData.costo_usd) || 0;
+        
+        const nuevosCostos = await calcularCostoPromedioPonderado(
+          formData.producto,
+          formData.tienda,
+          formData.cantidad_entrada,
+          costoCup,
+          costoUsd
+        );
+        
+        // Guardar costos actuales del formulario
+        setCurrentCosts({
+          costo_cup: costoCup,
+          costo_usd: costoUsd,
+        });
+        
+        // Guardar costos sugeridos por la fórmula
+        setSuggestedCosts({
+          costo_cup: nuevosCostos.costo_cup,
+          costo_usd: nuevosCostos.costo_usd,
+        });
+        
+        // Mostrar el modal
+        setShowCostSuggestionModal(true);
+      } catch (error) {
+        // Si hay error al calcular, continuar con el guardado normal
+        executeSave();
+      }
+    } else {
+      // Si la fórmula no está activa o estamos en modo edición, guardar directamente
+      executeSave();
+    }
+  };
+
+  const handleKeepCurrentCosts = () => {
+    // Cerrar el modal y guardar con los costos actuales del formulario
+    setShowCostSuggestionModal(false);
     executeSave();
+  };
+
+  const handleUseSuggestedCosts = () => {
+    // Actualizar el formData con los costos sugeridos y cerrar el modal
+    setFormData(prev => ({
+      ...prev,
+      costo_cup: suggestedCosts.costo_cup,
+      costo_usd: suggestedCosts.costo_usd,
+    }));
+    setShowCostSuggestionModal(false);
+    executeSave();
+  };
+
+  const checkAndShowCostSuggestionMultiple = async () => {
+    // Si la fórmula de costo promedio ponderado está activa y estamos en modo add
+    if (config.applyWeightedAverageCost && isAddMode && !isEditMode) {
+      try {
+        const validEntradas = multipleEntradas.filter(e => e.producto !== null);
+        
+        const currentCostsArray = [];
+        const suggestedCostsArray = [];
+        
+        for (const entrada of validEntradas) {
+          const costoCup = parseFloat(entrada.costo_cup) || 0;
+          const costoUsd = parseFloat(entrada.costo_usd) || 0;
+          
+          const nuevosCostos = await calcularCostoPromedioPonderado(
+            entrada.producto,
+            formData.tienda,
+            entrada.cantidad_entrada,
+            costoCup,
+            costoUsd
+          );
+          
+          currentCostsArray.push({
+            id: entrada.id,
+            productoNombre: entrada.producto.nombre,
+            costo_cup: costoCup,
+            costo_usd: costoUsd,
+          });
+          
+          suggestedCostsArray.push({
+            id: entrada.id,
+            productoNombre: entrada.producto.nombre,
+            costo_cup: nuevosCostos.costo_cup,
+            costo_usd: nuevosCostos.costo_usd,
+          });
+        }
+        
+        setMultipleCurrentCosts(currentCostsArray);
+        setMultipleSuggestedCosts(suggestedCostsArray);
+        setIsMultipleCostSuggestion(true);
+        setShowCostSuggestionModal(true);
+      } catch (error) {
+        // Si hay error al calcular, continuar con el guardado normal
+        executeSaveMultiple();
+      }
+    } else {
+      // Si la fórmula no está activa o estamos en modo edición, guardar directamente
+      executeSaveMultiple();
+    }
+  };
+
+  const handleKeepCurrentCostsMultiple = () => {
+    setShowCostSuggestionModal(false);
+    setIsMultipleCostSuggestion(false);
+    executeSaveMultiple();
+  };
+
+  const handleUseSuggestedCostsMultiple = () => {
+    // Actualizar multipleEntradas con los costos sugeridos
+    setMultipleEntradas(prev => prev.map(entrada => {
+      const suggestedCost = multipleSuggestedCosts.find(sc => sc.id === entrada.id);
+      if (suggestedCost) {
+        return {
+          ...entrada,
+          costo_cup: suggestedCost.costo_cup,
+          costo_usd: suggestedCost.costo_usd,
+        };
+      }
+      return entrada;
+    }));
+    
+    setShowCostSuggestionModal(false);
+    setIsMultipleCostSuggestion(false);
+    executeSaveMultiple();
   };
 
   const executeSave = async () => {
@@ -701,11 +860,17 @@ const EntradaFormContent = () => {
           precio_usd: '',
         }));
       } else {
-        // Si no existe relación, solo actualizar la tienda y limpiar precios
+        // Si no existe relación, autorellenar costos desde cualquier tienda (costo es único)
+        const firstTiendaServicio = formData.producto.tiendas_servicio?.[0];
+        const costoCup = firstTiendaServicio?.costo_cup?.toString() || '';
+        const costoUsd = firstTiendaServicio?.costo_usd?.toString() || '';
+        
         setFormData(prev => ({
           ...prev,
           tienda,
           id_servicio_tienda: null,
+          costo_cup: costoCup,
+          costo_usd: costoUsd,
           precio_cup: '',
           precio_usd: '',
         }));
@@ -775,13 +940,8 @@ const EntradaFormContent = () => {
     return () => clearTimeout(timeoutId);
   }, [productoSearchText, formData.producto]);
 
-  // Efecto para autorellenar costos cuando la fórmula de costo promedio ponderado está activa
+  // Efecto para autorellenar costos cuando se selecciona producto/tienda
   useEffect(() => {
-    if (config.applyWeightedAverageCost) {
-      // Cuando la fórmula está activa, NO autorellenar costos (usuario debe ingresar costo de entrada)
-      return;
-    }
-    
     if (!formData.producto || !formData.tienda) {
       return;
     }
@@ -796,14 +956,42 @@ const EntradaFormContent = () => {
     );
 
     if (servicioTienda) {
-      // Cuando la fórmula NO está activa, autorellenar con el costo actual del producto en la tienda
+      // Autorellenar con el costo actual del producto en la tienda
       setFormData(prev => ({
         ...prev,
         costo_cup: servicioTienda.costo_cup?.toString() || '',
         costo_usd: servicioTienda.costo_usd?.toString() || '',
       }));
     }
-  }, [formData.producto, formData.tienda, config.applyWeightedAverageCost, hasManuallyModifiedCostos]);
+  }, [formData.producto, formData.tienda, hasManuallyModifiedCostos]);
+
+  // Efecto para autorellenar costos en modo múltiple cuando cambia la tienda
+  useEffect(() => {
+    if (!formData.tienda || !isMultipleMode) {
+      return;
+    }
+
+    // Autorellenar costos para todas las entradas que tienen producto seleccionado
+    setMultipleEntradas(prev => prev.map(entrada => {
+      if (!entrada.producto || entrada.hasManuallyModifiedCostos) {
+        return entrada;
+      }
+
+      const tiendaServicio = entrada.producto.tiendas_servicio?.find(
+        ts => ts.id_tienda === formData.tienda.id_tienda
+      );
+
+      if (tiendaServicio) {
+        return {
+          ...entrada,
+          costo_cup: tiendaServicio.costo_cup?.toString() || '',
+          costo_usd: tiendaServicio.costo_usd?.toString() || '',
+        };
+      }
+
+      return entrada;
+    }));
+  }, [formData.tienda, isMultipleMode]);
 
   // Efecto para manejar el dropdown de búsqueda de productos en modo múltiple
   useEffect(() => {
@@ -908,13 +1096,13 @@ const EntradaFormContent = () => {
     let costoCup = '';
     let costoUsd = '';
     
-    if (formData.tienda && !config.applyWeightedAverageCost) {
+    if (formData.tienda) {
       const tiendaServicio = producto.tiendas_servicio?.find(
         ts => ts.id_tienda === formData.tienda.id_tienda
       );
       costoCup = tiendaServicio?.costo_cup?.toString() || '';
       costoUsd = tiendaServicio?.costo_usd?.toString() || '';
-    } else if (!config.applyWeightedAverageCost) {
+    } else {
       const firstTiendaServicio = producto.tiendas_servicio?.[0];
       costoCup = firstTiendaServicio?.costo_cup?.toString() || '';
       costoUsd = firstTiendaServicio?.costo_usd?.toString() || '';
@@ -1048,15 +1236,23 @@ const EntradaFormContent = () => {
       precioCup = !isNaN(parsedPrecioCup) ? parsedPrecioCup : 0;
       precioUsd = !isNaN(parsedPrecioUsd) ? parsedPrecioUsd : 0;
     } 
-    // In add mode, use the product's tiendas_servicio
+    // In add mode, use the product's tiendas_servicio or form prices if no relationship exists
     else if (formData.producto && formData.tienda) {
       const servicioTienda = formData.producto.tiendas_servicio?.find(
         ts => ts.id_tienda === formData.tienda.id_tienda
       );
-      const parsedPrecioCup = parseFloat(servicioTienda?.precio_cup);
-      const parsedPrecioUsd = parseFloat(servicioTienda?.precio_usd);
-      precioCup = !isNaN(parsedPrecioCup) ? parsedPrecioCup : 0;
-      precioUsd = !isNaN(parsedPrecioUsd) ? parsedPrecioUsd : 0;
+      
+      if (servicioTienda) {
+        // Use existing relationship prices
+        const parsedPrecioCup = parseFloat(servicioTienda.precio_cup);
+        const parsedPrecioUsd = parseFloat(servicioTienda.precio_usd);
+        precioCup = !isNaN(parsedPrecioCup) ? parsedPrecioCup : 0;
+        precioUsd = !isNaN(parsedPrecioUsd) ? parsedPrecioUsd : 0;
+      } else {
+        // No relationship exists, use prices from form (user is entering them manually)
+        precioCup = parseFloat(formData.precio_cup) || 0;
+        precioUsd = parseFloat(formData.precio_usd) || 0;
+      }
     }
 
     // Calculate total cost
@@ -2118,6 +2314,159 @@ const EntradaFormContent = () => {
         </Card>
       </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Modal de Costos Sugeridos */}
+      <Modal
+        visible={showCostSuggestionModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCostSuggestionModal(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.5)' }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.outlineVariant }]}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                Costos Sugeridos
+              </Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setShowCostSuggestionModal(false)}
+              >
+                <Ionicons name="close" size={24} color={colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView 
+              style={styles.modalList} 
+              contentContainerStyle={styles.modalListContent}
+              showsVerticalScrollIndicator={true}
+            >
+              <Text style={[styles.infoText, { color: colors.outline, marginBottom: responsive.responsiveMargin(16) }]}>
+                {isMultipleCostSuggestion 
+                  ? 'La fórmula de costo promedio ponderado ha calculado los siguientes costos sugeridos para cada producto:'
+                  : 'La fórmula de costo promedio ponderado ha calculado los siguientes costos sugeridos para esta entrada:'}
+              </Text>
+
+              {isMultipleCostSuggestion ? (
+                  // Modo múltiple: mostrar lista de productos con costos lado a lado
+                  multipleCurrentCosts.map((currentCost, index) => {
+                    const suggestedCost = multipleSuggestedCosts[index];
+                    return (
+                      <View key={currentCost.id} style={[styles.productCostCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                        <Text style={[styles.productCostTitle, { color: colors.onSurface }]}>
+                          {currentCost.productoNombre}
+                        </Text>
+                        
+                        {/* Fila CUP: Actual vs Sugerido */}
+                        <View style={styles.costComparisonRow}>
+                          <View style={[styles.costComparisonHalf, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                            <Text style={[styles.costComparisonHalfTitle, { color: colors.onSurface }]}>
+                              CUP Actual
+                            </Text>
+                            <Text style={[styles.costComparisonHalfValue, { color: colors.onSurface }]}>
+                              ${currentCost.costo_cup?.toFixed(2) || '0.00'}
+                            </Text>
+                          </View>
+                          <View style={[styles.costComparisonHalf, { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+                            <Text style={[styles.costComparisonHalfTitle, { color: '#fff' }]}>
+                              CUP Sugerido
+                            </Text>
+                            <Text style={[styles.costComparisonHalfValue, { color: '#fff' }]}>
+                              ${suggestedCost.costo_cup?.toFixed(2) || '0.00'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Fila USD: Actual vs Sugerido */}
+                        <View style={styles.costComparisonRow}>
+                          <View style={[styles.costComparisonHalf, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                            <Text style={[styles.costComparisonHalfTitle, { color: colors.onSurface }]}>
+                              USD Actual
+                            </Text>
+                            <Text style={[styles.costComparisonHalfValue, { color: colors.onSurface }]}>
+                              ${currentCost.costo_usd?.toFixed(2) || '0.00'}
+                            </Text>
+                          </View>
+                          <View style={[styles.costComparisonHalf, { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+                            <Text style={[styles.costComparisonHalfTitle, { color: '#fff' }]}>
+                              USD Sugerido
+                            </Text>
+                            <Text style={[styles.costComparisonHalfValue, { color: '#fff' }]}>
+                              ${suggestedCost.costo_usd?.toFixed(2) || '0.00'}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })
+                ) : null}
+
+                {!isMultipleCostSuggestion && (
+                  <View>
+                    {/* Fila CUP: Actual vs Sugerido */}
+                    <View style={styles.costComparisonRow}>
+                      <View style={[styles.costComparisonHalf, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                        <Text style={[styles.costComparisonHalfTitle, { color: colors.onSurface }]}>
+                          CUP Actual
+                        </Text>
+                        <Text style={[styles.costComparisonHalfValue, { color: colors.onSurface }]}>
+                          ${currentCosts?.costo_cup?.toFixed(2) || '0.00'}
+                        </Text>
+                      </View>
+                      <View style={[styles.costComparisonHalf, { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+                        <Text style={[styles.costComparisonHalfTitle, { color: '#fff' }]}>
+                          CUP Sugerido
+                        </Text>
+                        <Text style={[styles.costComparisonHalfValue, { color: '#fff' }]}>
+                          ${suggestedCosts?.costo_cup?.toFixed(2) || '0.00'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Fila USD: Actual vs Sugerido */}
+                    <View style={styles.costComparisonRow}>
+                      <View style={[styles.costComparisonHalf, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                        <Text style={[styles.costComparisonHalfTitle, { color: colors.onSurface }]}>
+                          USD Actual
+                        </Text>
+                        <Text style={[styles.costComparisonHalfValue, { color: colors.onSurface }]}>
+                          ${currentCosts?.costo_usd?.toFixed(2) || '0.00'}
+                        </Text>
+                      </View>
+                      <View style={[styles.costComparisonHalf, { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+                        <Text style={[styles.costComparisonHalfTitle, { color: '#fff' }]}>
+                          USD Sugerido
+                        </Text>
+                        <Text style={[styles.costComparisonHalfValue, { color: '#fff' }]}>
+                          ${suggestedCosts?.costo_usd?.toFixed(2) || '0.00'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
+            </ScrollView>
+
+            <View style={[styles.modalFooter, { borderTopColor: colors.outlineVariant }]}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonSecondary, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                onPress={() => isMultipleCostSuggestion ? handleKeepCurrentCostsMultiple() : handleKeepCurrentCosts()}
+              >
+                <Text style={[styles.modalButtonText, { color: colors.onSurface }]}>
+                  Mantener Costos Actuales
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonPrimary, { backgroundColor: colors.primary }]}
+                onPress={() => isMultipleCostSuggestion ? handleUseSuggestedCostsMultiple() : handleUseSuggestedCosts()}
+              >
+                <Text style={[styles.modalButtonText, { color: '#fff' }]}>
+                  Usar Costos Sugeridos
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -2399,8 +2748,8 @@ const createStyles = (responsive) => StyleSheet.create({
     width: '100%',
     maxWidth: responsive.responsiveWidth(500),
     borderRadius: 16,
-    maxHeight: responsive.responsiveHeight(700),
     minHeight: responsive.responsiveHeight(400),
+    maxHeight: responsive.responsiveHeight(600),
     overflow: 'hidden',
     flexDirection: 'column',
   },
@@ -2438,11 +2787,10 @@ const createStyles = (responsive) => StyleSheet.create({
   modalList: {
     flex: 1,
     paddingHorizontal: responsive.responsivePadding(16),
-    paddingBottom: responsive.responsivePadding(16),
-    minHeight: responsive.responsiveHeight(300),
+    paddingVertical: responsive.responsivePadding(16),
   },
   modalListContent: {
-    paddingVertical: responsive.responsivePadding(8),
+    paddingBottom: responsive.responsivePadding(8),
   },
   modalListItem: {
     paddingVertical: responsive.responsivePadding(14),
@@ -2540,6 +2888,97 @@ const createStyles = (responsive) => StyleSheet.create({
   productCountInfoText: {
     fontSize: responsive.responsiveFontSize(14),
     fontWeight: '500',
+    fontFamily: 'Inter',
+  },
+  costComparisonCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: responsive.responsivePadding(16),
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  costComparisonRow: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(8),
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  costComparisonHalf: {
+    flex: 1,
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: responsive.responsivePadding(12),
+    alignItems: 'center',
+  },
+  costComparisonHalfTitle: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  costComparisonHalfValue: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  productCostCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: responsive.responsivePadding(16),
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  productCostTitle: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  costComparisonTitle: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  costRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  costLabel: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+  },
+  costValue: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(12),
+    padding: responsive.responsivePadding(16),
+    borderTopWidth: 1,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: responsive.responsivePadding(14),
+    paddingHorizontal: responsive.responsivePadding(16),
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonSecondary: {
+    borderWidth: 1,
+  },
+  modalButtonPrimary: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  modalButtonText: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '600',
     fontFamily: 'Inter',
   },
 });
