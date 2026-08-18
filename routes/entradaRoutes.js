@@ -99,6 +99,7 @@ const authenticate = require("../helpers/authenticate");
  *       500:
  *         description: Error interno del servidor
  */
+router.get("/entrada/filter", authenticate(), entradaController.filterEntradas);
 
 /**
  * @swagger
