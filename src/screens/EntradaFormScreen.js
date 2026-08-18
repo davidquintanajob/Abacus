@@ -529,7 +529,7 @@ const EntradaFormContent = () => {
     executeSave();
   };
 
-  const handleUseSuggestedCosts = () => {
+  const handleUseSuggestedCosts = async () => {
     // Actualizar el formData con los costos sugeridos y cerrar el modal
     setFormData(prev => ({
       ...prev,
@@ -537,6 +537,32 @@ const EntradaFormContent = () => {
       costo_usd: suggestedCosts.costo_usd,
     }));
     setShowCostSuggestionModal(false);
+
+    // Si es Administrador y la fórmula de costo promedio ponderado está activa,
+    // actualizar el costo del producto en todas las tiendas
+    if (isAdmin && config.applyWeightedAverageCost) {
+      try {
+        const productoActualizado = await getProductoById(formData.producto.id_servicio);
+        
+        // Actualizar el costo en todas las tiendas_servicio del producto
+        const productoTiendaList = (productoActualizado.tiendas_servicio || []).map(ts => ({
+          id_tienda: ts.id_tienda,
+          precio_cup: ts.precio_cup,
+          precio_usd: ts.precio_usd,
+          costo_cup: suggestedCosts.costo_cup,
+          costo_usd: suggestedCosts.costo_usd,
+          cantidad_alerta: ts.cantidad_alerta,
+        }));
+        
+        await updateProducto(formData.producto.id_servicio, {
+          productoTiendaList: productoTiendaList,
+        });
+      } catch (err) {
+        console.error('[handleUseSuggestedCosts] Error al actualizar costo del producto:', err);
+        // Continuar con el guardado de la entrada incluso si falla la actualización del producto
+      }
+    }
+
     executeSave();
   };
 
@@ -609,7 +635,7 @@ const EntradaFormContent = () => {
     executeSaveMultiple();
   };
 
-  const handleUseSuggestedCostsMultiple = () => {
+  const handleUseSuggestedCostsMultiple = async () => {
     // Actualizar multipleEntradas con los costos sugeridos
     setMultipleEntradas(prev => prev.map(entrada => {
       const suggestedCost = multipleSuggestedCosts.find(sc => sc.id === entrada.id);
@@ -625,6 +651,53 @@ const EntradaFormContent = () => {
     
     setShowCostSuggestionModal(false);
     setIsMultipleCostSuggestion(false);
+
+    // Si es Administrador y la fórmula de costo promedio ponderado está activa,
+    // actualizar el costo de cada producto en todas las tiendas
+    if (isAdmin && config.applyWeightedAverageCost) {
+      try {
+        const validEntradas = multipleEntradas.filter(e => e.producto !== null);
+        
+        // Procesar cada producto único (evitar duplicados)
+        const productosUnicos = new Map();
+        validEntradas.forEach(entrada => {
+          if (!productosUnicos.has(entrada.producto.id_servicio)) {
+            const suggestedCost = multipleSuggestedCosts.find(sc => sc.id === entrada.id);
+            if (suggestedCost) {
+              productosUnicos.set(entrada.producto.id_servicio, suggestedCost);
+            }
+          }
+        });
+
+        // Actualizar cada producto
+        for (const [productoId, suggestedCost] of productosUnicos) {
+          try {
+            const productoActualizado = await getProductoById(productoId);
+            
+            // Actualizar el costo en todas las tiendas_servicio del producto
+            const productoTiendaList = (productoActualizado.tiendas_servicio || []).map(ts => ({
+              id_tienda: ts.id_tienda,
+              precio_cup: ts.precio_cup,
+              precio_usd: ts.precio_usd,
+              costo_cup: suggestedCost.costo_cup,
+              costo_usd: suggestedCost.costo_usd,
+              cantidad_alerta: ts.cantidad_alerta,
+            }));
+            
+            await updateProducto(productoId, {
+              productoTiendaList: productoTiendaList,
+            });
+          } catch (err) {
+            console.error(`[handleUseSuggestedCostsMultiple] Error al actualizar costo del producto ${productoId}:`, err);
+            // Continuar con otros productos incluso si falla uno
+          }
+        }
+      } catch (err) {
+        console.error('[handleUseSuggestedCostsMultiple] Error al actualizar costos de productos:', err);
+        // Continuar con el guardado de las entradas incluso si falla la actualización de productos
+      }
+    }
+
     executeSaveMultiple();
   };
 

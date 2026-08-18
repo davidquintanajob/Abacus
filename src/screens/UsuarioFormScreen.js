@@ -61,7 +61,7 @@ const UsuarioFormContent = () => {
         nombre_natural: usuario.nombre_natural || '',
         telefono: usuario.telefono || '',
         direccion: usuario.direccion || '',
-        nombre_usuario: usuario.nombre_usuario || '',
+        nombre_usuario: (usuario.nombre_usuario || '').trimEnd(),
         contrasenna: '',
         salario_diario: usuario.salario_diario?.toString() || '0',
         rol: usuario.rol || '',
@@ -208,6 +208,7 @@ const UsuarioFormContent = () => {
                 placeholder="Nombre de usuario"
                 value={formData.nombre_usuario}
                 onChangeText={(text) => setFormData(prev => ({ ...prev, nombre_usuario: text }))}
+                onBlur={() => setFormData(prev => ({ ...prev, nombre_usuario: prev.nombre_usuario.trimEnd() }))}
                 editable={!isViewMode}
                 autoCapitalize="none"
               />
