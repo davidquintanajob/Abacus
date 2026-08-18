@@ -24,35 +24,31 @@ const authenticate = require("../helpers/authenticate");
  *         schema:
  *           type: integer
  *           default: 10
- *         description: Cantidad de registros por página
  *       - in: query
  *         name: page
  *         schema:
  *           type: integer
  *           default: 1
- *         description: Número de página
  *       - in: query
  *         name: id_servicio_tienda
  *         schema:
  *           type: integer
- *         description: Filtrar por ID de relación servicio-tienda
  *       - in: query
  *         name: id_usuario
  *         schema:
  *           type: integer
- *         description: Filtrar por ID de usuario que creó la entrada
  *       - in: query
  *         name: fecha_desde
  *         schema:
  *           type: string
  *           format: date
- *         description: Fecha inicial (YYYY-MM-DD)
+ *         description: Fecha de creación inicial (YYYY-MM-DD)
  *       - in: query
  *         name: fecha_hasta
  *         schema:
  *           type: string
  *           format: date
- *         description: Fecha final (YYYY-MM-DD)
+ *         description: Fecha de creación final (YYYY-MM-DD)
  *       - in: query
  *         name: nombre_servicio
  *         schema:
@@ -83,6 +79,18 @@ const authenticate = require("../helpers/authenticate");
  *         schema:
  *           type: number
  *         description: Cantidad restante máxima (incluye)
+ *       - in: query
+ *         name: fecha_vencimiento_desde
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Fecha de vencimiento mínima (YYYY-MM-DD) – solo entradas con fecha >=
+ *       - in: query
+ *         name: fecha_vencimiento_hasta
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Fecha de vencimiento máxima (YYYY-MM-DD) – solo entradas con fecha <=
  *     responses:
  *       200:
  *         description: Lista de entradas con paginación
@@ -91,7 +99,6 @@ const authenticate = require("../helpers/authenticate");
  *       500:
  *         description: Error interno del servidor
  */
-router.get("/entrada/filter", authenticate(), entradaController.filterEntradas);
 
 /**
  * @swagger

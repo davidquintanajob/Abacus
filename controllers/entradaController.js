@@ -252,8 +252,10 @@ const filterEntradas = async (req, res) => {
       codigo_lote,
       id_tienda,
       id_servicio,
-      cantidad_restante_min, // nuevo
-      cantidad_restante_max, // nuevo
+      cantidad_restante_min,
+      cantidad_restante_max,
+      fecha_vencimiento_desde, // nuevo
+      fecha_vencimiento_hasta, // nuevo
     } = req.query;
 
     let limitNum = parseInt(limit, 10) || 10;
@@ -267,6 +269,7 @@ const filterEntradas = async (req, res) => {
 
     const filters = {};
 
+    // Filtros existentes
     if (id_servicio_tienda) {
       const parsed = parseInt(id_servicio_tienda, 10);
       if (isNaN(parsed) || parsed < 1) throwError("El ID de servicio-tienda debe ser un número entero positivo", 400);
@@ -318,6 +321,23 @@ const filterEntradas = async (req, res) => {
     if (filters.cantidad_restante_min !== undefined && filters.cantidad_restante_max !== undefined) {
       if (filters.cantidad_restante_min > filters.cantidad_restante_max) {
         throwError("La cantidad restante mínima no puede ser mayor que la máxima", 400);
+      }
+    }
+
+    // Nuevos filtros de fecha_vencimiento
+    if (fecha_vencimiento_desde) {
+      const date = new Date(fecha_vencimiento_desde);
+      if (isNaN(date.getTime())) throwError("Fecha de vencimiento desde inválida (formato YYYY-MM-DD)", 400);
+      filters.fecha_vencimiento_desde = date;
+    }
+    if (fecha_vencimiento_hasta) {
+      const date = new Date(fecha_vencimiento_hasta);
+      if (isNaN(date.getTime())) throwError("Fecha de vencimiento hasta inválida (formato YYYY-MM-DD)", 400);
+      filters.fecha_vencimiento_hasta = date;
+    }
+    if (filters.fecha_vencimiento_desde && filters.fecha_vencimiento_hasta) {
+      if (filters.fecha_vencimiento_desde > filters.fecha_vencimiento_hasta) {
+        throwError("La fecha de vencimiento desde no puede ser mayor que la fecha de vencimiento hasta", 400);
       }
     }
 

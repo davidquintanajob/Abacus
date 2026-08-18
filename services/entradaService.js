@@ -327,10 +327,12 @@ const deleteEntrada = async (id) => {
 const filterEntradas = async (filters, limit, offset) => {
   const where = {};
 
+  // Filtros directos
   if (filters.id_servicio_tienda) where.id_servicio_tienda = filters.id_servicio_tienda;
   if (filters.id_usuario) where.id_usuario = filters.id_usuario;
   if (filters.codigo_lote) where.codigo_lote = { [Op.iLike]: `%${filters.codigo_lote}%` };
 
+  // Filtro por fecha de creación
   if (filters.fecha_desde || filters.fecha_hasta) {
     where.fecha = {};
     if (filters.fecha_desde) where.fecha[Op.gte] = filters.fecha_desde;
@@ -341,7 +343,7 @@ const filterEntradas = async (filters, limit, offset) => {
     }
   }
 
-  // Nuevas condiciones para cantidad_restante
+  // Filtro por cantidad_restante
   if (filters.cantidad_restante_min !== undefined && filters.cantidad_restante_max !== undefined) {
     where.cantidad_restante = { [Op.between]: [filters.cantidad_restante_min, filters.cantidad_restante_max] };
   } else if (filters.cantidad_restante_min !== undefined) {
@@ -350,6 +352,16 @@ const filterEntradas = async (filters, limit, offset) => {
     where.cantidad_restante = { [Op.lte]: filters.cantidad_restante_max };
   }
 
+  // Filtro por fecha_vencimiento
+  if (filters.fecha_vencimiento_desde && filters.fecha_vencimiento_hasta) {
+    where.fecha_vencimiento = { [Op.between]: [filters.fecha_vencimiento_desde, filters.fecha_vencimiento_hasta] };
+  } else if (filters.fecha_vencimiento_desde) {
+    where.fecha_vencimiento = { [Op.gte]: filters.fecha_vencimiento_desde };
+  } else if (filters.fecha_vencimiento_hasta) {
+    where.fecha_vencimiento = { [Op.lte]: filters.fecha_vencimiento_hasta };
+  }
+
+  // Construir include con condiciones anidadas
   const servicioTiendaWhere = {};
   if (filters.id_tienda) servicioTiendaWhere.id_tienda = filters.id_tienda;
   if (filters.id_servicio) servicioTiendaWhere.id_servicio = filters.id_servicio;
