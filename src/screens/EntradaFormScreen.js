@@ -146,7 +146,7 @@ const EntradaFormContent = () => {
             tienda: completeEntrada.servicioTienda?.tienda,
           });
           
-          setProductoSearchText(completeEntrada.servicioTienda?.servicio?.nombre || '');
+          setProductoSearchText((completeEntrada.servicioTienda?.servicio?.nombre || '').trimEnd());
         } catch (err) {
           console.error('[fetchCompleteEntrada] Error:', err);
           console.error('[fetchCompleteEntrada] Error message:', err.message);
@@ -162,14 +162,35 @@ const EntradaFormContent = () => {
 
   useEffect(() => {
     if (productoPreSeleccionado && isAddMode) {
+      let costoCup = '';
+      let costoUsd = '';
+      
+      // Auto-fill costs from the product (cost is unique across all stores)
+      if (formData.tienda) {
+        const tiendaServicio = productoPreSeleccionado.tiendas_servicio?.find(
+          ts => ts.id_tienda === formData.tienda.id_tienda
+        );
+        costoCup = tiendaServicio?.costo_cup?.toString() || '';
+        costoUsd = tiendaServicio?.costo_usd?.toString() || '';
+      }
+      
+      // If no tienda selected or no specific tienda cost, use first tienda's cost
+      if (!costoCup && !costoUsd) {
+        const firstTiendaServicio = productoPreSeleccionado.tiendas_servicio?.[0];
+        costoCup = firstTiendaServicio?.costo_cup?.toString() || '';
+        costoUsd = firstTiendaServicio?.costo_usd?.toString() || '';
+      }
+      
       setFormData(prev => ({
         ...prev,
         producto: productoPreSeleccionado,
+        costo_cup: costoCup,
+        costo_usd: costoUsd,
       }));
       
-      setProductoSearchText(productoPreSeleccionado.nombre || '');
+      setProductoSearchText((productoPreSeleccionado.nombre || '').trimEnd());
     }
-  }, [productoPreSeleccionado, isAddMode]);
+  }, [productoPreSeleccionado, isAddMode, formData.tienda]);
 
   // Efecto para restaurar datos cuando regresa de ProductoFormScreen
   useEffect(() => {
@@ -193,7 +214,7 @@ const EntradaFormContent = () => {
               costo_usd: tiendaRelacion.costo_usd?.toString() || '',
             }));
             
-            setProductoSearchText(productoActualizado.nombre || '');
+            setProductoSearchText((productoActualizado.nombre || '').trimEnd());
             
             showToast({ 
               type: 'success', 
@@ -1028,13 +1049,17 @@ const EntradaFormContent = () => {
     let costoCup = '';
     let costoUsd = '';
     
-    if (formData.tienda && !config.applyWeightedAverageCost) {
+    // Always auto-fill costs from the product (cost is unique across all stores)
+    if (formData.tienda) {
       const tiendaServicio = producto.tiendas_servicio?.find(
         ts => ts.id_tienda === formData.tienda.id_tienda
       );
       costoCup = tiendaServicio?.costo_cup?.toString() || '';
       costoUsd = tiendaServicio?.costo_usd?.toString() || '';
-    } else if (!config.applyWeightedAverageCost) {
+    }
+    
+    // If no tienda selected or no specific tienda cost, use first tienda's cost
+    if (!costoCup && !costoUsd) {
       const firstTiendaServicio = producto.tiendas_servicio?.[0];
       costoCup = firstTiendaServicio?.costo_cup?.toString() || '';
       costoUsd = firstTiendaServicio?.costo_usd?.toString() || '';
@@ -1047,20 +1072,13 @@ const EntradaFormContent = () => {
       costo_usd: costoUsd,
     }));
     
-    setProductoSearchText(producto.nombre);
+    setProductoSearchText(producto.nombre.trimEnd());
     setShowProductoDropdown(false);
     setProductoSearchResults([]);
   };
 
   // Funciones para modo múltiple
-  const addNewEntrada = (isAutoAdd = false) => {
-    // Check if all previous entries have a product selected (skip check if auto-add after product selection)
-    const allPreviousHaveProduct = multipleEntradas.every(e => e.producto !== null);
-    
-    if (!isAutoAdd && !allPreviousHaveProduct && multipleEntradas.length > 0) {
-      return; // Don't add if previous entry doesn't have product (only for manual adds)
-    }
-    
+  const addNewEntrada = () => {
     const newEntrada = {
       id: Date.now(), // ID temporal
       producto: null,
@@ -1074,6 +1092,31 @@ const EntradaFormContent = () => {
       hasManuallyModifiedCostos: false, // Track manual cost modifications per entry
     };
     setMultipleEntradas(prev => [...prev, newEntrada]);
+  };
+
+  const isEntradaComplete = (entrada) => {
+    // Check if all required fields are filled
+    if (!entrada.producto) return false;
+    if (!entrada.cantidad_entrada || parseFloat(entrada.cantidad_entrada) <= 0) return false;
+    if (!entrada.costo_cup || parseFloat(entrada.costo_cup) < 0) return false;
+    if (!entrada.costo_usd || parseFloat(entrada.costo_usd) < 0) return false;
+    
+    // Check if product-tienda relationship exists, if not validate prices
+    const productoTienda = entrada.producto?.tiendas_servicio?.find(
+      ts => ts.id_tienda === formData.tienda?.id_tienda
+    );
+    
+    if (!productoTienda) {
+      if (!entrada.precio_cup || entrada.precio_cup === '') return false;
+      if (!entrada.precio_usd || entrada.precio_usd === '') return false;
+    }
+    
+    // Check expiration date if product is vencible
+    if (entrada.producto.producto?.isVencible && !entrada.fecha_vencimiento) {
+      return false;
+    }
+    
+    return true;
   };
 
   const removeEntrada = (id) => {
@@ -1111,14 +1154,11 @@ const EntradaFormContent = () => {
     updateMultipleEntrada(id, 'producto', producto);
     updateMultipleEntrada(id, 'costo_cup', costoCup);
     updateMultipleEntrada(id, 'costo_usd', costoUsd);
-    updateMultipleEntrada(id, 'productoSearchText', producto.nombre);
+    updateMultipleEntrada(id, 'productoSearchText', producto.nombre.trimEnd());
     
     // Cerrar dropdown para esta entrada específica
     setMultipleShowProductoDropdown(prev => ({ ...prev, [id]: false }));
     setMultipleProductoSearchResults(prev => ({ ...prev, [id]: [] }));
-    
-    // Automatically add a new entry after selecting a product
-    addNewEntrada(true);
   };
 
   const searchProductosMultiple = async (id, searchTerm) => {
@@ -2088,6 +2128,29 @@ const EntradaFormContent = () => {
                 </View>
               ))}
 
+              {/* Botón para agregar otro producto */}
+              {isMultipleMode && !isReadOnly && (
+                <TouchableOpacity
+                  style={[
+                    styles.addProductButton,
+                    { 
+                      backgroundColor: isEntradaComplete(multipleEntradas[multipleEntradas.length - 1]) ? colors.primary : colors.outlineVariant,
+                      opacity: isEntradaComplete(multipleEntradas[multipleEntradas.length - 1]) ? 1 : 0.5
+                    }
+                  ]}
+                  onPress={() => addNewEntrada()}
+                  disabled={!isEntradaComplete(multipleEntradas[multipleEntradas.length - 1])}
+                >
+                  <Ionicons name="add-circle" size={responsive.responsiveWidth(20)} color={isEntradaComplete(multipleEntradas[multipleEntradas.length - 1]) ? '#fff' : colors.outline} />
+                  <Text style={[
+                    styles.addProductButtonText,
+                    { color: isEntradaComplete(multipleEntradas[multipleEntradas.length - 1]) ? '#fff' : colors.outline }
+                  ]}>
+                    Agregar otro producto
+                  </Text>
+                </TouchableOpacity>
+              )}
+
 
               {/* Info de cantidad de productos (solo en modo múltiple) */}
               {isMultipleMode && (
@@ -2790,7 +2853,7 @@ const createStyles = (responsive) => StyleSheet.create({
     paddingVertical: responsive.responsivePadding(16),
   },
   modalListContent: {
-    paddingBottom: responsive.responsivePadding(8),
+    paddingBottom: responsive.responsivePadding(24),
   },
   modalListItem: {
     paddingVertical: responsive.responsivePadding(14),

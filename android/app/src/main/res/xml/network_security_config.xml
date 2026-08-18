@@ -13,4 +13,11 @@
         <domain includeSubdomains="true">172.16.0.0/12</domain>
         <domain includeSubdomains="true">10.0.0.0/8</domain>
     </domain-config>
+    <domain-config>
+        <domain includeSubdomains="true">eltoque.com</domain>
+        <domain includeSubdomains="true">tasas.eltoque.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
 </network-security-config>

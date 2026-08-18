@@ -61,6 +61,9 @@ const ServicioFormContent = () => {
   const [showComponenteSelectorModal, setShowComponenteSelectorModal] = useState(false);
   const [componenteSearchText, setComponenteSearchText] = useState('');
   const [isOfertaExpanded, setIsOfertaExpanded] = useState(false);
+  const [isLoadingServicios, setIsLoadingServicios] = useState(false);
+  const [serviciosPagination, setServiciosPagination] = useState({ currentPage: 1, limit: 10, totalPages: 1, totalItems: 0 });
+  const [debounceTimer, setDebounceTimer] = useState(null);
   
   const [formData, setFormData] = useState({
     nombre: servicio?.nombre || '',
@@ -75,12 +78,18 @@ const ServicioFormContent = () => {
     costo_cup_general: servicio?.costo_cup_general ?? null,
     costo_usd_general: servicio?.costo_usd_general ?? null,
     // Lista de componentes para la oferta
-    ofertaList: servicio?.componentes?.map(c => ({
-      id_servicio_componente: c.id_servicio,
-      cantidad: c.oferta?.cantidad || c.cantidad || 1.0,
-      nombre: c.nombre,
-      categoria: c.categoria
-    })) || [],
+    ofertaList: servicio?.componentes?.map(c => {
+      const tiendasServicio = c.tiendas_servicio || c.servicioTiendaList || [];
+      const firstTienda = tiendasServicio[0];
+      return {
+        id_servicio_componente: c.id_servicio,
+        cantidad: c.oferta?.cantidad || c.cantidad || 1.0,
+        nombre: c.nombre,
+        categoria: c.categoria,
+        costo_cup: firstTienda?.costo_cup || 0,
+        costo_usd: firstTienda?.costo_usd || 0,
+      };
+    }) || [],
   });
 
   // Estado para controlar si las secciones están expandidas o colapsadas
@@ -164,7 +173,6 @@ const ServicioFormContent = () => {
   useEffect(() => {
     fetchTiendas();
     fetchConfig();
-    fetchAllServicios();
   }, []);
 
   useEffect(() => {
@@ -272,12 +280,18 @@ const ServicioFormContent = () => {
             costo_cup_general: costoCupGeneral,
             costo_usd_general: costoUsdGeneral,
             // Lista de componentes para la oferta
-            ofertaList: completeServicio.componentes?.map(c => ({
-              id_servicio_componente: c.id_servicio,
-              cantidad: c.oferta?.cantidad || c.cantidad || 1.0,
-              nombre: c.nombre,
-              categoria: c.categoria
-            })) || [],
+            ofertaList: completeServicio.componentes?.map(c => {
+              const tiendasServicio = c.tiendas_servicio || c.servicioTiendaList || [];
+              const firstTienda = tiendasServicio[0];
+              return {
+                id_servicio_componente: c.id_servicio,
+                cantidad: c.oferta?.cantidad || c.cantidad || 1.0,
+                nombre: c.nombre,
+                categoria: c.categoria,
+                costo_cup: firstTienda?.costo_cup || 0,
+                costo_usd: firstTienda?.costo_usd || 0,
+              };
+            }) || [],
           });
         } catch (err) {
           showToast({ type: 'error', message: 'Error al cargar datos del servicio' });
@@ -320,21 +334,129 @@ const ServicioFormContent = () => {
     }
   };
 
-  const fetchAllServicios = async () => {
+  const fetchAllServicios = async (searchTerm = '', page = 1) => {
     try {
+      setIsLoadingServicios(true);
+      
       if (isOfflineMode) {
         // En modo offline, cargar servicios de AsyncStorage
         const allServicios = await storageService.getServicios();
-        setAllServicios(allServicios);
+        let filtered = allServicios;
+        
+        if (searchTerm) {
+          filtered = allServicios.filter(s => 
+            s.nombre.toLowerCase().includes(searchTerm.toLowerCase()) && 
+            s.id_servicio !== servicio?.id_servicio
+          );
+        } else {
+          filtered = allServicios.filter(s => s.id_servicio !== servicio?.id_servicio);
+        }
+        
+        const totalItems = filtered.length;
+        const totalPages = Math.ceil(totalItems / serviciosPagination.limit);
+        const startIndex = (page - 1) * serviciosPagination.limit;
+        const endIndex = startIndex + serviciosPagination.limit;
+        const paginatedServicios = filtered.slice(startIndex, endIndex);
+        
+        setAllServicios(paginatedServicios);
+        setServiciosPagination(prev => ({ ...prev, currentPage: page, totalPages, totalItems }));
         return;
       }
-      // Obtener todos los servicios (vendibles y no vendibles)
-      const dataVendibles = await getServicios({ esvendible: 'true' }, 1, 1000);
-      const dataNoVendibles = await getServicios({ esvendible: 'false' }, 1, 1000);
-      const allServicios = [...(dataVendibles.data || []), ...(dataNoVendibles.data || [])];
-      setAllServicios(allServicios);
+      
+      // Obtener servicios vendibles y no vendibles con paginación inteligente
+      const filtersVendibles = {};
+      const filtersNoVendibles = {};
+      
+      if (searchTerm) {
+        filtersVendibles.nombre = searchTerm;
+        filtersNoVendibles.nombre = searchTerm;
+      }
+      
+      filtersVendibles.esvendible = 'true';
+      filtersNoVendibles.esvendible = 'false';
+      
+      // Primero obtener los totales para calcular la paginación correcta
+      const [dataVendibles, dataNoVendibles] = await Promise.all([
+        getServicios(filtersVendibles, 1, 1000),
+        getServicios(filtersNoVendibles, 1, 1000)
+      ]);
+      
+      let serviciosVendibles = dataVendibles.data || [];
+      let serviciosNoVendibles = dataNoVendibles.data || [];
+      
+      // Filtrar el servicio actual si estamos editando
+      if (servicio?.id_servicio) {
+        serviciosVendibles = serviciosVendibles.filter(s => s.id_servicio !== servicio.id_servicio);
+        serviciosNoVendibles = serviciosNoVendibles.filter(s => s.id_servicio !== servicio.id_servicio);
+      }
+      
+      // Combinar y ordenar todos los servicios
+      const allServiciosCombined = [...serviciosVendibles, ...serviciosNoVendibles].sort((a, b) => 
+        a.nombre.localeCompare(b.nombre)
+      );
+      
+      // Calcular paginación local
+      const totalItems = allServiciosCombined.length;
+      const totalPages = Math.ceil(totalItems / serviciosPagination.limit);
+      const startIndex = (page - 1) * serviciosPagination.limit;
+      const endIndex = startIndex + serviciosPagination.limit;
+      const paginatedServicios = allServiciosCombined.slice(startIndex, endIndex);
+      
+      setAllServicios(paginatedServicios);
+      setServiciosPagination({ 
+        currentPage: page, 
+        limit: serviciosPagination.limit, 
+        totalPages, 
+        totalItems 
+      });
     } catch (err) {
-      // Error fetching servicios
+      console.error('Error fetching servicios:', err);
+      setAllServicios([]);
+    } finally {
+      setIsLoadingServicios(false);
+    }
+  };
+
+  // Cargar servicios cuando se abre el modal de componentes
+  useEffect(() => {
+    if (showComponenteSelectorModal) {
+      setServiciosPagination(prev => ({ ...prev, currentPage: 1 }));
+      setComponenteSearchText('');
+      fetchAllServicios('', 1);
+    }
+  }, [showComponenteSelectorModal]);
+
+  // Búsqueda con debounce
+  useEffect(() => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+    
+    const newTimer = setTimeout(() => {
+      if (showComponenteSelectorModal) {
+        setServiciosPagination(prev => ({ ...prev, currentPage: 1 }));
+        fetchAllServicios(componenteSearchText, 1);
+      }
+    }, 500);
+    
+    setDebounceTimer(newTimer);
+    
+    return () => {
+      if (newTimer) {
+        clearTimeout(newTimer);
+      }
+    };
+  }, [componenteSearchText]);
+
+  const handleServicioNextPage = () => {
+    if (serviciosPagination.currentPage < serviciosPagination.totalPages) {
+      fetchAllServicios(componenteSearchText, serviciosPagination.currentPage + 1);
+    }
+  };
+
+  const handleServicioPrevPage = () => {
+    if (serviciosPagination.currentPage > 1) {
+      fetchAllServicios(componenteSearchText, serviciosPagination.currentPage - 1);
     }
   };
 
@@ -346,6 +468,11 @@ const ServicioFormContent = () => {
       showToast({ type: 'warning', message: 'Este servicio ya está agregado como componente' });
       return;
     }
+    
+    // Get cost data from the selected servicio
+    const tiendasServicio = servicioSeleccionado.tiendas_servicio || servicioSeleccionado.servicioTiendaList || [];
+    const firstTienda = tiendasServicio[0];
+    
     setFormData(prev => ({
       ...prev,
       ofertaList: [
@@ -354,7 +481,9 @@ const ServicioFormContent = () => {
           id_servicio_componente: servicioSeleccionado.id_servicio,
           cantidad: 1.0,
           nombre: servicioSeleccionado.nombre,
-          categoria: servicioSeleccionado.categoria
+          categoria: servicioSeleccionado.categoria,
+          costo_cup: firstTienda?.costo_cup || 0,
+          costo_usd: firstTienda?.costo_usd || 0,
         }
       ]
     }));
@@ -401,18 +530,23 @@ const ServicioFormContent = () => {
     let totalCostoUsd = 0;
 
     formData.ofertaList.forEach(componente => {
-      const servicioComponente = allServicios.find(s => s.id_servicio === componente.id_servicio_componente);
-      if (servicioComponente) {
-        // Get cost from the first tienda of the servicio component
-        const tiendasServicio = servicioComponente.tiendas_servicio || servicioComponente.servicioTiendaList || [];
-        const firstTienda = tiendasServicio[0];
-        const costoCup = firstTienda?.costo_cup || 0;
-        const costoUsd = firstTienda?.costo_usd || 0;
-        
-        const cantidad = componente.cantidad || 1;
-        totalCostoCup += costoCup * cantidad;
-        totalCostoUsd += costoUsd * cantidad;
+      // Use stored cost data from the component itself, or search in allServicios if not available
+      let costoCup = componente.costo_cup;
+      let costoUsd = componente.costo_usd;
+
+      if (costoCup === undefined || costoUsd === undefined) {
+        const servicioComponente = allServicios.find(s => s.id_servicio === componente.id_servicio_componente);
+        if (servicioComponente) {
+          const tiendasServicio = servicioComponente.tiendas_servicio || servicioComponente.servicioTiendaList || [];
+          const firstTienda = tiendasServicio[0];
+          costoCup = firstTienda?.costo_cup || 0;
+          costoUsd = firstTienda?.costo_usd || 0;
+        }
       }
+
+      const cantidad = componente.cantidad || 1;
+      totalCostoCup += (costoCup || 0) * cantidad;
+      totalCostoUsd += (costoUsd || 0) * cantidad;
     });
 
     return { costo_cup: totalCostoCup, costo_usd: totalCostoUsd };
@@ -1463,13 +1597,17 @@ const ServicioFormContent = () => {
           animationType="fade"
           onRequestClose={() => setShowComponenteSelectorModal(false)}
         >
-          <TouchableOpacity 
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowComponenteSelectorModal(false)}
-          >
+          <View style={styles.modalOverlay}>
             <Card style={[styles.dropdownModal, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Seleccionar Servicio Componente</Text>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Seleccionar Servicio Componente</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setShowComponenteSelectorModal(false)}
+                >
+                  <Ionicons name="close" size={responsive.responsiveWidth(24)} color={colors.onSurface} />
+                </TouchableOpacity>
+              </View>
               <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
                 <Ionicons 
                   name="search-outline" 
@@ -1486,24 +1624,55 @@ const ServicioFormContent = () => {
                 />
               </View>
               <ScrollView style={styles.dropdownScroll}>
-                {allServicios
-                  .filter(s => s.nombre.toLowerCase().includes(componenteSearchText.toLowerCase()) && s.id_servicio !== servicio?.id_servicio)
-                  .sort((a, b) => a.nombre.localeCompare(b.nombre))
-                  .map((servicio) => (
-                    <TouchableOpacity
-                      key={servicio.id_servicio}
-                      style={styles.dropdownItem}
-                      onPress={() => handleAddServicioComponente(servicio)}
-                    >
-                      <View>
-                        <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{servicio.nombre}</Text>
-                        <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>{servicio.categoria}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
+                {isLoadingServicios ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={[styles.loadingText, { color: colors.outline }]}>Cargando servicios...</Text>
+                  </View>
+                ) : allServicios.length === 0 ? (
+                  <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron servicios</Text>
+                ) : (
+                  allServicios.map((servicio, index) => (
+                    <View key={servicio.id_servicio}>
+                      <TouchableOpacity
+                        style={styles.dropdownItem}
+                        onPress={() => handleAddServicioComponente(servicio)}
+                      >
+                        <View>
+                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{servicio.nombre}</Text>
+                          <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>{servicio.categoria}</Text>
+                        </View>
+                      </TouchableOpacity>
+                      {index < allServicios.length - 1 && (
+                        <View style={[styles.separatorLine, { backgroundColor: colors.outlineVariant }]} />
+                      )}
+                    </View>
+                  ))
+                )}
               </ScrollView>
+              {serviciosPagination.totalPages > 1 && (
+                <View style={styles.paginationControls}>
+                  <TouchableOpacity
+                    style={[styles.paginationButton, serviciosPagination.currentPage === 1 && styles.paginationButtonDisabled]}
+                    onPress={handleServicioPrevPage}
+                    disabled={serviciosPagination.currentPage === 1}
+                  >
+                    <Ionicons name="chevron-back" size={responsive.responsiveWidth(20)} color={serviciosPagination.currentPage === 1 ? colors.outline : colors.primary} />
+                  </TouchableOpacity>
+                  <Text style={[styles.paginationText, { color: colors.onSurface }]}>
+                    {serviciosPagination.currentPage} / {serviciosPagination.totalPages}
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.paginationButton, serviciosPagination.currentPage === serviciosPagination.totalPages && styles.paginationButtonDisabled]}
+                    onPress={handleServicioNextPage}
+                    disabled={serviciosPagination.currentPage === serviciosPagination.totalPages}
+                  >
+                    <Ionicons name="chevron-forward" size={responsive.responsiveWidth(20)} color={serviciosPagination.currentPage === serviciosPagination.totalPages ? colors.outline : colors.primary} />
+                  </TouchableOpacity>
+                </View>
+              )}
             </Card>
-          </TouchableOpacity>
+          </View>
         </Modal>
       )}
       </KeyboardAvoidingView>
@@ -1814,11 +1983,22 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(20),
     fontWeight: '700',
     fontFamily: 'Hanken Grotesk',
-    marginBottom: responsive.responsiveMargin(20),
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  closeButton: {
+    padding: responsive.responsivePadding(8),
+    borderRadius: responsive.responsiveWidth(20),
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
   },
   dropdownModal: {
     width: '100%',
-    maxHeight: responsive.responsiveHeight(300),
+    maxHeight: responsive.responsiveHeight(600),
     borderRadius: 12,
     padding: responsive.responsivePadding(16),
     shadowColor: '#000',
@@ -1843,17 +2023,6 @@ const createStyles = (responsive) => StyleSheet.create({
     marginLeft: responsive.responsiveMargin(8),
     paddingVertical: 0,
   },
-  searchIcon: {
-    marginRight: responsive.responsiveMargin(4),
-  },
-  dropdownScroll: {
-    maxHeight: responsive.responsiveHeight(200),
-  },
-  dropdownItem: {
-    padding: responsive.responsivePadding(12),
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
-  },
   dropdownItemText: {
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
@@ -1862,6 +2031,40 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.bodySmall,
     fontFamily: 'Inter',
     marginTop: responsive.responsiveMargin(4),
+  },
+  separatorLine: {
+    height: 1,
+    marginVertical: responsive.responsiveMargin(8),
+  },
+  dropdownScroll: {
+    maxHeight: responsive.responsiveHeight(500),
+  },
+  loadingContainer: {
+    padding: responsive.responsivePadding(20),
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: responsive.responsiveMargin(8),
+    fontSize: responsive.fontSizes.bodySmall,
+  },
+  paginationControls: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: responsive.responsivePadding(12),
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  paginationButton: {
+    padding: responsive.responsivePadding(8),
+    borderRadius: 8,
+  },
+  paginationButtonDisabled: {
+    opacity: 0.5,
+  },
+  paginationText: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '500',
   },
   componenteItem: {
     flexDirection: 'row',

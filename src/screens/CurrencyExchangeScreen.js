@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Switch, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Switch, Modal, Image } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -10,8 +10,10 @@ import { Card } from '../components/common/Card';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { configService } from '../services/configService';
+import { exchangeRateService } from '../services/exchangeRateService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
+import NetInfo from '@react-native-community/netinfo';
 
 const AccessLevelSwitch = ({ value, onChange, colors, responsive }) => {
   const levels = [
@@ -110,12 +112,49 @@ const CurrencyExchangeContent = () => {
     title: '',
     description: '',
   });
+  const [exchangeRates, setExchangeRates] = useState(null);
+  const [isLoadingRates, setIsLoadingRates] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
+  const maxRetries = 3;
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
 
   useEffect(() => {
     fetchConfig();
+    // Cargar tasas automáticamente al inicio si hay conexión
+    if (isConnected) {
+      fetchExchangeRates();
+    }
+    
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsConnected(state.isConnected);
+      // Cargar tasas cuando se reconecta a internet
+      if (state.isConnected && !isConnected) {
+        fetchExchangeRates();
+      }
+    });
+
+    return () => unsubscribe();
   }, []); // Solo se ejecuta al montar el componente
+
+  const fetchExchangeRates = async (manualRetry = false) => {
+    // Evitar reintentos si ya estamos cargando
+    if (isLoadingRates) {
+      return;
+    }
+
+    try {
+      setIsLoadingRates(true);
+      const data = await exchangeRateService.getExchangeRates();
+      setExchangeRates(data);
+    } catch (error) {
+      // No mostrar error en consola para no molestar al usuario
+      setExchangeRates(null);
+    } finally {
+      setIsLoadingRates(false);
+    }
+  };
 
   const fetchConfig = async () => {
     try {
@@ -373,6 +412,98 @@ const CurrencyExchangeContent = () => {
             </View>
           ) : (
             <>
+              {isConnected && (
+                <View style={styles.exchangeRatesSection}>
+                  <View style={styles.exchangeRatesHeader}>
+                    <Ionicons name="cash" size={responsive.responsiveWidth(20)} color={colors.primary} />
+                    <Text style={[styles.exchangeRatesTitle, { color: colors.onSurface }]}>
+                      Tasas de Cambio en Vivo
+                    </Text>
+                    <TouchableOpacity onPress={() => fetchExchangeRates(true)} style={styles.refreshButton}>
+                      <Ionicons 
+                        name="refresh" 
+                        size={responsive.responsiveWidth(18)} 
+                        color={colors.primary} 
+                      />
+                    </TouchableOpacity>
+                  </View>
+                  
+                  {isLoadingRates ? (
+                    <View style={styles.ratesLoadingContainer}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                      <Text style={[styles.ratesLoadingText, { color: colors.outline }]}>
+                        Cargando tasas...
+                      </Text>
+                    </View>
+                  ) : exchangeRates ? (
+                    <View style={styles.ratesContainer}>
+                      <View style={styles.rateItem}>
+                        <View style={styles.rateInfo}>
+                          <Text style={styles.currencyFlag}>🇺🇸</Text>
+                          <View>
+                            <Text style={[styles.currencyName, { color: colors.onSurface }]}>USD</Text>
+                            <Text style={[styles.currencyLabel, { color: colors.outline }]}>Dólar Americano</Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.rateValue, { color: colors.primary }]}>
+                          {exchangeRateService.formatCurrency(exchangeRates.tasas.USD, 'CUP')}
+                        </Text>
+                      </View>
+
+                      <View style={styles.rateItem}>
+                        <View style={styles.rateInfo}>
+                          <Text style={styles.currencyFlag}>🇪🇺</Text>
+                          <View>
+                            <Text style={[styles.currencyName, { color: colors.onSurface }]}>ECU</Text>
+                            <Text style={[styles.currencyLabel, { color: colors.outline }]}>Euro</Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.rateValue, { color: colors.primary }]}>
+                          {exchangeRateService.formatCurrency(exchangeRates.tasas.ECU, 'CUP')}
+                        </Text>
+                      </View>
+
+                      <View style={styles.rateItem}>
+                        <View style={styles.rateInfo}>
+                          <Text style={styles.currencyFlag}>🏦</Text>
+                          <View>
+                            <Text style={[styles.currencyName, { color: colors.onSurface }]}>MLC</Text>
+                            <Text style={[styles.currencyLabel, { color: colors.outline }]}>Divisa Cubana</Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.rateValue, { color: colors.primary }]}>
+                          {exchangeRateService.formatCurrency(exchangeRates.tasas.MLC, 'CUP')}
+                        </Text>
+                      </View>
+
+                      <View style={styles.rateItem}>
+                        <View style={styles.rateInfo}>
+                          <Text style={styles.currencyFlag}>💵</Text>
+                          <View>
+                            <Text style={[styles.currencyName, { color: colors.onSurface }]}>USDT</Text>
+                            <Text style={[styles.currencyLabel, { color: colors.outline }]}>Tether TRC20</Text>
+                          </View>
+                        </View>
+                        <Text style={[styles.rateValue, { color: colors.primary }]}>
+                          {exchangeRateService.formatCurrency(exchangeRates.tasas.USDT_TRC20, 'CUP')}
+                        </Text>
+                      </View>
+
+                      <Text style={[styles.ratesSource, { color: colors.outline }]}>
+                        Fuente: elTOQUE • Actualizado: {exchangeRates.date} {exchangeRates.hour}:{exchangeRates.minutes.toString().padStart(2, '0')}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.ratesErrorContainer}>
+                      <Ionicons name="alert-circle" size={responsive.responsiveWidth(20)} color={colors.error} />
+                      <Text style={[styles.ratesErrorText, { color: colors.error }]}>
+                        No se pudieron cargar las tasas de cambio
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
               <View style={styles.formGroup}>
                 <Text style={[styles.label, { color: colors.outline }]}>Tipo de Cambio CUP → USD *</Text>
                 <TextInput
@@ -1315,6 +1446,91 @@ const createStyles = (responsive) => StyleSheet.create({
   modalButtonText: {
     fontSize: responsive.fontSizes.body,
     fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  exchangeRatesSection: {
+    marginBottom: responsive.responsiveMargin(24),
+    padding: responsive.responsivePadding(16),
+    borderRadius: 12,
+    backgroundColor: 'rgba(0,0,0,0.02)',
+  },
+  exchangeRatesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  exchangeRatesTitle: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    marginLeft: responsive.responsiveMargin(8),
+    flex: 1,
+  },
+  refreshButton: {
+    padding: responsive.responsivePadding(8),
+  },
+  ratesLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: responsive.responsivePadding(16),
+    gap: responsive.responsiveMargin(8),
+  },
+  ratesLoadingText: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+  },
+  ratesContainer: {
+    gap: responsive.responsiveMargin(12),
+  },
+  rateItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(16),
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+  },
+  rateInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(12),
+  },
+  currencyFlag: {
+    fontSize: responsive.responsiveFontSize(24),
+  },
+  currencyName: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  currencyLabel: {
+    fontSize: responsive.fontSizes.caption,
+    fontFamily: 'Inter',
+  },
+  rateValue: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  ratesSource: {
+    fontSize: responsive.fontSizes.caption,
+    fontFamily: 'Inter',
+    textAlign: 'center',
+    marginTop: responsive.responsiveMargin(8),
+    fontStyle: 'italic',
+  },
+  ratesErrorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: responsive.responsivePadding(16),
+    gap: responsive.responsiveMargin(8),
+  },
+  ratesErrorText: {
+    fontSize: responsive.fontSizes.bodySmall,
     fontFamily: 'Inter',
   },
 });

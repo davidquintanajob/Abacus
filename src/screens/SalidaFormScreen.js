@@ -189,7 +189,7 @@ const SalidaFormContent = () => {
             tienda: completeSalida.servicioTienda?.tienda,
           });
           
-          setProductoSearchText(productoCompleto?.nombre || '');
+          setProductoSearchText((productoCompleto?.nombre || '').trimEnd());
           setOriginalCantidad(completeSalida.cantidad_total);
         } catch (err) {
           console.error('[fetchCompleteSalida] Error:', err);
@@ -210,7 +210,7 @@ const SalidaFormContent = () => {
         producto: productoPreSeleccionado,
       }));
       
-      setProductoSearchText(productoPreSeleccionado.nombre || '');
+      setProductoSearchText((productoPreSeleccionado.nombre || '').trimEnd());
       
       // If user only has access to one store, automatically select it
       const userRole = user?.rol?.toLowerCase();
@@ -435,7 +435,7 @@ const SalidaFormContent = () => {
       producto,
     }));
     
-    setProductoSearchText(producto.nombre);
+    setProductoSearchText(producto.nombre.trimEnd());
     setShowProductoDropdown(false);
     setProductoSearchResults([]);
   };
