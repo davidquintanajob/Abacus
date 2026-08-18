@@ -557,7 +557,7 @@ const CurrencyExchangeContent = () => {
         <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
           <View style={styles.permissionsHeader}>
             <View style={styles.permissionsHeaderLeft}>
-              <Ionicons name="shield-checkmark" size={responsive.responsiveWidth(24)} color={colors.primary} />
+              <Image source={require('../../assets/product.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
               <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
                 Permisos de Productos y Servicios
               </Text>
@@ -656,7 +656,7 @@ const CurrencyExchangeContent = () => {
         <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
           <View style={styles.permissionsHeader}>
             <View style={styles.permissionsHeaderLeft}>
-              <Ionicons name="shield-checkmark" size={responsive.responsiveWidth(24)} color={colors.primary} />
+              <Image source={require('../../assets/package-add.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
               <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
                 Configuración de Entradas
               </Text>
@@ -731,7 +731,7 @@ const CurrencyExchangeContent = () => {
         <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
           <View style={styles.permissionsHeader}>
             <View style={styles.permissionsHeaderLeft}>
-              <Ionicons name="shield-checkmark" size={responsive.responsiveWidth(24)} color={colors.primary} />
+              <Image source={require('../../assets/package-add.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
               <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
                 Permisos de Entradas
               </Text>
@@ -950,7 +950,7 @@ const CurrencyExchangeContent = () => {
         <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
           <View style={styles.permissionsHeader}>
             <View style={styles.permissionsHeaderLeft}>
-              <Ionicons name="shield-checkmark" size={responsive.responsiveWidth(24)} color={colors.primary} />
+              <Image source={require('../../assets/box.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
               <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
                 Permisos de Salidas
               </Text>
@@ -1316,6 +1316,10 @@ const createStyles = (responsive) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: responsive.responsiveMargin(8),
+  },
+  permissionsIcon: {
+    width: responsive.responsiveWidth(24),
+    height: responsive.responsiveHeight(24),
   },
   expandButton: {
     width: responsive.responsiveWidth(40),
