@@ -7,7 +7,7 @@ const SalidaEntrada = sequelize.define(
     id_salida: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      primaryKey: true,
+      primaryKey: true,          // Clave primaria compuesta (parte 1)
       references: {
         model: "salidas",
         key: "id_salida",
@@ -18,7 +18,7 @@ const SalidaEntrada = sequelize.define(
     id_entrada: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      primaryKey: true,
+      primaryKey: true,          // Clave primaria compuesta (parte 2)
       references: {
         model: "entradas",
         key: "id_entrada",
@@ -38,11 +38,16 @@ const SalidaEntrada = sequelize.define(
     },
   },
   {
-    timestamps: false, // No necesitamos createdAt/updatedAt en la intermedia
+    timestamps: false,
     tableName: "salidas_entradas",
+    // 🔽 Eliminamos índices únicos automáticos y aseguramos la clave primaria compuesta
     indexes: [
+      // Índice para búsquedas por id_salida (no único)
       { fields: ["id_salida"] },
+      // Índice para búsquedas por id_entrada (no único)
       { fields: ["id_entrada"] },
+      // Opcional: índice compuesto para mejorar consultas con ambos campos
+      // { fields: ["id_salida", "id_entrada"] }
     ],
   }
 );

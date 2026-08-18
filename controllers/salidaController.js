@@ -4,11 +4,25 @@ const { throwError } = require("../helpers/errorLauncher");
 const handleError = (res, error) => {
   const status = error.status || 500;
   const message = error.message || "Error interno del servidor";
-  let errors = error.errors;
-  if (!Array.isArray(errors) || errors.length === 0) {
-    errors = [message];
+
+  let errors = [];
+  if (error.errors && Array.isArray(error.errors)) {
+    // Intentar extraer mensajes de cada error (para errores de Sequelize)
+    errors = error.errors.map((e) => {
+      if (typeof e === "string") return e;
+      if (e.message) return e.message;
+      if (e.msg) return e.msg;
+      return String(e);
+    });
+  } else if (error.message) {
+    errors = [error.message];
+  } else {
+    errors = ["Error interno del servidor"];
   }
+
+  // Si el mensaje es un objeto vacío o [object Object], reemplazamos
   errors = errors.map((e) => (typeof e === "string" ? e : String(e)));
+
   res.status(status).json({ errors });
 };
 
@@ -134,9 +148,6 @@ const deleteSalida = async (req, res) => {
   }
 };
 
-/**
- * FILTRO CON PAGINACIÓN – ahora soporta id_tienda
- */
 const filterSalidas = async (req, res) => {
   try {
     const {

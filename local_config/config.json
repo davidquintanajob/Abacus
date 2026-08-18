@@ -10,7 +10,7 @@
     "almacenero": true,
     "economico": false
   },
-  "applyWeightedAverageCost": true,
+  "applyWeightedAverageCost": false,
   "entradaAccessLevels": {
     "dependiente": "own_store",
     "almacenero": "all_stores",

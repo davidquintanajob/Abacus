@@ -50,15 +50,12 @@ const getEntradasDisponibles = async (id_servicio_tienda, isVencible) => {
   };
   let order = [];
   if (isVencible) {
-    // 1. NULL al final, luego fecha_vencimiento ASC (más cercana primero)
-    // 2. Luego fecha ASC (más vieja primero)
     order = [
       [Sequelize.literal('CASE WHEN "fecha_vencimiento" IS NULL THEN 1 ELSE 0 END'), 'ASC'],
       ['fecha_vencimiento', 'ASC NULLS LAST'],
       ['fecha', 'ASC'],
     ];
   } else {
-    // Solo fecha ASC (más vieja primero)
     order = [['fecha', 'ASC']];
   }
 
@@ -70,12 +67,11 @@ const getEntradasDisponibles = async (id_servicio_tienda, isVencible) => {
 };
 
 /**
- * Descuenta la cantidad total de la salida de las entradas disponibles,
- * creando registros en la tabla intermedia SalidaEntrada.
- * Se asume que la cantidad total es válida y hay stock suficiente.
+ * Descuenta una cantidad de entradas disponibles para un servicio_tienda, creando o actualizando registros en SalidaEntrada.
+ * Si ya existe un registro intermedio para la misma combinación (id_salida, id_entrada), se suma la cantidad.
+ * Si no existe, se crea uno nuevo.
  */
 const descontarEntradas = async (id_salida, id_servicio_tienda, cantidadTotal, transaction) => {
-  // Obtener información del producto para saber si es vencible
   const st = await ServicioTienda.findByPk(id_servicio_tienda, {
     include: [
       {
@@ -89,7 +85,6 @@ const descontarEntradas = async (id_salida, id_servicio_tienda, cantidadTotal, t
   if (!st) throwError("Servicio-tienda no encontrado", 404);
   const isVencible = st.servicio.producto.isVencible;
 
-  // Obtener entradas en el orden definido por la política
   const entradas = await getEntradasDisponibles(id_servicio_tienda, isVencible);
 
   let cantidadPendiente = cantidadTotal;
@@ -97,20 +92,31 @@ const descontarEntradas = async (id_salida, id_servicio_tienda, cantidadTotal, t
     if (cantidadPendiente <= 0) break;
     const disponible = entrada.cantidad_restante;
     const cantidadAUsar = Math.min(disponible, cantidadPendiente);
+
+    // 🔽 Buscar si ya existe un registro intermedio para esta salida y esta entrada
+    const [registroExistente, creado] = await SalidaEntrada.findOrCreate({
+      where: {
+        id_salida,
+        id_entrada: entrada.id_entrada,
+      },
+      defaults: {
+        cantidad: 0,
+      },
+      transaction,
+    });
+
+    // Actualizar la cantidad (sumar la nueva cantidad)
+    await registroExistente.update(
+      { cantidad: registroExistente.cantidad + cantidadAUsar },
+      { transaction }
+    );
+
     // Restar de la entrada
     await entrada.update(
       { cantidad_restante: entrada.cantidad_restante - cantidadAUsar },
       { transaction }
     );
-    // Crear registro intermedio
-    await SalidaEntrada.create(
-      {
-        id_salida,
-        id_entrada: entrada.id_entrada,
-        cantidad: cantidadAUsar,
-      },
-      { transaction }
-    );
+
     cantidadPendiente -= cantidadAUsar;
   }
 
@@ -120,9 +126,51 @@ const descontarEntradas = async (id_salida, id_servicio_tienda, cantidadTotal, t
 };
 
 /**
- * Revertir una salida: suma de vuelta a las entradas y elimina los registros intermedios.
+ * Devuelve una cantidad a las entradas (cuando la salida disminuye) en orden LIFO inverso.
+ * Elimina o reduce los registros intermedios.
  */
-const revertirSalida = async (id_salida, transaction) => {
+const devolverEntradas = async (id_salida, cantidadADevolver, transaction) => {
+  if (cantidadADevolver <= 0) return;
+
+  // Obtener registros intermedios ordenados por ID descendente (último creado primero)
+  const salidaEntradas = await SalidaEntrada.findAll({
+    where: { id_salida },
+    order: [['id_salida', 'DESC'], ['id_entrada', 'DESC']],
+    transaction,
+  });
+
+  let cantidadPendiente = cantidadADevolver;
+  for (const se of salidaEntradas) {
+    if (cantidadPendiente <= 0) break;
+    const cantidadActual = se.cantidad;
+    const cantidadADevolverDeEste = Math.min(cantidadActual, cantidadPendiente);
+    const entrada = await Entrada.findByPk(se.id_entrada, { transaction });
+    if (entrada) {
+      await entrada.update(
+        { cantidad_restante: entrada.cantidad_restante + cantidadADevolverDeEste },
+        { transaction }
+      );
+    }
+    if (cantidadADevolverDeEste === cantidadActual) {
+      await se.destroy({ transaction });
+    } else {
+      await se.update(
+        { cantidad: cantidadActual - cantidadADevolverDeEste },
+        { transaction }
+      );
+    }
+    cantidadPendiente -= cantidadADevolverDeEste;
+  }
+
+  if (cantidadPendiente > 0) {
+    throwError("No se pudo devolver toda la cantidad a las entradas. Inconsistencia en los registros intermedios.", 400);
+  }
+};
+
+/**
+ * Revertir completamente una salida: suma de vuelta a las entradas y elimina todos los registros intermedios.
+ */
+const revertirSalidaCompleta = async (id_salida, transaction) => {
   const salidaEntradas = await SalidaEntrada.findAll({
     where: { id_salida },
     transaction,
@@ -178,7 +226,6 @@ const createSalida = async (salidaData) => {
   const transaction = await Salida.sequelize.transaction();
 
   try {
-    // Validar que el servicio_tienda sea producto y obtener datos
     const st = await validateServicioTiendaProducto(id_servicio_tienda);
     const cantidadDisponible = parseFloat(st.cantidad || 0);
     if (cantidadDisponible < cantidad_total) {
@@ -188,13 +235,11 @@ const createSalida = async (salidaData) => {
       );
     }
 
-    // Tomar costos del servicio_tienda
     const costo_cup = parseFloat(st.costo_cup || 0);
     const costo_usd = parseFloat(st.costo_usd || 0);
 
     const fechaRegistro = fecha ? new Date(fecha) : new Date();
 
-    // 1. Crear la salida con costos temporales (0)
     const nuevaSalida = await Salida.create(
       {
         id_usuario,
@@ -209,16 +254,13 @@ const createSalida = async (salidaData) => {
       { transaction }
     );
 
-    // 2. Descontar de entradas (crea registros intermedios)
     await descontarEntradas(nuevaSalida.id_salida, id_servicio_tienda, cantidad_total, transaction);
 
-    // 3. Restar de servicio_tienda.cantidad
     await st.update(
       { cantidad: cantidadDisponible - cantidad_total },
       { transaction }
     );
 
-    // 4. Actualizar la salida con los costos reales
     await nuevaSalida.update(
       { costo_cup, costo_usd },
       { transaction }
@@ -226,11 +268,15 @@ const createSalida = async (salidaData) => {
 
     await transaction.commit();
 
-    // Obtener la salida con relaciones (fuera de la transacción)
     return await getSalidaWithRelations(nuevaSalida.id_salida);
   } catch (error) {
     if (transaction && !transaction.finished) {
       await transaction.rollback();
+    }
+    // Transformar errores de Sequelize en mensajes legibles
+    if (error.name === "SequelizeValidationError" || error.name === "SequelizeForeignKeyConstraintError") {
+      const messages = error.errors ? error.errors.map(e => e.message) : [error.message];
+      throwError("Error al crear la salida", 400, messages);
     }
     throw error;
   }
@@ -244,97 +290,137 @@ const updateSalida = async (id, updateData) => {
   const transaction = await Salida.sequelize.transaction();
 
   try {
-    const salidaActual = await Salida.findByPk(id, { transaction });
+    const salidaActual = await Salida.findByPk(id, {
+      include: [
+        { model: ServicioTienda, as: "servicioTienda" },
+      ],
+      transaction,
+    });
     if (!salidaActual) throwError("Salida no encontrada.", 404);
 
-    // Construir objeto con datos actualizados
-    const newData = { ...salidaActual.get() };
-    let cambios = false;
+    const nuevoIdST = updateData.id_servicio_tienda !== undefined
+      ? updateData.id_servicio_tienda
+      : salidaActual.id_servicio_tienda;
+    const nuevaCantidad = updateData.cantidad_total !== undefined
+      ? updateData.cantidad_total
+      : salidaActual.cantidad_total;
+    const cantidadActual = salidaActual.cantidad_total;
 
-    if (updateData.id_servicio_tienda !== undefined && updateData.id_servicio_tienda !== salidaActual.id_servicio_tienda) {
-      newData.id_servicio_tienda = updateData.id_servicio_tienda;
-      cambios = true;
+    if (nuevaCantidad <= 0) {
+      throwError("La cantidad total debe ser mayor que cero.", 400);
     }
-    if (updateData.cantidad_total !== undefined && updateData.cantidad_total !== salidaActual.cantidad_total) {
-      newData.cantidad_total = updateData.cantidad_total;
-      cambios = true;
-    }
-    if (updateData.descripcion !== undefined && updateData.descripcion !== salidaActual.descripcion) {
-      newData.descripcion = updateData.descripcion;
-      cambios = true;
-    }
-    if (updateData.tipo_salida !== undefined && updateData.tipo_salida !== salidaActual.tipo_salida) {
-      newData.tipo_salida = updateData.tipo_salida;
-      cambios = true;
-    }
-    if (updateData.fecha !== undefined) {
-      const newFecha = new Date(updateData.fecha);
-      if (isNaN(newFecha.getTime())) throwError("Fecha inválida", 400);
-      if (newFecha.getTime() !== salidaActual.fecha.getTime()) {
-        newData.fecha = newFecha;
-        cambios = true;
+
+    // Caso: cambio de servicio_tienda (revertir y re-aplicar)
+    if (nuevoIdST !== salidaActual.id_servicio_tienda) {
+      await revertirSalidaCompleta(id, transaction);
+
+      const stActual = await ServicioTienda.findByPk(salidaActual.id_servicio_tienda, { transaction });
+      if (stActual) {
+        await stActual.update(
+          { cantidad: parseFloat(stActual.cantidad || 0) + cantidadActual },
+          { transaction }
+        );
       }
-    }
-    if (updateData.id_usuario !== undefined && updateData.id_usuario !== salidaActual.id_usuario) {
-      const usuario = await Usuario.findByPk(updateData.id_usuario);
-      if (!usuario) throwError("El usuario especificado no existe.", 404);
-      newData.id_usuario = updateData.id_usuario;
-      cambios = true;
-    }
 
-    if (!cambios) {
+      const newData = { ...salidaActual.get(), ...updateData };
+      await salidaActual.update(newData, { transaction });
+
+      const stNuevo = await validateServicioTiendaProducto(nuevoIdST);
+      const cantidadDisponibleNueva = parseFloat(stNuevo.cantidad || 0);
+      if (cantidadDisponibleNueva < nuevaCantidad) {
+        throwError(
+          `No hay suficiente cantidad en la tienda "${stNuevo.tienda.nombre}" para el producto "${stNuevo.servicio.nombre}". Disponible: ${cantidadDisponibleNueva}, solicitado: ${nuevaCantidad}`,
+          400
+        );
+      }
+
+      const nuevoCosto_cup = parseFloat(stNuevo.costo_cup || 0);
+      const nuevoCosto_usd = parseFloat(stNuevo.costo_usd || 0);
+
+      await descontarEntradas(id, nuevoIdST, nuevaCantidad, transaction);
+
+      await stNuevo.update(
+        { cantidad: cantidadDisponibleNueva - nuevaCantidad },
+        { transaction }
+      );
+
+      await salidaActual.update(
+        { costo_cup: nuevoCosto_cup, costo_usd: nuevoCosto_usd },
+        { transaction }
+      );
+
       await transaction.commit();
       return await getSalidaWithRelations(id);
     }
 
-    // --- Revertir salida actual (deshacer los efectos en entradas y stock) ---
-    await revertirSalida(id, transaction);
+    // Caso: mismo servicio_tienda, manejo incremental
+    const delta = nuevaCantidad - cantidadActual;
 
-    const stActual = await ServicioTienda.findByPk(salidaActual.id_servicio_tienda, { transaction });
-    if (stActual) {
-      await stActual.update(
-        { cantidad: parseFloat(stActual.cantidad || 0) + salidaActual.cantidad_total },
-        { transaction }
-      );
+    const otrosCampos = {};
+    if (updateData.descripcion !== undefined) otrosCampos.descripcion = updateData.descripcion;
+    if (updateData.tipo_salida !== undefined) otrosCampos.tipo_salida = updateData.tipo_salida;
+    if (updateData.fecha !== undefined) otrosCampos.fecha = new Date(updateData.fecha);
+    if (updateData.id_usuario !== undefined) {
+      const usuario = await Usuario.findByPk(updateData.id_usuario);
+      if (!usuario) throwError("El usuario especificado no existe.", 404);
+      otrosCampos.id_usuario = updateData.id_usuario;
     }
 
-    // Actualizar los datos de la salida (sin costos aún)
-    await salidaActual.update(newData, { transaction });
-
-    // --- Aplicar la nueva lógica de creación con los datos actualizados ---
-    const nuevoIdST = newData.id_servicio_tienda;
-    const nuevaCantidad = newData.cantidad_total;
-
-    const stNuevo = await validateServicioTiendaProducto(nuevoIdST);
-    const cantidadDisponibleNueva = parseFloat(stNuevo.cantidad || 0);
-    if (cantidadDisponibleNueva < nuevaCantidad) {
-      throwError(
-        `No hay suficiente cantidad en la tienda "${stNuevo.tienda.nombre}" para el producto "${stNuevo.servicio.nombre}". Disponible: ${cantidadDisponibleNueva}, solicitado: ${nuevaCantidad}`,
-        400
-      );
+    if (delta === 0 && Object.keys(otrosCampos).length === 0) {
+      await transaction.commit();
+      return await getSalidaWithRelations(id);
     }
 
-    const nuevoCosto_cup = parseFloat(stNuevo.costo_cup || 0);
-    const nuevoCosto_usd = parseFloat(stNuevo.costo_usd || 0);
+    if (Object.keys(otrosCampos).length > 0) {
+      await salidaActual.update(otrosCampos, { transaction });
+    }
 
-    await descontarEntradas(id, nuevoIdST, nuevaCantidad, transaction);
+    if (delta !== 0) {
+      const stActual = await ServicioTienda.findByPk(salidaActual.id_servicio_tienda, { transaction });
+      if (!stActual) throwError("Servicio-tienda no encontrado.", 404);
 
-    await stNuevo.update(
-      { cantidad: cantidadDisponibleNueva - nuevaCantidad },
-      { transaction }
-    );
-
-    await salidaActual.update(
-      { costo_cup: nuevoCosto_cup, costo_usd: nuevoCosto_usd },
-      { transaction }
-    );
+      if (delta > 0) {
+        const cantidadDisponibleActual = parseFloat(stActual.cantidad || 0);
+        if (cantidadDisponibleActual < delta) {
+          throwError(
+            `No hay suficiente cantidad en la tienda "${stActual.tienda.nombre}" para aumentar la salida. Disponible: ${cantidadDisponibleActual}, se necesita: ${delta}`,
+            400
+          );
+        }
+        // 🔽 Aquí usamos descontarEntradas que ahora actualiza en lugar de crear duplicados
+        await descontarEntradas(id, salidaActual.id_servicio_tienda, delta, transaction);
+        await stActual.update(
+          { cantidad: cantidadDisponibleActual - delta },
+          { transaction }
+        );
+        await salidaActual.update(
+          { cantidad_total: nuevaCantidad },
+          { transaction }
+        );
+      } else {
+        const cantidadADevolver = -delta;
+        await devolverEntradas(id, cantidadADevolver, transaction);
+        await stActual.update(
+          { cantidad: parseFloat(stActual.cantidad || 0) + cantidadADevolver },
+          { transaction }
+        );
+        await salidaActual.update(
+          { cantidad_total: nuevaCantidad },
+          { transaction }
+        );
+      }
+    }
 
     await transaction.commit();
-
     return await getSalidaWithRelations(id);
   } catch (error) {
     if (transaction && !transaction.finished) {
       await transaction.rollback();
+    }
+    // Transformar errores de Sequelize en mensajes legibles
+    if (error.name === "SequelizeValidationError" || error.name === "SequelizeForeignKeyConstraintError") {
+      const messages = error.errors ? error.errors.map(e => e.message) : [error.message];
+      throwError("Error al actualizar la salida", 400, messages);
     }
     throw error;
   }
@@ -347,10 +433,8 @@ const deleteSalida = async (id) => {
     const salida = await Salida.findByPk(id, { transaction });
     if (!salida) throwError("Salida no encontrada.", 404);
 
-    // Revertir efectos en entradas y eliminar registros intermedios
-    await revertirSalida(id, transaction);
+    await revertirSalidaCompleta(id, transaction);
 
-    // Devolver cantidad al servicio_tienda
     const st = await ServicioTienda.findByPk(salida.id_servicio_tienda, { transaction });
     if (st) {
       await st.update(
@@ -359,7 +443,6 @@ const deleteSalida = async (id) => {
       );
     }
 
-    // Eliminar la salida
     await salida.destroy({ transaction });
 
     await transaction.commit();
@@ -367,16 +450,14 @@ const deleteSalida = async (id) => {
     if (transaction && !transaction.finished) {
       await transaction.rollback();
     }
+    if (error.name === "SequelizeValidationError" || error.name === "SequelizeForeignKeyConstraintError") {
+      const messages = error.errors ? error.errors.map(e => e.message) : [error.message];
+      throwError("Error al eliminar la salida", 400, messages);
+    }
     throw error;
   }
 };
 
-/**
- * Filtra salidas con paginación.
- * - Los resultados se ordenan por fecha DESC (más recientes primero).
- * - Incluye todas las relaciones necesarias.
- * - Soporta filtro por id_tienda (a través de ServicioTienda) y id_servicio_tienda directo.
- */
 const filterSalidas = async (filters, limit, offset) => {
   const where = {};
 
@@ -395,7 +476,6 @@ const filterSalidas = async (filters, limit, offset) => {
     }
   }
 
-  // Construir include base
   const include = [
     { model: Usuario, as: "usuario" },
     {
@@ -413,9 +493,7 @@ const filterSalidas = async (filters, limit, offset) => {
     },
   ];
 
-  // 🔽 NUEVO: Aplicar filtro por id_tienda en el include de ServicioTienda
   if (filters.id_tienda) {
-    // Agregamos un where al include de ServicioTienda
     const servicioTiendaInclude = include.find(
       (item) => item.model === ServicioTienda && item.as === "servicioTienda"
     );
