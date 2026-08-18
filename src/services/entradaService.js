@@ -17,6 +17,8 @@ export const getEntradas = async (filters = {}, page = 1, limit = 10) => {
     if (filters.id_tienda) queryParams.append('id_tienda', filters.id_tienda);
     if (filters.cantidad_restante_min) queryParams.append('cantidad_restante_min', filters.cantidad_restante_min);
     if (filters.cantidad_restante_max) queryParams.append('cantidad_restante_max', filters.cantidad_restante_max);
+    if (filters.fecha_vencimiento_desde) queryParams.append('fecha_vencimiento_desde', filters.fecha_vencimiento_desde);
+    if (filters.fecha_vencimiento_hasta) queryParams.append('fecha_vencimiento_hasta', filters.fecha_vencimiento_hasta);
 
     const response = await api.get(`/entrada/filter?${queryParams}`);
     return response.data;

@@ -81,7 +81,7 @@ const EntradaFormContent = () => {
     precio_cup: '',
     fecha_vencimiento: '',
     nombre_proveedor: '',
-    fecha: new Date().toISOString().split('T')[0],
+    fecha: new Date().toISOString().split('T')[0] + 'T12:00:00',
     producto: null,
     tienda: null,
   });
@@ -90,7 +90,21 @@ const EntradaFormContent = () => {
   const [showFechaEntradaPicker, setShowFechaEntradaPicker] = useState(false);
 
   // Helper function to format date correctly without timezone issues
-  const formatDateToLocal = (dateString) => {
+  const formatDateToLocal = (dateString, isDateOnly = false) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    // Append time only for DATE fields, not DATEONLY fields
+    if (isDateOnly) {
+      return `${year}-${month}-${day}`;
+    }
+    return `${year}-${month}-${day}T12:00:00`;
+  };
+
+  // Helper function to format date for display (without time component)
+  const formatDateForDisplay = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
     const year = date.getFullYear();
@@ -298,7 +312,6 @@ const EntradaFormContent = () => {
       const servicioTienda = producto.tiendas_servicio?.find(ts => ts.id_tienda === tienda.id_tienda);
       
       if (!servicioTienda) {
-        console.log('No servicioTienda found, returning new costs');
         return { costo_cup: nuevoCostoCup, costo_usd: nuevoCostoUsd };
       }
 
@@ -311,15 +324,6 @@ const EntradaFormContent = () => {
       const costoActualUsd = parseFloat(servicioTienda.costo_usd) || 0;
       const nuevaCantidadNum = parseFloat(nuevaCantidad);
 
-      console.log('CalcularCostoPromedioPonderado - Inputs:', {
-        cantidadActual,
-        costoActualCup,
-        costoActualUsd,
-        nuevaCantidad: nuevaCantidadNum,
-        nuevoCostoCup,
-        nuevoCostoUsd,
-      });
-
       // Calcular costo promedio ponderado
       const cantidadTotal = cantidadActual + nuevaCantidadNum;
       const costoTotalCup = (costoActualCup * cantidadActual) + (nuevoCostoCup * nuevaCantidadNum);
@@ -328,20 +332,11 @@ const EntradaFormContent = () => {
       const nuevoCostoPromedioCup = costoTotalCup / cantidadTotal;
       const nuevoCostoPromedioUsd = costoTotalUsd / cantidadTotal;
 
-      console.log('CalcularCostoPromedioPonderado - Results:', {
-        cantidadTotal,
-        costoTotalCup,
-        costoTotalUsd,
-        nuevoCostoPromedioCup,
-        nuevoCostoPromedioUsd,
-      });
-
       return {
         costo_cup: parseFloat(nuevoCostoPromedioCup.toFixed(5)),
         costo_usd: parseFloat(nuevoCostoPromedioUsd.toFixed(5)),
       };
     } catch (error) {
-      console.error('Error in calcularCostoPromedioPonderado:', error);
       return { costo_cup: nuevoCostoCup, costo_usd: nuevoCostoUsd };
     }
   };
@@ -493,6 +488,17 @@ const EntradaFormContent = () => {
           costoUsd
         );
         
+        // Verificar si hay diferencia significativa entre costos actuales y sugeridos
+        const diffCup = Math.abs(nuevosCostos.costo_cup - costoCup);
+        const diffUsd = Math.abs(nuevosCostos.costo_usd - costoUsd);
+        const threshold = 0.01; // Umbral de diferencia mínima
+        
+        // Si no hay diferencia significativa, guardar directamente sin mostrar modal
+        if (diffCup < threshold && diffUsd < threshold) {
+          executeSave();
+          return;
+        }
+        
         // Guardar costos actuales del formulario
         setCurrentCosts({
           costo_cup: costoCup,
@@ -542,6 +548,8 @@ const EntradaFormContent = () => {
         
         const currentCostsArray = [];
         const suggestedCostsArray = [];
+        const threshold = 0.01; // Umbral de diferencia mínima
+        let hasSignificantDifference = false;
         
         for (const entrada of validEntradas) {
           const costoCup = parseFloat(entrada.costo_cup) || 0;
@@ -555,19 +563,32 @@ const EntradaFormContent = () => {
             costoUsd
           );
           
-          currentCostsArray.push({
-            id: entrada.id,
-            productoNombre: entrada.producto.nombre,
-            costo_cup: costoCup,
-            costo_usd: costoUsd,
-          });
+          // Verificar si hay diferencia significativa
+          const diffCup = Math.abs(nuevosCostos.costo_cup - costoCup);
+          const diffUsd = Math.abs(nuevosCostos.costo_usd - costoUsd);
           
-          suggestedCostsArray.push({
-            id: entrada.id,
-            productoNombre: entrada.producto.nombre,
-            costo_cup: nuevosCostos.costo_cup,
-            costo_usd: nuevosCostos.costo_usd,
+          if (diffCup >= threshold || diffUsd >= threshold) {
+            hasSignificantDifference = true;
+          }
+          
+          currentCostsArray.push({ 
+            id: entrada.id, 
+            productoNombre: entrada.producto.nombre, 
+            costo_cup: costoCup, 
+            costo_usd: costoUsd 
           });
+          suggestedCostsArray.push({ 
+            id: entrada.id, 
+            productoNombre: entrada.producto.nombre, 
+            costo_cup: nuevosCostos.costo_cup, 
+            costo_usd: nuevosCostos.costo_usd 
+          });
+        }
+        
+        // Si no hay diferencia significativa en ningún producto, guardar directamente
+        if (!hasSignificantDifference) {
+          executeSaveMultiple();
+          return;
         }
         
         setMultipleCurrentCosts(currentCostsArray);
@@ -575,11 +596,9 @@ const EntradaFormContent = () => {
         setIsMultipleCostSuggestion(true);
         setShowCostSuggestionModal(true);
       } catch (error) {
-        // Si hay error al calcular, continuar con el guardado normal
         executeSaveMultiple();
       }
     } else {
-      // Si la fórmula no está activa o estamos en modo edición, guardar directamente
       executeSaveMultiple();
     }
   };
@@ -837,10 +856,12 @@ const EntradaFormContent = () => {
   const handleDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
     if (selectedDate) {
-      const year = selectedDate.getFullYear();
-      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-      const day = String(selectedDate.getDate()).padStart(2, '0');
-      const formattedDate = `${year}-${month}-${day}`;
+      // Use UTC methods to avoid timezone issues
+      const year = selectedDate.getUTCFullYear();
+      const month = String(selectedDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getUTCDate()).padStart(2, '0');
+      // Append time to prevent UTC conversion issues in backend
+      const formattedDate = `${year}-${month}-${day}T12:00:00`;
       setFormData(prev => ({ ...prev, fecha_vencimiento: formattedDate }));
     }
   };
@@ -848,10 +869,12 @@ const EntradaFormContent = () => {
   const handleFechaEntradaChange = (event, selectedDate) => {
     setShowFechaEntradaPicker(false);
     if (selectedDate) {
-      const year = selectedDate.getFullYear();
-      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-      const day = String(selectedDate.getDate()).padStart(2, '0');
-      const formattedDate = `${year}-${month}-${day}`;
+      // Use UTC methods to avoid timezone issues
+      const year = selectedDate.getUTCFullYear();
+      const month = String(selectedDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getUTCDate()).padStart(2, '0');
+      // Append time to prevent UTC conversion issues
+      const formattedDate = `${year}-${month}-${day}T12:00:00`;
       setFormData(prev => ({ ...prev, fecha: formattedDate }));
     }
   };
@@ -1214,10 +1237,12 @@ const EntradaFormContent = () => {
   const handleDateChangeMultiple = (id, event, selectedDate) => {
     setMultipleShowDatePicker(prev => ({ ...prev, [id]: false }));
     if (selectedDate) {
-      const year = selectedDate.getFullYear();
-      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-      const day = String(selectedDate.getDate()).padStart(2, '0');
-      const formattedDate = `${year}-${month}-${day}`;
+      // Use UTC methods to avoid timezone issues
+      const year = selectedDate.getUTCFullYear();
+      const month = String(selectedDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getUTCDate()).padStart(2, '0');
+      // Append time to prevent UTC conversion issues in backend
+      const formattedDate = `${year}-${month}-${day}T12:00:00`;
       updateMultipleEntrada(id, 'fecha_vencimiento', formattedDate);
     }
   };
@@ -1547,21 +1572,23 @@ const EntradaFormContent = () => {
                               onChangeText={setTiendaSearchText}
                             />
                           </View>
-                          {filteredTiendas.length > 0 ? (
-                            filteredTiendas.map((tienda, index) => (
-                              <TouchableOpacity
-                                key={tienda.id_tienda}
-                                style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
-                                onPress={() => handleTiendaSelect(tienda)}
-                              >
-                                <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
-                              </TouchableOpacity>
-                            ))
-                          ) : (
-                            <View style={styles.dropdownItem}>
-                              <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
-                            </View>
-                          )}
+                          <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                            {filteredTiendas.length > 0 ? (
+                              filteredTiendas.map((tienda, index) => (
+                                <TouchableOpacity
+                                  key={tienda.id_tienda}
+                                  style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
+                                  onPress={() => handleTiendaSelect(tienda)}
+                                >
+                                  <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
+                                </TouchableOpacity>
+                              ))
+                            ) : (
+                              <View style={styles.dropdownItem}>
+                                <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
+                              </View>
+                            )}
+                          </ScrollView>
                         </View>
                       )}
                     </View>
@@ -1747,7 +1774,7 @@ const EntradaFormContent = () => {
                           disabled={isReadOnly}
                         >
                           <Text style={[styles.inputText, { color: formData.fecha_vencimiento ? colors.onSurface : colors.outline }]}>
-                            {formData.fecha_vencimiento || 'Seleccionar...'}
+                            {formData.fecha_vencimiento ? formatDateForDisplay(formData.fecha_vencimiento) : 'Seleccionar...'}
                           </Text>
                         </TouchableOpacity>
                         {showDatePicker && (
@@ -1768,7 +1795,7 @@ const EntradaFormContent = () => {
                           disabled={isReadOnly}
                         >
                           <Text style={[styles.inputText, { color: formData.fecha ? colors.onSurface : colors.outline }]}>
-                            {formData.fecha || 'Seleccionar...'}
+                            {formData.fecha ? formatDateForDisplay(formData.fecha) : 'Seleccionar...'}
                           </Text>
                         </TouchableOpacity>
                         {showFechaEntradaPicker && (
@@ -1790,7 +1817,7 @@ const EntradaFormContent = () => {
                         disabled={isReadOnly}
                       >
                         <Text style={[styles.inputText, { color: formData.fecha ? colors.onSurface : colors.outline }]}>
-                          {formData.fecha || 'Seleccionar...'}
+                          {formData.fecha ? formatDateForDisplay(formData.fecha) : 'Seleccionar...'}
                         </Text>
                       </TouchableOpacity>
                       {showFechaEntradaPicker && (
@@ -1846,21 +1873,23 @@ const EntradaFormContent = () => {
                             onChangeText={setTiendaSearchText}
                           />
                         </View>
-                        {filteredTiendas.length > 0 ? (
-                          filteredTiendas.map((tienda, index) => (
-                            <TouchableOpacity
-                              key={tienda.id_tienda}
-                              style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
-                              onPress={() => handleTiendaSelect(tienda)}
-                            >
-                              <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
-                            </TouchableOpacity>
-                          ))
-                        ) : (
-                          <View style={styles.dropdownItem}>
-                            <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
-                          </View>
-                        )}
+                        <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                          {filteredTiendas.length > 0 ? (
+                            filteredTiendas.map((tienda, index) => (
+                              <TouchableOpacity
+                                key={tienda.id_tienda}
+                                style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
+                                onPress={() => handleTiendaSelect(tienda)}
+                              >
+                                <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
+                              </TouchableOpacity>
+                            ))
+                          ) : (
+                            <View style={styles.dropdownItem}>
+                              <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
+                            </View>
+                          )}
+                        </ScrollView>
                       </View>
                     )}
                   </View>
@@ -1874,7 +1903,7 @@ const EntradaFormContent = () => {
                       disabled={isReadOnly}
                     >
                       <Text style={[styles.inputText, { color: formData.fecha ? colors.onSurface : colors.outline }]}>
-                        {formData.fecha || 'Seleccionar...'}
+                        {formData.fecha ? formatDateForDisplay(formData.fecha) : 'Seleccionar...'}
                       </Text>
                     </TouchableOpacity>
                     {showFechaEntradaPicker && (
@@ -2112,7 +2141,7 @@ const EntradaFormContent = () => {
                         disabled={isReadOnly}
                       >
                         <Text style={[styles.inputText, { color: entrada.fecha_vencimiento ? colors.onSurface : colors.outline }]}>
-                          {entrada.fecha_vencimiento || 'Seleccionar...'}
+                          {entrada.fecha_vencimiento ? formatDateForDisplay(entrada.fecha_vencimiento) : 'Seleccionar...'}
                         </Text>
                       </TouchableOpacity>
                       {multipleShowDatePicker[entrada.id] && (
@@ -2632,6 +2661,9 @@ const createStyles = (responsive) => StyleSheet.create({
     zIndex: 10,
     backgroundColor: '#fff',
     maxHeight: responsive.responsiveHeight(200),
+  },
+  dropdownScroll: {
+    maxHeight: responsive.responsiveHeight(150),
   },
   searchDropdown: {
     borderWidth: 1,

@@ -10,6 +10,7 @@ import { Card } from '../components/common/Card';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useOffline } from '../context/OfflineContext';
+import { getEntradas } from '../services/entradaService';
 
 const HomeContent = () => {
   const navigation = useNavigation();
@@ -19,6 +20,8 @@ const HomeContent = () => {
   const { enableOfflineMode, isOfflineMode: contextOfflineMode } = useOffline();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [greeting, setGreeting] = useState('Buenos días');
+  const [expiringProducts, setExpiringProducts] = useState([]);
+  const [loadingExpiring, setLoadingExpiring] = useState(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
 
@@ -50,6 +53,87 @@ const HomeContent = () => {
     if (hour < 12) setGreeting('Buenos días');
     else if (hour < 18) setGreeting('Buenas tardes');
     else setGreeting('Buenas noches');
+  }, []);
+
+  // Función para calcular el umbral dinámico de alerta
+  const calculateThreshold = (vidaUtil, porcentaje, minAbs, maxAbs) => {
+    return Math.max(minAbs, Math.min(maxAbs, porcentaje * vidaUtil));
+  };
+
+  // Función para determinar el nivel de alerta de un producto
+  const getExpirationAlert = (fechaCreacion, fechaVencimiento) => {
+    const hoy = new Date();
+    const vencimiento = new Date(fechaVencimiento);
+    const creacion = new Date(fechaCreacion);
+    
+    // Calcular días
+    const vidaUtil = Math.ceil((vencimiento - creacion) / (1000 * 60 * 60 * 24));
+    const diasRestantes = Math.ceil((vencimiento - hoy) / (1000 * 60 * 60 * 24));
+    
+    // Si ya venció
+    if (diasRestantes <= 0) {
+      return { level: 'expired', days: diasRestantes, label: 'Vencido' };
+    }
+    
+    // Calcular umbrales
+    const umbralAmarillo = calculateThreshold(vidaUtil, 0.20, 3, 30);
+    const umbralRojo = calculateThreshold(vidaUtil, 0.10, 1, 7);
+    
+    // Determinar nivel
+    if (diasRestantes <= umbralRojo) {
+      return { level: 'critical', days: diasRestantes, label: 'Crítico' };
+    } else if (diasRestantes <= umbralAmarillo) {
+      return { level: 'warning', days: diasRestantes, label: 'Próximo a vencer' };
+    } else {
+      return { level: 'ok', days: diasRestantes, label: 'Vigente' };
+    }
+  };
+
+  // Consultar productos próximos a vencer
+  useEffect(() => {
+    const fetchExpiringProducts = async () => {
+      try {
+        setLoadingExpiring(true);
+        
+        // Calcular fecha de vencimiento máximo (30 días desde hoy para el umbral amarillo)
+        const hoy = new Date();
+        const fechaMaxima = new Date(hoy);
+        fechaMaxima.setDate(fechaMaxima.getDate() + 30);
+        
+        const fechaMaximaStr = fechaMaxima.toISOString().split('T')[0];
+        
+        // Consultar entradas con fecha de vencimiento hasta 30 días
+        const response = await getEntradas(
+          { fecha_vencimiento_hasta: fechaMaximaStr },
+          1,
+          20
+        );
+        
+        // Filtrar y clasificar productos según la fórmula
+        const productosConAlerta = response.data
+          .filter(entrada => entrada.fecha_vencimiento && entrada.cantidad_restante > 0)
+          .map(entrada => {
+            const alerta = getExpirationAlert(entrada.fecha, entrada.fecha_vencimiento);
+            return {
+              ...entrada,
+              alerta,
+              nombreProducto: entrada.servicioTienda?.servicio?.nombre || 'Producto desconocido',
+              codigoLote: entrada.codigo_lote || 'N/A'
+            };
+          })
+          .filter(item => item.alerta.level === 'critical' || item.alerta.level === 'warning' || item.alerta.level === 'expired')
+          .sort((a, b) => a.alerta.days - b.alerta.days) // Ordenar por días restantes (menor primero)
+          .slice(0, 5); // Mostrar máximo 5 productos
+        
+        setExpiringProducts(productosConAlerta);
+      } catch (error) {
+        console.error('Error al consultar productos próximos a vencer:', error);
+      } finally {
+        setLoadingExpiring(false);
+      }
+    };
+    
+    fetchExpiringProducts();
   }, []);
 
   const quickAccessItems = [
@@ -112,6 +196,33 @@ const HomeContent = () => {
         return <Ionicons name="cube" size={responsive.responsiveWidth(20)} color={colors.secondary} />;
       default:
         return <Ionicons name="information-circle" size={responsive.responsiveWidth(20)} color={colors.outline} />;
+    }
+  };
+
+  const getExpirationAlertColor = (level) => {
+    switch (level) {
+      case 'critical':
+        return isDarkMode ? '#EF4444' : '#DC2626'; // Rojo más claro en modo oscuro
+      case 'warning':
+        return isDarkMode ? '#FBBF24' : '#F59E0B'; // Amarillo más claro en modo oscuro
+      case 'expired':
+        return isDarkMode ? '#9CA3AF' : '#1F2937'; // Gris en modo oscuro, negro en claro
+      default:
+        return colors.outline;
+    }
+  };
+
+  const getExpirationAlertIcon = (level) => {
+    const iconColor = getExpirationAlertColor(level);
+    switch (level) {
+      case 'critical':
+        return <Ionicons name="warning" size={responsive.responsiveWidth(20)} color={iconColor} />;
+      case 'warning':
+        return <Ionicons name="time" size={responsive.responsiveWidth(20)} color={iconColor} />;
+      case 'expired':
+        return <Ionicons name="close-circle" size={responsive.responsiveWidth(20)} color={iconColor} />;
+      default:
+        return <Ionicons name="checkmark-circle" size={responsive.responsiveWidth(20)} color="#16A34A" />;
     }
   };
 
@@ -203,6 +314,59 @@ const HomeContent = () => {
             </View>
           </Card>
         </View>
+
+        {/* Alertas de Vencimiento */}
+        {expiringProducts.length > 0 && (
+          <View style={styles.expirationSection}>
+            <Text style={[styles.sectionTitle, { color: colors.outline }]}>
+              ALERTAS DE VENCIMIENTO
+            </Text>
+            <View style={styles.expirationList}>
+              {expiringProducts.map((producto, index) => (
+                <Card 
+                  key={producto.id || index} 
+                  style={[
+                    styles.expirationItem, 
+                    { 
+                      backgroundColor: colors.surface,
+                      borderLeftWidth: 4,
+                      borderLeftColor: getExpirationAlertColor(producto.alerta.level)
+                    }
+                  ]}
+                >
+                  <View style={styles.expirationIconContainer}>
+                    {getExpirationAlertIcon(producto.alerta.level)}
+                  </View>
+                  <View style={styles.expirationContent}>
+                    <Text style={[styles.expirationProductName, { color: colors.onSurface }]}>
+                      {producto.nombreProducto}
+                    </Text>
+                    <Text style={[styles.expirationLote, { color: colors.outline }]}>
+                      Lote: {producto.codigoLote}
+                    </Text>
+                  </View>
+                  <View style={styles.expirationRight}>
+                    <Text 
+                      style={[
+                        styles.expirationLabel, 
+                        { color: getExpirationAlertColor(producto.alerta.level) }
+                      ]}
+                    >
+                      {producto.alerta.label}
+                    </Text>
+                    <Text style={[styles.expirationDays, { color: colors.outline }]}>
+                      {producto.alerta.days === 0 ? 'Hoy' : 
+                       producto.alerta.days === 1 ? 'Mañana' :
+                       producto.alerta.days === -1 ? 'Ayer' :
+                       producto.alerta.days < 0 ? `${Math.abs(producto.alerta.days)} días` :
+                       `${producto.alerta.days} días`}
+                    </Text>
+                  </View>
+                </Card>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Acciones Rápidas */}
         <View style={styles.quickAccessSection}>
@@ -445,6 +609,67 @@ const createStyles = (responsive) => StyleSheet.create({
     fontFamily: 'Inter',
     lineHeight: responsive.fontSizes.bodySmall * 1.3,
     textAlign: 'center',
+  },
+  activitySection: {
+    marginBottom: responsive.responsiveMargin(24),
+  },
+  expirationSection: {
+    marginBottom: responsive.responsiveMargin(24),
+  },
+  expirationList: {
+    gap: responsive.gridGap,
+  },
+  expirationItem: {
+    borderRadius: 14,
+    padding: responsive.cardPadding,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  expirationIconContainer: {
+    width: responsive.responsiveWidth(40),
+    height: responsive.responsiveHeight(40),
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: responsive.responsiveMargin(12),
+  },
+  expirationContent: {
+    flex: 1,
+  },
+  expirationProductName: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    lineHeight: responsive.fontSizes.body * 1.4,
+    marginBottom: 2,
+  },
+  expirationLote: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '400',
+    fontFamily: 'Inter',
+    lineHeight: responsive.fontSizes.bodySmall * 1.3,
+  },
+  expirationRight: {
+    alignItems: 'flex-end',
+  },
+  expirationLabel: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '600',
+    fontFamily: 'JetBrains Mono',
+    lineHeight: responsive.fontSizes.bodySmall * 1.4,
+    marginBottom: 2,
+  },
+  expirationDays: {
+    fontSize: responsive.fontSizes.caption,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+    lineHeight: responsive.fontSizes.caption * 1.4,
   },
   activitySection: {
     marginBottom: responsive.responsiveMargin(24),
