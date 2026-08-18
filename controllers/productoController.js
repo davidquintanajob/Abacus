@@ -45,7 +45,6 @@ const createProducto = async (req, res) => {
     if (esvendible !== undefined && typeof esvendible !== "boolean") {
       errors.push("esvendible debe ser booleano");
     }
-    // Validación de imagen: solo se verifica que sea string si se envía
     if (imagen !== undefined && typeof imagen !== "string") {
       errors.push("imagen debe ser un texto base64 o una URL");
     }
@@ -75,7 +74,7 @@ const createProducto = async (req, res) => {
       categoria,
       esvendible: esvendible !== undefined ? esvendible : true,
       nota: nota || null,
-      imagen: imagen || null,  // se procesará en el servicio
+      imagen: imagen || null,
       sufijo,
       isVencible: isVencible !== undefined ? isVencible : false,
       unidad_medida: unidad_medida || null,
@@ -286,10 +285,22 @@ const updateProducto = async (req, res) => {
   }
 };
 
+/** NUEVO: Eliminar producto */
+const deleteProducto = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await productoService.deleteProducto(id);
+    res.status(200).json({ message: "Producto eliminado correctamente" });
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
 module.exports = {
   createProducto,
   getProductoById,
   getProductosEnAlerta,
   filterProductos,
   updateProducto,
+  deleteProducto, // <-- exportar
 };

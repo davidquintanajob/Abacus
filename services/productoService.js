@@ -3,6 +3,8 @@ const { Producto } = require("../models/producto");
 const { ServicioTienda } = require("../models/servicio_tienda");
 const { Tienda } = require("../models/tienda");
 const { Codigo } = require("../models/codigo");
+const { Entrada } = require("../models/entrada");
+const { Salida } = require("../models/salida");
 const { Op, Sequelize } = require("sequelize");
 const fs = require("fs");
 const path = require("path");
@@ -185,7 +187,6 @@ const createProducto = async (productoData, productoTiendaList, codigoList) => {
     }
     await validateSufijoUnico(productoData.sufijo);
 
-    // CORREGIDO: usa el valor de productoData.esvendible o true por defecto
     newServicio = await Servicio.create(
       {
         nombre: productoData.nombre,
@@ -452,16 +453,11 @@ const filterProductos = async (filterCriteria = {}, id_tienda, cantidadMin, cant
   };
 };
 
-/**
- * Actualiza un producto existente.
- * Maneja la actualización de la lista de servicio_tienda sin eliminar registros que tengan entradas o salidas asociadas.
- */
 const updateProducto = async (id, productoData, productoTiendaList, codigoList) => {
   const transaction = await Servicio.sequelize.transaction();
   const createdImagePaths = [];
 
   try {
-    // 1. Obtener el servicio y producto
     const servicio = await Servicio.findByPk(id, { transaction });
     if (!servicio) {
       throwError("Producto no encontrado", 404);
@@ -472,12 +468,10 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
       throwError("Producto no encontrado", 404);
     }
 
-    // 2. Validar sufijo si cambia
     if (productoData.sufijo && productoData.sufijo !== producto.sufijo) {
       await validateSufijoUnico(productoData.sufijo, id);
     }
 
-    // 3. Actualizar servicio (CORREGIDO: esvendible ahora se toma del input o se mantiene)
     await servicio.update(
       {
         nombre: productoData.nombre !== undefined ? productoData.nombre : servicio.nombre,
@@ -488,7 +482,6 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
       { transaction }
     );
 
-    // 4. Manejar imagen
     let imagenValue = producto.imagen;
     if (productoData.imagen !== undefined) {
       if (productoData.imagen === null || productoData.imagen === "") {
@@ -502,7 +495,6 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
       }
     }
 
-    // 5. Actualizar producto
     await producto.update(
       {
         imagen: imagenValue,
@@ -513,7 +505,6 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
       { transaction }
     );
 
-    // 6. Actualizar códigos si se envía
     if (codigoList !== undefined) {
       const normalizedCodigos = normalizeCodigoList(codigoList);
       const existingCodes = await Codigo.findAll({ where: { id_servicio: id }, transaction });
@@ -538,25 +529,21 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
       }
     }
 
-    // 7. Actualizar la lista de servicio_tienda (manejo inteligente)
+    // Actualizar lista de servicio_tienda (inteligente)
     if (productoTiendaList !== undefined) {
-      // Obtener los registros actuales
       const currentST = await ServicioTienda.findAll({
         where: { id_servicio: id },
         transaction,
       });
 
-      // Crear un mapa de los actuales por id_tienda
       const currentMap = new Map();
       currentST.forEach((st) => {
         currentMap.set(st.id_tienda, st);
       });
 
-      // Crear un conjunto de las nuevas tiendas
       const newTiendaIds = new Set();
       const newSTData = [];
 
-      // Validar y preparar los nuevos datos
       for (const item of productoTiendaList) {
         if (item.precio_cup < 0 || item.precio_usd < 0 || item.costo_cup < 0 || item.costo_usd < 0) {
           throwError("Los precios y costos no pueden ser negativos", 400);
@@ -574,51 +561,40 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
           precio_usd: item.precio_usd,
           costo_cup: item.costo_cup,
           costo_usd: item.costo_usd,
-          cantidad: 0, // no se modifica, siempre 0 al crear
+          cantidad: 0,
           cantidad_alerta: item.cantidad_alerta || null,
         });
       }
 
-      // Recorrer los actuales para decidir: mantener, actualizar o eliminar
       const toDelete = [];
       const toUpdate = [];
 
       for (const [tiendaId, st] of currentMap) {
         if (newTiendaIds.has(tiendaId)) {
-          // Este registro debe actualizarse
           const newItem = newSTData.find((item) => item.id_tienda === tiendaId);
           toUpdate.push({ st, newData: newItem });
         } else {
-          // Este registro ya no está en la nueva lista, se debe eliminar si es posible
           toDelete.push(st);
         }
       }
 
-      // Verificar si los registros a eliminar tienen dependencias (entradas o salidas)
-      const { Entrada } = require("../models/entrada");
       if (toDelete.length > 0) {
         const stIdsToDelete = toDelete.map((st) => st.id_servicio_tienda);
 
-        // Contar entradas asociadas
         const entradaCounts = await Entrada.count({
           where: { id_servicio_tienda: { [Op.in]: stIdsToDelete } },
           transaction,
         });
 
-        // También contar salidas (si existe el modelo Salida)
         let salidaCounts = 0;
         try {
-          const { Salida } = require("../models/salida");
           salidaCounts = await Salida.count({
             where: { id_servicio_tienda: { [Op.in]: stIdsToDelete } },
             transaction,
           });
-        } catch (e) {
-          // Si el modelo no existe, ignorar
-        }
+        } catch (e) {}
 
         if (entradaCounts > 0 || salidaCounts > 0) {
-          // Identificar qué tiendas tienen dependencias para dar un mensaje más específico
           const tiendasConDependencias = [];
           for (const st of toDelete) {
             const hasEntrada = await Entrada.count({
@@ -635,13 +611,11 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
           );
         }
 
-        // Si no hay dependencias, eliminar los registros
         for (const st of toDelete) {
           await st.destroy({ transaction });
         }
       }
 
-      // Actualizar los que se mantienen
       for (const { st, newData } of toUpdate) {
         await st.update(
           {
@@ -655,7 +629,6 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
         );
       }
 
-      // Crear los nuevos registros que no existían
       const toCreate = newSTData.filter((item) => !currentMap.has(item.id_tienda));
       if (toCreate.length > 0) {
         await ServicioTienda.bulkCreate(toCreate, { transaction });
@@ -673,10 +646,77 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
   }
 };
 
+/** NUEVO: Eliminar producto con validación de dependencias */
+const deleteProducto = async (id) => {
+  const transaction = await Servicio.sequelize.transaction();
+
+  try {
+    // 1. Verificar que el producto exista
+    const servicio = await Servicio.findByPk(id, { transaction });
+    if (!servicio) {
+      throwError("Producto no encontrado", 404);
+    }
+
+    const producto = await Producto.findByPk(id, { transaction });
+    if (!producto) {
+      throwError("Producto no encontrado", 404);
+    }
+
+    // 2. Obtener todos los servicio_tienda asociados a este producto
+    const servicioTiendas = await ServicioTienda.findAll({
+      where: { id_servicio: id },
+      transaction,
+    });
+
+    if (servicioTiendas.length > 0) {
+      const stIds = servicioTiendas.map(st => st.id_servicio_tienda);
+
+      // 3. Verificar si alguna de estas servicio_tienda tiene entradas
+      const entradasCount = await Entrada.count({
+        where: { id_servicio_tienda: { [Op.in]: stIds } },
+        transaction,
+      });
+
+      // 4. Verificar si alguna tiene salidas
+      let salidasCount = 0;
+      try {
+        salidasCount = await Salida.count({
+          where: { id_servicio_tienda: { [Op.in]: stIds } },
+          transaction,
+        });
+      } catch (e) {
+        // Si el modelo Salida no existe, ignorar
+      }
+
+      if (entradasCount > 0 || salidasCount > 0) {
+        throwError(
+          `No se puede eliminar el producto porque tiene ${entradasCount > 0 ? 'entradas' : ''}${entradasCount > 0 && salidasCount > 0 ? ' y ' : ''}${salidasCount > 0 ? 'salidas' : ''} asociadas. Elimine primero las operaciones relacionadas.`,
+          400
+        );
+      }
+    }
+
+    // 5. Si no hay dependencias, eliminar el Servicio (CASCADE eliminará Producto, Códigos y ServicioTienda)
+    await servicio.destroy({ transaction });
+
+    // 6. (Opcional) Eliminar archivo de imagen si existe
+    const imagePath = path.join(IMAGE_UPLOAD_DIR, `${id}.webp`);
+    if (fs.existsSync(imagePath)) {
+      fs.unlinkSync(imagePath);
+    }
+
+    await transaction.commit();
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+};
+
 module.exports = {
   createProducto,
   getProductoById,
   getProductosEnAlerta,
   filterProductos,
   updateProducto,
+  deleteProducto, // <-- exportar
 };

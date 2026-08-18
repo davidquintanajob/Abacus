@@ -261,5 +261,28 @@ router.post("/producto", authenticate(), productoController.createProducto);
  *         description: Producto no encontrado
  */
 router.put("/producto/:id", authenticate(), productoController.updateProducto);
+/**
+ * @swagger
+ * /producto/{id}:
+ *   delete:
+ *     summary: Eliminar un producto
+ *     tags: [Productos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Producto eliminado correctamente
+ *       400:
+ *         description: No se puede eliminar porque tiene entradas o salidas asociadas
+ *       404:
+ *         description: Producto no encontrado
+ */
+router.delete("/producto/:id", authenticate(), productoController.deleteProducto);
 
 module.exports = router;

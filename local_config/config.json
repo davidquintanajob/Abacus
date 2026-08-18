@@ -10,5 +10,16 @@
     "almacenero": true,
     "economico": false
   },
-  "applyWeightedAverageCost": true
+  "applyWeightedAverageCost": true,
+  "entradaAccessLevels": {
+    "dependiente": "own_store",
+    "almacenero": "all_stores",
+    "economico": "none"
+  },
+  "entradaManagePermissions": {
+    "dependiente": false,
+    "almacenero": true,
+    "economico": false
+  },
+  "showEntradaModalAfterProductCreation": true
 }
