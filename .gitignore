@@ -3,7 +3,7 @@ node_modules/
 
 helpers/daily_license.lic
 helpers/LicenseTool.js
-local_config/config.json
+local_config/*
 
 # Logs
 logs

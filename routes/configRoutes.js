@@ -37,6 +37,21 @@ router.get('/', authenticate(), configController.getConfig);
  * /config:
  *   put:
  *     summary: Actualizar el archivo de configuración
+ *     description: |
+ *       Permite actualizar la configuración general. 
+ *       
+ *       **Nota sobre `monedaConfig`**:  
+ *       Si se envía una propiedad `monedaConfig` en el cuerpo, esta se procesa de forma especial: 
+ *       se valida su estructura, se imprime en consola (por ahora) y **no** se guarda en el archivo. 
+ *       El resto de las propiedades se persisten normalmente.
+ *       
+ *       **Campos obligatorios de `monedaConfig` y sus valores válidos:**
+ *       - `modificarSoloServicios`: booleano (`true` o `false`).
+ *       - `datosModificar`: string, debe ser exactamente `"costos"`, `"precios"` o `"ambos"`.
+ *       - `tipoDatoModificar`: string, debe ser `"cup"` o `"usd"`.
+ *       - `monedaValor`: número mayor que 0 (p.ej., `1.5`).
+ *       
+ *       Si alguno de estos campos no cumple con el tipo o valor esperado, la petición será rechazada con un error 400.
  *     tags: [Configuración]
  *     security:
  *       - bearerAuth: []
@@ -50,6 +65,11 @@ router.get('/', authenticate(), configController.getConfig);
  *           example:
  *             clave: "valor"
  *             otro: 123
+ *             monedaConfig:
+ *               modificarSoloServicios: true
+ *               datosModificar: "costos"
+ *               tipoDatoModificar: "cup"
+ *               monedaValor: 1.5
  *     responses:
  *       200:
  *         description: Configuración actualizada correctamente
@@ -64,7 +84,14 @@ router.get('/', authenticate(), configController.getConfig);
  *                   type: object
  *                   additionalProperties: true
  *       400:
- *         description: El cuerpo no es un JSON válido o está vacío
+ *         description: |
+ *           El cuerpo no es un JSON válido, está vacío, o `monedaConfig` tiene un formato inválido.
+ *           Los errores específicos para `monedaConfig` pueden ser:
+ *           - Debe ser un objeto
+ *           - modificarSoloServicios debe ser booleano
+ *           - datosModificar debe ser "costos", "precios" o "ambos"
+ *           - tipoDatoModificar debe ser "cup" o "usd"
+ *           - monedaValor debe ser un número mayor que 0
  *       500:
  *         description: Error interno del servidor
  */
