@@ -306,6 +306,12 @@ const EntradaFormContent = () => {
     }
   };
 
+  const hasAutoApplySuggestedCost = () => {
+    const userRole = user?.rol?.toLowerCase();
+    if (isAdmin) return false; // Admins always see the modal
+    return config.autoApplySuggestedCost?.[userRole] === true;
+  };
+
   const calcularCostoPromedioPonderado = async (producto, tienda, nuevaCantidad, nuevoCostoCup, nuevoCostoUsd) => {
     try {
       // Obtener todas las entradas anteriores del producto en esta tienda
@@ -476,45 +482,88 @@ const EntradaFormContent = () => {
   const checkAndShowCostSuggestion = async () => {
     // Si la fórmula de costo promedio ponderado está activa y estamos en modo add
     if (config.applyWeightedAverageCost && isAddMode && !isEditMode) {
-      try {
-        const costoCup = parseFloat(formData.costo_cup) || 0;
-        const costoUsd = parseFloat(formData.costo_usd) || 0;
-        
-        const nuevosCostos = await calcularCostoPromedioPonderado(
-          formData.producto,
-          formData.tienda,
-          formData.cantidad_entrada,
-          costoCup,
-          costoUsd
-        );
-        
-        // Verificar si hay diferencia significativa entre costos actuales y sugeridos
-        const diffCup = Math.abs(nuevosCostos.costo_cup - costoCup);
-        const diffUsd = Math.abs(nuevosCostos.costo_usd - costoUsd);
-        const threshold = 0.01; // Umbral de diferencia mínima
-        
-        // Si no hay diferencia significativa, guardar directamente sin mostrar modal
-        if (diffCup < threshold && diffUsd < threshold) {
+      // Solo calcular la fórmula si es admin o tiene permiso de auto-aplicar
+      if (isAdmin || hasAutoApplySuggestedCost()) {
+        try {
+          const costoCup = parseFloat(formData.costo_cup) || 0;
+          const costoUsd = parseFloat(formData.costo_usd) || 0;
+          
+          const nuevosCostos = await calcularCostoPromedioPonderado(
+            formData.producto,
+            formData.tienda,
+            formData.cantidad_entrada,
+            costoCup,
+            costoUsd
+          );
+          
+          // Verificar si hay diferencia significativa entre costos actuales y sugeridos
+          const diffCup = Math.abs(nuevosCostos.costo_cup - costoCup);
+          const diffUsd = Math.abs(nuevosCostos.costo_usd - costoUsd);
+          const threshold = 0.01; // Umbral de diferencia mínima
+          
+          // Si no hay diferencia significativa, guardar directamente sin mostrar modal
+          if (diffCup < threshold && diffUsd < threshold) {
+            executeSave();
+            return;
+          }
+          
+          // Si el usuario tiene permiso de auto-aplicar costo sugerido (y no es admin)
+          if (hasAutoApplySuggestedCost()) {
+            // Aplicar automáticamente el costo sugerido sin mostrar modal
+            // Actualizar el formData con los costos sugeridos
+            setFormData(prev => ({
+              ...prev,
+              costo_cup: nuevosCostos.costo_cup,
+              costo_usd: nuevosCostos.costo_usd,
+            }));
+            
+            // Actualizar el costo del producto en todas las tiendas
+            try {
+              const productoActualizado = await getProductoById(formData.producto.id_servicio);
+              
+              const productoTiendaList = (productoActualizado.tiendas_servicio || []).map(ts => ({
+                id_tienda: ts.id_tienda,
+                precio_cup: ts.precio_cup,
+                precio_usd: ts.precio_usd,
+                costo_cup: nuevosCostos.costo_cup,
+                costo_usd: nuevosCostos.costo_usd,
+                cantidad_alerta: ts.cantidad_alerta,
+              }));
+              
+              await updateProducto(formData.producto.id_servicio, {
+                productoTiendaList: productoTiendaList,
+              });
+            } catch (err) {
+              console.error('[checkAndShowCostSuggestion] Error al actualizar costo del producto:', err);
+              // Continuar con el guardado de la entrada incluso si falla la actualización del producto
+            }
+            
+            executeSave();
+            return;
+          }
+          
+          // Para administradores: mostrar el modal para que elija
+          // Guardar costos actuales del formulario
+          setCurrentCosts({
+            costo_cup: costoCup,
+            costo_usd: costoUsd,
+          });
+          
+          // Guardar costos sugeridos por la fórmula
+          setSuggestedCosts({
+            costo_cup: nuevosCostos.costo_cup,
+            costo_usd: nuevosCostos.costo_usd,
+          });
+          
+          // Mostrar el modal solo para administradores
+          setShowCostSuggestionModal(true);
+        } catch (error) {
+          // Si hay error al calcular, continuar con el guardado normal
           executeSave();
-          return;
         }
-        
-        // Guardar costos actuales del formulario
-        setCurrentCosts({
-          costo_cup: costoCup,
-          costo_usd: costoUsd,
-        });
-        
-        // Guardar costos sugeridos por la fórmula
-        setSuggestedCosts({
-          costo_cup: nuevosCostos.costo_cup,
-          costo_usd: nuevosCostos.costo_usd,
-        });
-        
-        // Mostrar el modal
-        setShowCostSuggestionModal(true);
-      } catch (error) {
-        // Si hay error al calcular, continuar con el guardado normal
+      } else {
+        // Si no es admin y no tiene permiso de auto-aplicar, guardar directamente con el costo ingresado
+        // sin aplicar la fórmula
         executeSave();
       }
     } else {
@@ -569,59 +618,124 @@ const EntradaFormContent = () => {
   const checkAndShowCostSuggestionMultiple = async () => {
     // Si la fórmula de costo promedio ponderado está activa y estamos en modo add
     if (config.applyWeightedAverageCost && isAddMode && !isEditMode) {
-      try {
-        const validEntradas = multipleEntradas.filter(e => e.producto !== null);
-        
-        const currentCostsArray = [];
-        const suggestedCostsArray = [];
-        const threshold = 0.01; // Umbral de diferencia mínima
-        let hasSignificantDifference = false;
-        
-        for (const entrada of validEntradas) {
-          const costoCup = parseFloat(entrada.costo_cup) || 0;
-          const costoUsd = parseFloat(entrada.costo_usd) || 0;
+      // Solo calcular la fórmula si es admin o tiene permiso de auto-aplicar
+      if (isAdmin || hasAutoApplySuggestedCost()) {
+        try {
+          const validEntradas = multipleEntradas.filter(e => e.producto !== null);
           
-          const nuevosCostos = await calcularCostoPromedioPonderado(
-            entrada.producto,
-            formData.tienda,
-            entrada.cantidad_entrada,
-            costoCup,
-            costoUsd
-          );
+          const currentCostsArray = [];
+          const suggestedCostsArray = [];
+          const threshold = 0.01; // Umbral de diferencia mínima
+          let hasSignificantDifference = false;
           
-          // Verificar si hay diferencia significativa
-          const diffCup = Math.abs(nuevosCostos.costo_cup - costoCup);
-          const diffUsd = Math.abs(nuevosCostos.costo_usd - costoUsd);
-          
-          if (diffCup >= threshold || diffUsd >= threshold) {
-            hasSignificantDifference = true;
+          for (const entrada of validEntradas) {
+            const costoCup = parseFloat(entrada.costo_cup) || 0;
+            const costoUsd = parseFloat(entrada.costo_usd) || 0;
+            
+            const nuevosCostos = await calcularCostoPromedioPonderado(
+              entrada.producto,
+              formData.tienda,
+              entrada.cantidad_entrada,
+              costoCup,
+              costoUsd
+            );
+            
+            // Verificar si hay diferencia significativa
+            const diffCup = Math.abs(nuevosCostos.costo_cup - costoCup);
+            const diffUsd = Math.abs(nuevosCostos.costo_usd - costoUsd);
+            
+            if (diffCup >= threshold || diffUsd >= threshold) {
+              hasSignificantDifference = true;
+            }
+            
+            currentCostsArray.push({ 
+              id: entrada.id, 
+              productoNombre: entrada.producto.nombre, 
+              costo_cup: costoCup, 
+              costo_usd: costoUsd 
+            });
+            suggestedCostsArray.push({ 
+              id: entrada.id, 
+              productoNombre: entrada.producto.nombre, 
+              costo_cup: nuevosCostos.costo_cup, 
+              costo_usd: nuevosCostos.costo_usd 
+            });
           }
           
-          currentCostsArray.push({ 
-            id: entrada.id, 
-            productoNombre: entrada.producto.nombre, 
-            costo_cup: costoCup, 
-            costo_usd: costoUsd 
-          });
-          suggestedCostsArray.push({ 
-            id: entrada.id, 
-            productoNombre: entrada.producto.nombre, 
-            costo_cup: nuevosCostos.costo_cup, 
-            costo_usd: nuevosCostos.costo_usd 
-          });
-        }
-        
-        // Si no hay diferencia significativa en ningún producto, guardar directamente
-        if (!hasSignificantDifference) {
+          // Si no hay diferencia significativa en ningún producto, guardar directamente
+          if (!hasSignificantDifference) {
+            executeSaveMultiple();
+            return;
+          }
+          
+          // Si el usuario tiene permiso de auto-aplicar costo sugerido (y no es admin)
+          if (hasAutoApplySuggestedCost()) {
+            // Aplicar automáticamente los costos sugeridos sin mostrar modal
+            setMultipleEntradas(prev => prev.map(entrada => {
+              const suggestedCost = suggestedCostsArray.find(sc => sc.id === entrada.id);
+              if (suggestedCost) {
+                return {
+                  ...entrada,
+                  costo_cup: suggestedCost.costo_cup,
+                  costo_usd: suggestedCost.costo_usd,
+                };
+              }
+              return entrada;
+            }));
+            
+            // Actualizar el costo de cada producto en todas las tiendas
+            try {
+              const productosUnicos = new Map();
+              validEntradas.forEach(entrada => {
+                if (!productosUnicos.has(entrada.producto.id_servicio)) {
+                  const suggestedCost = suggestedCostsArray.find(sc => sc.id === entrada.id);
+                  if (suggestedCost) {
+                    productosUnicos.set(entrada.producto.id_servicio, suggestedCost);
+                  }
+                }
+              });
+
+              for (const [productoId, suggestedCost] of productosUnicos) {
+                try {
+                  const productoActualizado = await getProductoById(productoId);
+                  
+                  const productoTiendaList = (productoActualizado.tiendas_servicio || []).map(ts => ({
+                    id_tienda: ts.id_tienda,
+                    precio_cup: ts.precio_cup,
+                    precio_usd: ts.precio_usd,
+                    costo_cup: suggestedCost.costo_cup,
+                    costo_usd: suggestedCost.costo_usd,
+                    cantidad_alerta: ts.cantidad_alerta,
+                  }));
+                  
+                  await updateProducto(productoId, {
+                    productoTiendaList: productoTiendaList,
+                  });
+                } catch (err) {
+                  console.error(`[checkAndShowCostSuggestionMultiple] Error al actualizar costo del producto ${productoId}:`, err);
+                }
+              }
+            } catch (err) {
+              console.error('[checkAndShowCostSuggestionMultiple] Error al actualizar costos de productos:', err);
+            }
+            
+            executeSaveMultiple();
+            return;
+          }
+          
+          // Para administradores: mostrar el modal para que elija
+          setMultipleCurrentCosts(currentCostsArray);
+          setMultipleSuggestedCosts(suggestedCostsArray);
+          setIsMultipleCostSuggestion(true);
+          
+          // Mostrar el modal solo para administradores
+          setShowCostSuggestionModal(true);
+        } catch (error) {
           executeSaveMultiple();
-          return;
         }
-        
-        setMultipleCurrentCosts(currentCostsArray);
-        setMultipleSuggestedCosts(suggestedCostsArray);
-        setIsMultipleCostSuggestion(true);
-        setShowCostSuggestionModal(true);
-      } catch (error) {
+      } else {
+        // Si no es admin y no tiene permiso de auto-aplicar, guardar directamente con los costos ingresados
+        // sin aplicar la fórmula
         executeSaveMultiple();
       }
     } else {
@@ -758,11 +872,12 @@ const EntradaFormContent = () => {
         }
       }
 
-      // Calcular costo promedio ponderado si está activado
+      // Calcular costo promedio ponderado si está activado y el usuario tiene permisos
       let costo_cup = toFixed5(formData.costo_cup);
       let costo_usd = toFixed5(formData.costo_usd);
 
-      if (config.applyWeightedAverageCost && !isEditMode) {
+      // Solo calcular si es admin o tiene permiso de auto-aplicar
+      if (config.applyWeightedAverageCost && !isEditMode && (isAdmin || hasAutoApplySuggestedCost())) {
         const nuevosCostos = await calcularCostoPromedioPonderado(
           formData.producto,
           formData.tienda,
@@ -772,11 +887,6 @@ const EntradaFormContent = () => {
         );
         costo_cup = nuevosCostos.costo_cup;
         costo_usd = nuevosCostos.costo_usd;
-        
-        // showToast({ 
-        //   type: 'info', 
-        //   message: `Costo promedio calculado: CUP ${costo_cup}, USD ${costo_usd}` 
-        // });
       }
 
       const entradaData = {
@@ -877,11 +987,12 @@ const EntradaFormContent = () => {
           }
         }
 
-        // Calcular costo promedio ponderado si está activado
+        // Calcular costo promedio ponderado si está activado y el usuario tiene permisos
         let costo_cup = toFixed5(entrada.costo_cup);
         let costo_usd = toFixed5(entrada.costo_usd);
 
-        if (config.applyWeightedAverageCost) {
+        // Solo calcular si es admin o tiene permiso de auto-aplicar
+        if (config.applyWeightedAverageCost && (isAdmin || hasAutoApplySuggestedCost())) {
           const nuevosCostos = await calcularCostoPromedioPonderado(
             entrada.producto,
             formData.tienda,

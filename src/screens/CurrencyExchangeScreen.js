@@ -99,6 +99,11 @@ const CurrencyExchangeContent = () => {
     economico: false,
   });
   const [applyWeightedAverageCost, setApplyWeightedAverageCost] = useState(false);
+  const [autoApplySuggestedCost, setAutoApplySuggestedCost] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
   const [showEntradaModalAfterProductCreation, setShowEntradaModalAfterProductCreation] = useState(false);
   const [showPermissions, setShowPermissions] = useState(false);
   const [showEntradaPermissions, setShowEntradaPermissions] = useState(false);
@@ -149,8 +154,11 @@ const CurrencyExchangeContent = () => {
       const data = await exchangeRateService.getExchangeRates();
       setExchangeRates(data);
     } catch (error) {
-      // No mostrar error en consola para no molestar al usuario
+      console.warn('[ExchangeRates]', error.message);
       setExchangeRates(null);
+      if (manualRetry) {
+        showToast({ type: 'error', message: 'No se pudieron cargar las tasas de cambio' });
+      }
     } finally {
       setIsLoadingRates(false);
     }
@@ -181,6 +189,9 @@ const CurrencyExchangeContent = () => {
       }
       if (data.applyWeightedAverageCost !== undefined) {
         setApplyWeightedAverageCost(data.applyWeightedAverageCost);
+      }
+      if (data.autoApplySuggestedCost) {
+        setAutoApplySuggestedCost(data.autoApplySuggestedCost);
       }
       if (data.showEntradaModalAfterProductCreation !== undefined) {
         setShowEntradaModalAfterProductCreation(data.showEntradaModalAfterProductCreation);
@@ -218,6 +229,7 @@ const CurrencyExchangeContent = () => {
         entradaManagePermissions: entradaManagePermissions,
         salidaAccessLevels: salidaAccessLevels,
         salidaManagePermissions: salidaManagePermissions,
+        autoApplySuggestedCost: autoApplySuggestedCost,
         customSalidaTypes: customSalidaTypes,
       };
       await configService.updateConfig(updatedConfig);
@@ -310,6 +322,36 @@ const CurrencyExchangeContent = () => {
       showToast({ type: 'error', message: 'Error al actualizar configuración de costo promedio' });
       setApplyWeightedAverageCost(applyWeightedAverageCost);
     }
+  };
+
+  const toggleAutoApplySuggestedCost = async (role) => {
+    const newAutoApplySuggestedCost = { ...autoApplySuggestedCost, [role]: !autoApplySuggestedCost[role] };
+    setAutoApplySuggestedCost(newAutoApplySuggestedCost);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        autoApplySuggestedCost: newAutoApplySuggestedCost,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Permiso de auto-aplicar costo sugerido actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de auto-aplicar costo sugerido' });
+      setAutoApplySuggestedCost(autoApplySuggestedCost);
+    }
+  };
+
+  const hasFullEntradaPermissions = (role) => {
+    return entradaManagePermissions[role] === true && entradaAccessLevels[role] !== 'none';
+  };
+
+  const getRolesWithFullEntradaPermissions = () => {
+    const roles = [];
+    if (hasFullEntradaPermissions('dependiente')) roles.push('dependiente');
+    if (hasFullEntradaPermissions('almacenero')) roles.push('almacenero');
+    if (hasFullEntradaPermissions('economico')) roles.push('economico');
+    return roles;
   };
 
   const toggleEntradaModalAfterProductCreation = async () => {
@@ -701,6 +743,89 @@ const CurrencyExchangeContent = () => {
                   thumbColor={applyWeightedAverageCost ? '#fff' : colors.outline}
                 />
               </View>
+
+              {applyWeightedAverageCost && getRolesWithFullEntradaPermissions().length > 0 && (
+                <>
+                  <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                    Configura qué roles pueden aplicar automáticamente el costo sugerido por la fórmula sin confirmación
+                  </Text>
+
+                  {getRolesWithFullEntradaPermissions().includes('dependiente') && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Dependiente
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Auto-aplicar Costo Sugerido - Dependiente',
+                            'Activo: Aplica costo sugerido automáticamente, actualiza el costo del producto en todas las tiendas. NO muestra ventana para elegir entre costos.\n\nInactivo: Usa costo ingresado solo para la entrada sin modificar el costo original del producto. NO muestra ventana para elegir entre costos.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={autoApplySuggestedCost.dependiente}
+                        onValueChange={() => toggleAutoApplySuggestedCost('dependiente')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={autoApplySuggestedCost.dependiente ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+
+                  {getRolesWithFullEntradaPermissions().includes('almacenero') && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Almacenero
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Auto-aplicar Costo Sugerido - Almacenero',
+                            'Activo: Aplica costo sugerido automáticamente, actualiza el costo del producto en todas las tiendas. NO muestra ventana para elegir entre costos.\n\nInactivo: Usa costo ingresado solo para la entrada sin modificar el costo original del producto. NO muestra ventana para elegir entre costos.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={autoApplySuggestedCost.almacenero}
+                        onValueChange={() => toggleAutoApplySuggestedCost('almacenero')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={autoApplySuggestedCost.almacenero ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+
+                  {getRolesWithFullEntradaPermissions().includes('economico') && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Económico
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Auto-aplicar Costo Sugerido - Económico',
+                            'Activo: Aplica costo sugerido automáticamente, actualiza el costo del producto en todas las tiendas. NO muestra ventana para elegir entre costos.\n\nInactivo: Usa costo ingresado solo para la entrada sin modificar el costo original del producto. NO muestra ventana para elegir entre costos.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={autoApplySuggestedCost.economico}
+                        onValueChange={() => toggleAutoApplySuggestedCost('economico')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={autoApplySuggestedCost.economico ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                </>
+              )}
 
               <View style={styles.permissionItem}>
                 <View style={styles.permissionInfo}>
