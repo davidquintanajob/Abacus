@@ -97,4 +97,25 @@ router.get('/', authenticate(), configController.getConfig);
  */
 router.put('/', authenticate(), configController.updateConfig);
 
+/**
+ * @swagger
+ * /config/tasa-cambio:
+ *   get:
+ *     summary: Obtener la tasa de cambio desde el servicio externo
+ *     tags: [Configuración]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Respuesta de la API externa
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               additionalProperties: true
+ *       500:
+ *         description: Error al consumir la API externa
+ */
+router.get('/tasa-cambio', authenticate(), configController.getTasaCambio);
+
 module.exports = router;
