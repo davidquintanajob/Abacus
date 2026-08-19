@@ -122,6 +122,12 @@ const CurrencyExchangeContent = () => {
   const [isConnected, setIsConnected] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
   const maxRetries = 3;
+  const [showCurrencyModal, setShowCurrencyModal] = useState(false);
+  const [currencyModalConfig, setCurrencyModalConfig] = useState({
+    datosModificar: 'ambos',
+    modificarSoloServicios: false,
+    tipoDatoModificar: 'usd',
+  });
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
 
@@ -219,8 +225,22 @@ const CurrencyExchangeContent = () => {
       return;
     }
 
+    // Show currency conversion modal
+    setShowCurrencyModal(true);
+  };
+
+  const handleCurrencyModalConfirm = async () => {
+    const rate = parseFloat(exchangeRate);
+    
     try {
       setIsSaving(true);
+      setShowCurrencyModal(false);
+
+      // Invertir tipoDatoModificar porque el backend tiene la lógica invertida
+      // Si el usuario quiere basar en USD (mantener USD, actualizar CUP), 
+      // el backend espera 'cup' para actualizar CUP basándose en USD
+      const invertedTipoDato = currencyModalConfig.tipoDatoModificar === 'usd' ? 'cup' : 'usd';
+
       const updatedConfig = {
         ...config,
         cupToUsdRate: rate,
@@ -231,15 +251,31 @@ const CurrencyExchangeContent = () => {
         salidaManagePermissions: salidaManagePermissions,
         autoApplySuggestedCost: autoApplySuggestedCost,
         customSalidaTypes: customSalidaTypes,
+        monedaConfig: {
+          modificarSoloServicios: currencyModalConfig.modificarSoloServicios,
+          datosModificar: currencyModalConfig.datosModificar,
+          tipoDatoModificar: invertedTipoDato,
+          monedaValor: rate,
+        },
       };
-      await configService.updateConfig(updatedConfig);
+      
+      const response = await configService.updateConfig(updatedConfig);
       setConfig(updatedConfig);
-      showToast({ type: 'success', message: 'Configuración guardada correctamente' });
+      
+      const message = response?.updatedServiciosTienda 
+        ? `Configuración guardada. ${response.updatedServiciosTienda} servicios actualizados.`
+        : 'Configuración guardada correctamente';
+      
+      showToast({ type: 'success', message });
     } catch (error) {
       showToast({ type: 'error', message: 'Error al guardar configuración' });
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleCurrencyModalCancel = () => {
+    setShowCurrencyModal(false);
   };
 
   const showInfoModal = (title, description) => {
@@ -1323,6 +1359,180 @@ const CurrencyExchangeContent = () => {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <Modal
+        visible={showCurrencyModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCurrencyModalCancel}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.currencyModalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Ionicons name="swap-horizontal" size={responsive.responsiveWidth(28)} color={colors.primary} />
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                Actualizar Precios y Costos
+              </Text>
+            </View>
+            
+            <ScrollView 
+              style={styles.currencyModalScrollView}
+              showsVerticalScrollIndicator={true}
+            >
+              <Text style={[styles.currencyModalSubtitle, { color: colors.outline }]}>
+                La tasa de cambio ha cambiado. ¿Deseas actualizar los precios y/o costos de tus productos y servicios?
+              </Text>
+
+              <View style={styles.currencyModalSection}>
+                <Text style={[styles.currencyModalSectionTitle, { color: colors.onSurface }]}>
+                  ¿Qué deseas modificar?
+                </Text>
+                <View style={styles.currencyModalOptions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.currencyModalOption,
+                      currencyModalConfig.datosModificar === 'precios' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                    ]}
+                    onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, datosModificar: 'precios' })}
+                  >
+                    <Ionicons 
+                      name="pricetag" 
+                      size={20} 
+                      color={currencyModalConfig.datosModificar === 'precios' ? '#fff' : colors.outline} 
+                    />
+                    <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.datosModificar === 'precios' ? '#fff' : colors.onSurface }]}>
+                      Solo Precios
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.currencyModalOption,
+                      currencyModalConfig.datosModificar === 'costos' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                    ]}
+                    onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, datosModificar: 'costos' })}
+                  >
+                    <Ionicons 
+                      name="wallet" 
+                      size={20} 
+                      color={currencyModalConfig.datosModificar === 'costos' ? '#fff' : colors.outline} 
+                    />
+                    <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.datosModificar === 'costos' ? '#fff' : colors.onSurface }]}>
+                      Solo Costos
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.currencyModalOption,
+                      currencyModalConfig.datosModificar === 'ambos' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                    ]}
+                    onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, datosModificar: 'ambos' })}
+                  >
+                    <Ionicons 
+                      name="layers" 
+                      size={20} 
+                      color={currencyModalConfig.datosModificar === 'ambos' ? '#fff' : colors.outline} 
+                    />
+                    <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.datosModificar === 'ambos' ? '#fff' : colors.onSurface }]}>
+                      Ambos
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.currencyModalSection}>
+                <Text style={[styles.currencyModalSectionTitle, { color: colors.onSurface }]}>
+                  ¿Qué servicios actualizar?
+                </Text>
+                <View style={styles.currencyModalOptions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.currencyModalOption,
+                      !currencyModalConfig.modificarSoloServicios && { backgroundColor: colors.primary, borderColor: colors.primary }
+                    ]}
+                    onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, modificarSoloServicios: false })}
+                  >
+                    <Ionicons 
+                      name="apps" 
+                      size={20} 
+                      color={!currencyModalConfig.modificarSoloServicios ? '#fff' : colors.outline} 
+                    />
+                    <Text style={[styles.currencyModalOptionText, { color: !currencyModalConfig.modificarSoloServicios ? '#fff' : colors.onSurface }]}>
+                      Todos (Productos + Servicios)
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.currencyModalOption,
+                      currencyModalConfig.modificarSoloServicios && { backgroundColor: colors.primary, borderColor: colors.primary }
+                    ]}
+                    onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, modificarSoloServicios: true })}
+                  >
+                    <Ionicons 
+                      name="list" 
+                      size={20} 
+                      color={currencyModalConfig.modificarSoloServicios ? '#fff' : colors.outline} 
+                    />
+                    <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.modificarSoloServicios ? '#fff' : colors.onSurface }]}>
+                      Solo Servicios (sin producto)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.currencyModalSection}>
+                <Text style={[styles.currencyModalSectionTitle, { color: colors.onSurface }]}>
+                  ¿Basar conversión en?
+                </Text>
+                <View style={styles.currencyModalOptions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.currencyModalOption,
+                      currencyModalConfig.tipoDatoModificar === 'usd' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                    ]}
+                    onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, tipoDatoModificar: 'usd' })}
+                  >
+                    <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.tipoDatoModificar === 'usd' ? '#fff' : colors.onSurface }]}>
+                      USD (Actualizar CUP)
+                    </Text>
+                    <Text style={[styles.currencyModalOptionSubtext, { color: currencyModalConfig.tipoDatoModificar === 'usd' ? '#fff' : colors.outline }]}>
+                      CUP = USD × {exchangeRate}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.currencyModalOption,
+                      currencyModalConfig.tipoDatoModificar === 'cup' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                    ]}
+                    onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, tipoDatoModificar: 'cup' })}
+                  >
+                    <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.tipoDatoModificar === 'cup' ? '#fff' : colors.onSurface }]}>
+                      CUP (Actualizar USD)
+                    </Text>
+                    <Text style={[styles.currencyModalOptionSubtext, { color: currencyModalConfig.tipoDatoModificar === 'cup' ? '#fff' : colors.outline }]}>
+                      USD = CUP / {exchangeRate}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+
+            <View style={styles.currencyModalButtons}>
+              <TouchableOpacity
+                style={[styles.currencyModalButton, styles.currencyModalCancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
+                onPress={handleCurrencyModalCancel}
+              >
+                <Text style={[styles.currencyModalButtonText, { color: colors.onSurface }]}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.currencyModalButton, styles.currencyModalConfirmButton, { backgroundColor: colors.primary }]}
+                onPress={handleCurrencyModalConfirm}
+              >
+                <Text style={[styles.currencyModalButtonText, { color: '#fff' }]}>Aplicar Cambios</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1660,6 +1870,81 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   ratesErrorText: {
     fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+  },
+  currencyModalContent: {
+    borderRadius: 16,
+    padding: responsive.responsivePadding(24),
+    width: '100%',
+    maxWidth: responsive.responsiveWidth(500),
+    maxHeight: '90%',
+  },
+  currencyModalScrollView: {
+    maxHeight: responsive.responsiveHeight(400),
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  currencyModalSubtitle: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(20),
+    lineHeight: responsive.fontSizes.body * 1.4,
+  },
+  currencyModalSection: {
+    marginBottom: responsive.responsiveMargin(20),
+  },
+  currencyModalSectionTitle: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  currencyModalOptions: {
+    gap: responsive.responsiveMargin(8),
+  },
+  currencyModalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: responsive.responsivePadding(12),
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.1)',
+    gap: responsive.responsiveMargin(12),
+    backgroundColor: 'transparent',
+  },
+  currencyModalOptionText: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+  },
+  currencyModalOptionSubtext: {
+    fontSize: responsive.fontSizes.caption,
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(2),
+  },
+  currencyModalButtons: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(12),
+    marginTop: responsive.responsiveMargin(8),
+  },
+  currencyModalButton: {
+    flex: 1,
+    paddingVertical: responsive.responsivePadding(14),
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  currencyModalCancelButton: {
+    borderWidth: 1,
+  },
+  currencyModalConfirmButton: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  currencyModalButtonText: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
     fontFamily: 'Inter',
   },
 });
