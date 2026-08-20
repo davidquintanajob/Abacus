@@ -80,6 +80,12 @@ const authenticate = require("../helpers/authenticate");
  *           type: string
  *         description: Búsqueda parcial por nombre natural del usuario
  *       - in: query
+ *         name: id_tienda
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Filtra por la tienda asociada al usuario de la operación
+ *       - in: query
  *         name: fecha_desde
  *         schema:
  *           type: string

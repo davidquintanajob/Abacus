@@ -317,6 +317,7 @@ const filterOperaciones = async (req, res) => {
       page,
       nombre_cuenta,
       nombre_usuario,
+      id_tienda,
       fecha_desde,
       fecha_hasta,
       cantidad_min,
@@ -335,6 +336,13 @@ const filterOperaciones = async (req, res) => {
     const filters = {};
     if (nombre_cuenta) filters.nombre_cuenta = nombre_cuenta.trim();
     if (nombre_usuario) filters.nombre_usuario = nombre_usuario.trim();
+    if (id_tienda !== undefined) {
+      const tiendaId = parseInt(id_tienda, 10);
+      if (isNaN(tiendaId) || tiendaId < 1 || String(tiendaId) !== String(id_tienda).trim()) {
+        throwError("id_tienda debe ser un número entero positivo.", 400);
+      }
+      filters.id_tienda = tiendaId;
+    }
     if (fecha_desde) {
       const date = new Date(fecha_desde);
       if (isNaN(date.getTime())) throwError("Fecha desde inválida (formato YYYY-MM-DD)", 400);

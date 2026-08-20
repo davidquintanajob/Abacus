@@ -275,6 +275,12 @@ const filterOperaciones = async (filters, limit, offset) => {
       nombre_natural: { [Op.iLike]: `%${filters.nombre_usuario}%` },
     };
   }
+  if (filters.id_tienda !== undefined) {
+    include[1].where = {
+      ...(include[1].where || {}),
+      id_tienda: filters.id_tienda,
+    };
+  }
   if (filters.fecha_desde || filters.fecha_hasta) {
     where.fecha_hora = {};
     if (filters.fecha_desde) where.fecha_hora[Op.gte] = filters.fecha_desde;
