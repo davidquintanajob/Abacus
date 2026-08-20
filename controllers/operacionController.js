@@ -20,8 +20,7 @@ const createOperacion = async (req, res) => {
     const {
       id_cuenta,
       id_usuario,
-      cantidad_cup,
-      cantidad_usd,
+      cantidad_operacion,
       tipo_operacion,
       fecha_hora,
       motivo,
@@ -30,14 +29,14 @@ const createOperacion = async (req, res) => {
 
     const errors = [];
     if (!id_cuenta) errors.push("El campo id_cuenta es obligatorio.");
-    if (cantidad_cup === undefined || cantidad_cup === null) errors.push("cantidad_cup es obligatorio.");
-    if (cantidad_usd === undefined || cantidad_usd === null) errors.push("cantidad_usd es obligatorio.");
+    if (cantidad_operacion === undefined || cantidad_operacion === null) errors.push("cantidad_operacion es obligatorio.");
     if (!tipo_operacion) errors.push("tipo_operacion es obligatorio.");
     if (!motivo || motivo.trim() === "") errors.push("motivo es obligatorio.");
     if (cambio_moneda === undefined || cambio_moneda === null) errors.push("cambio_moneda es obligatorio.");
 
-    if (isNaN(cantidad_cup) || cantidad_cup < 0) errors.push("cantidad_cup debe ser un número no negativo.");
-    if (isNaN(cantidad_usd) || cantidad_usd < 0) errors.push("cantidad_usd debe ser un número no negativo.");
+    if (cantidad_operacion !== undefined && (isNaN(cantidad_operacion) || cantidad_operacion < 0)) {
+      errors.push("cantidad_operacion debe ser un número no negativo.");
+    }
     if (tipo_operacion && !tiposOperacion.includes(tipo_operacion)) {
       errors.push(`tipo_operacion debe ser uno de: ${tiposOperacion.join(", ")}.`);
     }
@@ -59,8 +58,7 @@ const createOperacion = async (req, res) => {
     const operacionData = {
       id_cuenta,
       id_usuario: id_usuario || null,
-      cantidad_cup,
-      cantidad_usd,
+      cantidad_operacion,
       tipo_operacion,
       fecha_hora: fecha_hora || null,
       motivo: motivo.trim(),
@@ -93,8 +91,7 @@ const updateOperacion = async (req, res) => {
     const {
       id_cuenta,
       id_usuario,
-      cantidad_cup,
-      cantidad_usd,
+      cantidad_operacion,
       tipo_operacion,
       fecha_hora,
       motivo,
@@ -106,11 +103,8 @@ const updateOperacion = async (req, res) => {
     }
 
     const errors = [];
-    if (cantidad_cup !== undefined && (isNaN(cantidad_cup) || cantidad_cup < 0)) {
-      errors.push("cantidad_cup debe ser un número no negativo.");
-    }
-    if (cantidad_usd !== undefined && (isNaN(cantidad_usd) || cantidad_usd < 0)) {
-      errors.push("cantidad_usd debe ser un número no negativo.");
+    if (cantidad_operacion !== undefined && (isNaN(cantidad_operacion) || cantidad_operacion < 0)) {
+      errors.push("cantidad_operacion debe ser un número no negativo.");
     }
     if (tipo_operacion !== undefined && !tiposOperacion.includes(tipo_operacion)) {
       errors.push(`tipo_operacion debe ser uno de: ${tiposOperacion.join(", ")}.`);
@@ -136,8 +130,7 @@ const updateOperacion = async (req, res) => {
     const updateData = {};
     if (id_cuenta !== undefined) updateData.id_cuenta = id_cuenta;
     if (id_usuario !== undefined) updateData.id_usuario = id_usuario || null;
-    if (cantidad_cup !== undefined) updateData.cantidad_cup = cantidad_cup;
-    if (cantidad_usd !== undefined) updateData.cantidad_usd = cantidad_usd;
+    if (cantidad_operacion !== undefined) updateData.cantidad_operacion = cantidad_operacion;
     if (tipo_operacion !== undefined) updateData.tipo_operacion = tipo_operacion;
     if (fecha_hora !== undefined) updateData.fecha_hora = fecha_hora;
     if (motivo !== undefined) updateData.motivo = motivo.trim();
@@ -184,8 +177,7 @@ const createOperacionesBulk = async (req, res) => {
       const {
         id_cuenta,
         id_usuario,
-        cantidad_cup,
-        cantidad_usd,
+        cantidad_operacion,
         tipo_operacion,
         fecha_hora,
         motivo,
@@ -194,14 +186,14 @@ const createOperacionesBulk = async (req, res) => {
 
       const localErrors = [];
       if (!id_cuenta) localErrors.push("id_cuenta es obligatorio.");
-      if (cantidad_cup === undefined || cantidad_cup === null) localErrors.push("cantidad_cup es obligatorio.");
-      if (cantidad_usd === undefined || cantidad_usd === null) localErrors.push("cantidad_usd es obligatorio.");
+      if (cantidad_operacion === undefined || cantidad_operacion === null) localErrors.push("cantidad_operacion es obligatorio.");
       if (!tipo_operacion) localErrors.push("tipo_operacion es obligatorio.");
       if (!motivo || motivo.trim() === "") localErrors.push("motivo es obligatorio.");
       if (cambio_moneda === undefined || cambio_moneda === null) localErrors.push("cambio_moneda es obligatorio.");
 
-      if (cantidad_cup !== undefined && (isNaN(cantidad_cup) || cantidad_cup < 0)) localErrors.push("cantidad_cup debe ser no negativo.");
-      if (cantidad_usd !== undefined && (isNaN(cantidad_usd) || cantidad_usd < 0)) localErrors.push("cantidad_usd debe ser no negativo.");
+      if (cantidad_operacion !== undefined && (isNaN(cantidad_operacion) || cantidad_operacion < 0)) {
+        localErrors.push("cantidad_operacion debe ser no negativo.");
+      }
       if (tipo_operacion && !tiposOperacion.includes(tipo_operacion)) {
         localErrors.push(`tipo_operacion debe ser uno de: ${tiposOperacion.join(", ")}.`);
       }
@@ -224,8 +216,7 @@ const createOperacionesBulk = async (req, res) => {
       operacionesData.push({
         id_cuenta,
         id_usuario: id_usuario || null,
-        cantidad_cup,
-        cantidad_usd,
+        cantidad_operacion,
         tipo_operacion,
         fecha_hora: fecha_hora || null,
         motivo: motivo.trim(),
@@ -270,11 +261,8 @@ const updateOperacionesBulk = async (req, res) => {
       }
 
       const localErrors = [];
-      if (rest.cantidad_cup !== undefined && (isNaN(rest.cantidad_cup) || rest.cantidad_cup < 0)) {
-        localErrors.push("cantidad_cup debe ser no negativo.");
-      }
-      if (rest.cantidad_usd !== undefined && (isNaN(rest.cantidad_usd) || rest.cantidad_usd < 0)) {
-        localErrors.push("cantidad_usd debe ser no negativo.");
+      if (rest.cantidad_operacion !== undefined && (isNaN(rest.cantidad_operacion) || rest.cantidad_operacion < 0)) {
+        localErrors.push("cantidad_operacion debe ser no negativo.");
       }
       if (rest.tipo_operacion !== undefined && !tiposOperacion.includes(rest.tipo_operacion)) {
         localErrors.push(`tipo_operacion debe ser uno de: ${tiposOperacion.join(", ")}.`);

@@ -21,7 +21,7 @@ const Operacion = sequelize.define(
         key: "id_cuenta",
       },
       onUpdate: "CASCADE",
-      onDelete: "RESTRICT", // No permitir eliminar una cuenta con operaciones
+      onDelete: "RESTRICT",
     },
     // Clave foránea hacia Usuario (opcional)
     id_usuario: {
@@ -32,7 +32,18 @@ const Operacion = sequelize.define(
         key: "id_usuario",
       },
       onUpdate: "CASCADE",
-      onDelete: "SET NULL", // Si se elimina el usuario, la operación queda sin usuario
+      onDelete: "SET NULL",
+    },
+    // ✅ NUEVA CLAVE FORÁNEA hacia ListaVenta (opcional)
+    id_lista_venta: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "lista_ventas",
+        key: "id_lista_venta",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
     },
     cantidad_operacion: {
       type: DataTypes.DECIMAL(10, 5),
@@ -41,7 +52,7 @@ const Operacion = sequelize.define(
       validate: {
         min: {
           args: [0],
-          msg: "La cantidad en no puede ser negativa",
+          msg: "La cantidad no puede ser negativa",
         },
       },
     },
@@ -88,6 +99,7 @@ const Operacion = sequelize.define(
     indexes: [
       { fields: ["id_cuenta"] },
       { fields: ["id_usuario"] },
+      { fields: ["id_lista_venta"] }, // ✅ NUEVO ÍNDICE
       { fields: ["fecha_hora"] },
       { fields: ["tipo_operacion"] },
     ],
@@ -103,6 +115,11 @@ Operacion.associate = function (models) {
   Operacion.belongsTo(models.Usuario, {
     foreignKey: "id_usuario",
     as: "usuario",
+  });
+  // ✅ NUEVA ASOCIACIÓN
+  Operacion.belongsTo(models.ListaVenta, {
+    foreignKey: "id_lista_venta",
+    as: "listaVenta",
   });
 };
 

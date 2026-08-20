@@ -105,6 +105,7 @@ const entradaRoutes = require("./routes/entradaRoutes");
 const salidaRoutes = require("./routes/salidaRoutes");
 const cuentaRoutes = require("./routes/cuentaRoutes");
 const operacionRoutes = require("./routes/operacionRoutes");
+const listaVentaRoutes = require("./routes/listaVentaRoutes.js");
 
 app.use("/", servicioRoutes);
 app.use("/", productoRoutes);
@@ -115,6 +116,7 @@ app.use("/", entradaRoutes);
 app.use("/", salidaRoutes);
 app.use("/", cuentaRoutes);
 app.use("/", operacionRoutes);
+app.use("/", listaVentaRoutes);
 
 // Inicializar la base de datos y arrancar el servidor
 const startApp = async () => {
@@ -143,6 +145,9 @@ const startApp = async () => {
     const { SalidaEntrada } = require("./models/salida_entrada.js");
     const { Cuenta } = require("./models/cuenta");
     const { Operacion } = require("./models/operacion");
+    const { Venta } = require("./models/venta");
+    const { ListaVenta } = require("./models/lista_venta");
+    const { VentaEntrada } = require("./models/venta_entrada");
 
     // Agrupar todos los modelos en un objeto para pasarlos a las asociaciones
     const models = {
@@ -157,7 +162,10 @@ const startApp = async () => {
       Salida,
       SalidaEntrada,
       Cuenta,
-      Operacion
+      Operacion,
+      Venta,
+      ListaVenta,
+      VentaEntrada
     };
 
     // Ejecutar el método associate de cada modelo si existe

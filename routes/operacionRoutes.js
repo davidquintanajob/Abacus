@@ -24,10 +24,7 @@ const authenticate = require("../helpers/authenticate");
  *         id_usuario:
  *           type: integer
  *           nullable: true
- *         cantidad_cup:
- *           type: number
- *           format: double
- *         cantidad_usd:
+ *         cantidad_operacion:
  *           type: number
  *           format: double
  *         tipo_operacion:
@@ -131,12 +128,6 @@ const authenticate = require("../helpers/authenticate");
  *                     totalCantidad:
  *                       type: number
  *                       description: Suma de montos en la moneda de cada cuenta
- *                     totalCup:
- *                       type: number
- *                       description: Suma de cantidad_cup de todas las operaciones
- *                     totalUsd:
- *                       type: number
- *                       description: Suma de cantidad_usd de todas las operaciones
  *                     totalIngresos:
  *                       type: number
  *                     totalRetiros:
@@ -184,8 +175,7 @@ router.get("/operacion/:id", authenticate(), operacionController.getOperacionByI
  *             type: object
  *             required:
  *               - id_cuenta
- *               - cantidad_cup
- *               - cantidad_usd
+ *               - cantidad_operacion
  *               - tipo_operacion
  *               - motivo
  *               - cambio_moneda
@@ -194,9 +184,7 @@ router.get("/operacion/:id", authenticate(), operacionController.getOperacionByI
  *                 type: integer
  *               id_usuario:
  *                 type: integer
- *               cantidad_cup:
- *                 type: number
- *               cantidad_usd:
+ *               cantidad_operacion:
  *                 type: number
  *               tipo_operacion:
  *                 type: string
@@ -241,8 +229,7 @@ router.post("/operacion", authenticate(), operacionController.createOperacion);
  *                   type: object
  *                   required:
  *                     - id_cuenta
- *                     - cantidad_cup
- *                     - cantidad_usd
+ *                     - cantidad_operacion
  *                     - tipo_operacion
  *                     - motivo
  *                     - cambio_moneda
@@ -251,9 +238,7 @@ router.post("/operacion", authenticate(), operacionController.createOperacion);
  *                       type: integer
  *                     id_usuario:
  *                       type: integer
- *                     cantidad_cup:
- *                       type: number
- *                     cantidad_usd:
+ *                     cantidad_operacion:
  *                       type: number
  *                     tipo_operacion:
  *                       type: string
@@ -298,9 +283,7 @@ router.post("/operacion/bulk", authenticate(), operacionController.createOperaci
  *                 type: integer
  *               id_usuario:
  *                 type: integer
- *               cantidad_cup:
- *                 type: number
- *               cantidad_usd:
+ *               cantidad_operacion:
  *                 type: number
  *               tipo_operacion:
  *                 type: string
@@ -352,9 +335,7 @@ router.put("/operacion/:id", authenticate(), operacionController.updateOperacion
  *                       type: integer
  *                     id_usuario:
  *                       type: integer
- *                     cantidad_cup:
- *                       type: number
- *                     cantidad_usd:
+ *                     cantidad_operacion:
  *                       type: number
  *                     tipo_operacion:
  *                       type: string

@@ -7,14 +7,7 @@ const { throwError } = require("../helpers/errorLauncher");
 // ---- Funciones auxiliares ----
 
 const getMontoEnMonedaCuenta = (operacion, cuenta) => {
-  // Determina la moneda de la cuenta según tipo_cuenta
-  if (cuenta.tipo_cuenta.includes("CUP")) {
-    return operacion.cantidad_cup;
-  } else if (cuenta.tipo_cuenta.includes("USD")) {
-    return operacion.cantidad_usd;
-  }
-  // fallback: si no se detecta, usar cantidad_cup
-  return operacion.cantidad_cup;
+  return parseFloat(operacion.cantidad_operacion);
 };
 
 const actualizarFondoCuenta = async (cuentaId, delta, transaction) => {
@@ -31,7 +24,7 @@ const actualizarFondoCuenta = async (cuentaId, delta, transaction) => {
 // ---- Operaciones de una sola entidad ----
 
 const createOperacion = async (operacionData, transaction = null) => {
-  const { id_cuenta, id_usuario, cantidad_cup, cantidad_usd, tipo_operacion, fecha_hora, motivo, cambio_moneda } = operacionData;
+  const { id_cuenta, id_usuario, cantidad_operacion, tipo_operacion, fecha_hora, motivo, cambio_moneda } = operacionData;
 
   // Validar usuario (si se envía)
   if (id_usuario) {
@@ -43,8 +36,7 @@ const createOperacion = async (operacionData, transaction = null) => {
   const cuenta = await Cuenta.findByPk(id_cuenta);
   if (!cuenta) throwError("La cuenta especificada no existe.", 404);
 
-  // Determinar monto a usar según moneda de la cuenta
-  const monto = cuenta.tipo_cuenta.includes("CUP") ? cantidad_cup : cantidad_usd;
+  const monto = parseFloat(cantidad_operacion);
 
   // Validar retiro: fondo suficiente
   if (tipo_operacion === "Retiro") {
@@ -63,8 +55,7 @@ const createOperacion = async (operacionData, transaction = null) => {
     {
       id_cuenta,
       id_usuario,
-      cantidad_cup,
-      cantidad_usd,
+      cantidad_operacion,
       tipo_operacion,
       fecha_hora: fecha,
       motivo,
@@ -125,8 +116,7 @@ const updateOperacion = async (id, updateData, transaction = null) => {
   const newData = { ...operacion.get() };
   if (updateData.id_cuenta !== undefined) newData.id_cuenta = updateData.id_cuenta;
   if (updateData.id_usuario !== undefined) newData.id_usuario = updateData.id_usuario;
-  if (updateData.cantidad_cup !== undefined) newData.cantidad_cup = updateData.cantidad_cup;
-  if (updateData.cantidad_usd !== undefined) newData.cantidad_usd = updateData.cantidad_usd;
+  if (updateData.cantidad_operacion !== undefined) newData.cantidad_operacion = updateData.cantidad_operacion;
   if (updateData.tipo_operacion !== undefined) newData.tipo_operacion = updateData.tipo_operacion;
   if (updateData.fecha_hora !== undefined) newData.fecha_hora = updateData.fecha_hora;
   if (updateData.motivo !== undefined) newData.motivo = updateData.motivo;
@@ -141,7 +131,7 @@ const updateOperacion = async (id, updateData, transaction = null) => {
   }
 
   // Determinar nuevo monto
-  const nuevoMonto = cuentaNueva.tipo_cuenta.includes("CUP") ? newData.cantidad_cup : newData.cantidad_usd;
+  const nuevoMonto = parseFloat(newData.cantidad_operacion);
 
   // Validar retiro con nuevo fondo
   if (newData.tipo_operacion === "Retiro") {
@@ -295,16 +285,9 @@ const filterOperaciones = async (filters, limit, offset) => {
     }
   }
 
-  // Filtro de cantidad (usamos literal SQL para obtener el monto en la moneda de la cuenta)
+  // Filtro de cantidad usando el monto único de la operación
   if (filters.cantidad_min !== undefined || filters.cantidad_max !== undefined) {
-    // Necesitamos una subconsulta o usar literal en la cláusula WHERE.
-    // Agregaremos una condición usando Sequelize.literal
-    const montoLiteral = Sequelize.literal(`
-      CASE 
-        WHEN "cuenta"."tipo_cuenta" LIKE '%CUP' THEN "Operacion"."cantidad_cup"
-        ELSE "Operacion"."cantidad_usd"
-      END
-    `);
+    const montoLiteral = Sequelize.col("Operacion.cantidad_operacion");
     if (filters.cantidad_min !== undefined) {
       where[Op.and] = where[Op.and] || [];
       where[Op.and].push(Sequelize.where(montoLiteral, Op.gte, filters.cantidad_min));
@@ -335,8 +318,6 @@ const filterOperaciones = async (filters, limit, offset) => {
   });
 
   let totalCantidad = 0;
-  let totalCup = 0;
-  let totalUsd = 0;
   let totalIngresos = 0;
   let totalRetiros = 0;
   let totalIngresosVenta = 0;
@@ -345,8 +326,6 @@ const filterOperaciones = async (filters, limit, offset) => {
     const cuenta = op.cuenta;
     const monto = cuenta ? getMontoEnMonedaCuenta(op, cuenta) : 0;
     totalCantidad += monto;
-    totalCup += parseFloat(op.cantidad_cup);
-    totalUsd += parseFloat(op.cantidad_usd);
     if (op.tipo_operacion === "Ingreso") totalIngresos += monto;
     else if (op.tipo_operacion === "Retiro") totalRetiros += monto;
     else if (op.tipo_operacion === "Ingreso por Venta") totalIngresosVenta += monto;
@@ -354,8 +333,6 @@ const filterOperaciones = async (filters, limit, offset) => {
 
   const summary = {
     totalCantidad,
-    totalCup,
-    totalUsd,
     totalIngresos,
     totalRetiros,
     totalIngresosVenta,

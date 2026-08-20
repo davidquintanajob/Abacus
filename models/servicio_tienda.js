@@ -57,7 +57,7 @@ const ServicioTienda = sequelize.define("servicio_tienda", {
   },
 }, {
   timestamps: true,
-  tableName: 'servicio_tiendas', // <--- NUEVO: nombre exacto de la tabla
+  tableName: 'servicio_tiendas',
   indexes: [
     { fields: ["id_tienda"] },
     { fields: ["id_servicio"] },
@@ -77,10 +77,14 @@ ServicioTienda.associate = function(models) {
     foreignKey: "id_servicio_tienda",
     as: "entradas",
   });
-  // NUEVA RELACIÓN
   ServicioTienda.hasMany(models.Salida, {
     foreignKey: "id_servicio_tienda",
     as: "salidas",
+  });
+  // ✅ NUEVA RELACIÓN
+  ServicioTienda.hasMany(models.Venta, {
+    foreignKey: "id_servicio_tienda",
+    as: "ventas",
   });
 };
 

@@ -120,6 +120,18 @@ Entrada.associate = function (models) {
     otherKey: "id_salida",
     as: "salidas",
   });
+  // ✅ NUEVA RELACIÓN con Venta
+  Entrada.belongsToMany(models.Venta, {
+    through: models.VentaEntrada,
+    foreignKey: "id_entrada",
+    otherKey: "id_venta",
+    as: "ventas",
+  });
+  // Relación directa con la intermedia
+  Entrada.hasMany(models.VentaEntrada, {
+    foreignKey: "id_entrada",
+    as: "ventaEntradas",
+  });
 };
 
 module.exports = { Entrada };
