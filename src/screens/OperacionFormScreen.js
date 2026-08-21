@@ -319,56 +319,102 @@ const OperacionFormContent = () => {
           ) : (
             <>
               <Card style={[styles.formCard, { backgroundColor: colors.surface }]}>
-                {/* Cuenta */}
-                <View style={styles.formGroup}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Cuenta *</Text>
-                  {!isReadOnly ? (
-                    <>
-                      <TextInput
-                        style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                        placeholderTextColor={colors.outline}
-                        placeholder="Buscar cuenta..."
-                        value={cuentaSearchText}
-                        onChangeText={setCuentaSearchText}
-                        onFocus={() => setShowCuentaDropdown(true)}
-                        editable={!isReadOnly}
-                      />
-                      {showCuentaDropdown && (
-                        <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                          <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                            {filteredCuentas.map((cuenta) => (
-                              <TouchableOpacity
-                                key={cuenta.id_cuenta}
-                                style={styles.dropdownItem}
-                                onPress={() => {
-                                  setFormData(prev => ({ 
-                                    ...prev, 
-                                    id_cuenta: cuenta.id_cuenta,
-                                    cuenta: cuenta 
-                                  }));
-                                  setCuentaSearchText(cuenta.nombre);
-                                  setShowCuentaDropdown(false);
-                                }}
-                              >
-                                <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>
-                                  {cuenta.nombre}
-                                </Text>
-                                <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>
-                                  {cuenta.tipo_cuenta} • Fondo: {parseFloat(cuenta.fondo || 0).toFixed(2)}
-                                </Text>
-                              </TouchableOpacity>
-                            ))}
-                          </ScrollView>
-                        </View>
-                      )}
-                    </>
-                  ) : (
-                    <View style={[styles.readOnlyInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                      <Text style={[styles.readOnlyText, { color: colors.onSurface }]}>
-                        {formData.cuenta?.nombre || 'N/A'}
-                      </Text>
-                    </View>
-                  )}
+                {/* Cuenta y Tipo de Operación */}
+                <View style={styles.formRow}>
+                  <View style={[styles.formGroup, { flex: 1 }]}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Cuenta *</Text>
+                    {!isReadOnly ? (
+                      <>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                          placeholderTextColor={colors.outline}
+                          placeholder="Buscar cuenta..."
+                          value={cuentaSearchText}
+                          onChangeText={setCuentaSearchText}
+                          onFocus={() => setShowCuentaDropdown(true)}
+                          editable={!isReadOnly}
+                        />
+                        {showCuentaDropdown && (
+                          <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                            <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                              {filteredCuentas.map((cuenta) => (
+                                <TouchableOpacity
+                                  key={cuenta.id_cuenta}
+                                  style={styles.dropdownItem}
+                                  onPress={() => {
+                                    setFormData(prev => ({ 
+                                      ...prev, 
+                                      id_cuenta: cuenta.id_cuenta,
+                                      cuenta: cuenta 
+                                    }));
+                                    setCuentaSearchText(cuenta.nombre);
+                                    setShowCuentaDropdown(false);
+                                  }}
+                                >
+                                  <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>
+                                    {cuenta.nombre}
+                                  </Text>
+                                  <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>
+                                    {cuenta.tipo_cuenta} • Fondo: {parseFloat(cuenta.fondo || 0).toFixed(2)}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                          </View>
+                        )}
+                      </>
+                    ) : (
+                      <View style={[styles.readOnlyInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                        <Text style={[styles.readOnlyText, { color: colors.onSurface }]}>
+                          {formData.cuenta?.nombre || 'N/A'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={[styles.formGroup, { flex: 1 }]}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Tipo de Operación *</Text>
+                    {!isReadOnly ? (
+                      <>
+                        <TouchableOpacity
+                          style={[styles.input, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                          onPress={() => setShowTipoOperacionDropdown(!showTipoOperacionDropdown)}
+                        >
+                          <Text style={[styles.inputText, { color: colors.onSurface }]}>
+                            {formData.tipo_operacion}
+                          </Text>
+                          <Ionicons 
+                            name={showTipoOperacionDropdown ? "chevron-up" : "chevron-down"} 
+                            size={20} 
+                            color={colors.primary} 
+                          />
+                        </TouchableOpacity>
+                        {showTipoOperacionDropdown && (
+                          <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                            <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                              {tiposOperacion.map((tipo) => (
+                                <TouchableOpacity
+                                  key={tipo}
+                                  style={styles.dropdownItem}
+                                  onPress={() => {
+                                    setFormData(prev => ({ ...prev, tipo_operacion: tipo }));
+                                    setShowTipoOperacionDropdown(false);
+                                  }}
+                                >
+                                  <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tipo}</Text>
+                                </TouchableOpacity>
+                              ))}
+                            </ScrollView>
+                          </View>
+                        )}
+                      </>
+                    ) : (
+                      <View style={[styles.readOnlyInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                        <Text style={[styles.readOnlyText, { color: colors.onSurface }]}>
+                          {formData.tipo_operacion}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
 
                 {/* Usuario */}
@@ -423,52 +469,8 @@ const OperacionFormContent = () => {
                   )}
                 </View>
 
-                {/* Tipo de Operación y Cambio de Moneda */}
+                {/* Cambio de Moneda y Fecha */}
                 <View style={styles.formRow}>
-                  <View style={[styles.formGroup, { flex: 1 }]}>
-                    <Text style={[styles.label, { color: colors.outline }]}>Tipo de Operación *</Text>
-                    {!isReadOnly ? (
-                      <>
-                        <TouchableOpacity
-                          style={[styles.input, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-                          onPress={() => setShowTipoOperacionDropdown(!showTipoOperacionDropdown)}
-                        >
-                          <Text style={[styles.inputText, { color: colors.onSurface }]}>
-                            {formData.tipo_operacion}
-                          </Text>
-                          <Ionicons 
-                            name={showTipoOperacionDropdown ? "chevron-up" : "chevron-down"} 
-                            size={20} 
-                            color={colors.primary} 
-                          />
-                        </TouchableOpacity>
-                        {showTipoOperacionDropdown && (
-                          <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                            <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                              {tiposOperacion.map((tipo) => (
-                                <TouchableOpacity
-                                  key={tipo}
-                                  style={styles.dropdownItem}
-                                  onPress={() => {
-                                    setFormData(prev => ({ ...prev, tipo_operacion: tipo }));
-                                    setShowTipoOperacionDropdown(false);
-                                  }}
-                                >
-                                  <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tipo}</Text>
-                                </TouchableOpacity>
-                              ))}
-                            </ScrollView>
-                          </View>
-                        )}
-                      </>
-                    ) : (
-                      <View style={[styles.readOnlyInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                        <Text style={[styles.readOnlyText, { color: colors.onSurface }]}>
-                          {formData.tipo_operacion}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
                   <View style={[styles.formGroup, { flex: 1 }]}>
                     <Text style={[styles.label, { color: colors.outline }]}>Cambio de Moneda *</Text>
                     <TextInput
@@ -483,6 +485,37 @@ const OperacionFormContent = () => {
                     <Text style={[styles.helperText, { color: colors.outline }]}>
                       Tasa actual: {exchangeRate ? exchangeRate.toFixed(2) : 'N/A'}
                     </Text>
+                  </View>
+                  <View style={[styles.formGroup, { flex: 1 }]}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Fecha *</Text>
+                    {!isReadOnly ? (
+                      <TouchableOpacity
+                        style={[styles.input, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                        onPress={() => setShowDatePicker(true)}
+                      >
+                        <Text style={[styles.inputText, { color: colors.onSurface }]}>
+                          {new Date(formData.fecha_hora).toLocaleDateString()}
+                        </Text>
+                        <Ionicons name="calendar" size={20} color={colors.primary} />
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={[styles.readOnlyInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                        <Text style={[styles.readOnlyText, { color: colors.onSurface }]}>
+                          {new Date(formData.fecha_hora).toLocaleDateString()}
+                        </Text>
+                      </View>
+                    )}
+                    <Text style={[styles.helperText, { color: colors.outline }]}>
+                      {' '}
+                    </Text>
+                    {showDatePicker && (
+                      <DateTimePicker
+                        value={new Date(formData.fecha_hora)}
+                        mode="date"
+                        display="default"
+                        onChange={handleFechaChange}
+                      />
+                    )}
                   </View>
                 </View>
 
@@ -514,35 +547,6 @@ const OperacionFormContent = () => {
                   </View>
                 </View>
 
-                {/* Fecha */}
-                <View style={styles.formGroup}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Fecha *</Text>
-                  {!isReadOnly ? (
-                    <TouchableOpacity
-                      style={[styles.input, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-                      onPress={() => setShowDatePicker(true)}
-                    >
-                      <Text style={[styles.inputText, { color: colors.onSurface }]}>
-                        {new Date(formData.fecha_hora).toLocaleDateString()}
-                      </Text>
-                      <Ionicons name="calendar" size={20} color={colors.primary} />
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={[styles.readOnlyInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                      <Text style={[styles.readOnlyText, { color: colors.onSurface }]}>
-                        {new Date(formData.fecha_hora).toLocaleDateString()}
-                      </Text>
-                    </View>
-                  )}
-                  {showDatePicker && (
-                    <DateTimePicker
-                      value={new Date(formData.fecha_hora)}
-                      mode="date"
-                      display="default"
-                      onChange={handleFechaChange}
-                    />
-                  )}
-                </View>
 
                 {/* Motivo */}
                 <View style={styles.formGroup}>
@@ -683,6 +687,7 @@ const createStyles = (responsive) => StyleSheet.create({
     paddingVertical: responsive.responsivePadding(10),
     fontSize: responsive.responsiveFontSize(14),
     fontFamily: 'JetBrains Mono',
+    minHeight: responsive.responsivePadding(44),
   },
   inputText: {
     fontSize: responsive.responsiveFontSize(14),
@@ -693,6 +698,7 @@ const createStyles = (responsive) => StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: responsive.responsivePadding(12),
     paddingVertical: responsive.responsivePadding(10),
+    minHeight: responsive.responsivePadding(44),
   },
   readOnlyText: {
     fontSize: responsive.responsiveFontSize(14),
