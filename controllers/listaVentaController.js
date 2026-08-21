@@ -34,6 +34,9 @@ const filterListaVentas = async (req, res) => {
       cantidad_max,
       forma_cobro,
       nombre_usuario,
+      id_tienda,
+      id_servicio,
+      nombre_servicio,
     } = req.query;
 
     let limitNum = parseInt(limit, 10) || 10;
@@ -78,6 +81,21 @@ const filterListaVentas = async (req, res) => {
       filters.forma_cobro = forma_cobro;
     }
     if (nombre_usuario) filters.nombre_usuario = nombre_usuario.trim();
+    if (id_tienda !== undefined) {
+      const tiendaId = parseInt(id_tienda, 10);
+      if (isNaN(tiendaId) || tiendaId < 1 || String(tiendaId) !== String(id_tienda).trim()) {
+        throwError("id_tienda debe ser un número entero positivo.", 400);
+      }
+      filters.id_tienda = tiendaId;
+    }
+    if (id_servicio !== undefined) {
+      const servicioId = parseInt(id_servicio, 10);
+      if (isNaN(servicioId) || servicioId < 1 || String(servicioId) !== String(id_servicio).trim()) {
+        throwError("id_servicio debe ser un número entero positivo.", 400);
+      }
+      filters.id_servicio = servicioId;
+    }
+    if (nombre_servicio) filters.nombre_servicio = nombre_servicio.trim();
 
     const offset = (pageNum - 1) * limitNum;
     const result = await listaVentaService.filterListaVentas(filters, limitNum, offset);
@@ -194,9 +212,79 @@ const deleteListaVenta = async (req, res) => {
   }
 };
 
+const updateListaVenta = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      fecha_hora,
+      nota,
+      cantidad_cobrada_efectivo_cup = 0,
+      cantidad_cobrada_efectivo_usd = 0,
+      cantidad_cobrada_transferencia_cup = 0,
+      cantidad_cobrada_transferencia_usd = 0,
+      id_cuenta_efectivo_cup,
+      id_cuenta_efectivo_usd,
+      id_cuenta_transferencia_cup,
+      id_cuenta_transferencia_usd,
+      id_usuario,
+      cambio_moneda,
+      ventas,
+    } = req.body;
+    const errors = [];
+    if (!fecha_hora) errors.push("fecha_hora es obligatorio.");
+    if (!Array.isArray(ventas) || ventas.length === 0) errors.push("ventas debe ser un arreglo no vacío.");
+    if (!id_usuario) errors.push("id_usuario es obligatorio.");
+    if (cambio_moneda === undefined || cambio_moneda === null || isNaN(cambio_moneda) || cambio_moneda <= 0) {
+      errors.push("cambio_moneda debe ser mayor que cero.");
+    }
+    const montos = [
+      cantidad_cobrada_efectivo_cup,
+      cantidad_cobrada_efectivo_usd,
+      cantidad_cobrada_transferencia_cup,
+      cantidad_cobrada_transferencia_usd,
+    ];
+    if (montos.some((monto) => isNaN(monto) || monto < 0)) {
+      errors.push("Las cantidades cobradas no pueden ser negativas.");
+    }
+    const cuentas = [
+      [cantidad_cobrada_efectivo_cup, id_cuenta_efectivo_cup, "cantidad_cobrada_efectivo_cup"],
+      [cantidad_cobrada_efectivo_usd, id_cuenta_efectivo_usd, "cantidad_cobrada_efectivo_usd"],
+      [cantidad_cobrada_transferencia_cup, id_cuenta_transferencia_cup, "cantidad_cobrada_transferencia_cup"],
+      [cantidad_cobrada_transferencia_usd, id_cuenta_transferencia_usd, "cantidad_cobrada_transferencia_usd"],
+    ];
+    for (const [monto, cuenta, campo] of cuentas) {
+      if (monto > 0 && (!cuenta || isNaN(cuenta) || cuenta <= 0)) {
+        errors.push(`Se requiere id_cuenta para ${campo} porque su cantidad es > 0.`);
+      }
+    }
+    if (errors.length > 0) throwError("Datos inválidos", 400, errors);
+
+    const data = {
+      fecha_hora: new Date(fecha_hora),
+      nota: nota || null,
+      cantidad_cobrada_efectivo_cup,
+      cantidad_cobrada_efectivo_usd,
+      cantidad_cobrada_transferencia_cup,
+      cantidad_cobrada_transferencia_usd,
+      id_cuenta_efectivo_cup,
+      id_cuenta_efectivo_usd,
+      id_cuenta_transferencia_cup,
+      id_cuenta_transferencia_usd,
+      id_usuario,
+      cambio_moneda,
+      ventas,
+    };
+    const updated = await listaVentaService.updateListaVenta(id, data);
+    res.status(200).json({ message: "Lista de ventas actualizada correctamente", data: updated });
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
 module.exports = {
   getListaVentaById,
   filterListaVentas,
   createListaVenta,
+  updateListaVenta,
   deleteListaVenta,
 };

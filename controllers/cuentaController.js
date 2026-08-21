@@ -31,7 +31,7 @@ const createCuenta = async (req, res) => {
         errors.push("El número de cuenta debe tener entre 12 y 16 caracteres.");
       }
     }
-    if (nota !== undefined && nota.length > 255) {
+    if (nota !== undefined && nota !== null && nota.length > 255) {
       errors.push("La nota no puede exceder 255 caracteres.");
     }
 
@@ -88,7 +88,7 @@ const updateCuenta = async (req, res) => {
         errors.push("El número de cuenta debe tener entre 12 y 16 caracteres.");
       }
     }
-    if (nota !== undefined && nota.length > 255) {
+    if (nota !== undefined && nota !== null && nota.length > 255) {
       errors.push("La nota no puede exceder 255 caracteres.");
     }
 

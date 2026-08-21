@@ -21,5 +21,13 @@
     "almacenero": true,
     "economico": false
   },
-  "showEntradaModalAfterProductCreation": true
+  "showEntradaModalAfterProductCreation": true,
+  "salidaAccessLevels": {
+    "dependiente": "own_store",
+    "almacenero": "none",
+    "economico": "none"
+  },
+  "customSalidaTypes": [
+    "Test"
+  ]
 }

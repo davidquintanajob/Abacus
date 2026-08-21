@@ -103,6 +103,23 @@ const authenticate = require("../helpers/authenticate");
  *         schema:
  *           type: string
  *         description: Filtra por nombre de usuario asociado a las operaciones de la lista
+ *       - in: query
+ *         name: id_tienda
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Filtra por la tienda asociada a las ventas
+ *       - in: query
+ *         name: id_servicio
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Filtra por el servicio asociado a las ventas
+ *       - in: query
+ *         name: nombre_servicio
+ *         schema:
+ *           type: string
+ *         description: Búsqueda parcial por nombre del servicio vendido
  *     responses:
  *       200:
  *         description: Lista de listas de ventas con paginación y sumatorias
@@ -181,18 +198,16 @@ router.get("/lista-venta/:id", authenticate(), listaVentaController.getListaVent
  *       - Cada venta debe tener `id_servicio_tienda`, `cantidad > 0`, `precio_cobrado_cup >= 0` y `precio_cobrado_usd >= 0`.
  *
  *       **2. Validaciones de negocio:**
- *       - Para cada `id_servicio_tienda` se verifica que el servicio asociado sea un producto (herencia Servicio → Producto).
- *       - Se verifica que el stock (`servicio_tienda.cantidad`) sea >= la cantidad de la venta.
+ *       - Para cada `id_servicio_tienda` se verifica que exista el servicio asociado.
+ *       - Si el servicio es un producto, se verifica que el stock (`servicio_tienda.cantidad`) sea >= la cantidad de la venta.
  *       - Se calcula la suma total de las ventas en CUP y en USD.
- *       - Se valida que la suma de las cantidades cobradas en CUP (efectivo + transferencia) coincida con el total de ventas en CUP, y lo mismo en USD (con tolerancia de 0.001 por redondeo).
  *
  *       **3. Transacción (todo o nada):**
  *       - **Crear la lista_venta** con los datos proporcionados.
  *       - **Por cada venta:**
  *           - Se toman automáticamente `precio_original_cup`, `precio_original_usd`, `costo_original_cup`, `costo_original_usd` del `servicio_tienda` relacionado.
  *           - Se crea el registro en `ventas` con todos los campos.
- *           - **Descuento de entradas:** Se seleccionan entradas disponibles (`cantidad_restante > 0`) para el servicio_tienda, ordenadas primero por fecha de vencimiento más cercana (si el producto es vencible) o por fecha de creación más antigua (FIFO). Por cada entrada utilizada, se descuenta la cantidad correspondiente y se crea un registro en `venta_entrada` con la cantidad descontada de esa entrada.
- *           - Se resta la cantidad vendida del stock (`servicio_tienda.cantidad`).
+ *           - Si es un producto, se descuentan entradas disponibles (`cantidad_restante > 0`) y el stock (`servicio_tienda.cantidad`). Los servicios normales no consumen stock ni entradas.
  *       - **Por cada forma de cobro** (efectivo CUP, efectivo USD, transferencia CUP, transferencia USD) cuyo monto > 0:
  *           - Se crea una operación de tipo "Ingreso" asociada a la lista_venta, con el usuario y la cuenta correspondiente.
  *           - La operación se crea con el monto de la forma de cobro en `cantidad_operacion`, y el resto de campos como `motivo = "Ingreso por Venta"`, `fecha_hora = fecha_hora de la lista`.
@@ -276,6 +291,90 @@ router.get("/lista-venta/:id", authenticate(), listaVentaController.getListaVent
  *         description: Error interno
  */
 router.post("/lista-venta", authenticate(), listaVentaController.createListaVenta);
+
+/**
+ * @swagger
+ * /lista-venta/{id}:
+ *   put:
+ *     summary: Actualizar una lista de ventas y revertir/aplicar todos sus efectos
+ *     tags: [ListaVenta]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fecha_hora
+ *               - ventas
+ *               - id_usuario
+ *               - cambio_moneda
+ *             properties:
+ *               fecha_hora:
+ *                 type: string
+ *                 format: date-time
+ *               nota:
+ *                 type: string
+ *                 nullable: true
+ *               cantidad_cobrada_efectivo_cup:
+ *                 type: number
+ *                 default: 0
+ *               cantidad_cobrada_efectivo_usd:
+ *                 type: number
+ *                 default: 0
+ *               cantidad_cobrada_transferencia_cup:
+ *                 type: number
+ *                 default: 0
+ *               cantidad_cobrada_transferencia_usd:
+ *                 type: number
+ *                 default: 0
+ *               id_cuenta_efectivo_cup:
+ *                 type: integer
+ *               id_cuenta_efectivo_usd:
+ *                 type: integer
+ *               id_cuenta_transferencia_cup:
+ *                 type: integer
+ *               id_cuenta_transferencia_usd:
+ *                 type: integer
+ *               id_usuario:
+ *                 type: integer
+ *               cambio_moneda:
+ *                 type: number
+ *               ventas:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - id_servicio_tienda
+ *                     - cantidad
+ *                     - precio_cobrado_cup
+ *                     - precio_cobrado_usd
+ *                   properties:
+ *                     id_servicio_tienda:
+ *                       type: integer
+ *                     cantidad:
+ *                       type: number
+ *                     precio_cobrado_cup:
+ *                       type: number
+ *                     precio_cobrado_usd:
+ *                       type: number
+ *     responses:
+ *       200:
+ *         description: Lista de ventas actualizada correctamente
+ *       400:
+ *         description: Datos inválidos o stock insuficiente
+ *       404:
+ *         description: Lista, usuario, cuenta o servicio no encontrado
+ */
+router.put("/lista-venta/:id", authenticate(), listaVentaController.updateListaVenta);
 
 /**
  * @swagger
