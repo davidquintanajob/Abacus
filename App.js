@@ -26,6 +26,10 @@ import { EntradasScreen } from './src/screens/EntradasScreen';
 import { EntradaFormScreen } from './src/screens/EntradaFormScreen';
 import { SalidasScreen } from './src/screens/SalidasScreen';
 import { SalidaFormScreen } from './src/screens/SalidaFormScreen';
+import OperacionesScreen from './src/screens/OperacionesScreen';
+import OperacionFormScreen from './src/screens/OperacionFormScreen';
+import CuentasScreen from './src/screens/CuentasScreen';
+import CuentaFormScreen from './src/screens/CuentaFormScreen';
 import { navigationRef } from './src/navigationRef';
 
 const Stack = createNativeStackNavigator();
@@ -64,6 +68,10 @@ const AppStack = ({ initialRoute }) => (
     <Stack.Screen name="EntradaForm" component={EntradaFormScreen} />
     <Stack.Screen name="Salidas" component={SalidasScreen} />
     <Stack.Screen name="SalidaForm" component={SalidaFormScreen} />
+    <Stack.Screen name="Operaciones" component={OperacionesScreen} />
+    <Stack.Screen name="OperacionForm" component={OperacionFormScreen} />
+    <Stack.Screen name="Cuentas" component={CuentasScreen} />
+    <Stack.Screen name="CuentaForm" component={CuentaFormScreen} />
     <Stack.Screen name="BarcodeScanner" component={BarcodeScannerScreen} />
     <Stack.Screen name="CurrencyExchange" component={CurrencyExchangeScreen} />
   </Stack.Navigator>

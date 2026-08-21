@@ -363,35 +363,27 @@ const ServicioFormContent = () => {
         return;
       }
       
-      // Obtener servicios vendibles y no vendibles con paginación inteligente
-      const filtersVendibles = {};
-      const filtersNoVendibles = {};
+      // Obtener todos los servicios (vendibles y no vendibles) en una sola llamada
+      const filters = {};
       
       if (searchTerm) {
-        filtersVendibles.nombre = searchTerm;
-        filtersNoVendibles.nombre = searchTerm;
+        filters.nombre = searchTerm;
       }
       
-      filtersVendibles.esvendible = 'true';
-      filtersNoVendibles.esvendible = 'false';
+      // Obtener todos los servicios sin filtrar por esvendible
+      // Usar limit 10 cuando hay búsqueda, 1000 cuando no hay búsqueda para cargar todos
+      const limit = searchTerm ? 10 : 1000;
+      const data = await getServicios(filters, 1, limit);
       
-      // Primero obtener los totales para calcular la paginación correcta
-      const [dataVendibles, dataNoVendibles] = await Promise.all([
-        getServicios(filtersVendibles, 1, 1000),
-        getServicios(filtersNoVendibles, 1, 1000)
-      ]);
-      
-      let serviciosVendibles = dataVendibles.data || [];
-      let serviciosNoVendibles = dataNoVendibles.data || [];
+      let allServiciosCombined = data.data || [];
       
       // Filtrar el servicio actual si estamos editando
       if (servicio?.id_servicio) {
-        serviciosVendibles = serviciosVendibles.filter(s => s.id_servicio !== servicio.id_servicio);
-        serviciosNoVendibles = serviciosNoVendibles.filter(s => s.id_servicio !== servicio.id_servicio);
+        allServiciosCombined = allServiciosCombined.filter(s => s.id_servicio !== servicio.id_servicio);
       }
       
-      // Combinar y ordenar todos los servicios
-      const allServiciosCombined = [...serviciosVendibles, ...serviciosNoVendibles].sort((a, b) => 
+      // Ordenar todos los servicios
+      allServiciosCombined = allServiciosCombined.sort((a, b) => 
         a.nombre.localeCompare(b.nombre)
       );
       

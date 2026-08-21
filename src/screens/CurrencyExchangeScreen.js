@@ -98,6 +98,16 @@ const CurrencyExchangeContent = () => {
     almacenero: false,
     economico: false,
   });
+  const [operacionAccessLevels, setOperacionAccessLevels] = useState({
+    dependiente: 'none',
+    almacenero: 'none',
+    economico: 'none',
+  });
+  const [operacionManagePermissions, setOperacionManagePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
   const [applyWeightedAverageCost, setApplyWeightedAverageCost] = useState(false);
   const [autoApplySuggestedCost, setAutoApplySuggestedCost] = useState({
     dependiente: false,
@@ -111,6 +121,8 @@ const CurrencyExchangeContent = () => {
   const [showEntradaManage, setShowEntradaManage] = useState(false);
   const [showSalidaPermissions, setShowSalidaPermissions] = useState(false);
   const [showSalidaManage, setShowSalidaManage] = useState(false);
+  const [showOperacionPermissions, setShowOperacionPermissions] = useState(false);
+  const [showOperacionManage, setShowOperacionManage] = useState(false);
   const [customSalidaTypes, setCustomSalidaTypes] = useState([]);
   const [infoModal, setInfoModal] = useState({
     visible: false,
@@ -193,6 +205,12 @@ const CurrencyExchangeContent = () => {
       if (data.salidaManagePermissions) {
         setSalidaManagePermissions(data.salidaManagePermissions);
       }
+      if (data.operacionAccessLevels) {
+        setOperacionAccessLevels(data.operacionAccessLevels);
+      }
+      if (data.operacionManagePermissions) {
+        setOperacionManagePermissions(data.operacionManagePermissions);
+      }
       if (data.applyWeightedAverageCost !== undefined) {
         setApplyWeightedAverageCost(data.applyWeightedAverageCost);
       }
@@ -249,6 +267,8 @@ const CurrencyExchangeContent = () => {
         entradaManagePermissions: entradaManagePermissions,
         salidaAccessLevels: salidaAccessLevels,
         salidaManagePermissions: salidaManagePermissions,
+        operacionAccessLevels: operacionAccessLevels,
+        operacionManagePermissions: operacionManagePermissions,
         autoApplySuggestedCost: autoApplySuggestedCost,
         customSalidaTypes: customSalidaTypes,
         monedaConfig: {
@@ -446,6 +466,44 @@ const CurrencyExchangeContent = () => {
     }
   };
 
+  const updateOperacionAccessLevel = async (role, newLevel) => {
+    const newOperacionAccessLevels = { ...operacionAccessLevels, [role]: newLevel };
+    setOperacionAccessLevels(newOperacionAccessLevels);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        operacionAccessLevels: newOperacionAccessLevels,
+      };
+      await configService.updateConfig(updatedConfig);
+      
+      await fetchConfig();
+      
+      showToast({ type: 'success', message: 'Nivel de acceso a operaciones actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar nivel de acceso a operaciones' });
+      setOperacionAccessLevels(operacionAccessLevels);
+    }
+  };
+
+  const toggleOperacionManagePermission = async (role) => {
+    const newOperacionManagePermissions = { ...operacionManagePermissions, [role]: !operacionManagePermissions[role] };
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        operacionManagePermissions: newOperacionManagePermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      
+      await fetchConfig();
+      
+      showToast({ type: 'success', message: 'Permiso de gestión de operaciones actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de gestión de operaciones' });
+    }
+  };
+
   const styles = createStyles(responsive);
 
   return (
@@ -497,12 +555,20 @@ const CurrencyExchangeContent = () => {
                     <Text style={[styles.exchangeRatesTitle, { color: colors.onSurface }]}>
                       Tasas de Cambio en Vivo
                     </Text>
-                    <TouchableOpacity onPress={() => fetchExchangeRates(true)} style={styles.refreshButton}>
-                      <Ionicons 
-                        name="refresh" 
-                        size={responsive.responsiveWidth(18)} 
-                        color={colors.primary} 
-                      />
+                    <TouchableOpacity 
+                      onPress={() => fetchExchangeRates(true)} 
+                      style={styles.refreshButton}
+                      disabled={isLoadingRates}
+                    >
+                      {isLoadingRates ? (
+                        <ActivityIndicator size={responsive.responsiveWidth(18)} color={colors.primary} />
+                      ) : (
+                        <Ionicons 
+                          name="refresh" 
+                          size={responsive.responsiveWidth(18)} 
+                          color={colors.primary} 
+                        />
+                      )}
                     </TouchableOpacity>
                   </View>
                   
@@ -1315,6 +1381,225 @@ const CurrencyExchangeContent = () => {
                         onValueChange={() => toggleSalidaManagePermission('economico')}
                         trackColor={{ false: colors.outlineVariant, true: colors.primary }}
                         thumbColor={salidaManagePermissions.economico ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+          )}
+
+            </>
+          )}
+        </Card>
+
+        <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
+          <View style={styles.permissionsHeader}>
+            <View style={styles.permissionsHeaderLeft}>
+              <Image source={require('../../assets/report.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
+              <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
+                Permisos de Operaciones
+              </Text>
+            </View>
+            <TouchableOpacity 
+              style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+              onPress={() => setShowOperacionPermissions(!showOperacionPermissions)}
+            >
+              <Ionicons 
+                name={showOperacionPermissions ? "chevron-up" : "chevron-down"} 
+                size={responsive.responsiveWidth(24)} 
+                color={isDarkMode ? colors.primary : '#1976D2'} 
+              />
+            </TouchableOpacity>
+          </View>
+
+          {showOperacionPermissions && (
+            <>
+              <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                Configura el nivel de acceso a las operaciones para cada rol
+              </Text>
+
+              <View style={styles.accessLevelExplanation}>
+                <View style={styles.accessLevelExplanationItem}>
+                  <Ionicons name="lock-closed" size={16} color={colors.outline} />
+                  <Text style={[styles.accessLevelExplanationText, { color: colors.outline }]}>
+                    <Text style={{ fontWeight: '600' }}>Sin acceso:</Text> No puede ver la pantalla de Operaciones ni ninguna operación del sistema
+                  </Text>
+                </View>
+                <View style={styles.accessLevelExplanationItem}>
+                  <Ionicons name="storefront" size={16} color={colors.outline} />
+                  <Text style={[styles.accessLevelExplanationText, { color: colors.outline }]}>
+                    <Text style={{ fontWeight: '600' }}>Mi tienda:</Text> Puede ver la pantalla de Operaciones pero solo las operaciones de su tienda
+                  </Text>
+                </View>
+                <View style={styles.accessLevelExplanationItem}>
+                  <Ionicons name="globe" size={16} color={colors.outline} />
+                  <Text style={[styles.accessLevelExplanationText, { color: colors.outline }]}>
+                    <Text style={{ fontWeight: '600' }}>Todas las tiendas:</Text> Puede ver la pantalla de Operaciones y las operaciones de todas las tiendas
+                  </Text>
+                </View>
+              </View>
+
+          <View style={styles.permissionItem}>
+            <View style={styles.permissionInfo}>
+              <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                Dependiente
+              </Text>
+              <TouchableOpacity 
+                style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                onPress={() => showInfoModal(
+                  'Acceso a Operaciones - Dependiente',
+                  'Define si los usuarios con rol Dependiente no tienen acceso a operaciones, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
+                )}
+              >
+                <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+              </TouchableOpacity>
+            </View>
+            <AccessLevelSwitch
+              value={operacionAccessLevels.dependiente}
+              onChange={(newLevel) => updateOperacionAccessLevel('dependiente', newLevel)}
+              colors={colors}
+              responsive={responsive}
+            />
+          </View>
+
+          <View style={styles.permissionItem}>
+            <View style={styles.permissionInfo}>
+              <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                Almacenero
+              </Text>
+              <TouchableOpacity 
+                style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                onPress={() => showInfoModal(
+                  'Acceso a Operaciones - Almacenero',
+                  'Define si los usuarios con rol Almacenero no tienen acceso a operaciones, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
+                )}
+              >
+                <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+              </TouchableOpacity>
+            </View>
+            <AccessLevelSwitch
+              value={operacionAccessLevels.almacenero}
+              onChange={(newLevel) => updateOperacionAccessLevel('almacenero', newLevel)}
+              colors={colors}
+              responsive={responsive}
+            />
+          </View>
+
+          <View style={styles.permissionItem}>
+            <View style={styles.permissionInfo}>
+              <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                Económico
+              </Text>
+              <TouchableOpacity 
+                style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                onPress={() => showInfoModal(
+                  'Acceso a Operaciones - Económico',
+                  'Define si los usuarios con rol Económico no tienen acceso a operaciones, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
+                )}
+              >
+                <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+              </TouchableOpacity>
+            </View>
+            <AccessLevelSwitch
+              value={operacionAccessLevels.economico}
+              onChange={(newLevel) => updateOperacionAccessLevel('economico', newLevel)}
+              colors={colors}
+              responsive={responsive}
+            />
+          </View>
+
+          {(operacionAccessLevels.dependiente !== 'none' || operacionAccessLevels.almacenero !== 'none' || operacionAccessLevels.economico !== 'none') && (
+            <View style={styles.permissionSection}>
+              <View style={styles.permissionSectionHeader}>
+                <Text style={[styles.permissionSectionTitle, { color: colors.onSurface }]}>
+                  Gestión de Operaciones
+                </Text>
+                <TouchableOpacity 
+                  style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+                  onPress={() => setShowOperacionManage(!showOperacionManage)}
+                >
+                  <Ionicons 
+                    name={showOperacionManage ? "chevron-up" : "chevron-down"} 
+                    size={responsive.responsiveWidth(20)} 
+                    color={isDarkMode ? colors.primary : '#1976D2'} 
+                  />
+                </TouchableOpacity>
+              </View>
+              {showOperacionManage && (
+                <>
+                  <Text style={[styles.permissionSectionSubtitle, { color: colors.outline }]}>
+                    Configura qué roles pueden crear, editar y eliminar operaciones (solo visible para roles con acceso)
+                  </Text>
+                  {operacionAccessLevels.dependiente !== 'none' && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Dependiente
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Operaciones - Dependiente',
+                            'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar operaciones. Cuando está desactivado, solo pueden ver la información sin poder gestionar operaciones.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={operacionManagePermissions.dependiente}
+                        onValueChange={() => toggleOperacionManagePermission('dependiente')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={operacionManagePermissions.dependiente ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                  {operacionAccessLevels.almacenero !== 'none' && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Almacenero
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Operaciones - Almacenero',
+                            'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar operaciones. Cuando está desactivado, solo pueden ver la información sin poder gestionar operaciones.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={operacionManagePermissions.almacenero}
+                        onValueChange={() => toggleOperacionManagePermission('almacenero')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={operacionManagePermissions.almacenero ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                  {operacionAccessLevels.economico !== 'none' && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Económico
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Operaciones - Económico',
+                            'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar operaciones. Cuando está desactivado, solo pueden ver la información sin poder gestionar operaciones.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={operacionManagePermissions.economico}
+                        onValueChange={() => toggleOperacionManagePermission('economico')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={operacionManagePermissions.economico ? '#fff' : colors.outline}
                       />
                     </View>
                   )}

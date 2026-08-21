@@ -16,7 +16,7 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
   const responsive = useResponsive();
   const insets = useSafeAreaInsets() || { top: 0, bottom: 0, left: 0, right: 0 };
   const { toast, showToast, hideToast } = useToast();
-  const { user, permissions, entradaAccessLevels, salidaAccessLevels } = useAuth();
+  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels } = useAuth();
   const { isOfflineMode } = useOffline();
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -37,12 +37,20 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
     (userRole === 'almacenero' && salidaAccessLevels?.almacenero !== 'none') ||
     (userRole === 'económico' && salidaAccessLevels?.economico !== 'none'));
 
+  const canAccessOperaciones = 
+    !isOfflineMode &&
+    (isAdmin ||
+    (userRole === 'dependiente' && operacionAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'almacenero' && operacionAccessLevels?.almacenero !== 'none') ||
+    (userRole === 'económico' && operacionAccessLevels?.economico !== 'none'));
+
   const menuItems = [
     { icon: require('../../../assets/bar-chart.png'), label: 'Panel', route: 'Home' },
     { icon: require('../../../assets/lanza-libre.png'), label: 'Servicios y Ofertas', route: 'Servicios' },
     { icon: require('../../../assets/product.png'), label: 'Productos', route: 'Productos' },
     ...(canAccessEntradas ? [{ icon: require('../../../assets/package-add.png'), label: 'Entradas', route: 'Entradas' }] : []),
     ...(canAccessSalidas ? [{ icon: require('../../../assets/box.png'), label: 'Salidas', route: 'Salidas' }] : []),
+    ...(canAccessOperaciones ? [{ icon: require('../../../assets/report.png'), label: 'Operaciones', route: 'Operaciones' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/tienda.png'), label: 'Tiendas', route: 'Tiendas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/usuarios.png'), label: 'Usuarios', route: 'Usuarios' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/Servicios.png'), label: 'Configuraciones del Administrador', route: 'CurrencyExchange' }] : []),

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -38,11 +38,13 @@ const SalidaFormContent = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingSalida, setIsFetchingSalida] = useState(false);
+  const [isEditingProducto, setIsEditingProducto] = useState(false);
   const [tiendas, setTiendas] = useState([]);
   const [showTiendaDropdown, setShowTiendaDropdown] = useState(false);
   const [tiendaSearchText, setTiendaSearchText] = useState('');
   const [showProductoModal, setShowProductoModal] = useState(false);
   const [productoSearchText, setProductoSearchText] = useState('');
+  const [displayProductoName, setDisplayProductoName] = useState('');
   const [productos, setProductos] = useState([]);
   const [productoSearchResults, setProductoSearchResults] = useState([]);
   const [isSearchingProductos, setIsSearchingProductos] = useState(false);
@@ -167,13 +169,15 @@ const SalidaFormContent = () => {
             completeSalida = await getSalidaById(salida.id_salida);
           }
           
-          // Fetch complete product data with current stock information
+          // Product data is already included in the salida response from backend
           let productoCompleto = completeSalida.servicioTienda?.servicio;
-          if (productoCompleto?.id_servicio && !isOfflineMode) {
+          
+          // Fetch complete product data with tiendas_servicio for stock calculations
+          if (productoCompleto?.id_servicio && !isOfflineMode && !productoCompleto.tiendas_servicio) {
             try {
               productoCompleto = await getProductoById(productoCompleto.id_servicio);
             } catch (err) {
-              console.error('[fetchCompleteSalida] Error fetching product:', err);
+              console.error('[fetchCompleteSalida] Error fetching product for stock data:', err);
               // Fall back to the product from salida data
               productoCompleto = completeSalida.servicioTienda?.servicio;
             }
@@ -189,7 +193,7 @@ const SalidaFormContent = () => {
             tienda: completeSalida.servicioTienda?.tienda,
           });
           
-          setProductoSearchText((productoCompleto?.nombre || '').trimEnd());
+          setDisplayProductoName((productoCompleto?.nombre || '').trimEnd());
           setOriginalCantidad(completeSalida.cantidad_total);
         } catch (err) {
           console.error('[fetchCompleteSalida] Error:', err);
@@ -414,6 +418,11 @@ const SalidaFormContent = () => {
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
+      // Only trigger search if user is actively editing the producto field
+      if (!isEditingProducto) {
+        return;
+      }
+      
       const isMatchingSelectedProduct = formData.producto && 
         productoSearchText === formData.producto.nombre;
       
@@ -427,7 +436,7 @@ const SalidaFormContent = () => {
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [productoSearchText, formData.producto]);
+  }, [productoSearchText, formData.producto, isEditingProducto]);
 
   const handleProductoSelect = (producto) => {
     setFormData(prev => ({
@@ -435,7 +444,9 @@ const SalidaFormContent = () => {
       producto,
     }));
     
-    setProductoSearchText(producto.nombre.trimEnd());
+    setDisplayProductoName(producto.nombre.trimEnd());
+    setProductoSearchText('');
+    setIsEditingProducto(false);
     setShowProductoDropdown(false);
     setProductoSearchResults([]);
   };
@@ -572,9 +583,30 @@ const SalidaFormContent = () => {
                     style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
                     placeholderTextColor={colors.outline}
                     placeholder="Buscar producto..."
-                    value={productoSearchText}
-                    onChangeText={setProductoSearchText}
+                    value={isEditingProducto ? productoSearchText : displayProductoName}
+                    onChangeText={(text) => {
+                      setProductoSearchText(text);
+                      if (!isEditingProducto) {
+                        setIsEditingProducto(true);
+                      }
+                    }}
+                    onFocus={() => {
+                      if (!isReadOnly) {
+                        setIsEditingProducto(true);
+                        setProductoSearchText(displayProductoName);
+                      }
+                    }}
+                    onBlur={() => {
+                      setIsEditingProducto(false);
+                      if (!formData.producto) {
+                        setDisplayProductoName(productoSearchText);
+                      } else {
+                        setProductoSearchText('');
+                        setDisplayProductoName(formData.producto.nombre);
+                      }
+                    }}
                     editable={!isReadOnly}
+                    autoFocus={false}
                   />
                   {showProductoDropdown && productoSearchResults.length > 0 && (
                     <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
@@ -690,6 +722,7 @@ const SalidaFormContent = () => {
                     }}
                     keyboardType="numeric"
                     editable={!isReadOnly}
+                    autoFocus={false}
                   />
                 </View>
               </View>
@@ -752,6 +785,7 @@ const SalidaFormContent = () => {
                         }
                       }}
                       editable={!isReadOnly}
+                      autoFocus={false}
                     />
                     {showTipoSalidaDropdown && (
                       <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
@@ -824,6 +858,7 @@ const SalidaFormContent = () => {
                   multiline
                   numberOfLines={3}
                   editable={!isReadOnly}
+                  autoFocus={false}
                 />
               </View>
 
