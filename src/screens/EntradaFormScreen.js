@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -26,6 +26,8 @@ const EntradaFormContent = () => {
   const { token, user, permissions, entradaAccessLevels, entradaManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
+  const productoInputRef = useRef(null);
+  const multipleProductoInputRefs = useRef({});
 
   const { entrada, mode, productoPreSeleccionado, canViewAllEntradas: canViewAllEntradasParam, entradaData, fromModal } = route.params || { mode: 'add' };
 
@@ -46,6 +48,7 @@ const EntradaFormContent = () => {
   const [productoSearchResults, setProductoSearchResults] = useState([]);
   const [isSearchingProductos, setIsSearchingProductos] = useState(false);
   const [showProductoDropdown, setShowProductoDropdown] = useState(false);
+  const [justSelectedProducto, setJustSelectedProducto] = useState(false);
   const [config, setConfig] = useState({});
   const [exchangeRate, setExchangeRate] = useState(null);
   // Tracks raw text while the user is typing in costo fields (avoids .toFixed forcing cursor to end)
@@ -59,6 +62,7 @@ const EntradaFormContent = () => {
   const [multipleProductoSearchResults, setMultipleProductoSearchResults] = useState({});
   const [multipleShowProductoDropdown, setMultipleShowProductoDropdown] = useState({});
   const [multipleIsSearchingProductos, setMultipleIsSearchingProductos] = useState({});
+  const [multipleJustSelectedProducto, setMultipleJustSelectedProducto] = useState({});
   const [multipleCostoInputTexts, setMultipleCostoInputTexts] = useState({});
   const [multipleShowDatePicker, setMultipleShowDatePicker] = useState({});
   // Tracks if user has manually modified costos (to prevent auto-fill from overwriting)
@@ -1152,6 +1156,11 @@ const EntradaFormContent = () => {
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
+      // Prevent search immediately after selecting a product
+      if (justSelectedProducto) {
+        return;
+      }
+      
       // Don't show dropdown if the text matches the selected product (editing mode)
       const isMatchingSelectedProduct = formData.producto && 
         productoSearchText === formData.producto.nombre;
@@ -1166,7 +1175,7 @@ const EntradaFormContent = () => {
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [productoSearchText, formData.producto]);
+  }, [productoSearchText, formData.producto, justSelectedProducto]);
 
   // Efecto para autorellenar costos cuando se selecciona producto/tienda
   useEffect(() => {
@@ -1231,6 +1240,12 @@ const EntradaFormContent = () => {
       }
       
       timeouts[entrada.id] = setTimeout(() => {
+        // Prevent search immediately after selecting a product
+        if (multipleJustSelectedProducto[entrada.id]) {
+          // Don't reset justSelectedProducto here - it will be reset when user types again
+          return;
+        }
+        
         const isMatchingSelectedProduct = entrada.producto && 
           entrada.productoSearchText === entrada.producto.nombre;
         
@@ -1247,7 +1262,7 @@ const EntradaFormContent = () => {
     return () => {
       Object.values(timeouts).forEach(timeout => clearTimeout(timeout));
     };
-  }, [multipleEntradas.map(e => e.productoSearchText).join(','), multipleEntradas.map(e => e.producto?.nombre).join(',')]);
+  }, [multipleEntradas.map(e => e.productoSearchText).join(','), multipleEntradas.map(e => e.producto?.nombre).join(','), multipleJustSelectedProducto]);
 
   const handleProductoSelect = (producto) => {
     // Reset manual modification flag when selecting a new product
@@ -1282,6 +1297,13 @@ const EntradaFormContent = () => {
     setProductoSearchText(producto.nombre.trimEnd());
     setShowProductoDropdown(false);
     setProductoSearchResults([]);
+    setJustSelectedProducto(true);
+    
+    // Dismiss keyboard and blur the input to prevent unnecessary API requests
+    Keyboard.dismiss();
+    if (productoInputRef.current) {
+      productoInputRef.current.blur();
+    }
   };
 
   // Funciones para modo múltiple
@@ -1366,6 +1388,13 @@ const EntradaFormContent = () => {
     // Cerrar dropdown para esta entrada específica
     setMultipleShowProductoDropdown(prev => ({ ...prev, [id]: false }));
     setMultipleProductoSearchResults(prev => ({ ...prev, [id]: [] }));
+    setMultipleJustSelectedProducto(prev => ({ ...prev, [id]: true }));
+    
+    // Dismiss keyboard and blur the input to prevent unnecessary API requests
+    Keyboard.dismiss();
+    if (multipleProductoInputRefs.current[id]) {
+      multipleProductoInputRefs.current[id].blur();
+    }
   };
 
   const searchProductosMultiple = async (id, searchTerm) => {
@@ -1684,13 +1713,19 @@ const EntradaFormContent = () => {
                     <Text style={[styles.label, { color: colors.outline }]}>Producto *</Text>
                     <View style={styles.relativeContainer}>
                       <TextInput
+                        ref={productoInputRef}
                         style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
                         placeholderTextColor={colors.outline}
                         placeholder="Buscar producto..."
                         value={productoSearchText}
-                        onChangeText={setProductoSearchText}
+                        onChangeText={(text) => {
+                          setProductoSearchText(text);
+                          setJustSelectedProducto(false);
+                        }}
                         editable={!isReadOnly}
-                        onBlur={() => setShowProductoDropdown(false)}
+                        onBlur={() => {
+                          setShowProductoDropdown(false);
+                        }}
                       />
                       {showProductoDropdown && !isReadOnly && (
                         <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
@@ -2137,13 +2172,23 @@ const EntradaFormContent = () => {
                     <Text style={[styles.label, { color: colors.outline }]}>Producto *</Text>
                     <View style={styles.relativeContainer}>
                       <TextInput
+                        ref={(ref) => {
+                          if (ref) {
+                            multipleProductoInputRefs.current[entrada.id] = ref;
+                          }
+                        }}
                         style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
                         placeholderTextColor={colors.outline}
                         placeholder="Buscar producto..."
                         value={entrada.productoSearchText}
-                        onChangeText={(text) => updateMultipleEntrada(entrada.id, 'productoSearchText', text)}
+                        onChangeText={(text) => {
+                          updateMultipleEntrada(entrada.id, 'productoSearchText', text);
+                          setMultipleJustSelectedProducto(prev => ({ ...prev, [entrada.id]: false }));
+                        }}
                         editable={!isReadOnly}
-                        onBlur={() => setMultipleShowProductoDropdown(prev => ({ ...prev, [entrada.id]: false }))}
+                        onBlur={() => {
+                          setMultipleShowProductoDropdown(prev => ({ ...prev, [entrada.id]: false }));
+                        }}
                       />
                       {multipleShowProductoDropdown[entrada.id] && !isReadOnly && (
                         <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -27,6 +27,7 @@ const SalidaFormContent = () => {
   const { token, user, permissions, salidaAccessLevels, salidaManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
+  const productoInputRef = useRef(null);
 
   const { salida, mode, productoPreSeleccionado, canViewAllSalidas: canViewAllSalidasParam } = route.params || { mode: 'add' };
 
@@ -49,6 +50,7 @@ const SalidaFormContent = () => {
   const [productoSearchResults, setProductoSearchResults] = useState([]);
   const [isSearchingProductos, setIsSearchingProductos] = useState(false);
   const [showProductoDropdown, setShowProductoDropdown] = useState(false);
+  const [justSelectedProducto, setJustSelectedProducto] = useState(false);
   
   const predefinedSalidaTypes = ['Perdida', 'Consumo personal', 'Baja', 'Ajuste de Inventario'];
   const [customSalidaTypes, setCustomSalidaTypes] = useState([]);
@@ -423,6 +425,12 @@ const SalidaFormContent = () => {
         return;
       }
       
+      // Prevent search immediately after selecting a product
+      if (justSelectedProducto) {
+        // Don't reset justSelectedProducto here - it will be reset when user types again
+        return;
+      }
+      
       const isMatchingSelectedProduct = formData.producto && 
         productoSearchText === formData.producto.nombre;
       
@@ -436,7 +444,7 @@ const SalidaFormContent = () => {
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [productoSearchText, formData.producto, isEditingProducto]);
+  }, [productoSearchText, formData.producto, isEditingProducto, justSelectedProducto]);
 
   const handleProductoSelect = (producto) => {
     setFormData(prev => ({
@@ -449,6 +457,13 @@ const SalidaFormContent = () => {
     setIsEditingProducto(false);
     setShowProductoDropdown(false);
     setProductoSearchResults([]);
+    setJustSelectedProducto(true);
+    
+    // Dismiss keyboard and blur the input to prevent unnecessary API requests
+    Keyboard.dismiss();
+    if (productoInputRef.current) {
+      productoInputRef.current.blur();
+    }
   };
 
   const filteredTiendas = tiendas.filter(tienda =>
@@ -580,18 +595,20 @@ const SalidaFormContent = () => {
                 <Text style={[styles.label, { color: colors.outline }]}>Producto *</Text>
                 <View style={styles.relativeContainer}>
                   <TextInput
+                    ref={productoInputRef}
                     style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
                     placeholderTextColor={colors.outline}
                     placeholder="Buscar producto..."
                     value={isEditingProducto ? productoSearchText : displayProductoName}
                     onChangeText={(text) => {
                       setProductoSearchText(text);
+                      setJustSelectedProducto(false);
                       if (!isEditingProducto) {
                         setIsEditingProducto(true);
                       }
                     }}
                     onFocus={() => {
-                      if (!isReadOnly) {
+                      if (!isReadOnly && !justSelectedProducto) {
                         setIsEditingProducto(true);
                         setProductoSearchText(displayProductoName);
                       }
@@ -600,7 +617,7 @@ const SalidaFormContent = () => {
                       setIsEditingProducto(false);
                       if (!formData.producto) {
                         setDisplayProductoName(productoSearchText);
-                      } else {
+                      } else if (!justSelectedProducto) {
                         setProductoSearchText('');
                         setDisplayProductoName(formData.producto.nombre);
                       }
