@@ -8,6 +8,10 @@ export const getOperaciones = async (filters = {}, page = 1, limit = 10) => {
     });
 
     // Add filters
+    if (filters.id_cuenta) queryParams.append('id_cuenta', filters.id_cuenta);
+    if (filters.id_usuario) queryParams.append('id_usuario', filters.id_usuario);
+    if (filters.id_tienda) queryParams.append('id_tienda', filters.id_tienda);
+    if (filters.tipo_operacion) queryParams.append('tipo_operacion', filters.tipo_operacion);
     if (filters.nombre_cuenta) queryParams.append('nombre_cuenta', filters.nombre_cuenta);
     if (filters.nombre_usuario) queryParams.append('nombre_usuario', filters.nombre_usuario);
     if (filters.fecha_desde) queryParams.append('fecha_desde', filters.fecha_desde);

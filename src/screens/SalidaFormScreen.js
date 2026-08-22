@@ -172,17 +172,13 @@ const SalidaFormContent = () => {
           }
           
           // Product data is already included in the salida response from backend
-          let productoCompleto = completeSalida.servicioTienda?.servicio;
+          // The servicioTienda relation includes the servicio (product) with all necessary data
+          const productoCompleto = completeSalida.servicioTienda?.servicio;
           
-          // Fetch complete product data with tiendas_servicio for stock calculations
-          if (productoCompleto?.id_servicio && !isOfflineMode && !productoCompleto.tiendas_servicio) {
-            try {
-              productoCompleto = await getProductoById(productoCompleto.id_servicio);
-            } catch (err) {
-              console.error('[fetchCompleteSalida] Error fetching product for stock data:', err);
-              // Fall back to the product from salida data
-              productoCompleto = completeSalida.servicioTienda?.servicio;
-            }
+          // Add tiendas_servicio to the product using the servicioTienda data from the salida
+          // This provides the stock and cost information needed for the specific tienda
+          if (productoCompleto && completeSalida.servicioTienda) {
+            productoCompleto.tiendas_servicio = [completeSalida.servicioTienda];
           }
           
           setFormData({

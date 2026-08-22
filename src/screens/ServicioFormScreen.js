@@ -363,17 +363,16 @@ const ServicioFormContent = () => {
         return;
       }
       
-      // Obtener todos los servicios (vendibles y no vendibles) en una sola llamada
+      // Obtener todos los servicios (vendibles y no vendibles) con paginación del servidor
       const filters = {};
       
       if (searchTerm) {
         filters.nombre = searchTerm;
       }
       
-      // Obtener todos los servicios sin filtrar por esvendible
-      // Usar limit 10 cuando hay búsqueda, 1000 cuando no hay búsqueda para cargar todos
-      const limit = searchTerm ? 10 : 1000;
-      const data = await getServicios(filters, 1, limit);
+      // Usar siempre limit 10 con paginación del servidor
+      const limit = serviciosPagination.limit;
+      const data = await getServicios(filters, page, limit);
       
       let allServiciosCombined = data.data || [];
       
@@ -382,24 +381,18 @@ const ServicioFormContent = () => {
         allServiciosCombined = allServiciosCombined.filter(s => s.id_servicio !== servicio.id_servicio);
       }
       
-      // Ordenar todos los servicios
+      // Ordenar los servicios de la página actual
       allServiciosCombined = allServiciosCombined.sort((a, b) => 
         a.nombre.localeCompare(b.nombre)
       );
       
-      // Calcular paginación local
-      const totalItems = allServiciosCombined.length;
-      const totalPages = Math.ceil(totalItems / serviciosPagination.limit);
-      const startIndex = (page - 1) * serviciosPagination.limit;
-      const endIndex = startIndex + serviciosPagination.limit;
-      const paginatedServicios = allServiciosCombined.slice(startIndex, endIndex);
-      
-      setAllServicios(paginatedServicios);
-      setServiciosPagination({ 
+      // Usar la paginación del servidor (igual que ServiciosScreen.js)
+      setAllServicios(allServiciosCombined);
+      setServiciosPagination(data.pagination || { 
         currentPage: page, 
-        limit: serviciosPagination.limit, 
-        totalPages, 
-        totalItems 
+        limit: limit, 
+        totalPages: 1, 
+        totalItems: allServiciosCombined.length 
       });
     } catch (err) {
       console.error('Error fetching servicios:', err);

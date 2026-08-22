@@ -15,6 +15,7 @@ import { useViewMode } from '../context/ViewModeContext';
 import { getOperaciones, deleteOperacion } from '../services/operacionService';
 import { getCuentas } from '../services/cuentaService';
 import { getUsuarios } from '../services/usuarioService';
+import { getTiendas } from '../services/tiendaService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -37,10 +38,13 @@ const OperacionesContent = () => {
   const [error, setError] = useState(null);
 
   const [isInitialized, setIsInitialized] = useState(false);
+  const [userTiendaReady, setUserTiendaReady] = useState(false);
   const hasDoneInitialFetch = useRef(false);
   const isFirstFocus = useRef(true);
   const isInitializedRef = useRef(false);
   const filtersRef = useRef(filters);
+  const userTiendaRef = useRef(user?.id_tienda);
+  const hasUserInteractedWithTiendaFilter = useRef(false);
 
   useEffect(() => {
     isInitializedRef.current = isInitialized;
@@ -50,17 +54,37 @@ const OperacionesContent = () => {
     filtersRef.current = filters;
   }, [filters]);
 
+  useEffect(() => {
+    userTiendaRef.current = user?.id_tienda;
+  }, [user?.id_tienda]);
+
+  // Get current date in YYYY-MM-DD format for default filters
+  const today = new Date();
+  const formattedDate = today.toISOString().split('T')[0];
+
+  // Format number with spaces every 3 characters for better readability
+  const formatNumberWithSpaces = (num) => {
+    const parts = parseFloat(num).toFixed(2).split('.');
+    const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return `${integerPart}.${parts[1]}`;
+  };
+
   // Filter states
   const [filters, setFilters] = useState({ 
+    id_cuenta: null,
+    id_usuario: null,
     nombre_cuenta: '', 
     nombre_usuario: '', 
-    fecha_desde: '', 
-    fecha_hasta: '', 
+    id_tienda: '',
+    tipo_operacion: '',
+    fecha_desde: formattedDate, 
+    fecha_hasta: formattedDate, 
     cantidad_min: '', 
     cantidad_max: '' 
   });
   const [cuentas, setCuentas] = useState([]);
   const [users, setUsers] = useState([]);
+  const [tiendas, setTiendas] = useState([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [showCuentaDropdown, setShowCuentaDropdown] = useState(false);
@@ -71,6 +95,11 @@ const OperacionesContent = () => {
   const [userSearchText, setUserSearchText] = useState('');
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [hasLoadedAllUsers, setHasLoadedAllUsers] = useState(false);
+  const [showTiendaDropdown, setShowTiendaDropdown] = useState(false);
+  const [tiendaSearchText, setTiendaSearchText] = useState('');
+  const [isLoadingTiendas, setIsLoadingTiendas] = useState(false);
+  const [hasLoadedAllTiendas, setHasLoadedAllTiendas] = useState(false);
+  const [showTipoOperacionDropdown, setShowTipoOperacionDropdown] = useState(false);
   const [showFechaDesdePicker, setShowFechaDesdePicker] = useState(false);
   const [showFechaHastaPicker, setShowFechaHastaPicker] = useState(false);
 
@@ -80,6 +109,23 @@ const OperacionesContent = () => {
   useEffect(() => {
     setIsInitialized(true);
   }, []);
+
+  // Initialize user's store from session data immediately
+  useEffect(() => {
+    if (user?.id_tienda) {
+      const userTienda = {
+        id_tienda: user.id_tienda,
+        nombre: user.tienda?.nombre || `Tienda ${user.id_tienda}`
+      };
+      setTiendas([userTienda]);
+      // Set tienda filter on initial load only if user hasn't interacted with it yet
+      if (!hasUserInteractedWithTiendaFilter.current) {
+        setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
+      }
+      setUserTiendaReady(true);
+      setIsInitialized(true);
+    }
+  }, [user?.id_tienda]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -96,7 +142,14 @@ const OperacionesContent = () => {
               setFilters(parsedFilters);
               fetchOperaciones(null, parsedFilters);
             } else {
-              fetchOperaciones();
+              // Only restore user's tienda filter if it's empty and user has a tienda
+              const shouldRestore = !filtersRef.current.id_tienda && userTiendaRef.current;
+              if (shouldRestore) {
+                setFilters(prev => ({ ...prev, id_tienda: userTiendaRef.current.toString() }));
+                fetchOperaciones(userTiendaRef.current.toString());
+              } else {
+                fetchOperaciones();
+              }
             }
           } catch (error) {
             console.error('Error restoring filters:', error);
@@ -131,6 +184,50 @@ const OperacionesContent = () => {
       setUsers([]);
     } finally {
       setIsLoadingUsers(false);
+    }
+  };
+
+  const fetchAllTiendas = async () => {
+    try {
+      setIsLoadingTiendas(true);
+      const userRole = user?.rol?.toLowerCase();
+      const canViewAllStores = 
+        userRole === 'administrador' ||
+        (userRole === 'dependiente' && operacionAccessLevels?.dependiente === 'all_stores') ||
+        (userRole === 'almacenero' && operacionAccessLevels?.almacenero === 'all_stores') ||
+        (userRole === 'económico' && operacionAccessLevels?.economico === 'all_stores');
+
+      let allTiendas = [];
+      
+      if (isOfflineMode) {
+        // En modo offline, cargar tiendas de AsyncStorage
+        allTiendas = [];
+      } else {
+        // En modo online, cargar tiendas de la API
+        const data = await getTiendas({}, 1, 1000);
+        allTiendas = data.data || [];
+      }
+      
+      // Always default to user's store if they have one
+      if (user?.id_tienda) {
+        // If user can view all stores, show all stores in dropdown
+        // If user cannot view all stores, show only their store
+        if (canViewAllStores) {
+          setTiendas(allTiendas);
+        } else {
+          const userTienda = allTiendas.find(t => t.id_tienda === user.id_tienda);
+          setTiendas(userTienda ? [userTienda] : []);
+        }
+      } else {
+        setTiendas(allTiendas);
+      }
+      setHasLoadedAllTiendas(true);
+    } catch (err) {
+      if (!isOfflineMode) {
+        setTiendas([]);
+      }
+    } finally {
+      setIsLoadingTiendas(false);
     }
   };
 
@@ -175,8 +272,16 @@ const OperacionesContent = () => {
     }
   };
 
+  // Single API call when all data is ready
   useEffect(() => {
-    if (isInitialized && !hasDoneInitialFetch.current) {
+    if (userTiendaReady && !hasDoneInitialFetch.current) {
+      fetchOperaciones();
+      hasDoneInitialFetch.current = true;
+    }
+  }, [userTiendaReady]);
+
+  useEffect(() => {
+    if (isInitialized && !hasDoneInitialFetch.current && !user?.id_tienda) {
       fetchOperaciones();
       hasDoneInitialFetch.current = true;
     }
@@ -195,19 +300,33 @@ const OperacionesContent = () => {
   };
 
   const handleClearFilters = () => {
+    // Get current date in YYYY-MM-DD format
+    const today = new Date();
+    const formattedDate = today.toISOString().split('T')[0];
+
     const clearedFilters = { 
+      id_cuenta: null,
+      id_usuario: null,
       nombre_cuenta: '', 
       nombre_usuario: '', 
-      fecha_desde: '', 
-      fecha_hasta: '', 
+      id_tienda: '',
+      tipo_operacion: '',
+      fecha_desde: formattedDate, 
+      fecha_hasta: formattedDate, 
       cantidad_min: '', 
       cantidad_max: '' 
     };
     
+    hasUserInteractedWithTiendaFilter.current = true;
     setFilters(clearedFilters);
+    setCuentaSearchText('');
+    setUserSearchText('');
+    setTiendaSearchText('');
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
-    fetchOperaciones(null, clearedFilters);
+    
+    // Send cleared filters directly to API to avoid state issues
+    fetchOperaciones(clearedFilters);
   };
 
   const handleDelete = (operacion) => {
@@ -321,6 +440,19 @@ const OperacionesContent = () => {
     userItem.nombre_natural?.toLowerCase().includes(userSearchText.toLowerCase())
   );
 
+  const filteredTiendas = tiendas.filter(tienda =>
+    tienda.nombre?.toLowerCase().includes(tiendaSearchText.toLowerCase())
+  );
+
+  const tiposOperacion = ['Ingreso', 'Retiro', 'Ingreso por Venta', 'Operaciones Manuales'];
+
+  const userRole = user?.rol?.toLowerCase();
+  const canViewAllStores = 
+    userRole === 'administrador' ||
+    (userRole === 'dependiente' && operacionAccessLevels?.dependiente === 'all_stores') ||
+    (userRole === 'almacenero' && operacionAccessLevels?.almacenero === 'all_stores') ||
+    (userRole === 'económico' && operacionAccessLevels?.economico === 'all_stores');
+
   const getOperacionTypeColor = (tipo) => {
     switch (tipo) {
       case 'Ingreso':
@@ -334,7 +466,6 @@ const OperacionesContent = () => {
     }
   };
 
-  const userRole = user?.rol?.toLowerCase();
   const canViewAllOperaciones = 
     userRole === 'administrador' ||
     (userRole === 'dependiente' && operacionAccessLevels?.dependiente === 'all_stores') ||
@@ -418,25 +549,278 @@ const OperacionesContent = () => {
             <TextInput
               style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
               placeholderTextColor={colors.outline}
-              placeholder="Buscar por nombre..."
+              placeholder="Buscar cuenta..."
               value={filters.nombre_cuenta}
-              onChangeText={(text) => setFilters(prev => ({ ...prev, nombre_cuenta: text }))}
+              onChangeText={(text) => {
+                setFilters(prev => ({ ...prev, nombre_cuenta: text }));
+                setCuentaSearchText(text);
+              }}
+              onFocus={() => {
+                setShowCuentaDropdown(true);
+                if (!hasLoadedAllCuentas && !isLoadingCuentas) {
+                  fetchAllCuentas();
+                }
+              }}
             />
+            {showCuentaDropdown && (
+              <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                {isLoadingCuentas && (
+                  <View style={styles.dropdownLoadingContainer}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando cuentas...</Text>
+                  </View>
+                )}
+                {!isLoadingCuentas && (
+                  <>
+                    <TouchableOpacity
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        const newFilters = { ...filters, id_cuenta: null, nombre_cuenta: '' };
+                        setFilters(newFilters);
+                        setCuentaSearchText('');
+                        setShowCuentaDropdown(false);
+                        fetchOperaciones(newFilters);
+                      }}
+                    >
+                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todas las cuentas</Text>
+                    </TouchableOpacity>
+                    {filteredCuentas.length > 0 ? (
+                      filteredCuentas.map((cuenta, index) => (
+                        <TouchableOpacity
+                          key={cuenta.id_cuenta}
+                          style={[styles.dropdownItem, index === filteredCuentas.length - 1 && styles.dropdownItemLast]}
+                          onPress={() => {
+                            const newFilters = { ...filters, id_cuenta: cuenta.id_cuenta, nombre_cuenta: cuenta.nombre };
+                            setFilters(newFilters);
+                            setCuentaSearchText(cuenta.nombre);
+                            setShowCuentaDropdown(false);
+                            fetchOperaciones(newFilters);
+                          }}
+                        >
+                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
+                          <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>
+                            {cuenta.tipo_cuenta} • Fondo: {parseFloat(cuenta.fondo || 0).toFixed(2)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))
+                    ) : (
+                      <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No hay cuentas</Text>
+                    )}
+                  </>
+                )}
+              </View>
+            )}
           </View>
 
           <View style={styles.filterGroup}>
-            <Text style={[styles.label, { color: colors.outline }]}>Usuario</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-              placeholderTextColor={colors.outline}
-              placeholder="Buscar por nombre..."
-              value={filters.nombre_usuario}
-              onChangeText={(text) => setFilters(prev => ({ ...prev, nombre_usuario: text }))}
-            />
-          </View>
+            <Text style={[styles.label, { color: colors.outline }]}>Tienda</Text>
+            <TouchableOpacity
+              style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+              onPress={() => {
+                if (canViewAllStores) {
+                  setShowTiendaDropdown(!showTiendaDropdown);
+                  // Lazy load all tiendas when dropdown is opened
+                  if (!hasLoadedAllTiendas && !isLoadingTiendas) {
+                    fetchAllTiendas();
+                  }
+                }
+              }}
+            >
+              <Text style={[styles.dropdownText, { color: filters.id_tienda ? colors.onSurface : colors.outline }]}>
+                {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda))?.nombre || 'Todas las tiendas'}
+              </Text>
+              <Ionicons 
+                name={showTiendaDropdown ? "chevron-up" : "chevron-down"} 
+                size={responsive.responsiveWidth(20)} 
+                color={colors.outline} 
+              />
+            </TouchableOpacity>
+            
+            {showTiendaDropdown && (
+              <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                {isLoadingTiendas && (
+                  <View style={styles.dropdownLoadingContainer}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando tiendas...</Text>
+                  </View>
+                )}
+                {!isLoadingTiendas && (
+                  <>
+                    <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <Ionicons 
+                        name="search-outline" 
+                        size={responsive.responsiveWidth(18)} 
+                        color={colors.outline} 
+                        style={styles.searchIcon}
+                      />
+                      <TextInput
+                        style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
+                        placeholderTextColor={colors.outline}
+                        placeholder="Buscar tienda..."
+                        value={tiendaSearchText}
+                        onChangeText={setTiendaSearchText}
+                      />
+                    </View>
+                  {canViewAllStores && (
+                    <TouchableOpacity
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        const newFilters = { ...filters, id_tienda: '' };
+                        setFilters(newFilters);
+                        setShowTiendaDropdown(false);
+                        setTiendaSearchText('');
+                        setPagination(prev => ({ ...prev, currentPage: 1 }));
+                        hasUserInteractedWithTiendaFilter.current = true;
+                        fetchOperaciones(newFilters);
+                      }}
+                    >
+                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todas las tiendas</Text>
+                    </TouchableOpacity>
+                  )}
+                  {filteredTiendas.length > 0 ? (
+                    filteredTiendas.map((tienda, index) => (
+                      <TouchableOpacity
+                        key={tienda.id_tienda}
+                        style={[styles.dropdownItem, index === filteredTiendas.length - 1 && styles.dropdownItemLast]}
+                        onPress={() => {
+                          const newIdTienda = tienda.id_tienda.toString();
+                          const newFilters = { ...filters, id_tienda: newIdTienda };
+                          setFilters(newFilters);
+                          setShowTiendaDropdown(false);
+                          setTiendaSearchText('');
+                          setPagination(prev => ({ ...prev, currentPage: 1 }));
+                          hasUserInteractedWithTiendaFilter.current = true;
+                          fetchOperaciones(newFilters);
+                        }}
+                      >
+                        <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
+                      </TouchableOpacity>
+                    ))
+                  ) : (
+                    <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No hay tiendas</Text>
+                  )}
+                </>
+              )}
+            </View>
+          )}
+        </View>
 
           {showAdvancedFilters && (
             <>
+              <View style={styles.filterGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Usuario</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Buscar usuario..."
+                  value={filters.nombre_usuario}
+                  onChangeText={(text) => {
+                    setFilters(prev => ({ ...prev, nombre_usuario: text }));
+                    setUserSearchText(text);
+                  }}
+                  onFocus={() => {
+                    setShowUserDropdown(true);
+                    if (!hasLoadedAllUsers && !isLoadingUsers) {
+                      fetchAllUsers();
+                    }
+                  }}
+                />
+                {showUserDropdown && (
+                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                    {isLoadingUsers && (
+                      <View style={styles.dropdownLoadingContainer}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                        <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando usuarios...</Text>
+                      </View>
+                    )}
+                    {!isLoadingUsers && (
+                      <>
+                        <TouchableOpacity
+                          style={styles.dropdownItem}
+                          onPress={() => {
+                            const newFilters = { ...filters, id_usuario: null, nombre_usuario: '' };
+                            setFilters(newFilters);
+                            setUserSearchText('');
+                            setShowUserDropdown(false);
+                            fetchOperaciones(newFilters);
+                          }}
+                        >
+                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todos los usuarios</Text>
+                        </TouchableOpacity>
+                        {filteredUsers.length > 0 ? (
+                          filteredUsers.map((userItem, index) => (
+                            <TouchableOpacity
+                              key={userItem.id_usuario}
+                              style={[styles.dropdownItem, index === filteredUsers.length - 1 && styles.dropdownItemLast]}
+                              onPress={() => {
+                                const newFilters = { ...filters, id_usuario: userItem.id_usuario, nombre_usuario: userItem.nombre_natural };
+                                setFilters(newFilters);
+                                setUserSearchText(userItem.nombre_natural);
+                                setShowUserDropdown(false);
+                                fetchOperaciones(newFilters);
+                              }}
+                            >
+                              <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{userItem.nombre_natural}</Text>
+                              <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>
+                                {userItem.rol}
+                              </Text>
+                            </TouchableOpacity>
+                          ))
+                        ) : (
+                          <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No hay usuarios</Text>
+                        )}
+                      </>
+                    )}
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.filterGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Tipo de Operación</Text>
+                <TouchableOpacity
+                  style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                  onPress={() => setShowTipoOperacionDropdown(!showTipoOperacionDropdown)}
+                >
+                  <Text style={[styles.dropdownText, { color: filters.tipo_operacion ? colors.onSurface : colors.outline }]}>
+                    {filters.tipo_operacion || 'Todos los tipos'}
+                  </Text>
+                  <Ionicons 
+                    name={showTipoOperacionDropdown ? "chevron-up" : "chevron-down"} 
+                    size={responsive.responsiveWidth(20)} 
+                    color={colors.outline} 
+                  />
+                </TouchableOpacity>
+                {showTipoOperacionDropdown && (
+                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                    <TouchableOpacity
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        const newFilters = { ...filters, tipo_operacion: '' };
+                        setFilters(newFilters);
+                        setShowTipoOperacionDropdown(false);
+                        fetchOperaciones(newFilters);
+                      }}
+                    >
+                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todos los tipos</Text>
+                    </TouchableOpacity>
+                    {tiposOperacion.map((tipo, index) => (
+                      <TouchableOpacity
+                        key={tipo}
+                        style={[styles.dropdownItem, index === tiposOperacion.length - 1 && styles.dropdownItemLast]}
+                        onPress={() => {
+                          const newFilters = { ...filters, tipo_operacion: tipo };
+                          setFilters(newFilters);
+                          setShowTipoOperacionDropdown(false);
+                          fetchOperaciones(newFilters);
+                        }}
+                      >
+                        <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tipo}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
               <View style={styles.filterRow}>
                 <View style={[styles.filterGroup, { flex: 1, marginRight: responsive.responsiveMargin(8) }]}>
                   <Text style={[styles.label, { color: colors.outline }]}>Cantidad Mínima</Text>
@@ -535,35 +919,41 @@ const OperacionesContent = () => {
         {/* Summary Card */}
         {summary && (
           <Card style={[styles.summaryCard, { backgroundColor: colors.surface }]}>
-            <View style={styles.summaryCompactContainer}>
-              <View style={styles.summaryCompactItem}>
-                <Text style={[styles.summaryCompactLabel, { color: colors.outline }]}>CUP</Text>
-                <Text style={[styles.summaryCompactValue, { color: colors.primary }]}>
-                  {summary.totalCup ? parseFloat(summary.totalCup).toFixed(2) : '0.00'}
+            <View style={styles.summaryGridContainer}>
+              <View style={[styles.summaryItem, styles.summaryItemGreen]}>
+                <View style={styles.summaryIconContainer}>
+                  <Ionicons name="trending-up" size={20} color="#4CAF50" />
+                </View>
+                <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Ingresos Manuales</Text>
+                <Text style={[styles.summaryItemValue, { color: '#4CAF50' }]}>
+                  {formatNumberWithSpaces(summary.totalIngresos || 0)}
                 </Text>
               </View>
-              <View style={styles.summaryCompactItem}>
-                <Text style={[styles.summaryCompactLabel, { color: colors.outline }]}>USD</Text>
-                <Text style={[styles.summaryCompactValue, { color: colors.primary }]}>
-                  {summary.totalUsd ? parseFloat(summary.totalUsd).toFixed(2) : '0.00'}
+              <View style={[styles.summaryItem, styles.summaryItemRed]}>
+                <View style={styles.summaryIconContainer}>
+                  <Ionicons name="trending-down" size={20} color="#F44336" />
+                </View>
+                <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Retiros Manuales</Text>
+                <Text style={[styles.summaryItemValue, { color: '#F44336' }]}>
+                  {formatNumberWithSpaces(summary.totalRetiros || 0)}
                 </Text>
               </View>
-              <View style={styles.summaryCompactItem}>
-                <Text style={[styles.summaryCompactLabel, { color: '#4CAF50' }]}>Ingresos</Text>
-                <Text style={[styles.summaryCompactValue, { color: '#4CAF50' }]}>
-                  {summary.totalIngresos ? parseFloat(summary.totalIngresos).toFixed(2) : '0.00'}
+              <View style={[styles.summaryItem, styles.summaryItemBlue]}>
+                <View style={styles.summaryIconContainer}>
+                  <Ionicons name="cart" size={20} color="#2196F3" />
+                </View>
+                <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Ingresos por Venta</Text>
+                <Text style={[styles.summaryItemValue, { color: '#2196F3' }]}>
+                  {formatNumberWithSpaces(summary.totalIngresosVenta || 0)}
                 </Text>
               </View>
-              <View style={styles.summaryCompactItem}>
-                <Text style={[styles.summaryCompactLabel, { color: '#F44336' }]}>Retiros</Text>
-                <Text style={[styles.summaryCompactValue, { color: '#F44336' }]}>
-                  {summary.totalRetiros ? parseFloat(summary.totalRetiros).toFixed(2) : '0.00'}
-                </Text>
-              </View>
-              <View style={styles.summaryCompactItem}>
-                <Text style={[styles.summaryCompactLabel, { color: '#2196F3' }]}>Ventas</Text>
-                <Text style={[styles.summaryCompactValue, { color: '#2196F3' }]}>
-                  {summary.totalIngresosVenta ? parseFloat(summary.totalIngresosVenta).toFixed(2) : '0.00'}
+              <View style={[styles.summaryItem, styles.summaryItemPrimary]}>
+                <View style={styles.summaryIconContainer}>
+                  <Ionicons name="cash" size={20} color={colors.primary} />
+                </View>
+                <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Cantidad en Negocio</Text>
+                <Text style={[styles.summaryItemValue, { color: colors.primary }]}>
+                  {formatNumberWithSpaces((summary.totalIngresos || 0) + (summary.totalIngresosVenta || 0) - (summary.totalRetiros || 0))}
                 </Text>
               </View>
             </View>
@@ -642,14 +1032,12 @@ const OperacionesContent = () => {
                       <Text style={[styles.operacionUsuario, { color: colors.outline }]}>
                         Usuario: {operacion.usuario?.nombre_natural || 'N/A'}
                       </Text>
-                      <View style={styles.montoRow}>
-                        <Text style={[styles.operacionMonto, { color: colors.primary }]}>
-                          CUP: {parseFloat(operacion.cantidad_cup || 0).toFixed(2)}
-                        </Text>
-                        <Text style={[styles.operacionMonto, { color: colors.primary }]}>
-                          USD: {parseFloat(operacion.cantidad_usd || 0).toFixed(2)}
-                        </Text>
-                      </View>
+                      <Text style={[styles.operacionMonto, { color: colors.primary }]}>
+                        Cantidad: {parseFloat(operacion.cantidad_operacion || 0).toFixed(2)}
+                      </Text>
+                      <Text style={[styles.operacionTipoCuenta, { color: colors.outline }]}>
+                        Tipo Cuenta: {operacion.cuenta?.tipo_cuenta || 'N/A'}
+                      </Text>
                       {operacion.motivo && (
                         <Text style={[styles.operacionMotivo, { color: colors.outline }]}>
                           Motivo: {operacion.motivo}
@@ -699,8 +1087,8 @@ const OperacionesContent = () => {
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Fecha</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(200) }]}>Cuenta</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Tipo</Text>
-                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100), textAlign: 'center' }]}>Monto CUP</Text>
-                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100), textAlign: 'center' }]}>Monto USD</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100), textAlign: 'center' }]}>Cantidad</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Tipo Cuenta</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Usuario</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(200) }]}>Motivo</Text>
                     {canManageOperaciones && (
@@ -724,10 +1112,10 @@ const OperacionesContent = () => {
                           </Text>
                           <Text style={[styles.tableCellText, { color: typeStyle.color, width: responsive.responsiveWidth(120) }]}>{typeStyle.label}</Text>
                           <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
-                            {parseFloat(operacion.cantidad_cup || 0).toFixed(2)}
+                            {parseFloat(operacion.cantidad_operacion || 0).toFixed(2)}
                           </Text>
-                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
-                            {parseFloat(operacion.cantidad_usd || 0).toFixed(2)}
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]} numberOfLines={1}>
+                            {operacion.cuenta?.tipo_cuenta || 'N/A'}
                           </Text>
                           <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]} numberOfLines={1}>
                             {operacion.usuario?.nombre_natural || 'N/A'}
@@ -870,6 +1258,72 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
   },
+  dropdown: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: responsive.responsivePadding(12),
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dropdownText: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+  },
+  dropdownMenu: {
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: responsive.responsiveMargin(4),
+    maxHeight: responsive.responsiveHeight(200),
+    overflow: 'hidden',
+  },
+  dropdownItem: {
+    padding: responsive.responsivePadding(12),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  dropdownSearchInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: responsive.responsivePadding(10),
+    paddingVertical: responsive.responsivePadding(8),
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  dropdownSearchInputText: {
+    flex: 1,
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+    marginLeft: responsive.responsiveMargin(8),
+    paddingVertical: 0,
+  },
+  searchIcon: {
+    marginRight: responsive.responsiveMargin(4),
+  },
+  dropdownItemText: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+  },
+  dropdownItemSubtext: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+    marginTop: 2,
+  },
+  dropdownLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: responsive.responsivePadding(16),
+    gap: responsive.responsiveMargin(8),
+  },
+  dropdownLoadingText: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+  },
   filterActions: {
     flexDirection: 'row',
     gap: responsive.responsiveMargin(12),
@@ -900,33 +1354,67 @@ const createStyles = (responsive) => StyleSheet.create({
     fontFamily: 'Inter',
   },
   summaryCard: {
-    borderRadius: 12,
-    padding: responsive.responsivePadding(12),
+    borderRadius: 16,
+    padding: responsive.responsivePadding(16),
     marginBottom: responsive.responsiveMargin(16),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  summaryCompactContainer: {
+  summaryGridContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: responsive.responsiveMargin(12),
   },
-  summaryCompactItem: {
+  summaryItem: {
+    flex: 1,
+    minWidth: responsive.responsiveWidth(150),
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderRadius: 12,
+    padding: responsive.responsivePadding(16),
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'column',
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
-  summaryCompactLabel: {
-    fontSize: responsive.responsiveFontSize(10),
-    fontWeight: '600',
+  summaryItemGreen: {
+    borderColor: 'rgba(76, 175, 80, 0.2)',
+    backgroundColor: 'rgba(76, 175, 80, 0.05)',
+  },
+  summaryItemRed: {
+    borderColor: 'rgba(244, 67, 54, 0.2)',
+    backgroundColor: 'rgba(244, 67, 54, 0.05)',
+  },
+  summaryItemBlue: {
+    borderColor: 'rgba(33, 150, 243, 0.2)',
+    backgroundColor: 'rgba(33, 150, 243, 0.05)',
+  },
+  summaryItemPrimary: {
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+    backgroundColor: 'rgba(0, 0, 0, 0.03)',
+  },
+  summaryIconContainer: {
+    width: '100%',
+    height: responsive.responsiveWidth(40),
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(10),
+  },
+  summaryItemLabel: {
+    fontSize: responsive.responsiveFontSize(11),
+    fontWeight: '500',
     fontFamily: 'Inter',
-    marginBottom: 2,
+    marginBottom: responsive.responsiveMargin(4),
+    textAlign: 'center',
   },
-  summaryCompactValue: {
-    fontSize: responsive.responsiveFontSize(13),
+  summaryItemValue: {
+    fontSize: responsive.responsiveFontSize(15),
     fontWeight: '700',
     fontFamily: 'Inter',
+    textAlign: 'center',
   },
   summaryTitle: {
     fontSize: responsive.responsiveFontSize(16),
@@ -1135,6 +1623,11 @@ const createStyles = (responsive) => StyleSheet.create({
   operacionMonto: {
     fontSize: responsive.fontSizes.bodySmall,
     fontWeight: '600',
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(2),
+  },
+  operacionTipoCuenta: {
+    fontSize: responsive.fontSizes.bodySmall,
     fontFamily: 'Inter',
     marginTop: responsive.responsiveMargin(2),
   },

@@ -12,11 +12,11 @@ import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
 import { createOperacion, updateOperacion, getOperacionById } from '../services/operacionService';
 import { getCuentas } from '../services/cuentaService';
-import { getUsuarios } from '../services/usuarioService';
 import { configService } from '../services/configService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const OperacionFormContent = () => {
   const navigation = useNavigation();
@@ -40,17 +40,13 @@ const OperacionFormContent = () => {
   const [cuentas, setCuentas] = useState([]);
   const [showCuentaDropdown, setShowCuentaDropdown] = useState(false);
   const [cuentaSearchText, setCuentaSearchText] = useState('');
-  const [users, setUsers] = useState([]);
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
-  const [userSearchText, setUserSearchText] = useState('');
   const [config, setConfig] = useState({});
   const [exchangeRate, setExchangeRate] = useState(null);
   
   const [formData, setFormData] = useState({
     id_cuenta: null,
     id_usuario: null,
-    cantidad_cup: '',
-    cantidad_usd: '',
+    cantidad_operacion: '',
     tipo_operacion: 'Ingreso',
     fecha_hora: new Date().toISOString(),
     motivo: '',
@@ -62,7 +58,7 @@ const OperacionFormContent = () => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTipoOperacionDropdown, setShowTipoOperacionDropdown] = useState(false);
 
-  const tiposOperacion = ['Ingreso', 'Retiro', 'Ingreso por Venta'];
+  const tiposOperacion = ['Ingreso', 'Retiro'];
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
@@ -77,7 +73,6 @@ const OperacionFormContent = () => {
   useEffect(() => {
     fetchCuentas();
     fetchConfig();
-    fetchUsers();
   }, []);
 
   useEffect(() => {
@@ -101,8 +96,7 @@ const OperacionFormContent = () => {
           setFormData({
             id_cuenta: completeOperacion.id_cuenta,
             id_usuario: completeOperacion.id_usuario,
-            cantidad_cup: completeOperacion.cantidad_cup?.toString() || '',
-            cantidad_usd: completeOperacion.cantidad_usd?.toString() || '',
+            cantidad_operacion: completeOperacion.cantidad_operacion?.toString() || '',
             tipo_operacion: completeOperacion.tipo_operacion,
             fecha_hora: completeOperacion.fecha_hora,
             motivo: completeOperacion.motivo || '',
@@ -113,9 +107,6 @@ const OperacionFormContent = () => {
           
           if (completeOperacion.cuenta) {
             setCuentaSearchText(completeOperacion.cuenta.nombre);
-          }
-          if (completeOperacion.usuario) {
-            setUserSearchText(completeOperacion.usuario.nombre_natural);
           }
         } catch (err) {
           console.error('[fetchCompleteOperacion] Error:', err);
@@ -142,24 +133,8 @@ const OperacionFormContent = () => {
     }
   };
 
-  const fetchUsers = async () => {
-    try {
-      if (isOfflineMode) {
-        setUsers([]);
-        return;
-      }
-      const data = await getUsuarios({ activo: true }, 1, 1000);
-      setUsers(data.data || []);
-    } catch (err) {
-      setUsers([]);
-    }
-  };
-
   const fetchConfig = async () => {
     try {
-      if (isOfflineMode) {
-        return;
-      }
       const data = await configService.getConfig();
       setConfig(data);
       if (data.cupToUsdRate) {
@@ -169,26 +144,27 @@ const OperacionFormContent = () => {
         }
       }
     } catch (err) {
-      // Error fetching config
+      // Error fetching config, try AsyncStorage directly
+      try {
+        const CONFIG_KEY = '@abacus_config';
+        const jsonValue = await AsyncStorage.getItem(CONFIG_KEY);
+        if (jsonValue !== null) {
+          const localConfig = JSON.parse(jsonValue);
+          if (localConfig.cupToUsdRate) {
+            setExchangeRate(localConfig.cupToUsdRate);
+            if (isAddMode) {
+              setFormData(prev => ({ ...prev, cambio_moneda: localConfig.cupToUsdRate.toString() }));
+            }
+          }
+        }
+      } catch (storageError) {
+        // Error reading from AsyncStorage
+      }
     }
   };
 
-  const handleCantidadCupChange = (text) => {
-    setFormData(prev => ({ ...prev, cantidad_cup: text }));
-    if (exchangeRate && text) {
-      const cupValue = parseFloat(text) || 0;
-      const usdValue = cupValue / exchangeRate;
-      setFormData(prev => ({ ...prev, cantidad_usd: usdValue.toFixed(5) }));
-    }
-  };
-
-  const handleCantidadUsdChange = (text) => {
-    setFormData(prev => ({ ...prev, cantidad_usd: text }));
-    if (exchangeRate && text) {
-      const usdValue = parseFloat(text) || 0;
-      const cupValue = usdValue * exchangeRate;
-      setFormData(prev => ({ ...prev, cantidad_cup: cupValue.toFixed(2) }));
-    }
+  const handleCantidadChange = (text) => {
+    setFormData(prev => ({ ...prev, cantidad_operacion: text }));
   };
 
   const handleSave = async () => {
@@ -196,12 +172,8 @@ const OperacionFormContent = () => {
       showToast({ type: 'warning', message: 'Debe seleccionar una cuenta' });
       return;
     }
-    if (!formData.cantidad_cup || parseFloat(formData.cantidad_cup) < 0) {
-      showToast({ type: 'warning', message: 'La cantidad CUP debe ser mayor o igual a 0' });
-      return;
-    }
-    if (!formData.cantidad_usd || parseFloat(formData.cantidad_usd) < 0) {
-      showToast({ type: 'warning', message: 'La cantidad USD debe ser mayor o igual a 0' });
+    if (!formData.cantidad_operacion || parseFloat(formData.cantidad_operacion) < 0) {
+      showToast({ type: 'warning', message: 'La cantidad debe ser mayor o igual a 0' });
       return;
     }
     if (!formData.tipo_operacion) {
@@ -217,19 +189,27 @@ const OperacionFormContent = () => {
       return;
     }
 
+    // Validation for edit mode: non-admin users cannot edit others' operations
+    if (isEditMode && !isAdmin && formData.usuario?.id_usuario !== user?.id_usuario) {
+      showToast({ type: 'error', message: 'No tiene permisos para modificar operaciones de otros usuarios' });
+      return;
+    }
+
     try {
       setIsSaving(true);
 
       const operacionData = {
         id_cuenta: formData.id_cuenta,
-        id_usuario: formData.id_usuario || null,
-        cantidad_cup: parseFloat(formData.cantidad_cup),
-        cantidad_usd: parseFloat(formData.cantidad_usd),
+        cantidad_operacion: parseFloat(formData.cantidad_operacion),
         tipo_operacion: formData.tipo_operacion,
         fecha_hora: formData.fecha_hora,
         motivo: formData.motivo.trim(),
         cambio_moneda: parseFloat(formData.cambio_moneda),
       };
+
+      // Always use the logged-in user for id_usuario
+      // If admin is editing another user's operation, the operation becomes the admin's
+      operacionData.id_usuario = user.id_usuario;
 
       if (isEditMode) {
         await updateOperacion(operacion.id_operacion, operacionData);
@@ -261,21 +241,24 @@ const OperacionFormContent = () => {
     cuenta.nombre.toLowerCase().includes(cuentaSearchText.toLowerCase())
   );
 
-  const filteredUsers = users.filter(userItem =>
-    userItem.nombre_natural?.toLowerCase().includes(userSearchText.toLowerCase())
-  );
-
   const getOperacionTypeColor = (tipo) => {
     switch (tipo) {
       case 'Ingreso':
         return { color: '#4CAF50', bgColor: isDarkMode ? 'rgba(76, 175, 80, 0.2)' : '#E8F5E9', borderColor: '#4CAF50' };
       case 'Retiro':
         return { color: '#F44336', bgColor: isDarkMode ? 'rgba(244, 67, 54, 0.2)' : '#FFEBEE', borderColor: '#F44336' };
-      case 'Ingreso por Venta':
-        return { color: '#2196F3', bgColor: isDarkMode ? 'rgba(33, 150, 243, 0.2)' : '#E3F2FD', borderColor: '#2196F3' };
       default:
         return { color: '#757575', bgColor: isDarkMode ? 'rgba(117, 117, 117, 0.2)' : '#F5F5F5', borderColor: '#757575' };
     }
+  };
+
+  const formatNumber = (value) => {
+    if (value === null || value === undefined || value === '') return '0.00';
+    const num = parseFloat(value);
+    if (isNaN(num)) return '0.00';
+    const parts = num.toFixed(2).split('.');
+    const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return `${integerPart}.${parts[1]}`;
   };
 
   const styles = createStyles(responsive);
@@ -319,58 +302,60 @@ const OperacionFormContent = () => {
           ) : (
             <>
               <Card style={[styles.formCard, { backgroundColor: colors.surface }]}>
-                {/* Cuenta y Tipo de Operación */}
+                {/* Cuenta - Full Row */}
+                <View style={styles.formGroup}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Cuenta *</Text>
+                  {!isReadOnly ? (
+                    <>
+                      <TextInput
+                        style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                        placeholderTextColor={colors.outline}
+                        placeholder="Buscar cuenta..."
+                        value={cuentaSearchText}
+                        onChangeText={setCuentaSearchText}
+                        onFocus={() => setShowCuentaDropdown(true)}
+                        editable={!isReadOnly}
+                      />
+                      {showCuentaDropdown && (
+                        <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                          <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                            {filteredCuentas.map((cuenta) => (
+                              <TouchableOpacity
+                                key={cuenta.id_cuenta}
+                                style={styles.dropdownItem}
+                                onPress={() => {
+                                  setFormData(prev => ({ 
+                                    ...prev, 
+                                    id_cuenta: cuenta.id_cuenta,
+                                    cuenta: cuenta 
+                                  }));
+                                  setCuentaSearchText(cuenta.nombre);
+                                  setShowCuentaDropdown(false);
+                                }}
+                              >
+                                <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>
+                                  {cuenta.nombre}
+                                </Text>
+                                <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>
+                                  {cuenta.tipo_cuenta} • Fondo: {formatNumber(cuenta.fondo)}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <View style={[styles.readOnlyInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <Text style={[styles.readOnlyText, { color: colors.onSurface }]}>
+                        {formData.cuenta?.nombre || 'N/A'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Tipo de Operación y Fecha */}
                 <View style={styles.formRow}>
-                  <View style={[styles.formGroup, { flex: 1 }]}>
-                    <Text style={[styles.label, { color: colors.outline }]}>Cuenta *</Text>
-                    {!isReadOnly ? (
-                      <>
-                        <TextInput
-                          style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                          placeholderTextColor={colors.outline}
-                          placeholder="Buscar cuenta..."
-                          value={cuentaSearchText}
-                          onChangeText={setCuentaSearchText}
-                          onFocus={() => setShowCuentaDropdown(true)}
-                          editable={!isReadOnly}
-                        />
-                        {showCuentaDropdown && (
-                          <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                            <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                              {filteredCuentas.map((cuenta) => (
-                                <TouchableOpacity
-                                  key={cuenta.id_cuenta}
-                                  style={styles.dropdownItem}
-                                  onPress={() => {
-                                    setFormData(prev => ({ 
-                                      ...prev, 
-                                      id_cuenta: cuenta.id_cuenta,
-                                      cuenta: cuenta 
-                                    }));
-                                    setCuentaSearchText(cuenta.nombre);
-                                    setShowCuentaDropdown(false);
-                                  }}
-                                >
-                                  <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>
-                                    {cuenta.nombre}
-                                  </Text>
-                                  <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>
-                                    {cuenta.tipo_cuenta} • Fondo: {parseFloat(cuenta.fondo || 0).toFixed(2)}
-                                  </Text>
-                                </TouchableOpacity>
-                              ))}
-                            </ScrollView>
-                          </View>
-                        )}
-                      </>
-                    ) : (
-                      <View style={[styles.readOnlyInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                        <Text style={[styles.readOnlyText, { color: colors.onSurface }]}>
-                          {formData.cuenta?.nombre || 'N/A'}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
                   <View style={[styles.formGroup, { flex: 1 }]}>
                     <Text style={[styles.label, { color: colors.outline }]}>Tipo de Operación *</Text>
                     {!isReadOnly ? (
@@ -415,77 +400,6 @@ const OperacionFormContent = () => {
                       </View>
                     )}
                   </View>
-                </View>
-
-                {/* Usuario */}
-                <View style={styles.formGroup}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Usuario</Text>
-                  {!isReadOnly ? (
-                    <>
-                      <TextInput
-                        style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                        placeholderTextColor={colors.outline}
-                        placeholder="Buscar usuario (opcional)..."
-                        value={userSearchText}
-                        onChangeText={setUserSearchText}
-                        onFocus={() => setShowUserDropdown(true)}
-                        editable={!isReadOnly}
-                      />
-                      {showUserDropdown && (
-                        <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                          <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                            {filteredUsers.map((userItem) => (
-                              <TouchableOpacity
-                                key={userItem.id_usuario}
-                                style={styles.dropdownItem}
-                                onPress={() => {
-                                  setFormData(prev => ({ 
-                                    ...prev, 
-                                    id_usuario: userItem.id_usuario,
-                                    usuario: userItem 
-                                  }));
-                                  setUserSearchText(userItem.nombre_natural);
-                                  setShowUserDropdown(false);
-                                }}
-                              >
-                                <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>
-                                  {userItem.nombre_natural}
-                                </Text>
-                                <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>
-                                  {userItem.rol}
-                                </Text>
-                              </TouchableOpacity>
-                            ))}
-                          </ScrollView>
-                        </View>
-                      )}
-                    </>
-                  ) : (
-                    <View style={[styles.readOnlyInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                      <Text style={[styles.readOnlyText, { color: colors.onSurface }]}>
-                        {formData.usuario?.nombre_natural || 'N/A'}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-
-                {/* Cambio de Moneda y Fecha */}
-                <View style={styles.formRow}>
-                  <View style={[styles.formGroup, { flex: 1 }]}>
-                    <Text style={[styles.label, { color: colors.outline }]}>Cambio de Moneda *</Text>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                      placeholderTextColor={colors.outline}
-                      placeholder="1.00"
-                      value={formData.cambio_moneda}
-                      onChangeText={(text) => setFormData(prev => ({ ...prev, cambio_moneda: text }))}
-                      keyboardType="decimal-pad"
-                      editable={!isReadOnly}
-                    />
-                    <Text style={[styles.helperText, { color: colors.outline }]}>
-                      Tasa actual: {exchangeRate ? exchangeRate.toFixed(2) : 'N/A'}
-                    </Text>
-                  </View>
                   <View style={[styles.formGroup, { flex: 1 }]}>
                     <Text style={[styles.label, { color: colors.outline }]}>Fecha *</Text>
                     {!isReadOnly ? (
@@ -505,9 +419,6 @@ const OperacionFormContent = () => {
                         </Text>
                       </View>
                     )}
-                    <Text style={[styles.helperText, { color: colors.outline }]}>
-                      {' '}
-                    </Text>
                     {showDatePicker && (
                       <DateTimePicker
                         value={new Date(formData.fecha_hora)}
@@ -519,34 +430,33 @@ const OperacionFormContent = () => {
                   </View>
                 </View>
 
-                {/* Cantidades */}
+                {/* Cantidad y Cambio de Moneda */}
                 <View style={styles.formRow}>
                   <View style={[styles.formGroup, { flex: 1 }]}>
-                    <Text style={[styles.label, { color: colors.outline }]}>Cantidad CUP *</Text>
+                    <Text style={[styles.label, { color: colors.outline }]}>Cantidad *</Text>
                     <TextInput
                       style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
                       placeholderTextColor={colors.outline}
                       placeholder="0.00"
-                      value={formData.cantidad_cup}
-                      onChangeText={handleCantidadCupChange}
+                      value={formData.cantidad_operacion}
+                      onChangeText={handleCantidadChange}
                       keyboardType="decimal-pad"
                       editable={!isReadOnly}
                     />
                   </View>
                   <View style={[styles.formGroup, { flex: 1 }]}>
-                    <Text style={[styles.label, { color: colors.outline }]}>Cantidad USD *</Text>
+                    <Text style={[styles.label, { color: colors.outline }]}>Cambio de Moneda</Text>
                     <TextInput
                       style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
                       placeholderTextColor={colors.outline}
-                      placeholder="0.00"
-                      value={formData.cantidad_usd}
-                      onChangeText={handleCantidadUsdChange}
+                      placeholder="1.00"
+                      value={formData.cambio_moneda}
+                      onChangeText={(text) => setFormData(prev => ({ ...prev, cambio_moneda: text }))}
                       keyboardType="decimal-pad"
-                      editable={!isReadOnly}
+                      editable={false}
                     />
                   </View>
                 </View>
-
 
                 {/* Motivo */}
                 <View style={styles.formGroup}>
@@ -563,44 +473,51 @@ const OperacionFormContent = () => {
                   />
                 </View>
 
+
                 {/* Info de Cuenta */}
                 {formData.cuenta && (
-                  <View style={[styles.cuentaInfo, { backgroundColor: colors.primaryContainer, borderColor: colors.primary }]}>
-                    <Text style={[styles.cuentaInfoTitle, { color: colors.onSurface }]}>Información de la Cuenta</Text>
+                  <View style={[styles.cuentaInfo, { backgroundColor: isDarkMode ? colors.primaryContainer : '#F5F5F5', borderColor: colors.primary }]}>
+                    <Text style={[styles.cuentaInfoTitle, { color: isDarkMode ? colors.onSurface : '#212121' }]}>Información de la Cuenta</Text>
                     <View style={styles.cuentaInfoRow}>
-                      <Text style={[styles.cuentaInfoLabel, { color: colors.outline }]}>Tipo:</Text>
-                      <Text style={[styles.cuentaInfoValue, { color: colors.onSurface }]}>{formData.cuenta.tipo_cuenta}</Text>
+                      <Text style={[styles.cuentaInfoLabel, { color: isDarkMode ? colors.outline : '#616161' }]}>Tipo:</Text>
+                      <Text style={[styles.cuentaInfoValue, { color: isDarkMode ? colors.onSurface : '#212121' }]}>{formData.cuenta.tipo_cuenta}</Text>
                     </View>
                     <View style={styles.cuentaInfoRow}>
-                      <Text style={[styles.cuentaInfoLabel, { color: colors.outline }]}>Fondo Actual:</Text>
+                      <Text style={[styles.cuentaInfoLabel, { color: isDarkMode ? colors.outline : '#616161' }]}>Fondo Actual:</Text>
                       <Text style={[styles.cuentaInfoValue, { color: colors.primary }]}>
-                        {parseFloat(formData.cuenta.fondo || 0).toFixed(2)}
+                        {formatNumber(formData.cuenta.fondo)}
                       </Text>
                     </View>
-                    {formData.cantidad_cup && formData.tipo_operacion && (
+                    <View style={styles.cuentaInfoRow}>
+                      <Text style={[styles.cuentaInfoLabel, { color: isDarkMode ? colors.outline : '#616161' }]}>Tasa de Cambio:</Text>
+                      <Text style={[styles.cuentaInfoValue, { color: isDarkMode ? colors.onSurface : '#212121' }]}>
+                        {exchangeRate ? formatNumber(exchangeRate) : 'N/A'}
+                      </Text>
+                    </View>
+                    {formData.cantidad_operacion && formData.tipo_operacion && (
                       <View style={styles.cuentaInfoRow}>
-                        <Text style={[styles.cuentaInfoLabel, { color: colors.outline }]}>
+                        <Text style={[styles.cuentaInfoLabel, { color: isDarkMode ? colors.outline : '#616161' }]}>
                           Fondo después de {formData.tipo_operacion.toLowerCase()}:
                         </Text>
                         <Text style={[styles.cuentaInfoValue, { color: formData.tipo_operacion === 'Retiro' ? '#F44336' : '#4CAF50' }]}>
                           {(() => {
                             const currentFund = parseFloat(formData.cuenta.fondo || 0);
-                            const cantidad = parseFloat(formData.cantidad_cup) || 0;
+                            const cantidad = parseFloat(formData.cantidad_operacion) || 0;
                             let newFund = currentFund;
-                            if (formData.tipo_operacion === 'Ingreso' || formData.tipo_operacion === 'Ingreso por Venta') {
+                            if (formData.tipo_operacion === 'Ingreso') {
                               newFund = currentFund + cantidad;
                             } else if (formData.tipo_operacion === 'Retiro') {
                               newFund = currentFund - cantidad;
                             }
-                            return newFund.toFixed(2);
+                            return formatNumber(newFund);
                           })()}
                         </Text>
                       </View>
                     )}
                     {formData.cuenta.num_cuenta && (
                       <View style={styles.cuentaInfoRow}>
-                        <Text style={[styles.cuentaInfoLabel, { color: colors.outline }]}>Número:</Text>
-                        <Text style={[styles.cuentaInfoValue, { color: colors.onSurface }]}>{formData.cuenta.num_cuenta}</Text>
+                        <Text style={[styles.cuentaInfoLabel, { color: isDarkMode ? colors.outline : '#616161' }]}>Número:</Text>
+                        <Text style={[styles.cuentaInfoValue, { color: isDarkMode ? colors.onSurface : '#212121' }]}>{formData.cuenta.num_cuenta}</Text>
                       </View>
                     )}
                   </View>

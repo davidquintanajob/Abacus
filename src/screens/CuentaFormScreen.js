@@ -39,7 +39,6 @@ const CuentaFormContent = () => {
     tipo_cuenta: '',
     num_cuenta: '',
     nota: '',
-    fondo: '',
   });
 
   const [showTipoCuentaDropdown, setShowTipoCuentaDropdown] = useState(false);
@@ -72,7 +71,6 @@ const CuentaFormContent = () => {
             tipo_cuenta: completeCuenta.tipo_cuenta || '',
             num_cuenta: completeCuenta.num_cuenta || '',
             nota: completeCuenta.nota || '',
-            fondo: completeCuenta.fondo ? completeCuenta.fondo.toString() : '',
           });
         } catch (error) {
           showToast({ type: 'error', message: error.message });
@@ -94,10 +92,6 @@ const CuentaFormContent = () => {
       showToast({ type: 'warning', message: 'Debe seleccionar un tipo de cuenta' });
       return;
     }
-    if (!formData.fondo || parseFloat(formData.fondo) < 0) {
-      showToast({ type: 'warning', message: 'El fondo debe ser mayor o igual a 0' });
-      return;
-    }
 
     try {
       setIsSaving(true);
@@ -107,7 +101,6 @@ const CuentaFormContent = () => {
         tipo_cuenta: formData.tipo_cuenta,
         num_cuenta: formData.num_cuenta || null,
         nota: formData.nota.trim() || null,
-        fondo: parseFloat(formData.fondo) || 0,
       };
 
       if (isEditMode) {
@@ -253,20 +246,6 @@ const CuentaFormContent = () => {
                     placeholder="Número de cuenta (opcional)..."
                     value={formData.num_cuenta}
                     onChangeText={(text) => setFormData(prev => ({ ...prev, num_cuenta: text }))}
-                    editable={!isReadOnly}
-                  />
-                </View>
-
-                {/* Fondo */}
-                <View style={styles.formGroup}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Fondo Inicial *</Text>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    placeholderTextColor={colors.outline}
-                    placeholder="0.00"
-                    value={formData.fondo}
-                    onChangeText={(text) => setFormData(prev => ({ ...prev, fondo: text }))}
-                    keyboardType="decimal-pad"
                     editable={!isReadOnly}
                   />
                 </View>

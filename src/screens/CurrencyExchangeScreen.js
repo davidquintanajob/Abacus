@@ -553,7 +553,7 @@ const CurrencyExchangeContent = () => {
                   <View style={styles.exchangeRatesHeader}>
                     <Ionicons name="cash" size={responsive.responsiveWidth(20)} color={colors.primary} />
                     <Text style={[styles.exchangeRatesTitle, { color: colors.onSurface }]}>
-                      Tasas de Cambio en Vivo
+                      Tasas de cambio en vivo segùn elTOQUE
                     </Text>
                     <TouchableOpacity 
                       onPress={() => fetchExchangeRates(true)} 
@@ -634,7 +634,7 @@ const CurrencyExchangeContent = () => {
                       </View>
 
                       <Text style={[styles.ratesSource, { color: colors.outline }]}>
-                        Fuente: elTOQUE • Actualizado: {exchangeRates.date} {exchangeRates.hour}:{exchangeRates.minutes.toString().padStart(2, '0')}
+                        Actualizado: {exchangeRates.date} {exchangeRates.hour}:{exchangeRates.minutes.toString().padStart(2, '0')}
                       </Text>
                     </View>
                   ) : (
