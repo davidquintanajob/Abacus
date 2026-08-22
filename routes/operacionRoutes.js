@@ -105,6 +105,12 @@ const authenticate = require("../helpers/authenticate");
  *         schema:
  *           type: number
  *         description: Monto máximo (en la moneda de la cuenta)
+ *       - in: query
+ *         name: tipo_operacion
+ *         schema:
+ *           type: string
+ *           enum: [Ingreso, Retiro, Ingreso por Venta, Operaciones Manuales]
+ *         description: Filtra por tipo de operación; Operaciones Manuales incluye Ingreso y Retiro
  *     responses:
  *       200:
  *         description: Lista de operaciones con paginación y sumatorias

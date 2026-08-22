@@ -281,6 +281,11 @@ const filterOperaciones = async (filters, limit, offset) => {
       id_tienda: filters.id_tienda,
     };
   }
+  if (filters.tipo_operacion !== undefined) {
+    where.tipo_operacion = filters.tipo_operacion === "Operaciones Manuales"
+      ? { [Op.in]: ["Ingreso", "Retiro"] }
+      : filters.tipo_operacion;
+  }
   if (filters.fecha_desde || filters.fecha_hasta) {
     where.fecha_hora = {};
     if (filters.fecha_desde) where.fecha_hora[Op.gte] = filters.fecha_desde;

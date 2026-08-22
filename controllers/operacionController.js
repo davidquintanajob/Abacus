@@ -322,6 +322,7 @@ const filterOperaciones = async (req, res) => {
       fecha_hasta,
       cantidad_min,
       cantidad_max,
+      tipo_operacion,
     } = req.query;
 
     let limitNum = parseInt(limit, 10) || 10;
@@ -336,6 +337,13 @@ const filterOperaciones = async (req, res) => {
     const filters = {};
     if (nombre_cuenta) filters.nombre_cuenta = nombre_cuenta.trim();
     if (nombre_usuario) filters.nombre_usuario = nombre_usuario.trim();
+    if (tipo_operacion !== undefined) {
+      const tiposFiltro = [...tiposOperacion, "Operaciones Manuales"];
+      if (!tiposFiltro.includes(tipo_operacion)) {
+        throwError(`tipo_operacion debe ser uno de: ${tiposFiltro.join(", ")}.`, 400);
+      }
+      filters.tipo_operacion = tipo_operacion;
+    }
     if (id_tienda !== undefined) {
       const tiendaId = parseInt(id_tienda, 10);
       if (isNaN(tiendaId) || tiendaId < 1 || String(tiendaId) !== String(id_tienda).trim()) {
