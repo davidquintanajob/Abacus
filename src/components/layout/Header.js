@@ -2,9 +2,11 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { useOffline } from '../../context/OfflineContext';
+import { useAuth } from '../../context/AuthContext';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useResponsive } from '../../hooks/useResponsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 
 export const Header = ({
   onMenuPress,
@@ -18,7 +20,10 @@ export const Header = ({
   showLogo = false,
   onViewModeToggle,
   showViewToggle = false,
-  viewMode = 'table'
+  viewMode = 'table',
+  onLogoPress,
+  showVersion = true,
+  version = '1.0.0'
 }) => {
   const { isOfflineMode } = useOffline();
   const { colors } = useTheme();
@@ -27,6 +32,16 @@ export const Header = ({
 
   const isDarkMode = isDark === true || isDark === 'true';
   const showBack = showBackButton === true || showBackButton === 'true';
+  const navigation = useNavigation();
+  const { isAuthenticated } = useAuth();
+
+  const handleLogoPress = () => {
+    if (onLogoPress) {
+      onLogoPress();
+    } else if (isAuthenticated) {
+      navigation.navigate('Home');
+    }
+  };
 
   const styles = createStyles(responsive, insets);
 
@@ -50,7 +65,11 @@ export const Header = ({
             <Ionicons name="menu" size={responsive.responsiveWidth(24)} color={colors.primary} />
           </TouchableOpacity>
         )}
-        <View style={styles.titleContainer}>
+        <TouchableOpacity 
+          style={styles.titleContainer}
+          onPress={handleLogoPress}
+          activeOpacity={0.7}
+        >
           {showLogo && title === 'Abacus' && (
             <Image
               source={isDarkMode ? require('../../../Logos/Abacus_sinFondo v4.png') : require('../../../Logos/Abacus_sinFondo v1.png')}
@@ -58,10 +77,17 @@ export const Header = ({
               resizeMode="contain"
             />
           )}
-          <Text style={[styles.title, { color: colors.primary }]}>
-            {title || 'Abacus'}
-          </Text>
-        </View>
+          <View style={styles.titleWithVersion}>
+            <Text style={[styles.title, { color: colors.primary }]}>
+              {title || 'Abacus'}
+            </Text>
+            {showVersion && (
+              <Text style={[styles.version, { color: colors.outline }]}>
+                v{version}
+              </Text>
+            )}
+          </View>
+        </TouchableOpacity>
       </View>
       
       <View style={styles.rightSection}>
@@ -144,6 +170,9 @@ const createStyles = (responsive, insets) => StyleSheet.create({
     alignItems: 'center',
     gap: responsive.responsiveMargin(8),
   },
+  titleWithVersion: {
+    flexDirection: 'column',
+  },
   logo: {
     width: responsive.responsiveWidth(30),
     height: responsive.responsiveHeight(30),
@@ -164,6 +193,12 @@ const createStyles = (responsive, insets) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(24),
     fontWeight: '700',
     fontFamily: 'Hanken Grotesk',
+  },
+  version: {
+    fontSize: responsive.responsiveFontSize(10),
+    fontWeight: '500',
+    fontFamily: 'Inter',
+    lineHeight: responsive.responsiveFontSize(10) * 1.2,
   },
   offlineIconContainer: {
     flexDirection: 'row',

@@ -524,6 +524,7 @@ const CurrencyExchangeContent = () => {
         onMenuPress={() => setSidebarOpen(true)}
         isDark={isDarkMode}
         title="Configuraciones del Admin"
+        showVersion={false}
       />
 
       <Sidebar 

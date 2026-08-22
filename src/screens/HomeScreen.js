@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -10,7 +10,9 @@ import { Card } from '../components/common/Card';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useOffline } from '../context/OfflineContext';
+import { useAuth } from '../context/AuthContext';
 import { getEntradas } from '../services/entradaService';
+import packageJson from '../../package.json';
 
 const HomeContent = () => {
   const navigation = useNavigation();
@@ -18,12 +20,15 @@ const HomeContent = () => {
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
   const { enableOfflineMode, isOfflineMode: contextOfflineMode } = useOffline();
+  const { user, permissions } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [greeting, setGreeting] = useState('Buenos días');
   const [expiringProducts, setExpiringProducts] = useState([]);
   const [loadingExpiring, setLoadingExpiring] = useState(false);
+  const [currentDate, setCurrentDate] = useState('');
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
+  const appVersion = packageJson.version;
 
   // Activar modo offline si viene del login
   useEffect(() => {
@@ -32,9 +37,29 @@ const HomeContent = () => {
     }
   }, [route.params?.isOfflineMode]);
 
+  // Establecer fecha actual
+  useEffect(() => {
+    const options = { day: 'numeric', month: 'long', year: 'numeric' };
+    const date = new Date().toLocaleDateString('es-ES', options);
+    setCurrentDate(date);
+  }, []);
+
   const logoSource = isDarkMode
     ? require('../../Logos/Abacus v4.1.png')
     : require('../../Logos/Abacus v1.1.png');
+
+  const storeImageSource = isDarkMode
+    ? require('../../assets/Home_logo_darck.png')
+    : require('../../assets/Home_Logo.png');
+
+  const getFirstName = (fullName) => {
+    console.log('getFirstName called with:', fullName);
+    console.log('User object:', user);
+    if (!fullName) return 'Administrador';
+    const name = fullName.trim();
+    if (name === 'Administrador') return 'Administrador';
+    return name.split(' ')[0];
+  };
 
   const handleSettingsPress = () => {
     navigation.navigate('Settings', { from: 'Home' });
@@ -46,6 +71,18 @@ const HomeContent = () => {
 
   const handleProfilePress = () => {
     navigation.navigate('UserProfile');
+  };
+
+  const handleLogoPress = () => {
+    navigation.navigate('Home');
+  };
+
+  const handleSupportCall = () => {
+    Linking.openURL('tel:56242671');
+  };
+
+  const handleWhatsApp = () => {
+    Linking.openURL('https://wa.me/56242671');
   };
 
   useEffect(() => {
@@ -136,66 +173,108 @@ const HomeContent = () => {
     fetchExpiringProducts();
   }, []);
 
-  const quickAccessItems = [
-    { 
-      icon: 'cube-outline', 
-      iconSet: 'Ionicons',
-      label: 'Inventario', 
-      description: 'Gestionar stock',
-      color: colors.primary 
-    },
-    { 
-      icon: 'shopping-cart', 
-      iconSet: 'MaterialIcons',
-      label: 'Ventas', 
-      description: 'Registrar ventas',
-      color: '#16A34A'
-    },
-    { 
-      icon: 'users', 
-      iconSet: 'FontAwesome5',
-      label: 'Clientes', 
-      description: 'Base de datos',
-      color: '#185FA5'
-    },
-    { 
-      icon: 'bar-chart', 
-      iconSet: 'MaterialIcons',
-      label: 'Reportes', 
-      description: 'Análisis detallado',
-      color: colors.secondary
-    },
-  ];
+  console.log('Permissions object:', permissions);
+  console.log('User role:', user?.rol);
+  console.log('economico permission:', permissions.economico);
+  
+  const isAdmin = user?.rol === 'Administrador';
+  const userRole = user?.rol?.toLowerCase();
+  const { entradaAccessLevels, salidaAccessLevels, operacionAccessLevels } = useAuth();
+  const { isOfflineMode } = useOffline();
+  
+  const canAccessSalidas = 
+    !isOfflineMode &&
+    (isAdmin ||
+    (userRole === 'dependiente' && salidaAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'almacenero' && salidaAccessLevels?.almacenero !== 'none') ||
+    (userRole === 'económico' && salidaAccessLevels?.economico !== 'none'));
 
-  const recentActivities = [
-    { id: 1, title: 'Venta #204', subtitle: 'Cliente: Juan Pérez', amount: '+$120', type: 'sale', time: '2 min' },
-    { id: 2, title: 'Cliente registrado', subtitle: 'María García', amount: '', type: 'customer', time: '15 min' },
-    { id: 3, title: 'Stock actualizado', subtitle: 'Producto: Laptop HP', amount: '-5 unidades', type: 'inventory', time: '1 hora' },
+  const canAccessOperaciones = 
+    !isOfflineMode &&
+    (isAdmin ||
+    (userRole === 'dependiente' && operacionAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'almacenero' && operacionAccessLevels?.almacenero !== 'none') ||
+    (userRole === 'económico' && operacionAccessLevels?.economico !== 'none'));
+  
+  const mainModules = [
+    {
+      id: 'servicios',
+      icon: require('../../assets/lanza-libre.png'),
+      iconType: 'image',
+      label: 'Servicios y Ofertas',
+      description: 'Gestionar servicios y ofertas',
+      color: colors.primary,
+      screen: 'Servicios',
+      permission: true,
+      hasPermission: true
+    },
+    {
+      id: 'productos',
+      icon: require('../../assets/product.png'),
+      iconType: 'image',
+      label: 'Productos',
+      description: 'Gestionar inventario',
+      color: '#16A34A',
+      screen: 'Productos',
+      permission: true,
+      hasPermission: true
+    },
+    {
+      id: 'ventas',
+      icon: require('../../assets/box.png'),
+      iconType: 'image',
+      label: 'Ventas',
+      description: 'Registrar ventas',
+      color: '#185FA5',
+      screen: null,
+      permission: canAccessSalidas,
+      hasPermission: canAccessSalidas
+    },
+    {
+      id: 'operaciones',
+      icon: require('../../assets/report.png'),
+      iconType: 'image',
+      label: 'Operaciones',
+      description: 'Gestión de operaciones',
+      color: colors.secondary,
+      screen: 'Operaciones',
+      permission: canAccessOperaciones,
+      hasPermission: canAccessOperaciones
+    },
   ];
+  
+  console.log('Main modules:', mainModules.map(m => ({ id: m.id, hasPermission: m.hasPermission })));
 
   const renderIcon = (item) => {
+    const iconColor = item.hasPermission ? item.color : colors.outline;
+    if (item.iconType === 'image') {
+      return (
+        <Image
+          source={item.icon}
+          style={[
+            styles.moduleIconImage,
+            { tintColor: iconColor }
+          ]}
+          resizeMode="contain"
+        />
+      );
+    }
     switch (item.iconSet) {
       case 'Ionicons':
-        return <Ionicons name={item.icon} size={responsive.responsiveWidth(28)} color={item.color} />;
+        return <Ionicons name={item.icon} size={responsive.responsiveWidth(28)} color={iconColor} />;
       case 'MaterialIcons':
-        return <MaterialIcons name={item.icon} size={responsive.responsiveWidth(28)} color={item.color} />;
+        return <MaterialIcons name={item.icon} size={responsive.responsiveWidth(28)} color={iconColor} />;
       case 'FontAwesome5':
-        return <FontAwesome5 name={item.icon} size={responsive.responsiveWidth(24)} color={item.color} />;
+        return <FontAwesome5 name={item.icon} size={responsive.responsiveWidth(24)} color={iconColor} />;
       default:
-        return <Ionicons name="help-circle" size={responsive.responsiveWidth(28)} color={item.color} />;
+        return <Ionicons name="help-circle" size={responsive.responsiveWidth(28)} color={iconColor} />;
     }
   };
 
-  const getActivityIcon = (type) => {
-    switch (type) {
-      case 'sale':
-        return <Ionicons name="cart" size={responsive.responsiveWidth(20)} color="#16A34A" />;
-      case 'customer':
-        return <Ionicons name="person-add" size={responsive.responsiveWidth(20)} color="#185FA5" />;
-      case 'inventory':
-        return <Ionicons name="cube" size={responsive.responsiveWidth(20)} color={colors.secondary} />;
-      default:
-        return <Ionicons name="information-circle" size={responsive.responsiveWidth(20)} color={colors.outline} />;
+  const handleModulePress = (module) => {
+    console.log('Module pressed:', module);
+    if (module.hasPermission && module.screen) {
+      navigation.navigate(module.screen);
     }
   };
 
@@ -238,9 +317,12 @@ const HomeContent = () => {
         onSettingsPress={handleSettingsPress}
         onNotificationsPress={handleNotificationsPress}
         onProfilePress={handleProfilePress}
+        onLogoPress={handleLogoPress}
         isDark={isDarkMode}
         title="Abacus"
         showLogo={true}
+        showVersion={true}
+        version={appVersion}
       />
       
       <Sidebar 
@@ -256,59 +338,132 @@ const HomeContent = () => {
       >
         {/* Header / Bienvenida */}
         <View style={styles.hero}>
-          <Image
-            source={logoSource}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          <Text style={[styles.greeting, { color: colors.onSurface }]}>
-            {greeting} 👋
-          </Text>
-          <Text style={[styles.greetingSubtitle, { color: colors.outline }]}>
-            Resumen general de tu negocio
-          </Text>
+          <Card style={[styles.welcomeCard, { backgroundColor: isDarkMode ? '#0A1628' : '#F5F8FC' }]}>
+            <View style={styles.welcomeContainer}>
+              <View style={styles.welcomeTextContainer}>
+                <Text style={[styles.greeting, { color: colors.onSurface }]}>
+                  ¡Bienvenido!
+                </Text>
+                <Text style={[styles.userName, { color: colors.onSurface }]}>
+                  {getFirstName(user?.nombre_natural || user?.nombre_usuario)}
+                </Text>
+                {console.log('Rendering user name:', user?.nombre_natural, user?.nombre_usuario)}
+                <Text style={[styles.userRole, { color: colors.outline }]}>
+                  {user?.rol || 'Administrador'}
+                </Text>
+                <Text style={[styles.currentDate, { color: colors.outline }]}>
+                  {currentDate}
+                </Text>
+              </View>
+              <Image
+                source={storeImageSource}
+                style={styles.storeImage}
+                resizeMode="contain"
+              />
+            </View>
+          </Card>
         </View>
 
-        {/* Tarjeta Principal Financiera */}
-        <View style={styles.financialCardContainer}>
-          <Card style={[styles.financialCard, { backgroundColor: isDark ? '#0C447C' : colors.primary }]}>
-            <View style={styles.financialCardHeader}>
-              <View>
-                <Text style={[styles.financialLabel, { color: isDark ? '#ffffff' : colors.onPrimary }]}>
-                  Balance Actual
+        {/* Módulos Principales */}
+        <View style={styles.modulesSection}>
+          <Text style={[styles.sectionTitle, { color: colors.outline }]}>
+            MÓDULOS PRINCIPALES
+          </Text>
+          <View style={styles.modulesGrid}>
+            {mainModules.map((module) => (
+              <TouchableOpacity
+                key={module.id}
+                style={styles.moduleItem}
+                onPress={() => handleModulePress(module)}
+                activeOpacity={module.hasPermission ? 0.7 : 1}
+                disabled={!module.hasPermission}
+              >
+                <Card style={[
+                  styles.moduleCard, 
+                  { 
+                    backgroundColor: isDarkMode ? '#0A1628' : '#F5F8FC',
+                    opacity: module.hasPermission ? 1 : 0.5
+                  }
+                ]}>
+                  <View style={styles.moduleIconContainer}>
+                    {renderIcon(module)}
+                  </View>
+                  <Text style={[styles.moduleLabel, { color: colors.onSurface }]}>
+                    {module.label}
+                  </Text>
+                  <Text style={[styles.moduleDescription, { color: colors.outline }]}>
+                    {module.description}
+                  </Text>
+                  {module.hasPermission ? (
+                    <View style={styles.accessButton}>
+                      <Text style={[styles.accessButtonText, { color: module.color }]}>
+                        Acceder
+                      </Text>
+                      <Ionicons name="arrow-forward" size={responsive.responsiveWidth(16)} color={module.color} />
+                    </View>
+                  ) : (
+                    <View style={[styles.accessButton, styles.disabledButton]}>
+                      <Text style={[styles.accessButtonText, { color: colors.outline }]}>
+                        Sin permisos
+                      </Text>
+                      <Ionicons name="lock-closed" size={responsive.responsiveWidth(16)} color={colors.outline} />
+                    </View>
+                  )}
+                </Card>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Estadísticas */}
+        <View style={styles.statsSection}>
+          <Text style={[styles.sectionTitle, { color: colors.outline }]}>
+            RESUMEN
+          </Text>
+          <Card style={[styles.statsCard, { backgroundColor: colors.surface }]}>
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <View style={[styles.statItemIconContainer, { backgroundColor: `${colors.primary}15` }]}>
+                  <Ionicons name="cube" size={responsive.responsiveWidth(20)} color={colors.primary} />
+                </View>
+                <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
+                  128
                 </Text>
-                <Text style={[styles.financialValue, { color: isDark ? '#ffffff' : colors.onPrimary }]}>
-                  $24,942
+                <Text style={[styles.statItemLabel, { color: colors.outline }]}>
+                  Productos
                 </Text>
               </View>
-              <View style={styles.financialIndicator}>
-                <Text style={[styles.financialChange, { color: '#4ADE80' }]}>
-                  +12.4%
+              <View style={styles.statItem}>
+                <View style={[styles.statItemIconContainer, { backgroundColor: '#16A34A15' }]}>
+                  <Ionicons name="cart" size={responsive.responsiveWidth(20)} color="#16A34A" />
+                </View>
+                <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
+                  56
                 </Text>
-                <Text style={[styles.financialChangeLabel, { color: isDark ? 'rgba(255,255,255,0.8)' : colors.onPrimaryContainer }]}>
-                  este mes
-                </Text>
-              </View>
-            </View>
-            
-            <View style={[styles.financialDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.15)' }]} />
-            
-            <View style={styles.financialSecondary}>
-              <View style={styles.financialSecondaryItem}>
-                <Text style={[styles.financialSecondaryLabel, { color: isDark ? 'rgba(255,255,255,0.8)' : colors.onPrimaryContainer }]}>
-                  Ventas
-                </Text>
-                <Text style={[styles.financialSecondaryValue, { color: isDark ? '#ffffff' : colors.onPrimary }]}>
-                  1,204
+                <Text style={[styles.statItemLabel, { color: colors.outline }]}>
+                  Ventas hoy
                 </Text>
               </View>
-              <View style={[styles.financialVerticalDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.15)' }]} />
-              <View style={styles.financialSecondaryItem}>
-                <Text style={[styles.financialSecondaryLabel, { color: isDark ? 'rgba(255,255,255,0.8)' : colors.onPrimaryContainer }]}>
-                  Gastos
+              <View style={styles.statItem}>
+                <View style={[styles.statItemIconContainer, { backgroundColor: '#185FA515' }]}>
+                  <Ionicons name="people" size={responsive.responsiveWidth(20)} color="#185FA5" />
+                </View>
+                <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
+                  12
                 </Text>
-                <Text style={[styles.financialSecondaryValue, { color: isDark ? '#ffffff' : colors.onPrimary }]}>
-                  $5,200
+                <Text style={[styles.statItemLabel, { color: colors.outline }]}>
+                  Usuarios
+                </Text>
+              </View>
+              <View style={styles.statItem}>
+                <View style={[styles.statItemIconContainer, { backgroundColor: `${colors.secondary}15` }]}>
+                  <Ionicons name="cash" size={responsive.responsiveWidth(20)} color={colors.secondary} />
+                </View>
+                <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
+                  7.8K
+                </Text>
+                <Text style={[styles.statItemLabel, { color: colors.outline }]}>
+                  Ingresos (mes)
                 </Text>
               </View>
             </View>
@@ -368,66 +523,45 @@ const HomeContent = () => {
           </View>
         )}
 
-        {/* Acciones Rápidas */}
-        <View style={styles.quickAccessSection}>
-          <Text style={[styles.sectionTitle, { color: colors.outline }]}>
-            ACCIONES RÁPIDAS
-          </Text>
-          <View style={styles.quickAccessGrid}>
-            {quickAccessItems.map((item, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.quickAccessItem}
+        {/* Sección de Soporte */}
+        <View style={styles.supportSection}>
+          <Card style={[styles.supportCard, { backgroundColor: colors.surface }]}>
+            <View style={styles.supportHeader}>
+              <View style={[styles.supportIconContainer, { backgroundColor: `${colors.primary}15` }]}>
+                <Ionicons name="headset" size={responsive.responsiveWidth(24)} color={colors.primary} />
+              </View>
+              <View style={styles.supportHeaderText}>
+                <Text style={[styles.supportTitle, { color: colors.onSurface }]}>
+                  ¿Necesitas ayuda?
+                </Text>
+                <Text style={[styles.supportSubtitle, { color: colors.outline }]}>
+                  Contáctanos para soporte técnico
+                </Text>
+              </View>
+            </View>
+            <View style={styles.supportContact}>
+              <TouchableOpacity 
+                style={styles.supportContactItem}
+                onPress={handleSupportCall}
                 activeOpacity={0.7}
               >
-                <Card style={[styles.quickAccessCard, { backgroundColor: colors.surface }]}>
-                  <View style={[styles.quickAccessIconContainer, { backgroundColor: `${item.color}15` }]}>
-                    {renderIcon(item)}
-                  </View>
-                  <Text style={[styles.quickAccessLabel, { color: colors.onSurface }]}>
-                    {item.label}
-                  </Text>
-                  <Text style={[styles.quickAccessDescription, { color: colors.outline }]}>
-                    {item.description}
-                  </Text>
-                </Card>
+                <Ionicons name="call" size={responsive.responsiveWidth(20)} color={colors.primary} />
+                <Text style={[styles.supportPhone, { color: colors.onSurface }]}>
+                  56242671
+                </Text>
               </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Actividad Reciente */}
-        <View style={styles.activitySection}>
-          <Text style={[styles.sectionTitle, { color: colors.outline }]}>
-            ACTIVIDAD RECIENTE
-          </Text>
-          <View style={styles.activityList}>
-            {recentActivities.map((activity) => (
-              <Card key={activity.id} style={[styles.activityItem, { backgroundColor: colors.surface }]}>
-                <View style={styles.activityIconContainer}>
-                  {getActivityIcon(activity.type)}
-                </View>
-                <View style={styles.activityContent}>
-                  <Text style={[styles.activityTitle, { color: colors.onSurface }]}>
-                    {activity.title}
-                  </Text>
-                  <Text style={[styles.activitySubtitle, { color: colors.outline }]}>
-                    {activity.subtitle}
-                  </Text>
-                </View>
-                <View style={styles.activityRight}>
-                  {activity.amount && (
-                    <Text style={[styles.activityAmount, { color: activity.amount.startsWith('+') ? '#16A34A' : colors.error }]}>
-                      {activity.amount}
-                    </Text>
-                  )}
-                  <Text style={[styles.activityTime, { color: colors.outline }]}>
-                    {activity.time}
-                  </Text>
-                </View>
-              </Card>
-            ))}
-          </View>
+              <TouchableOpacity 
+                style={styles.supportContactItem}
+                onPress={handleWhatsApp}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="logo-whatsapp" size={responsive.responsiveWidth(20)} color="#25D366" />
+                <Text style={[styles.supportWhatsApp, { color: colors.onSurface }]}>
+                  También por WhatsApp
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Card>
         </View>
 
         {/* Espacio inferior */}
@@ -455,129 +589,113 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   hero: {
     marginBottom: responsive.responsiveMargin(24),
-    paddingTop: 8,
+    paddingTop: responsive.responsiveMargin(32),
+  },
+  welcomeCard: {
+    borderRadius: 16,
+    padding: responsive.cardPadding,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  welcomeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  logo: {
-    width: responsive.responsiveWidth(180),
-    height: responsive.responsiveHeight(180),
-    marginBottom: responsive.responsiveMargin(-50),
-    marginTop: responsive.responsiveMargin(-50),
-  },
-  greeting: {
-    fontSize: responsive.fontSizes.h1,
-    fontWeight: '700',
-    fontFamily: 'Hanken Grotesk',
-    lineHeight: responsive.fontSizes.h1 * 1.3,
-    marginBottom: 4,
-  },
-  greetingSubtitle: {
-    fontSize: responsive.fontSizes.bodyLarge,
-    fontWeight: '400',
-    fontFamily: 'Inter',
-    lineHeight: responsive.fontSizes.bodyLarge * 1.4,
-  },
-  financialCardContainer: {
-    marginBottom: responsive.responsiveMargin(24),
-  },
-  financialCard: {
-    borderRadius: 20,
-    padding: responsive.responsivePadding(24),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  financialCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-  financialLabel: {
-    fontSize: responsive.fontSizes.bodySmall,
-    fontWeight: '500',
-    fontFamily: 'Inter',
-    lineHeight: responsive.fontSizes.bodySmall * 1.4,
-    opacity: 0.9,
-    marginBottom: 4,
-  },
-  financialValue: {
-    fontSize: responsive.responsiveFontSize(36),
-    fontWeight: '700',
-    fontFamily: 'Hanken Grotesk',
-    lineHeight: responsive.responsiveFontSize(36) * 1.2,
-    letterSpacing: -0.5,
-  },
-  financialIndicator: {
-    alignItems: 'flex-end',
-  },
-  financialChange: {
-    fontSize: responsive.responsiveFontSize(18),
-    fontWeight: '700',
-    fontFamily: 'Hanken Grotesk',
-    lineHeight: responsive.responsiveFontSize(18) * 1.3,
-  },
-  financialChangeLabel: {
-    fontSize: responsive.fontSizes.caption,
-    fontWeight: '500',
-    fontFamily: 'Inter',
-    lineHeight: responsive.fontSizes.caption * 1.4,
-    opacity: 0.8,
-  },
-  financialDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    marginBottom: 16,
-  },
-  financialSecondary: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  financialSecondaryItem: {
+  welcomeTextContainer: {
     flex: 1,
   },
-  financialSecondaryLabel: {
+  greeting: {
+    fontSize: responsive.responsiveFontSize(28),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+    lineHeight: responsive.responsiveFontSize(28) * 1.3,
+    marginBottom: 4,
+  },
+  userName: {
+    fontSize: responsive.responsiveFontSize(24),
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    lineHeight: responsive.responsiveFontSize(24) * 1.3,
+    marginBottom: 4,
+  },
+  userRole: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+    lineHeight: responsive.fontSizes.body * 1.4,
+    marginBottom: 4,
+  },
+  currentDate: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '400',
+    fontFamily: 'Inter',
+    lineHeight: responsive.fontSizes.bodySmall * 1.4,
+  },
+  storeImage: {
+    width: responsive.responsiveWidth(120),
+    height: responsive.responsiveHeight(120),
+  },
+  modulesSection: {
+    marginBottom: responsive.responsiveMargin(24),
+  },
+  statsSection: {
+    marginBottom: responsive.responsiveMargin(24),
+  },
+  statsCard: {
+    borderRadius: 16,
+    padding: responsive.cardPadding,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: responsive.gridGap,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statItemIconContainer: {
+    width: responsive.responsiveWidth(40),
+    height: responsive.responsiveHeight(40),
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  statItemValue: {
+    fontSize: responsive.responsiveFontSize(20),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+    lineHeight: responsive.responsiveFontSize(20) * 1.2,
+    marginBottom: 4,
+  },
+  statItemLabel: {
     fontSize: responsive.fontSizes.bodySmall,
     fontWeight: '500',
     fontFamily: 'Inter',
     lineHeight: responsive.fontSizes.bodySmall * 1.3,
-    opacity: 0.8,
-    marginBottom: 4,
+    textAlign: 'center',
   },
-  financialSecondaryValue: {
-    fontSize: responsive.responsiveFontSize(20),
-    fontWeight: '600',
-    fontFamily: 'Hanken Grotesk',
-    lineHeight: responsive.responsiveFontSize(20) * 1.4,
-  },
-  financialVerticalDivider: {
-    width: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    marginHorizontal: 16,
-  },
-  quickAccessSection: {
-    marginBottom: responsive.responsiveMargin(24),
-  },
-  sectionTitle: {
-    fontSize: responsive.fontSizes.caption,
-    fontWeight: '600',
-    fontFamily: 'JetBrains Mono',
-    letterSpacing: 0.1,
-    marginBottom: responsive.responsiveMargin(16),
-    paddingHorizontal: 4,
-    textTransform: 'uppercase',
-  },
-  quickAccessGrid: {
+  modulesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: responsive.gridGap,
   },
-  quickAccessItem: {
-    width: responsive.isSmall ? '48%' : responsive.isMedium ? '48%' : '31%',
+  moduleItem: {
+    flex: 1,
+    minWidth: responsive.isSmall ? '45%' : responsive.isMedium ? '45%' : '22%',
+    maxWidth: responsive.isSmall ? '48%' : responsive.isMedium ? '48%' : '25%',
   },
-  quickAccessCard: {
+  moduleCard: {
     borderRadius: 16,
     padding: responsive.cardPadding,
     alignItems: 'center',
@@ -587,7 +705,7 @@ const createStyles = (responsive) => StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  quickAccessIconContainer: {
+  moduleIconContainer: {
     width: responsive.responsiveWidth(56),
     height: responsive.responsiveHeight(56),
     borderRadius: 16,
@@ -595,23 +713,121 @@ const createStyles = (responsive) => StyleSheet.create({
     justifyContent: 'center',
     marginBottom: responsive.responsiveMargin(12),
   },
-  quickAccessLabel: {
+  moduleIconImage: {
+    width: responsive.responsiveWidth(32),
+    height: responsive.responsiveHeight(32),
+  },
+  moduleLabel: {
     fontSize: responsive.fontSizes.body,
     fontWeight: '600',
     fontFamily: 'Hanken Grotesk',
     lineHeight: responsive.fontSizes.body * 1.4,
     marginBottom: 4,
     textAlign: 'center',
+    minHeight: responsive.responsiveFontSize(24) * 1.4,
   },
-  quickAccessDescription: {
+  moduleDescription: {
     fontSize: responsive.fontSizes.bodySmall,
     fontWeight: '400',
     fontFamily: 'Inter',
     lineHeight: responsive.fontSizes.bodySmall * 1.3,
     textAlign: 'center',
+    marginBottom: 12,
+    minHeight: responsive.fontSizes.bodySmall * 1.3 * 2,
   },
-  activitySection: {
+  lockedContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  lockedText: {
+    fontSize: responsive.fontSizes.caption,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+  },
+  accessButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  accessButtonText: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  supportSection: {
     marginBottom: responsive.responsiveMargin(24),
+  },
+  supportCard: {
+    borderRadius: 16,
+    padding: responsive.cardPadding,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  supportHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  supportIconContainer: {
+    width: responsive.responsiveWidth(48),
+    height: responsive.responsiveHeight(48),
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: responsive.responsiveMargin(12),
+  },
+  supportHeaderText: {
+    flex: 1,
+  },
+  supportTitle: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    lineHeight: responsive.fontSizes.body * 1.4,
+    marginBottom: 4,
+  },
+  supportSubtitle: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '400',
+    fontFamily: 'Inter',
+    lineHeight: responsive.fontSizes.bodySmall * 1.3,
+  },
+  supportContact: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  supportContactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  supportPhone: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    lineHeight: responsive.fontSizes.body * 1.4,
+  },
+  supportWhatsApp: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+    lineHeight: responsive.fontSizes.bodySmall * 1.4,
+  },
+  sectionTitle: {
+    fontSize: responsive.fontSizes.caption,
+    fontWeight: '600',
+    fontFamily: 'JetBrains Mono',
+    letterSpacing: 0.1,
+    marginBottom: responsive.responsiveMargin(16),
+    paddingHorizontal: 4,
+    textTransform: 'uppercase',
   },
   expirationSection: {
     marginBottom: responsive.responsiveMargin(24),
@@ -666,64 +882,6 @@ const createStyles = (responsive) => StyleSheet.create({
     marginBottom: 2,
   },
   expirationDays: {
-    fontSize: responsive.fontSizes.caption,
-    fontWeight: '500',
-    fontFamily: 'Inter',
-    lineHeight: responsive.fontSizes.caption * 1.4,
-  },
-  activitySection: {
-    marginBottom: responsive.responsiveMargin(24),
-  },
-  activityList: {
-    gap: responsive.gridGap,
-  },
-  activityItem: {
-    borderRadius: 14,
-    padding: responsive.cardPadding,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  activityIconContainer: {
-    width: responsive.responsiveWidth(40),
-    height: responsive.responsiveHeight(40),
-    borderRadius: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: responsive.responsiveMargin(12),
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontSize: responsive.fontSizes.body,
-    fontWeight: '600',
-    fontFamily: 'Hanken Grotesk',
-    lineHeight: responsive.fontSizes.body * 1.4,
-    marginBottom: 2,
-  },
-  activitySubtitle: {
-    fontSize: responsive.fontSizes.bodySmall,
-    fontWeight: '400',
-    fontFamily: 'Inter',
-    lineHeight: responsive.fontSizes.bodySmall * 1.3,
-  },
-  activityRight: {
-    alignItems: 'flex-end',
-  },
-  activityAmount: {
-    fontSize: responsive.fontSizes.body,
-    fontWeight: '600',
-    fontFamily: 'Hanken Grotesk',
-    lineHeight: responsive.fontSizes.body * 1.4,
-    marginBottom: 2,
-  },
-  activityTime: {
     fontSize: responsive.fontSizes.caption,
     fontWeight: '500',
     fontFamily: 'Inter',
