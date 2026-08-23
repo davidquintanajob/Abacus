@@ -328,26 +328,51 @@ const filterOperaciones = async (filters, limit, offset) => {
     distinct: true,
   });
 
-  let totalCantidad = 0;
-  let totalIngresos = 0;
-  let totalRetiros = 0;
-  let totalIngresosVenta = 0;
+  const summary = {
+    totalIngresoEfectivoCUP: 0,
+    totalIngresoVentaEfectivoCUP: 0,
+    totalRetiroEfectivoCUP: 0,
+    totalIngresoTransferenciaCUP: 0,
+    totalIngresoVentaTransferenciaCUP: 0,
+    totalRetiroTransferenciaCUP: 0,
+    totalIngresoEfectivoUSD: 0,
+    totalIngresoVentaEfectivoUSD: 0,
+    totalRetiroEfectivoUSD: 0,
+    totalIngresoTransferenciaUSD: 0,
+    totalIngresoVentaTransferenciaUSD: 0,
+    totalRetiroTransferenciaUSD: 0,
+  };
+
+  const summaryKeyByAccountType = {
+    "Efectivo CUP": {
+      Ingreso: "totalIngresoEfectivoCUP",
+      "Ingreso por Venta": "totalIngresoVentaEfectivoCUP",
+      Retiro: "totalRetiroEfectivoCUP",
+    },
+    "Transferencia CUP": {
+      Ingreso: "totalIngresoTransferenciaCUP",
+      "Ingreso por Venta": "totalIngresoVentaTransferenciaCUP",
+      Retiro: "totalRetiroTransferenciaCUP",
+    },
+    "Efectivo USD": {
+      Ingreso: "totalIngresoEfectivoUSD",
+      "Ingreso por Venta": "totalIngresoVentaEfectivoUSD",
+      Retiro: "totalRetiroEfectivoUSD",
+    },
+    "Transferencia USD": {
+      Ingreso: "totalIngresoTransferenciaUSD",
+      "Ingreso por Venta": "totalIngresoVentaTransferenciaUSD",
+      Retiro: "totalRetiroTransferenciaUSD",
+    },
+  };
 
   for (const op of allOps) {
     const cuenta = op.cuenta;
-    const monto = cuenta ? getMontoEnMonedaCuenta(op, cuenta) : 0;
-    totalCantidad += monto;
-    if (op.tipo_operacion === "Ingreso") totalIngresos += monto;
-    else if (op.tipo_operacion === "Retiro") totalRetiros += monto;
-    else if (op.tipo_operacion === "Ingreso por Venta") totalIngresosVenta += monto;
+    const summaryKey = cuenta && summaryKeyByAccountType[cuenta.tipo_cuenta]?.[op.tipo_operacion];
+    if (summaryKey) {
+      summary[summaryKey] += getMontoEnMonedaCuenta(op, cuenta);
+    }
   }
-
-  const summary = {
-    totalCantidad,
-    totalIngresos,
-    totalRetiros,
-    totalIngresosVenta,
-  };
 
   return { rows, count, summary };
 };

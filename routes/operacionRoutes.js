@@ -137,14 +137,29 @@ const authenticate = require("../helpers/authenticate");
  *                 summary:
  *                   type: object
  *                   properties:
- *                     totalCantidad:
+ *                     totalIngresoEfectivoCUP:
  *                       type: number
- *                       description: Suma de montos en la moneda de cada cuenta
- *                     totalIngresos:
+ *                     totalIngresoVentaEfectivoCUP:
  *                       type: number
- *                     totalRetiros:
+ *                     totalRetiroEfectivoCUP:
  *                       type: number
- *                     totalIngresosVenta:
+ *                     totalIngresoTransferenciaCUP:
+ *                       type: number
+ *                     totalIngresoVentaTransferenciaCUP:
+ *                       type: number
+ *                     totalRetiroTransferenciaCUP:
+ *                       type: number
+ *                     totalIngresoEfectivoUSD:
+ *                       type: number
+ *                     totalIngresoVentaEfectivoUSD:
+ *                       type: number
+ *                     totalRetiroEfectivoUSD:
+ *                       type: number
+ *                     totalIngresoTransferenciaUSD:
+ *                       type: number
+ *                     totalIngresoVentaTransferenciaUSD:
+ *                       type: number
+ *                     totalRetiroTransferenciaUSD:
  *                       type: number
  */
 router.get("/operacion/filter", authenticate(), operacionController.filterOperaciones);
