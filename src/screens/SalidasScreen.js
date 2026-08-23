@@ -703,7 +703,7 @@ const SalidasContent = () => {
       <Header 
         onMenuPress={() => setSidebarOpen(true)}
         onThemePress={toggleTheme}
-        onSettingsPress={() => navigation.navigate('Settings')}
+        onSettingsPress={undefined}
         onNotificationsPress={() => {}}
         onProfilePress={() => navigation.navigate('UserProfile')}
         onViewModeToggle={toggleViewMode}

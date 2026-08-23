@@ -530,7 +530,7 @@ const ServiciosContent = () => {
       <Header 
         onMenuPress={() => setSidebarOpen(true)}
         onThemePress={toggleTheme}
-        onSettingsPress={handleSettingsPress}
+        onSettingsPress={undefined}
         onNotificationsPress={handleNotificationsPress}
         onProfilePress={handleProfilePress}
         onViewModeToggle={toggleViewMode}

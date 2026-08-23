@@ -13,6 +13,7 @@ export const Header = ({
   onProfilePress,
   onThemePress,
   onNotificationsPress,
+  onSettingsPress,
   showBackButton = false,
   onBackPress,
   isDark = false,
@@ -129,6 +130,15 @@ export const Header = ({
             activeOpacity={0.7}
           >
             <Ionicons name={isDarkMode ? "sunny" : "moon"} size={responsive.responsiveWidth(24)} color={colors.primary} />
+          </TouchableOpacity>
+        )}
+        {onSettingsPress && (
+          <TouchableOpacity
+            onPress={onSettingsPress}
+            style={styles.iconButton}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="settings-outline" size={responsive.responsiveWidth(24)} color={colors.primary} />
           </TouchableOpacity>
         )}
         {onProfilePress && (

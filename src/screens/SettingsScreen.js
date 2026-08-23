@@ -150,7 +150,7 @@ const SettingsContent = () => {
       <Header 
         onMenuPress={() => setSidebarOpen(true)}
         onThemePress={toggleTheme}
-        onSettingsPress={fromLogin ? undefined : handleSettingsPress}
+        onSettingsPress={undefined}
         onNotificationsPress={fromLogin ? undefined : handleNotificationsPress}
         onProfilePress={fromLogin ? undefined : handleProfilePress}
         showBackButton={fromLogin}

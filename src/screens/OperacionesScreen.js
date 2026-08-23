@@ -58,15 +58,56 @@ const OperacionesContent = () => {
     userTiendaRef.current = user?.id_tienda;
   }, [user?.id_tienda]);
 
-  // Get current date in YYYY-MM-DD format for default filters
-  const today = new Date();
-  const formattedDate = today.toISOString().split('T')[0];
+  // Get current date in YYYY-MM-DD format for default filters (local timezone)
+  const getLocalDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  const formattedDate = getLocalDate();
 
   // Format number with spaces every 3 characters for better readability
   const formatNumberWithSpaces = (num) => {
     const parts = parseFloat(num).toFixed(2).split('.');
     const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
     return `${integerPart}.${parts[1]}`;
+  };
+
+  // Get summary values based on selected currency and account type
+  const getSummaryValues = () => {
+    if (!summary) return { ingresos: 0, retiros: 0, ingresosVenta: 0 };
+    
+    const currency = selectedCurrency; // 'CUP' or 'USD'
+    
+    // If no account is selected, sum both Efectivo and Transferencia
+    if (!filters.id_cuenta) {
+      const ingresosEfectivo = summary[`totalIngresoEfectivo${currency}`] || 0;
+      const ingresosTransferencia = summary[`totalIngresoTransferencia${currency}`] || 0;
+      const retirosEfectivo = summary[`totalRetiroEfectivo${currency}`] || 0;
+      const retirosTransferencia = summary[`totalRetiroTransferencia${currency}`] || 0;
+      const ingresosVentaEfectivo = summary[`totalIngresoVentaEfectivo${currency}`] || 0;
+      const ingresosVentaTransferencia = summary[`totalIngresoVentaTransferencia${currency}`] || 0;
+      
+      return {
+        ingresos: ingresosEfectivo + ingresosTransferencia,
+        retiros: retirosEfectivo + retirosTransferencia,
+        ingresosVenta: ingresosVentaEfectivo + ingresosVentaTransferencia
+      };
+    }
+    
+    // If account is selected, use specific account type
+    const accountType = selectedAccountType; // 'Efectivo' or 'Transferencia'
+    const keyPrefix = `totalIngreso${accountType}${currency}`;
+    const retiroKey = `totalRetiro${accountType}${currency}`;
+    const ventaKey = `totalIngresoVenta${accountType}${currency}`;
+    
+    return {
+      ingresos: summary[keyPrefix] || 0,
+      retiros: summary[retiroKey] || 0,
+      ingresosVenta: summary[ventaKey] || 0
+    };
   };
 
   // Filter states
@@ -102,6 +143,8 @@ const OperacionesContent = () => {
   const [showTipoOperacionDropdown, setShowTipoOperacionDropdown] = useState(false);
   const [showFechaDesdePicker, setShowFechaDesdePicker] = useState(false);
   const [showFechaHastaPicker, setShowFechaHastaPicker] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState('CUP'); // 'CUP' or 'USD'
+  const [selectedAccountType, setSelectedAccountType] = useState('Efectivo'); // 'Efectivo' or 'Transferencia'
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
@@ -300,10 +343,6 @@ const OperacionesContent = () => {
   };
 
   const handleClearFilters = () => {
-    // Get current date in YYYY-MM-DD format
-    const today = new Date();
-    const formattedDate = today.toISOString().split('T')[0];
-
     const clearedFilters = { 
       id_cuenta: null,
       id_usuario: null,
@@ -497,7 +536,7 @@ const OperacionesContent = () => {
       <Header 
         onMenuPress={() => setSidebarOpen(true)}
         onThemePress={toggleTheme}
-        onSettingsPress={handleSettingsPress}
+        onSettingsPress={undefined}
         onNotificationsPress={handleNotificationsPress}
         onProfilePress={handleProfilePress}
         onViewModeToggle={toggleViewMode}
@@ -579,6 +618,9 @@ const OperacionesContent = () => {
                         setFilters(newFilters);
                         setCuentaSearchText('');
                         setShowCuentaDropdown(false);
+                        // Reset to default when no account is selected
+                        setSelectedCurrency('CUP');
+                        setSelectedAccountType('Efectivo');
                         fetchOperaciones(newFilters);
                       }}
                     >
@@ -594,6 +636,12 @@ const OperacionesContent = () => {
                             setFilters(newFilters);
                             setCuentaSearchText(cuenta.nombre);
                             setShowCuentaDropdown(false);
+                            // Detect currency and account type from selected account
+                            const accountType = cuenta.tipo_cuenta || 'Efectivo CUP';
+                            const currency = accountType.includes('USD') ? 'USD' : 'CUP';
+                            const type = accountType.includes('Transferencia') ? 'Transferencia' : 'Efectivo';
+                            setSelectedCurrency(currency);
+                            setSelectedAccountType(type);
                             fetchOperaciones(newFilters);
                           }}
                         >
@@ -919,6 +967,29 @@ const OperacionesContent = () => {
         {/* Summary Card */}
         {summary && (
           <Card style={[styles.summaryCard, { backgroundColor: colors.surface }]}>
+            <View style={styles.summaryHeader}>
+              <Text style={[styles.summaryTitle, { color: colors.onSurface }]}>Resumen de Operaciones</Text>
+              {!filters.id_cuenta ? (
+                <View style={[styles.currencyToggle, { backgroundColor: colors.background }]}>
+                  <TouchableOpacity
+                    style={[styles.currencyToggleButton, selectedCurrency === 'CUP' && { backgroundColor: colors.primary }]}
+                    onPress={() => setSelectedCurrency('CUP')}
+                  >
+                    <Text style={[styles.currencyToggleText, selectedCurrency === 'CUP' ? { color: '#fff' } : { color: colors.outline }]}>CUP</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.currencyToggleButton, selectedCurrency === 'USD' && { backgroundColor: colors.primary }]}
+                    onPress={() => setSelectedCurrency('USD')}
+                  >
+                    <Text style={[styles.currencyToggleText, selectedCurrency === 'USD' ? { color: '#fff' } : { color: colors.outline }]}>USD</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={[styles.currencyBadge, { backgroundColor: selectedCurrency === 'USD' ? '#16A34A' : colors.primary }]}>
+                  <Text style={styles.currencyBadgeText}>{selectedCurrency}</Text>
+                </View>
+              )}
+            </View>
             <View style={styles.summaryGridContainer}>
               <View style={[styles.summaryItem, styles.summaryItemGreen]}>
                 <View style={styles.summaryIconContainer}>
@@ -926,7 +997,7 @@ const OperacionesContent = () => {
                 </View>
                 <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Ingresos Manuales</Text>
                 <Text style={[styles.summaryItemValue, { color: '#4CAF50' }]}>
-                  {formatNumberWithSpaces(summary.totalIngresos || 0)}
+                  {formatNumberWithSpaces(getSummaryValues().ingresos)}
                 </Text>
               </View>
               <View style={[styles.summaryItem, styles.summaryItemRed]}>
@@ -935,7 +1006,7 @@ const OperacionesContent = () => {
                 </View>
                 <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Retiros Manuales</Text>
                 <Text style={[styles.summaryItemValue, { color: '#F44336' }]}>
-                  {formatNumberWithSpaces(summary.totalRetiros || 0)}
+                  {formatNumberWithSpaces(getSummaryValues().retiros)}
                 </Text>
               </View>
               <View style={[styles.summaryItem, styles.summaryItemBlue]}>
@@ -944,7 +1015,7 @@ const OperacionesContent = () => {
                 </View>
                 <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Ingresos por Venta</Text>
                 <Text style={[styles.summaryItemValue, { color: '#2196F3' }]}>
-                  {formatNumberWithSpaces(summary.totalIngresosVenta || 0)}
+                  {formatNumberWithSpaces(getSummaryValues().ingresosVenta)}
                 </Text>
               </View>
               <View style={[styles.summaryItem, styles.summaryItemPrimary]}>
@@ -953,7 +1024,7 @@ const OperacionesContent = () => {
                 </View>
                 <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Cantidad en Negocio</Text>
                 <Text style={[styles.summaryItemValue, { color: colors.primary }]}>
-                  {formatNumberWithSpaces((summary.totalIngresos || 0) + (summary.totalIngresosVenta || 0) - (summary.totalRetiros || 0))}
+                  {formatNumberWithSpaces(getSummaryValues().ingresos + getSummaryValues().ingresosVenta - getSummaryValues().retiros)}
                 </Text>
               </View>
             </View>
@@ -1362,6 +1433,43 @@ const createStyles = (responsive) => StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 5,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  summaryTitle: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+  },
+  currencyBadge: {
+    paddingHorizontal: responsive.responsivePadding(12),
+    paddingVertical: responsive.responsivePadding(6),
+    borderRadius: 20,
+  },
+  currencyBadgeText: {
+    color: '#fff',
+    fontSize: responsive.responsiveFontSize(12),
+    fontWeight: '700',
+    fontFamily: 'Inter',
+  },
+  currencyToggle: {
+    flexDirection: 'row',
+    borderRadius: 20,
+    padding: 2,
+  },
+  currencyToggleButton: {
+    paddingHorizontal: responsive.responsivePadding(12),
+    paddingVertical: responsive.responsivePadding(6),
+    borderRadius: 18,
+  },
+  currencyToggleText: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontWeight: '600',
+    fontFamily: 'Inter',
   },
   summaryGridContainer: {
     flexDirection: 'row',

@@ -49,12 +49,10 @@ const HomeContent = () => {
     : require('../../Logos/Abacus v1.1.png');
 
   const storeImageSource = isDarkMode
-    ? require('../../assets/Home_logo_darck.png')
+    ? require('../../assets/Home_logo_darck (2).png')
     : require('../../assets/Home_Logo.png');
 
   const getFirstName = (fullName) => {
-    console.log('getFirstName called with:', fullName);
-    console.log('User object:', user);
     if (!fullName) return 'Administrador';
     const name = fullName.trim();
     if (name === 'Administrador') return 'Administrador';
@@ -164,7 +162,7 @@ const HomeContent = () => {
         
         setExpiringProducts(productosConAlerta);
       } catch (error) {
-        console.error('Error al consultar productos próximos a vencer:', error);
+        // Error handling without console log
       } finally {
         setLoadingExpiring(false);
       }
@@ -173,10 +171,6 @@ const HomeContent = () => {
     fetchExpiringProducts();
   }, []);
 
-  console.log('Permissions object:', permissions);
-  console.log('User role:', user?.rol);
-  console.log('economico permission:', permissions.economico);
-  
   const isAdmin = user?.rol === 'Administrador';
   const userRole = user?.rol?.toLowerCase();
   const { entradaAccessLevels, salidaAccessLevels, operacionAccessLevels } = useAuth();
@@ -242,8 +236,6 @@ const HomeContent = () => {
       hasPermission: canAccessOperaciones
     },
   ];
-  
-  console.log('Main modules:', mainModules.map(m => ({ id: m.id, hasPermission: m.hasPermission })));
 
   const renderIcon = (item) => {
     const iconColor = item.hasPermission ? item.color : colors.outline;
@@ -272,7 +264,6 @@ const HomeContent = () => {
   };
 
   const handleModulePress = (module) => {
-    console.log('Module pressed:', module);
     if (module.hasPermission && module.screen) {
       navigation.navigate(module.screen);
     }
@@ -347,7 +338,6 @@ const HomeContent = () => {
                 <Text style={[styles.userName, { color: colors.onSurface }]}>
                   {getFirstName(user?.nombre_natural || user?.nombre_usuario)}
                 </Text>
-                {console.log('Rendering user name:', user?.nombre_natural, user?.nombre_usuario)}
                 <Text style={[styles.userRole, { color: colors.outline }]}>
                   {user?.rol || 'Administrador'}
                 </Text>
