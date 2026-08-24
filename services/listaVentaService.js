@@ -300,6 +300,44 @@ const getListaVentaById = async (id) => {
   return await getListaVentaWithRelations(id);
 };
 
+const createOperacionesSummary = () => ({
+  totalIngresoEfectivoCUP: 0,
+  totalIngresoVentaEfectivoCUP: 0,
+  totalRetiroEfectivoCUP: 0,
+  totalIngresoTransferenciaCUP: 0,
+  totalIngresoVentaTransferenciaCUP: 0,
+  totalRetiroTransferenciaCUP: 0,
+  totalIngresoEfectivoUSD: 0,
+  totalIngresoVentaEfectivoUSD: 0,
+  totalRetiroEfectivoUSD: 0,
+  totalIngresoTransferenciaUSD: 0,
+  totalIngresoVentaTransferenciaUSD: 0,
+  totalRetiroTransferenciaUSD: 0,
+});
+
+const summaryKeyByAccountType = {
+  "Efectivo CUP": {
+    Ingreso: "totalIngresoEfectivoCUP",
+    "Ingreso por Venta": "totalIngresoVentaEfectivoCUP",
+    Retiro: "totalRetiroEfectivoCUP",
+  },
+  "Transferencia CUP": {
+    Ingreso: "totalIngresoTransferenciaCUP",
+    "Ingreso por Venta": "totalIngresoVentaTransferenciaCUP",
+    Retiro: "totalRetiroTransferenciaCUP",
+  },
+  "Efectivo USD": {
+    Ingreso: "totalIngresoEfectivoUSD",
+    "Ingreso por Venta": "totalIngresoVentaEfectivoUSD",
+    Retiro: "totalRetiroEfectivoUSD",
+  },
+  "Transferencia USD": {
+    Ingreso: "totalIngresoTransferenciaUSD",
+    "Ingreso por Venta": "totalIngresoVentaTransferenciaUSD",
+    Retiro: "totalRetiroTransferenciaUSD",
+  },
+};
+
 const filterListaVentas = async (filters, limit, offset) => {
   const where = {};
   const andConditions = [];
@@ -363,10 +401,50 @@ const filterListaVentas = async (filters, limit, offset) => {
           total_efectivo_usd: 0,
           total_transferencia_cup: 0,
           total_transferencia_usd: 0,
+          operaciones: createOperacionesSummary(),
         },
       };
     }
     where.id_lista_venta = { [Op.in]: idsListaVenta };
+  }
+
+  if (filters.tipo_cuenta) {
+    const operacionesCoincidentes = await Operacion.findAll({
+      attributes: ["id_lista_venta"],
+      where: { id_lista_venta: { [Op.ne]: null } },
+      include: [
+        {
+          model: Cuenta,
+          as: "cuenta",
+          required: true,
+          where: { tipo_cuenta: filters.tipo_cuenta },
+        },
+      ],
+      raw: true,
+    });
+    const idsListaPorTipoCuenta = [
+      ...new Set(operacionesCoincidentes.map((operacion) => operacion.id_lista_venta)),
+    ];
+    if (idsListaPorTipoCuenta.length === 0) {
+      return {
+        rows: [],
+        count: 0,
+        summary: {
+          total_efectivo_cup: 0,
+          total_efectivo_usd: 0,
+          total_transferencia_cup: 0,
+          total_transferencia_usd: 0,
+          operaciones: createOperacionesSummary(),
+        },
+      };
+    }
+    const tipoCuentaCondition = { id_lista_venta: { [Op.in]: idsListaPorTipoCuenta } };
+    if (where.id_lista_venta) {
+      where[Op.and] = [where.id_lista_venta, tipoCuentaCondition];
+      delete where.id_lista_venta;
+    } else {
+      where.id_lista_venta = tipoCuentaCondition.id_lista_venta;
+    }
   }
 
   const ventasInclude = {
@@ -407,7 +485,10 @@ const filterListaVentas = async (filters, limit, offset) => {
         required: hasUserFilter,
         where: hasUserFilter ? { nombre_natural: { [Op.iLike]: `%${filters.nombre_usuario}%` } } : undefined,
       },
-      { model: Cuenta, as: "cuenta" },
+      {
+        model: Cuenta,
+        as: "cuenta",
+      },
     ],
   };
 
@@ -418,7 +499,9 @@ const filterListaVentas = async (filters, limit, offset) => {
     "Transferencia USD": "cantidad_cobrada_transferencia_usd",
   };
   if (filters.forma_cobro) where[formaColumnas[filters.forma_cobro]] = { [Op.gt]: 0 };
-  if (andConditions.length > 0) where[Op.and] = andConditions;
+  if (andConditions.length > 0) {
+    where[Op.and] = [...(where[Op.and] || []), ...andConditions];
+  }
 
   const queryOptions = {
     where,
@@ -433,12 +516,20 @@ const filterListaVentas = async (filters, limit, offset) => {
     total_efectivo_usd: 0,
     total_transferencia_cup: 0,
     total_transferencia_usd: 0,
+    operaciones: createOperacionesSummary(),
   };
   for (const lista of allRows) {
     summary.total_efectivo_cup += parseFloat(lista.cantidad_cobrada_efectivo_cup || 0);
     summary.total_efectivo_usd += parseFloat(lista.cantidad_cobrada_efectivo_usd || 0);
     summary.total_transferencia_cup += parseFloat(lista.cantidad_cobrada_transferencia_cup || 0);
     summary.total_transferencia_usd += parseFloat(lista.cantidad_cobrada_transferencia_usd || 0);
+    for (const operacion of lista.operaciones || []) {
+      const cuenta = operacion.cuenta;
+      const summaryKey = cuenta && summaryKeyByAccountType[cuenta.tipo_cuenta]?.[operacion.tipo_operacion];
+      if (summaryKey) {
+        summary.operaciones[summaryKey] += parseFloat(operacion.cantidad_operacion || 0);
+      }
+    }
   }
   return { rows, count, summary };
 };

@@ -34,6 +34,34 @@ router.get('/', authenticate(), configController.getConfig);
 
 /**
  * @swagger
+ * /config/logo:
+ *   put:
+ *     summary: Almacenar o actualizar el logo de la aplicación
+ *     tags: [Configuración]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - imagen
+ *             properties:
+ *               imagen:
+ *                 type: string
+ *                 description: Imagen codificada en Base64, con o sin prefijo data URI
+ *     responses:
+ *       200:
+ *         description: Logo almacenado correctamente
+ *       400:
+ *         description: Imagen Base64 inválida
+ */
+router.put('/logo', authenticate(), configController.updateLogo);
+
+/**
+ * @swagger
  * /config:
  *   put:
  *     summary: Actualizar el archivo de configuración

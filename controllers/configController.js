@@ -10,6 +10,8 @@ const { Op } = require('sequelize');
 
 // Ruta absoluta al archivo de configuración dentro de local_config
 const CONFIG_FILE = path.join(__dirname, '..', 'local_config', 'config.json');
+const LOGO_DIR = path.join(__dirname, '..', 'local_config_logo');
+const LOGO_FILE = path.join(LOGO_DIR, 'logo.web');
 
 // Función auxiliar para manejar errores (igual que en usuarioController)
 const handleError = (res, error) => {
@@ -53,6 +55,42 @@ class ConfigController {
       } catch (parseError) {
         throwError('El archivo de configuración contiene JSON inválido', 500);
       }
+    } catch (error) {
+      handleError(res, error);
+    }
+  }
+
+  /**
+   * PUT /config/logo
+   * Guarda o reemplaza el logo recibido como Base64 en local_config_logo/logo.web.
+   */
+  async updateLogo(req, res) {
+    try {
+      const body = req.body || {};
+      const { imagen } = body;
+
+      if (Object.keys(body).length !== 1 || typeof imagen !== 'string' || imagen.trim() === '') {
+        throwError('La petición debe contener únicamente el campo imagen como cadena Base64 no vacía', 400);
+      }
+
+      const base64Imagen = imagen.replace(/^data:[^;]+;base64,/, '').replace(/\s/g, '');
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64Imagen) || base64Imagen.length % 4 === 1) {
+        throwError('El campo imagen no contiene una imagen Base64 válida', 400);
+      }
+
+      const contenidoImagen = Buffer.from(base64Imagen.padEnd(Math.ceil(base64Imagen.length / 4) * 4, '='), 'base64');
+      if (contenidoImagen.length === 0) {
+        throwError('El campo imagen no contiene datos', 400);
+      }
+
+      await fs.mkdir(LOGO_DIR, { recursive: true });
+      await fs.writeFile(LOGO_FILE, contenidoImagen);
+
+      res.status(200).json({
+        message: 'Logo almacenado correctamente',
+        archivo: 'logo.web',
+        url: '/local_config_logo/logo.web',
+      });
     } catch (error) {
       handleError(res, error);
     }

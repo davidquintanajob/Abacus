@@ -26,6 +26,7 @@ app.use(cors({
 // Servir archivos estáticos (fotos si se usan)
 app.use("/fotos", express.static(path.join(__dirname, "fotos")));
 app.use("/imagenes_productos", express.static(path.join(__dirname, "imagenes_productos")));
+app.use("/local_config_logo", express.static(path.join(__dirname, "local_config_logo")));
 
 // Logger de solicitudes (simplificado)
 app.use((req, res, next) => {

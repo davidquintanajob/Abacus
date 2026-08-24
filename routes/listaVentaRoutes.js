@@ -99,6 +99,12 @@ const authenticate = require("../helpers/authenticate");
  *           enum: [Efectivo CUP, Efectivo USD, Transferencia CUP, Transferencia USD]
  *         description: Filtra por aquellas listas con cantidad > 0 en esa forma de cobro
  *       - in: query
+ *         name: tipo_cuenta
+ *         schema:
+ *           type: string
+ *           enum: [Efectivo CUP, Transferencia CUP, Efectivo USD, Transferencia USD]
+ *         description: Filtra por listas relacionadas con operaciones de cuentas de este tipo
+ *       - in: query
  *         name: nombre_usuario
  *         schema:
  *           type: string
@@ -154,6 +160,33 @@ const authenticate = require("../helpers/authenticate");
  *                       type: number
  *                     total_transferencia_usd:
  *                       type: number
+ *                     operaciones:
+ *                       type: object
+ *                       properties:
+ *                         totalIngresoEfectivoCUP:
+ *                           type: number
+ *                         totalIngresoVentaEfectivoCUP:
+ *                           type: number
+ *                         totalRetiroEfectivoCUP:
+ *                           type: number
+ *                         totalIngresoTransferenciaCUP:
+ *                           type: number
+ *                         totalIngresoVentaTransferenciaCUP:
+ *                           type: number
+ *                         totalRetiroTransferenciaCUP:
+ *                           type: number
+ *                         totalIngresoEfectivoUSD:
+ *                           type: number
+ *                         totalIngresoVentaEfectivoUSD:
+ *                           type: number
+ *                         totalRetiroEfectivoUSD:
+ *                           type: number
+ *                         totalIngresoTransferenciaUSD:
+ *                           type: number
+ *                         totalIngresoVentaTransferenciaUSD:
+ *                           type: number
+ *                         totalRetiroTransferenciaUSD:
+ *                           type: number
  */
 router.get("/lista-venta/filter", authenticate(), listaVentaController.filterListaVentas);
 

@@ -33,6 +33,7 @@ const filterListaVentas = async (req, res) => {
       cantidad_min,
       cantidad_max,
       forma_cobro,
+      tipo_cuenta,
       nombre_usuario,
       id_tienda,
       id_servicio,
@@ -79,6 +80,13 @@ const filterListaVentas = async (req, res) => {
         throwError(`forma_cobro debe ser uno de: ${formasValidas.join(", ")}`, 400);
       }
       filters.forma_cobro = forma_cobro;
+    }
+    if (tipo_cuenta) {
+      const tiposCuentaValidos = ["Efectivo CUP", "Transferencia CUP", "Efectivo USD", "Transferencia USD"];
+      if (!tiposCuentaValidos.includes(tipo_cuenta)) {
+        throwError(`tipo_cuenta debe ser uno de: ${tiposCuentaValidos.join(", ")}`, 400);
+      }
+      filters.tipo_cuenta = tipo_cuenta;
     }
     if (nombre_usuario) filters.nombre_usuario = nombre_usuario.trim();
     if (id_tienda !== undefined) {
