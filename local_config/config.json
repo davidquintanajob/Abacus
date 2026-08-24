@@ -1,5 +1,5 @@
 {
-  "cupToUsdRate": 650,
+  "cupToUsdRate": 600,
   "permissions": {
     "dependiente": false,
     "almacenero": false,
@@ -37,6 +37,16 @@
   },
   "operacionManagePermissions": {
     "dependiente": true,
+    "almacenero": false,
+    "economico": false
+  },
+  "salidaManagePermissions": {
+    "dependiente": false,
+    "almacenero": false,
+    "economico": false
+  },
+  "autoApplySuggestedCost": {
+    "dependiente": false,
     "almacenero": false,
     "economico": false
   }

@@ -584,7 +584,7 @@ const createListaVenta = async (listaData) => {
             id_usuario,
             id_lista_venta: nuevaLista.id_lista_venta,
             cantidad_operacion: item.cantidad,
-            tipo_operacion: "Ingreso",
+            tipo_operacion: "Ingreso por Venta",
             fecha_hora,
             motivo: "Ingreso por Venta",
             cambio_moneda,
@@ -715,7 +715,7 @@ const updateListaVenta = async (id, listaData) => {
         if (!item.cuenta) throwError(`Falta cuenta para ${item.key}`, 400);
         await Operacion.create({
           id_cuenta: item.cuenta.id_cuenta, id_usuario, id_lista_venta: lista.id_lista_venta,
-          cantidad_operacion: item.cantidad, tipo_operacion: "Ingreso", fecha_hora,
+          cantidad_operacion: item.cantidad, tipo_operacion: "Ingreso por Venta", fecha_hora,
           motivo: "Ingreso por Venta", cambio_moneda,
         }, { transaction });
         await actualizarFondoCuenta(item.cuenta.id_cuenta, item.cantidad, transaction);
