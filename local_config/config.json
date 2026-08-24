@@ -29,5 +29,15 @@
   },
   "customSalidaTypes": [
     "Test"
-  ]
+  ],
+  "operacionAccessLevels": {
+    "dependiente": "own_store",
+    "almacenero": "none",
+    "economico": "none"
+  },
+  "operacionManagePermissions": {
+    "dependiente": true,
+    "almacenero": false,
+    "economico": false
+  }
 }

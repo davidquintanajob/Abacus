@@ -106,6 +106,7 @@ const salidaRoutes = require("./routes/salidaRoutes");
 const cuentaRoutes = require("./routes/cuentaRoutes");
 const operacionRoutes = require("./routes/operacionRoutes");
 const listaVentaRoutes = require("./routes/listaVentaRoutes.js");
+const informesRoutes = require("./routes/informesRoutes");
 
 app.use("/", servicioRoutes);
 app.use("/", productoRoutes);
@@ -117,6 +118,7 @@ app.use("/", salidaRoutes);
 app.use("/", cuentaRoutes);
 app.use("/", operacionRoutes);
 app.use("/", listaVentaRoutes);
+app.use("/", informesRoutes);
 
 // Inicializar la base de datos y arrancar el servidor
 const startApp = async () => {
