@@ -57,7 +57,7 @@ const ServicioFormContent = () => {
   const [cantidadInputTexts, setCantidadInputTexts] = useState({});
   
   // Estados para la sección de Oferta
-  const [allServicios, setAllServicios] = useState([]);
+  const [allItems, setAllItems] = useState([]);
   const [showComponenteSelectorModal, setShowComponenteSelectorModal] = useState(false);
   const [componenteSearchText, setComponenteSearchText] = useState('');
   const [isOfertaExpanded, setIsOfertaExpanded] = useState(false);
@@ -341,6 +341,7 @@ const ServicioFormContent = () => {
       if (isOfflineMode) {
         // En modo offline, cargar servicios de AsyncStorage
         const allServicios = await storageService.getServicios();
+        
         let filtered = allServicios;
         
         if (searchTerm) {
@@ -352,51 +353,64 @@ const ServicioFormContent = () => {
           filtered = allServicios.filter(s => s.id_servicio !== servicio?.id_servicio);
         }
         
-        const totalItems = filtered.length;
+        // Add type indicator based on whether servicio has producto
+        const itemsWithTipo = filtered.map(s => ({
+          ...s,
+          tipo: s.producto ? 'producto' : 'servicio'
+        }));
+        
+        // Sort by name
+        itemsWithTipo.sort((a, b) => a.nombre.localeCompare(b.nombre));
+        
+        const totalItems = itemsWithTipo.length;
         const totalPages = Math.ceil(totalItems / serviciosPagination.limit);
         const startIndex = (page - 1) * serviciosPagination.limit;
         const endIndex = startIndex + serviciosPagination.limit;
-        const paginatedServicios = filtered.slice(startIndex, endIndex);
+        const paginatedItems = itemsWithTipo.slice(startIndex, endIndex);
         
-        setAllServicios(paginatedServicios);
+        setAllItems(paginatedItems);
         setServiciosPagination(prev => ({ ...prev, currentPage: page, totalPages, totalItems }));
         return;
       }
       
-      // Obtener todos los servicios (vendibles y no vendibles) con paginación del servidor
+      // Obtener todos los servicios (incluyendo productos) con paginación del servidor
       const filters = {};
       
       if (searchTerm) {
         filters.nombre = searchTerm;
       }
       
-      // Usar siempre limit 10 con paginación del servidor
+      // Usar fetchProducto=true para obtener servicios y productos
       const limit = serviciosPagination.limit;
-      const data = await getServicios(filters, page, limit);
+      const data = await getServicios({ ...filters, fetchProducto: true }, page, limit);
       
-      let allServiciosCombined = data.data || [];
+      let allItemsCombined = data.data || [];
       
       // Filtrar el servicio actual si estamos editando
       if (servicio?.id_servicio) {
-        allServiciosCombined = allServiciosCombined.filter(s => s.id_servicio !== servicio.id_servicio);
+        allItemsCombined = allItemsCombined.filter(s => s.id_servicio !== servicio.id_servicio);
       }
       
-      // Ordenar los servicios de la página actual
-      allServiciosCombined = allServiciosCombined.sort((a, b) => 
-        a.nombre.localeCompare(b.nombre)
-      );
+      // Add type indicator based on whether servicio has producto
+      const itemsWithTipo = allItemsCombined.map(s => ({
+        ...s,
+        tipo: s.producto ? 'producto' : 'servicio'
+      }));
       
-      // Usar la paginación del servidor (igual que ServiciosScreen.js)
-      setAllServicios(allServiciosCombined);
+      // Ordenar por nombre
+      itemsWithTipo.sort((a, b) => a.nombre.localeCompare(b.nombre));
+      
+      // Usar la paginación del servidor
+      setAllItems(itemsWithTipo);
       setServiciosPagination(data.pagination || { 
         currentPage: page, 
         limit: limit, 
         totalPages: 1, 
-        totalItems: allServiciosCombined.length 
+        totalItems: itemsWithTipo.length 
       });
     } catch (err) {
-      console.error('Error fetching servicios:', err);
-      setAllServicios([]);
+      console.error('Error fetching servicios y productos:', err);
+      setAllItems([]);
     } finally {
       setIsLoadingServicios(false);
     }
@@ -445,28 +459,30 @@ const ServicioFormContent = () => {
     }
   };
 
-  const handleAddServicioComponente = (servicioSeleccionado) => {
+  const handleAddServicioComponente = (itemSeleccionado) => {
+    const id = itemSeleccionado.id_servicio;
     const existe = formData.ofertaList.find(
-      item => item.id_servicio_componente === servicioSeleccionado.id_servicio
+      item => item.id_servicio_componente === id
     );
     if (existe) {
-      showToast({ type: 'warning', message: 'Este servicio ya está agregado como componente' });
+      showToast({ type: 'warning', message: 'Este elemento ya está agregado como componente' });
       return;
     }
     
-    // Get cost data from the selected servicio
-    const tiendasServicio = servicioSeleccionado.tiendas_servicio || servicioSeleccionado.servicioTiendaList || [];
-    const firstTienda = tiendasServicio[0];
+    // Get cost data from the selected item (servicio or producto)
+    const tiendasItem = itemSeleccionado.tiendas_servicio || itemSeleccionado.servicioTiendaList || [];
+    const firstTienda = tiendasItem[0];
     
     setFormData(prev => ({
       ...prev,
       ofertaList: [
         ...prev.ofertaList,
         {
-          id_servicio_componente: servicioSeleccionado.id_servicio,
+          id_servicio_componente: id,
+          tipo: itemSeleccionado.tipo,
           cantidad: 1.0,
-          nombre: servicioSeleccionado.nombre,
-          categoria: servicioSeleccionado.categoria,
+          nombre: itemSeleccionado.nombre,
+          categoria: itemSeleccionado.categoria,
           costo_cup: firstTienda?.costo_cup || 0,
           costo_usd: firstTienda?.costo_usd || 0,
         }
@@ -515,15 +531,15 @@ const ServicioFormContent = () => {
     let totalCostoUsd = 0;
 
     formData.ofertaList.forEach(componente => {
-      // Use stored cost data from the component itself, or search in allServicios if not available
+      // Use stored cost data from the component itself, or search in allItems if not available
       let costoCup = componente.costo_cup;
       let costoUsd = componente.costo_usd;
 
       if (costoCup === undefined || costoUsd === undefined) {
-        const servicioComponente = allServicios.find(s => s.id_servicio === componente.id_servicio_componente);
-        if (servicioComponente) {
-          const tiendasServicio = servicioComponente.tiendas_servicio || servicioComponente.servicioTiendaList || [];
-          const firstTienda = tiendasServicio[0];
+        const itemComponente = allItems.find(item => item.id_servicio === componente.id_servicio_componente);
+        if (itemComponente) {
+          const tiendasItem = itemComponente.tiendas_servicio || itemComponente.servicioTiendaList || [];
+          const firstTienda = tiendasItem[0];
           costoCup = firstTienda?.costo_cup || 0;
           costoUsd = firstTienda?.costo_usd || 0;
         }
@@ -547,7 +563,7 @@ const ServicioFormContent = () => {
         costo_usd_general: costo_usd,
       }));
     }
-  }, [formData.ofertaList, allServicios, isOferta]);
+  }, [formData.ofertaList, allItems, isOferta]);
 
   const handleSave = async () => {
     // Validation
@@ -573,7 +589,7 @@ const ServicioFormContent = () => {
     }
     // Validate that oferta has at least one component when in oferta mode
     if (isOferta && (!formData.ofertaList || formData.ofertaList.length === 0)) {
-      showToast({ type: 'warning', message: 'Debe agregar al menos un servicio componente para la oferta' });
+      showToast({ type: 'warning', message: 'Debe agregar al menos un servicio o producto componente para la oferta' });
       return;
     }
     // Validate that there are no duplicate stores in servicioTiendaList
@@ -1064,11 +1080,11 @@ const ServicioFormContent = () => {
             )}
           </View>
 
-          {/* Servicios (Oferta) Section */}
+          {/* Servicios y Productos (Oferta) Section */}
           {isOferta && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Servicios (Oferta)</Text>
+                <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Servicios y Productos (Oferta)</Text>
                 <View style={styles.sectionActions}>
                   {canEditService && (
                     <TouchableOpacity
@@ -1095,7 +1111,7 @@ const ServicioFormContent = () => {
               <>
                 {formData.ofertaList.length === 0 ? (
                   <Text style={[styles.emptyText, { color: colors.outline }]}>
-                    No hay servicios componentes agregados
+                    No hay servicios ni productos componentes agregados
                   </Text>
                 ) : (
                   formData.ofertaList.map((componente, index) => (
@@ -1585,7 +1601,7 @@ const ServicioFormContent = () => {
           <View style={styles.modalOverlay}>
             <Card style={[styles.dropdownModal, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
               <View style={styles.modalHeader}>
-                <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Seleccionar Servicio Componente</Text>
+                <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Seleccionar Servicio o Producto</Text>
                 <TouchableOpacity
                   style={styles.closeButton}
                   onPress={() => setShowComponenteSelectorModal(false)}
@@ -1595,7 +1611,7 @@ const ServicioFormContent = () => {
               </View>
               <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
                 <Ionicons 
-                  name="search-outline" 
+                  name="search" 
                   size={responsive.responsiveWidth(18)} 
                   color={colors.outline} 
                   style={styles.searchIcon}
@@ -1603,7 +1619,7 @@ const ServicioFormContent = () => {
                 <TextInput
                   style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
                   placeholderTextColor={colors.outline}
-                  placeholder="Buscar servicio..."
+                  placeholder="Buscar servicio o producto..."
                   value={componenteSearchText}
                   onChangeText={setComponenteSearchText}
                 />
@@ -1612,27 +1628,43 @@ const ServicioFormContent = () => {
                 {isLoadingServicios ? (
                   <View style={styles.loadingContainer}>
                     <ActivityIndicator size="small" color={colors.primary} />
-                    <Text style={[styles.loadingText, { color: colors.outline }]}>Cargando servicios...</Text>
+                    <Text style={[styles.loadingText, { color: colors.outline }]}>Cargando servicios y productos...</Text>
                   </View>
-                ) : allServicios.length === 0 ? (
-                  <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron servicios</Text>
+                ) : allItems.length === 0 ? (
+                  <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron servicios ni productos</Text>
                 ) : (
-                  allServicios.map((servicio, index) => (
-                    <View key={servicio.id_servicio}>
+                  allItems.map((item, index) => {
+                    const key = item.id_servicio || `${item.tipo}-${item.nombre}-${index}`;
+                    return (
+                      <View key={key}>
                       <TouchableOpacity
                         style={styles.dropdownItem}
-                        onPress={() => handleAddServicioComponente(servicio)}
+                        onPress={() => handleAddServicioComponente(item)}
                       >
-                        <View>
-                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{servicio.nombre}</Text>
-                          <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>{servicio.categoria}</Text>
+                        <View style={styles.dropdownItemContent}>
+                          <View style={styles.dropdownItemMain}>
+                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{item.nombre}</Text>
+                            <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>{item.categoria}</Text>
+                          </View>
+                          <View style={[
+                            styles.typeBadge, 
+                            { backgroundColor: item.tipo === 'servicio' ? colors.primary : colors.tertiary }
+                          ]}>
+                            <Text style={[
+                              styles.typeBadgeText,
+                              { color: '#fff' }
+                            ]}>
+                              {item.tipo === 'servicio' ? 'Servicio' : 'Producto'}
+                            </Text>
+                          </View>
                         </View>
                       </TouchableOpacity>
-                      {index < allServicios.length - 1 && (
+                      {index < allItems.length - 1 && (
                         <View style={[styles.separatorLine, { backgroundColor: colors.outlineVariant }]} />
                       )}
                     </View>
-                  ))
+                    );
+                  })
                 )}
               </ScrollView>
               {serviciosPagination.totalPages > 1 && (
@@ -2017,6 +2049,25 @@ const createStyles = (responsive) => StyleSheet.create({
     fontFamily: 'Inter',
     marginTop: responsive.responsiveMargin(4),
   },
+  dropdownItemContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dropdownItemMain: {
+    flex: 1,
+  },
+  typeBadge: {
+    paddingHorizontal: responsive.responsivePadding(8),
+    paddingVertical: responsive.responsivePadding(4),
+    borderRadius: 12,
+    marginLeft: responsive.responsiveMargin(8),
+  },
+  typeBadgeText: {
+    fontSize: responsive.fontSizes.caption,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
   separatorLine: {
     height: 1,
     marginVertical: responsive.responsiveMargin(8),
@@ -2053,6 +2104,7 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   componenteItem: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     padding: responsive.responsivePadding(12),
     borderRadius: 8,
@@ -2062,15 +2114,32 @@ const createStyles = (responsive) => StyleSheet.create({
   componenteInfo: {
     flex: 1,
   },
+  componenteNameRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   componenteNombre: {
     fontSize: responsive.fontSizes.body,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+    flex: 1,
+  },
+  componenteTypeBadge: {
+    paddingHorizontal: responsive.responsivePadding(8),
+    paddingVertical: responsive.responsivePadding(4),
+    borderRadius: 12,
+    marginLeft: responsive.responsiveMargin(8),
+  },
+  componenteTypeBadgeText: {
+    fontSize: responsive.fontSizes.caption,
     fontWeight: '600',
     fontFamily: 'Inter',
-    marginBottom: responsive.responsiveMargin(4),
   },
   componenteCategoria: {
     fontSize: responsive.fontSizes.bodySmall,
     fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(4),
   },
   componenteCantidadRow: {
     flexDirection: 'row',

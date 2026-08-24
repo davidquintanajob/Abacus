@@ -354,11 +354,6 @@ const EntradaFormContent = () => {
   const handleSave = async () => {
     // Validaciones para modo múltiple
     if (isMultipleMode) {
-      if (!formData.tienda) {
-        showToast({ type: 'warning', message: 'Debe seleccionar una tienda' });
-        return;
-      }
-      
       // Filter out empty entries (without product selected)
       const validEntradas = multipleEntradas.filter(e => e.producto !== null);
       
@@ -1395,6 +1390,13 @@ const EntradaFormContent = () => {
     if (multipleProductoInputRefs.current[id]) {
       multipleProductoInputRefs.current[id].blur();
     }
+
+    // Auto-generate new empty form if this is the last entry
+    const lastIndex = multipleEntradas.length - 1;
+    const currentEntryIndex = multipleEntradas.findIndex(e => e.id === id);
+    if (currentEntryIndex === lastIndex) {
+      addNewEntrada();
+    }
   };
 
   const searchProductosMultiple = async (id, searchTerm) => {
@@ -2392,17 +2394,17 @@ const EntradaFormContent = () => {
                   style={[
                     styles.addProductButton,
                     { 
-                      backgroundColor: isEntradaComplete(multipleEntradas[multipleEntradas.length - 1]) ? colors.primary : colors.outlineVariant,
-                      opacity: isEntradaComplete(multipleEntradas[multipleEntradas.length - 1]) ? 1 : 0.5
+                      backgroundColor: multipleEntradas[multipleEntradas.length - 1]?.producto !== null ? colors.primary : colors.outlineVariant,
+                      opacity: multipleEntradas[multipleEntradas.length - 1]?.producto !== null ? 1 : 0.5
                     }
                   ]}
                   onPress={() => addNewEntrada()}
-                  disabled={!isEntradaComplete(multipleEntradas[multipleEntradas.length - 1])}
+                  disabled={multipleEntradas[multipleEntradas.length - 1]?.producto === null}
                 >
-                  <Ionicons name="add-circle" size={responsive.responsiveWidth(20)} color={isEntradaComplete(multipleEntradas[multipleEntradas.length - 1]) ? '#fff' : colors.outline} />
+                  <Ionicons name="add-circle" size={responsive.responsiveWidth(20)} color={multipleEntradas[multipleEntradas.length - 1]?.producto !== null ? '#fff' : colors.outline} />
                   <Text style={[
                     styles.addProductButtonText,
-                    { color: isEntradaComplete(multipleEntradas[multipleEntradas.length - 1]) ? '#fff' : colors.outline }
+                    { color: multipleEntradas[multipleEntradas.length - 1]?.producto !== null ? '#fff' : colors.outline }
                   ]}>
                     Agregar otro producto
                   </Text>
