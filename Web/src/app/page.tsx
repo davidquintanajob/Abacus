@@ -1,0 +1,744 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
+import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { Header } from '../components/layout/Header';
+import { Sidebar } from '../components/layout/Sidebar';
+import { AlertTriangle, Clock, XCircle, CheckCircle, Phone, MessageCircle, ArrowRight, Lock, Box, ShoppingCart, DollarSign, Users } from 'lucide-react';
+import { getEntradas } from '../services/entradaService';
+import { SvgIcon } from '../components/common/SvgIcon';
+import { darkColors } from '../lib/colors';
+import { getGeneralInformation } from '../services/informesService';
+import { useResponsive } from '../hooks/useResponsive';
+
+
+export default function HomePage() {
+  const { colors, isDark, toggleTheme } = useTheme();
+  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels } = useAuth();
+  const { isMobile, isTablet, isDesktop } = useResponsive();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [greeting, setGreeting] = useState('Buenos días');
+  const [currentDate, setCurrentDate] = useState('');
+  const [expiringProducts, setExpiringProducts] = useState<any[]>([]);
+  const [loadingExpiring, setLoadingExpiring] = useState(false);
+  const [stats, setStats] = useState({
+    cantidad_productos: 0,
+    total_ventas_cup: 0,
+    total_ventas_usd: 0,
+    usuarios_activos: 0,
+    ganancia_cup: 0
+  });
+  const [loadingStats, setLoadingStats] = useState(false);
+
+  const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
+
+  useEffect(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) setGreeting('Buenos días');
+    else if (hour < 18) setGreeting('Buenas tardes');
+    else setGreeting('Buenas noches');
+  }, []);
+
+  useEffect(() => {
+    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric' };
+    const date = new Date().toLocaleDateString('es-ES', options);
+    setCurrentDate(date);
+  }, []);
+
+  const getFirstName = (fullName: string) => {
+    if (!fullName) return 'Administrador';
+    const name = fullName.trim();
+    if (name === 'Administrador') return 'Administrador';
+    return name.split(' ')[0];
+  };
+
+  const getRoleImage = () => {
+    const role = user?.rol?.toLowerCase();
+    if (!role) return isDarkMode ? '/home-dark.png' : '/home-light.png';
+
+    if (role === 'almacenero') {
+      return isDarkMode ? '/almacenero-dark.png' : '/almacenero-light.png';
+    } else if (role === 'dependiente') {
+      return isDarkMode ? '/dependiente-dark.png' : '/dependiente-light.png';
+    } else if (role === 'económico') {
+      return isDarkMode ? '/economico-dark.png' : '/economico-light.png';
+    } else {
+      return isDarkMode ? '/home-dark.png' : '/home-light.png';
+    }
+  };
+
+  const isAdmin = user?.rol === 'Administrador';
+  const userRole = user?.rol?.toLowerCase();
+
+  const canAccessSalidas =
+    isAdmin ||
+    (userRole === 'dependiente' && salidaAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'almacenero' && salidaAccessLevels?.almacenero !== 'none') ||
+    (userRole === 'económico' && salidaAccessLevels?.economico !== 'none');
+
+  const canAccessOperaciones =
+    isAdmin ||
+    (userRole === 'dependiente' && operacionAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'almacenero' && operacionAccessLevels?.almacenero !== 'none') ||
+    (userRole === 'económico' && operacionAccessLevels?.economico !== 'none');
+
+  const mainModules = [
+    {
+      id: 'servicios',
+      icon: '/lanza-libre.svg',
+      iconType: 'svg',
+      label: 'Servicios y Ofertas',
+      description: 'Gestionar servicios y ofertas',
+      color: colors.primary,
+      darkColor: darkColors.primary, // #a0cafb — igual que la app móvil
+      screen: '/servicios',
+      permission: true,
+      hasPermission: true
+    },
+    {
+      id: 'productos',
+      icon: '/product.svg',
+      iconType: 'svg',
+      label: 'Productos',
+      description: 'Gestionar inventario',
+      color: '#16A34A',
+      darkColor: '#16A34A', // mismo color en ambos modos, igual que en la app
+      screen: '/productos',
+      permission: true,
+      hasPermission: true
+    },
+    {
+      id: 'ventas',
+      icon: '/box.svg',
+      iconType: 'svg',
+      label: 'Ventas',
+      description: 'Registrar ventas',
+      color: '#185FA5',
+      darkColor: '#185FA5', // mismo color en ambos modos, igual que en la app
+      screen: '/ventas',
+      permission: canAccessSalidas,
+      hasPermission: canAccessSalidas
+    },
+    {
+      id: 'operaciones',
+      icon: '/report.svg',
+      iconType: 'svg',
+      label: 'Operaciones',
+      description: 'Gestión de operaciones',
+      color: colors.secondary,
+      darkColor: darkColors.secondary, // #ffb59e — igual que la app móvil
+      screen: '/operaciones',
+      permission: canAccessOperaciones,
+      hasPermission: canAccessOperaciones
+    },
+  ];
+
+  const formatNumber = (value: number) => {
+    if (value === null || value === undefined) return '0';
+    if (value >= 1000) {
+      return (value / 1000).toFixed(1) + 'K';
+    }
+    return value.toFixed(0);
+  };
+
+  const handleSupportCall = () => {
+    window.open('tel:56242671', '_blank');
+  };
+
+  const handleWhatsApp = () => {
+    window.open('https://wa.me/56242671', '_blank');
+  };
+
+  const handleLogoPress = () => {
+    if (user) {
+      window.location.href = '/';
+    }
+  };
+
+  const handleModulePress = (module: any) => {
+    if (module.hasPermission && module.screen) {
+      window.location.href = module.screen;
+    }
+  };
+
+  // Función para calcular el umbral dinámico de alerta
+  const calculateThreshold = (vidaUtil: number, porcentaje: number, minAbs: number, maxAbs: number) => {
+    return Math.max(minAbs, Math.min(maxAbs, porcentaje * vidaUtil));
+  };
+
+  // Función para determinar el nivel de alerta de un producto
+  const getExpirationAlert = (fechaCreacion: string, fechaVencimiento: string) => {
+    const hoy = new Date();
+    const vencimiento = new Date(fechaVencimiento);
+    const creacion = new Date(fechaCreacion);
+    
+    const vidaUtil = Math.ceil((vencimiento.getTime() - creacion.getTime()) / (1000 * 60 * 60 * 24));
+    const diasRestantes = Math.ceil((vencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diasRestantes <= 0) {
+      return { level: 'expired', days: diasRestantes, label: 'Vencido' };
+    }
+    
+    const umbralAmarillo = calculateThreshold(vidaUtil, 0.20, 3, 30);
+    const umbralRojo = calculateThreshold(vidaUtil, 0.10, 1, 7);
+    
+    if (diasRestantes <= umbralRojo) {
+      return { level: 'critical', days: diasRestantes, label: 'Crítico' };
+    } else if (diasRestantes <= umbralAmarillo) {
+      return { level: 'warning', days: diasRestantes, label: 'Próximo a vencer' };
+    } else {
+      return { level: 'ok', days: diasRestantes, label: 'Vigente' };
+    }
+  };
+
+  const getExpirationAlertColor = (level: string) => {
+    switch (level) {
+      case 'critical':
+        return isDarkMode ? '#EF4444' : '#DC2626';
+      case 'warning':
+        return isDarkMode ? '#FBBF24' : '#F59E0B';
+      case 'expired':
+        return isDarkMode ? '#9CA3AF' : '#1F2937';
+      default:
+        return colors.outline;
+    }
+  };
+
+  const getExpirationAlertIcon = (level: string) => {
+    const iconColor = getExpirationAlertColor(level);
+    switch (level) {
+      case 'critical':
+        return <AlertTriangle size={20} color={iconColor} />;
+      case 'warning':
+        return <Clock size={20} color={iconColor} />;
+      case 'expired':
+        return <XCircle size={20} color={iconColor} />;
+      default:
+        return <CheckCircle size={20} color="#16A34A" />;
+    }
+  };
+
+  // Consultar productos próximos a vencer
+  useEffect(() => {
+    const fetchExpiringProducts = async () => {
+      try {
+        setLoadingExpiring(true);
+        
+        const hoy = new Date();
+        const fechaMaxima = new Date(hoy);
+        fechaMaxima.setDate(fechaMaxima.getDate() + 30);
+        
+        const fechaMaximaStr = fechaMaxima.toISOString().split('T')[0];
+        
+        const response = await getEntradas(
+          { fecha_vencimiento_hasta: fechaMaximaStr },
+          1,
+          20
+        );
+        
+        const productosConAlerta = response.data
+          .filter((entrada: any) => entrada.fecha_vencimiento && entrada.cantidad_restante > 0)
+          .map((entrada: any) => {
+            const alerta = getExpirationAlert(entrada.fecha, entrada.fecha_vencimiento);
+            return {
+              ...entrada,
+              alerta,
+              nombreProducto: entrada.servicioTienda?.servicio?.nombre || 'Producto desconocido',
+              codigoLote: entrada.codigo_lote || 'N/A'
+            };
+          })
+          .filter((item: any) => item.alerta.level === 'critical' || item.alerta.level === 'warning' || item.alerta.level === 'expired')
+          .sort((a: any, b: any) => a.alerta.days - b.alerta.days)
+          .slice(0, 5);
+        
+        setExpiringProducts(productosConAlerta);
+      } catch (error) {
+        // Error al cargar productos próximos a vencer — servidor no disponible
+      } finally {
+        setLoadingExpiring(false);
+      }
+    };
+
+    fetchExpiringProducts();
+  }, []);
+
+  // Consultar información general para el RESUMEN
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setLoadingStats(true);
+        const data = await getGeneralInformation();
+        setStats(data);
+      } catch (error) {
+        // Error al cargar estadísticas — servidor no disponible
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  return (
+    <div style={{ minHeight: '100vh', backgroundColor: colors.background }}>
+      <Header 
+        onMenuPress={() => setSidebarOpen(true)}
+        onThemePress={toggleTheme}
+        onNotificationsPress={() => {}}
+        onLogoPress={handleLogoPress}
+        isDark={isDarkMode}
+        title="Abacus"
+        showLogo={true}
+      />
+      
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        onClose={() => setSidebarOpen(false)}
+      />
+
+      <div style={{ 
+        marginTop: '80px',
+        marginRight: 'auto',
+        marginBottom: '0',
+        marginLeft: 'auto',
+        paddingTop: isMobile ? '20px' : isTablet ? '32px' : '40px',
+        paddingRight: isMobile ? '20px' : isTablet ? '32px' : '40px',
+        paddingBottom: '120px',
+        paddingLeft: isMobile ? '20px' : isTablet ? '32px' : '40px',
+        maxWidth: isDesktop ? '1400px' : '100%',
+      }}>
+        {/* Header / Bienvenida */}
+        <div style={{ marginBottom: '24px' }}>
+          <div 
+            style={{ 
+              borderRadius: '16px', 
+              padding: '24px', 
+              backgroundColor: isDarkMode ? '#0A1628' : '#F5F8FC',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <p style={{ fontSize: isDesktop ? '32px' : isTablet ? '28px' : '24px', fontWeight: 'bold', color: colors.onSurface, margin: 0 }}>
+                  ¡Bienvenido!
+                </p>
+                <p style={{ fontSize: isDesktop ? '20px' : isTablet ? '18px' : '16px', color: colors.onSurface, margin: '4px 0 0 0' }}>
+                  {isMobile ? getFirstName(user?.nombre_natural || user?.nombre_usuario) : (user?.nombre_natural || user?.nombre_usuario)}
+                </p>
+                <p style={{ fontSize: '14px', color: colors.outline, margin: '4px 0 0 0' }}>
+                  {user?.rol || 'Administrador'}
+                </p>
+                <p style={{ fontSize: '14px', color: colors.outline, margin: '4px 0 0 0' }}>
+                  {currentDate}
+                </p>
+              </div>
+              <Image
+                src={getRoleImage()}
+                alt="Store"
+                width={isDesktop ? 120 : isTablet ? 100 : 80}
+                height={isDesktop ? 120 : isTablet ? 100 : 80}
+                style={{ borderRadius: '8px' }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Alertas de Vencimiento */}
+        {expiringProducts.length > 0 && (
+          <div style={{ marginBottom: '24px' }}>
+            <p
+              style={{ 
+                fontSize: '12px', 
+                fontWeight: '600', 
+                marginBottom: '16px', 
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: colors.outline 
+              }}
+            >
+              ALERTAS DE VENCIMIENTO
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {expiringProducts.map((producto, index) => (
+                <div
+                  key={producto.id || index}
+                  style={{
+                    borderRadius: '12px',
+                    padding: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    backgroundColor: colors.surface,
+                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                    borderLeftWidth: '4px',
+                    borderLeftStyle: 'solid',
+                    borderLeftColor: getExpirationAlertColor(producto.alerta.level)
+                  }}
+                >
+                  <div
+                    style={{ 
+                      width: '40px', 
+                      height: '40px', 
+                      borderRadius: '8px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                      marginRight: '12px'
+                    }}
+                  >
+                    {getExpirationAlertIcon(producto.alerta.level)}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontWeight: '600', color: colors.onSurface, margin: 0 }}>
+                      {producto.nombreProducto}
+                    </p>
+                    <p style={{ fontSize: '14px', color: colors.outline, margin: '4px 0 0 0' }}>
+                      Lote: {producto.codigoLote}
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <p
+                      style={{ 
+                        fontSize: '14px', 
+                        fontWeight: '600',
+                        color: getExpirationAlertColor(producto.alerta.level),
+                        margin: 0
+                      }}
+                    >
+                      {producto.alerta.label}
+                    </p>
+                    <p style={{ fontSize: '12px', color: colors.outline, margin: '4px 0 0 0' }}>
+                      {producto.alerta.days === 0 ? 'Hoy' :
+                       producto.alerta.days === 1 ? 'Mañana' :
+                       producto.alerta.days === -1 ? 'Ayer' :
+                       producto.alerta.days < 0 ? `${Math.abs(producto.alerta.days)} días` :
+                       `${producto.alerta.days} días`}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Módulos Principales */}
+        <div style={{ marginBottom: '24px' }}>
+          <p
+            style={{ 
+              fontSize: '12px', 
+              fontWeight: '600', 
+              marginBottom: '16px', 
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              color: colors.outline 
+            }}
+          >
+            MÓDULOS PRINCIPALES
+          </p>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : isTablet ? 'repeat(3, 1fr)' : 'repeat(4, 1fr)', 
+            gap: isMobile ? '16px' : '24px' 
+          }}>
+            {mainModules.map((module) => (
+              <button
+                key={module.id}
+                onClick={() => handleModulePress(module)}
+                disabled={!module.hasPermission}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  padding: 0,
+                  cursor: module.hasPermission ? 'pointer' : 'not-allowed',
+                  opacity: module.hasPermission ? 1 : 0.5,
+                  transition: isDesktop ? 'transform 0.2s ease, box-shadow 0.2s ease' : 'none'
+                }}
+                onMouseEnter={(e) => {
+                  if (isDesktop && module.hasPermission) {
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.15)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (isDesktop) {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }
+                }}
+              >
+                <div
+                  style={{
+                    borderRadius: isMobile ? '16px' : '20px',
+                    paddingTop: isMobile ? '12px' : '20px',
+                    paddingBottom: 0,
+                    backgroundColor: isDarkMode ? '#0A1628' : '#F5F8FC',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    overflow: 'hidden',
+                    minHeight: isDesktop ? '180px' : 'auto'
+                  }}
+                >
+                  <div style={{ paddingLeft: '12px', paddingRight: '12px', alignItems: 'center', width: '100%', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                    {module.iconType === 'svg' ? (
+                      <div style={{ margin: '0 auto 8px', width: isDesktop ? '40px' : '28px', height: isDesktop ? '40px' : '28px' }}>
+                        <SvgIcon
+                          src={module.icon}
+                          size={isDesktop ? 40 : 28}
+                          color={module.hasPermission
+                            ? (isDarkMode ? (module.darkColor || module.color) : module.color)
+                            : colors.outline
+                          }
+                        />
+                      </div>
+                    ) : null}
+                    <p style={{ fontWeight: '600', color: colors.onSurface, margin: '0 0 8px 0', fontSize: isDesktop ? '16px' : '14px', textAlign: 'center' }}>
+                      {module.label}
+                    </p>
+                  </div>
+                  {module.hasPermission ? (
+                    <div
+                      style={{
+                        marginTop: 'auto',
+                        paddingTop: isDesktop ? '12px' : '8px',
+                        paddingBottom: isDesktop ? '12px' : '8px',
+                        borderTop: `1px solid ${isDarkMode ? (module.darkColor || module.color) : module.color}30`,
+                        backgroundColor: `${isDarkMode ? (module.darkColor || module.color) : module.color}08`,
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <p style={{ fontSize: isDesktop ? '14px' : '12px', fontWeight: '600', color: isDarkMode ? (module.darkColor || module.color) : module.color, margin: 0 }}>
+                        Acceder
+                      </p>
+                      <ArrowRight size={isDesktop ? 20 : 16} color={isDarkMode ? (module.darkColor || module.color) : module.color} />
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        marginTop: '8px',
+                        paddingTop: '8px',
+                        paddingBottom: '8px',
+                        borderTop: `1px solid ${colors.outline}30`,
+                        backgroundColor: `${colors.outline}08`,
+                        width: '100%',
+                        opacity: 0.5,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <p style={{ fontSize: '12px', fontWeight: '600', color: colors.outline, margin: 0 }}>
+                        Sin permisos
+                      </p>
+                      <Lock size={16} color={colors.outline} />
+                    </div>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Estadísticas */}
+        <div style={{ marginBottom: '24px' }}>
+          <p
+            style={{ 
+              fontSize: '12px', 
+              fontWeight: '600', 
+              marginBottom: '16px', 
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              color: colors.outline 
+            }}
+          >
+            RESUMEN
+          </p>
+          <div
+            style={{
+              borderRadius: '16px',
+              padding: '20px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+              backgroundColor: colors.surface
+            }}
+          >
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: isMobile ? '8px' : '16px' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div
+                  style={{
+                    width: isMobile ? '32px' : '40px',
+                    height: isMobile ? '32px' : '40px',
+                    margin: '0 auto 8px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: `${colors.primary}15`
+                  }}
+                >
+                  <Box size={isMobile ? 14 : 20} color={colors.primary} />
+                </div>
+                <p style={{ fontSize: isMobile ? '14px' : '20px', fontWeight: 'bold', color: colors.onSurface, margin: 0 }}>
+                  {loadingStats ? '...' : stats.cantidad_productos}
+                </p>
+                <p style={{ fontSize: isMobile ? '10px' : '14px', color: colors.outline, margin: '4px 0 0 0', lineHeight: '1.3' }}>
+                  Productos en stock
+                </p>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div
+                  style={{
+                    width: isMobile ? '32px' : '40px',
+                    height: isMobile ? '32px' : '40px',
+                    margin: '0 auto 8px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: '#16A34A15'
+                  }}
+                >
+                  <ShoppingCart size={isMobile ? 14 : 20} color="#16A34A" />
+                </div>
+                <p style={{ fontSize: isMobile ? '14px' : '20px', fontWeight: 'bold', color: colors.onSurface, margin: 0 }}>
+                  {loadingStats ? '...' : (stats.total_ventas_cup || 0).toFixed(0)}
+                </p>
+                <p style={{ fontSize: isMobile ? '10px' : '14px', color: colors.outline, margin: '4px 0 0 0', lineHeight: '1.3' }}>
+                  Ventas hoy
+                </p>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div
+                  style={{
+                    width: isMobile ? '32px' : '40px',
+                    height: isMobile ? '32px' : '40px',
+                    margin: '0 auto 8px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: `${colors.secondary}15`
+                  }}
+                >
+                  <DollarSign size={isMobile ? 14 : 20} color={colors.secondary} />
+                </div>
+                <p style={{ fontSize: isMobile ? '14px' : '20px', fontWeight: 'bold', color: colors.onSurface, margin: 0 }}>
+                  {loadingStats ? '...' : formatNumber(stats.ganancia_cup)}
+                </p>
+                <p style={{ fontSize: isMobile ? '10px' : '14px', color: colors.outline, margin: '4px 0 0 0', lineHeight: '1.3' }}>
+                  Ganancia hoy (CUP)
+                </p>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div
+                  style={{
+                    width: isMobile ? '32px' : '40px',
+                    height: isMobile ? '32px' : '40px',
+                    margin: '0 auto 8px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: '#185FA515'
+                  }}
+                >
+                  <Users size={isMobile ? 14 : 20} color="#185FA5" />
+                </div>
+                <p style={{ fontSize: isMobile ? '14px' : '20px', fontWeight: 'bold', color: colors.onSurface, margin: 0 }}>
+                  {loadingStats ? '...' : stats.usuarios_activos}
+                </p>
+                <p style={{ fontSize: isMobile ? '10px' : '14px', color: colors.outline, margin: '4px 0 0 0', lineHeight: '1.3' }}>
+                  Usuarios activos
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sección de Soporte */}
+        <div style={{ marginBottom: '24px' }}>
+          <div
+            style={{
+              borderRadius: '16px',
+              padding: '20px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+              backgroundColor: colors.surface
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: `${colors.primary}15`,
+                  marginRight: '12px'
+                }}
+              >
+                <Phone size={24} color={colors.primary} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: '16px', fontWeight: '600', color: colors.onSurface, margin: 0 }}>
+                  ¿Necesitas ayuda?
+                </p>
+                <p style={{ fontSize: '14px', color: colors.outline, margin: '4px 0 0 0' }}>
+                  Contáctanos para soporte técnico
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+              <button
+                onClick={handleSupportCall}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  backgroundColor: `${colors.primary}15`
+                }}
+              >
+                <Phone size={20} color={colors.primary} />
+                <p style={{ fontSize: '16px', fontWeight: '600', color: colors.onSurface, margin: 0 }}>
+                  56242671
+                </p>
+              </button>
+              <button
+                onClick={handleWhatsApp}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  backgroundColor: '#25D36615'
+                }}
+              >
+                <MessageCircle size={20} color="#25D366" />
+                <p style={{ fontSize: '14px', color: colors.onSurface, margin: 0 }}>
+                  También por WhatsApp
+                </p>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
