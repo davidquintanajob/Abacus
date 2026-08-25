@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { Header } from '../components/layout/Header';
@@ -92,6 +93,8 @@ const EntradaFormContent = () => {
 
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showFechaEntradaPicker, setShowFechaEntradaPicker] = useState(false);
+  const [showExpirationAlert, setShowExpirationAlert] = useState(false);
+  const [expirationAlertData, setExpirationAlertData] = useState(null);
 
   // Helper function to format date correctly without timezone issues
   const formatDateToLocal = (dateString, isDateOnly = false) => {
@@ -132,6 +135,34 @@ const EntradaFormContent = () => {
     fetchConfig();
   }, []);
 
+  // Verificar si se abrió desde alerta de vencimiento
+  useEffect(() => {
+    const checkExpirationAlert = async () => {
+      try {
+        const fromAlert = await AsyncStorage.getItem('from_expiration_alert');
+        const entradaId = await AsyncStorage.getItem('expiration_alert_entrada_id');
+        
+        if (fromAlert === 'true' && entradaId && entrada?.id_entrada?.toString() === entradaId) {
+          // Limpiar el AsyncStorage
+          await AsyncStorage.removeItem('from_expiration_alert');
+          await AsyncStorage.removeItem('expiration_alert_producto_id');
+          await AsyncStorage.removeItem('expiration_alert_entrada_id');
+          
+          // Mostrar alerta de que la entrada está próxima a vencer
+          setShowExpirationAlert(true);
+          setExpirationAlertData({
+            entradaId: entrada.id_entrada,
+            message: 'Esta entrada está próxima a vencer'
+          });
+        }
+      } catch (error) {
+        // Error al verificar alerta de vencimiento
+      }
+    };
+    
+    checkExpirationAlert();
+  }, [entrada?.id_entrada]);
+
   useEffect(() => {
     const fetchCompleteEntrada = async () => {
       if (entrada?.id_entrada) {
@@ -150,18 +181,42 @@ const EntradaFormContent = () => {
             completeEntrada = await getEntradaById(entrada.id_entrada);
           }
           
+          const producto = completeEntrada.servicioTienda?.servicio;
+          const tienda = completeEntrada.servicioTienda?.tienda;
+          
+          // Auto-fill prices from product-tienda relationship if it exists
+          let precioCup = '';
+          let precioUsd = '';
+          let productoCompleto = producto;
+          
+          if (producto && tienda) {
+            // Get complete product with tiendas_servicio relationships
+            try {
+              productoCompleto = await getProductoById(producto.id_servicio);
+              const productoTienda = productoCompleto.tiendas_servicio?.find(
+                ts => ts.id_tienda === tienda.id_tienda
+              );
+              if (productoTienda) {
+                precioCup = productoTienda.precio_cup?.toString() || '';
+                precioUsd = productoTienda.precio_usd?.toString() || '';
+              }
+            } catch (err) {
+              // Error al obtener producto completo, usar producto inicial
+            }
+          }
+          
           setFormData({
             id_servicio_tienda: completeEntrada.id_servicio_tienda,
             cantidad_entrada: completeEntrada.cantidad_entrada.toString(),
             costo_usd: completeEntrada.costo_usd.toString(),
             costo_cup: completeEntrada.costo_cup.toString(),
-            precio_usd: '',
-            precio_cup: '',
+            precio_usd: precioUsd,
+            precio_cup: precioCup,
             fecha_vencimiento: completeEntrada.fecha_vencimiento ? formatDateToLocal(completeEntrada.fecha_vencimiento) : '',
             nombre_proveedor: completeEntrada.nombre_proveedor || '',
             fecha: completeEntrada.fecha ? formatDateToLocal(completeEntrada.fecha) : formatDateToLocal(new Date().toISOString()),
-            producto: completeEntrada.servicioTienda?.servicio,
-            tienda: completeEntrada.servicioTienda?.tienda,
+            producto: productoCompleto,
+            tienda: tienda,
           });
           
           setProductoSearchText((completeEntrada.servicioTienda?.servicio?.nombre || '').trimEnd());
@@ -1662,7 +1717,19 @@ const EntradaFormContent = () => {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-        <Card style={[styles.formCard, { backgroundColor: colors.surface }]}>
+        {/* Alerta de Vencimiento */}
+        {showExpirationAlert && (
+          <Card style={[styles.expirationAlertCard, { backgroundColor: isDarkMode ? '#FFF3E0' : '#FFF3E0', borderColor: '#FF9800', borderWidth: 1 }]}>
+            <View style={styles.expirationAlertContent}>
+              <Ionicons name="warning" size={responsive.responsiveWidth(20)} color="#FF9800" />
+              <Text style={[styles.expirationAlertText, { color: '#E65100' }]}>
+                {expirationAlertData?.message || 'Esta entrada está próxima a vencer'}
+              </Text>
+            </View>
+          </Card>
+        )}
+
+        <Card style={[styles.formCard, { backgroundColor: colors.surface, marginTop: showExpirationAlert ? 0 : responsive.responsiveMargin(55) }]}>
           {isFetchingEntrada ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
@@ -2812,8 +2879,29 @@ const createStyles = (responsive) => StyleSheet.create({
   formCard: {
     borderRadius: 16,
     padding: responsive.responsivePadding(24),
-    marginTop: responsive.responsiveMargin(55),
     marginBottom: responsive.responsiveMargin(16),
+  },
+  expirationAlertCard: {
+    borderRadius: 12,
+    padding: responsive.responsivePadding(16),
+    marginBottom: responsive.responsiveMargin(8),
+    marginTop: responsive.responsiveMargin(55),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  expirationAlertContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(12),
+  },
+  expirationAlertText: {
+    flex: 1,
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '500',
+    fontFamily: 'Inter',
   },
   formGroup: {
     marginBottom: responsive.responsiveMargin(16),

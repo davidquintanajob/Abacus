@@ -851,20 +851,25 @@ const OperacionesContent = () => {
                     >
                       <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todos los tipos</Text>
                     </TouchableOpacity>
-                    {tiposOperacion.map((tipo, index) => (
-                      <TouchableOpacity
-                        key={tipo}
-                        style={[styles.dropdownItem, index === tiposOperacion.length - 1 && styles.dropdownItemLast]}
-                        onPress={() => {
-                          const newFilters = { ...filters, tipo_operacion: tipo };
-                          setFilters(newFilters);
-                          setShowTipoOperacionDropdown(false);
-                          fetchOperaciones(newFilters);
-                        }}
-                      >
-                        <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tipo}</Text>
-                      </TouchableOpacity>
-                    ))}
+                    <ScrollView
+                      nestedScrollEnabled={true}
+                      style={{ maxHeight: 200 }}
+                    >
+                      {tiposOperacion.map((tipo, index) => (
+                        <TouchableOpacity
+                          key={tipo}
+                          style={[styles.dropdownItem, index === tiposOperacion.length - 1 && styles.dropdownItemLast]}
+                          onPress={() => {
+                            const newFilters = { ...filters, tipo_operacion: tipo };
+                            setFilters(newFilters);
+                            setShowTipoOperacionDropdown(false);
+                            fetchOperaciones(newFilters);
+                          }}
+                        >
+                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tipo}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
                   </View>
                 )}
               </View>
@@ -990,44 +995,36 @@ const OperacionesContent = () => {
                 </View>
               )}
             </View>
-            <View style={styles.summaryGridContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.summaryGridContainer}
+            >
               <View style={[styles.summaryItem, styles.summaryItemGreen]}>
-                <View style={styles.summaryIconContainer}>
-                  <Ionicons name="trending-up" size={20} color="#4CAF50" />
-                </View>
                 <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Ingresos Manuales</Text>
                 <Text style={[styles.summaryItemValue, { color: '#4CAF50' }]}>
                   {formatNumberWithSpaces(getSummaryValues().ingresos)}
                 </Text>
               </View>
               <View style={[styles.summaryItem, styles.summaryItemRed]}>
-                <View style={styles.summaryIconContainer}>
-                  <Ionicons name="trending-down" size={20} color="#F44336" />
-                </View>
                 <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Retiros Manuales</Text>
                 <Text style={[styles.summaryItemValue, { color: '#F44336' }]}>
                   {formatNumberWithSpaces(getSummaryValues().retiros)}
                 </Text>
               </View>
               <View style={[styles.summaryItem, styles.summaryItemBlue]}>
-                <View style={styles.summaryIconContainer}>
-                  <Ionicons name="cart" size={20} color="#2196F3" />
-                </View>
                 <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Ingresos por Venta</Text>
                 <Text style={[styles.summaryItemValue, { color: '#2196F3' }]}>
                   {formatNumberWithSpaces(getSummaryValues().ingresosVenta)}
                 </Text>
               </View>
               <View style={[styles.summaryItem, styles.summaryItemPrimary]}>
-                <View style={styles.summaryIconContainer}>
-                  <Ionicons name="cash" size={20} color={colors.primary} />
-                </View>
                 <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Cantidad en Negocio</Text>
                 <Text style={[styles.summaryItemValue, { color: colors.primary }]}>
                   {formatNumberWithSpaces(getSummaryValues().ingresos + getSummaryValues().ingresosVenta - getSummaryValues().retiros)}
                 </Text>
               </View>
-            </View>
+            </ScrollView>
           </Card>
         )}
 
@@ -1472,16 +1469,14 @@ const createStyles = (responsive) => StyleSheet.create({
     fontFamily: 'Inter',
   },
   summaryGridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: responsive.responsiveMargin(12),
+    gap: responsive.responsiveMargin(6),
   },
   summaryItem: {
     flex: 1,
-    minWidth: responsive.responsiveWidth(150),
+    minWidth: responsive.responsiveWidth(100),
     backgroundColor: 'rgba(0, 0, 0, 0.02)',
-    borderRadius: 12,
-    padding: responsive.responsivePadding(16),
+    borderRadius: 8,
+    padding: responsive.responsivePadding(8),
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'column',
@@ -1512,14 +1507,14 @@ const createStyles = (responsive) => StyleSheet.create({
     marginBottom: responsive.responsiveMargin(10),
   },
   summaryItemLabel: {
-    fontSize: responsive.responsiveFontSize(11),
+    fontSize: responsive.responsiveFontSize(10),
     fontWeight: '500',
     fontFamily: 'Inter',
-    marginBottom: responsive.responsiveMargin(4),
+    marginBottom: responsive.responsiveMargin(2),
     textAlign: 'center',
   },
   summaryItemValue: {
-    fontSize: responsive.responsiveFontSize(15),
+    fontSize: responsive.responsiveFontSize(13),
     fontWeight: '700',
     fontFamily: 'Inter',
     textAlign: 'center',

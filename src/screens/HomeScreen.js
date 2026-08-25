@@ -7,11 +7,15 @@ import { useTheme } from '../theme/ThemeContext';
 import { Header } from '../components/layout/Header';
 import { Sidebar } from '../components/layout/Sidebar';
 import { Card } from '../components/common/Card';
+import { Toast } from '../components/common/Toast';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
+import { useToast } from '../hooks/useToast';
 import { useOffline } from '../context/OfflineContext';
 import { useAuth } from '../context/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getEntradas } from '../services/entradaService';
+import { getGeneralInformation } from '../services/informesService';
 import packageJson from '../../package.json';
 
 const HomeContent = () => {
@@ -19,6 +23,7 @@ const HomeContent = () => {
   const route = useRoute();
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
+  const { toast, showToast, hideToast } = useToast();
   const { enableOfflineMode, isOfflineMode: contextOfflineMode } = useOffline();
   const { user, permissions } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -26,6 +31,14 @@ const HomeContent = () => {
   const [expiringProducts, setExpiringProducts] = useState([]);
   const [loadingExpiring, setLoadingExpiring] = useState(false);
   const [currentDate, setCurrentDate] = useState('');
+  const [summaryData, setSummaryData] = useState({
+    cantidad_productos: 0,
+    total_ventas_cup: 0,
+    total_ventas_usd: 0,
+    usuarios_activos: 0,
+    ganancia_cup: 0
+  });
+  const [loadingSummary, setLoadingSummary] = useState(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const appVersion = packageJson.version;
@@ -48,15 +61,46 @@ const HomeContent = () => {
     ? require('../../Logos/Abacus v4.1.png')
     : require('../../Logos/Abacus v1.1.png');
 
-  const storeImageSource = isDarkMode
-    ? require('../../assets/Home_logo_darck (2).png')
-    : require('../../assets/Home_Logo.png');
+  const storeImageSource = (() => {
+    const userRole = user?.rol?.toLowerCase();
+    
+    if (userRole === 'dependiente') {
+      return isDarkMode
+        ? require('../../assets/Dependiente_logo (2).png')
+        : require('../../assets/Dependiente_logo.png');
+    }
+    
+    if (userRole === 'almacenero') {
+      return isDarkMode
+        ? require('../../assets/Almacenero_logo (2).png')
+        : require('../../assets/Almacenero_logo.png');
+    }
+    
+    if (userRole === 'económico') {
+      return isDarkMode
+        ? require('../../assets/Económico_logo (2).png')
+        : require('../../assets/Económico_logo.png');
+    }
+    
+    // Por defecto (administrador u otros roles)
+    return isDarkMode
+      ? require('../../assets/Home_logo_darck (2).png')
+      : require('../../assets/Home_Logo.png');
+  })();
 
   const getFirstName = (fullName) => {
     if (!fullName) return 'Administrador';
     const name = fullName.trim();
     if (name === 'Administrador') return 'Administrador';
     return name.split(' ')[0];
+  };
+
+  const formatCurrency = (value) => {
+    if (value === null || value === undefined) return '0';
+    if (value >= 1000) {
+      return (value / 1000).toFixed(1) + 'K';
+    }
+    return value.toFixed(0);
   };
 
   const handleSettingsPress = () => {
@@ -81,6 +125,56 @@ const HomeContent = () => {
 
   const handleWhatsApp = () => {
     Linking.openURL('https://wa.me/56242671');
+  };
+
+  const handleProductoPress = async (producto) => {
+    try {
+      // Todos los usuarios pueden ver productos, solo admin puede editar
+      const userRole = user?.rol?.toLowerCase();
+      
+      // Guardar en AsyncStorage que se abrió desde alerta de vencimiento
+      await AsyncStorage.setItem('from_expiration_alert', 'true');
+      await AsyncStorage.setItem('expiration_alert_producto_id', producto.servicioTienda?.servicio?.id_servicio?.toString() || '');
+      await AsyncStorage.setItem('expiration_alert_entrada_id', producto.id_entrada?.toString() || '');
+      
+      // Navegar al formulario del producto
+      const productoData = producto.servicioTienda?.servicio;
+      const mode = userRole === 'administrador' ? 'edit' : 'view';
+      navigation.navigate('ProductoForm', { producto: productoData, mode });
+    } catch (error) {
+      // Error handling
+    }
+  };
+
+  const handleEntradaPress = async (producto) => {
+    try {
+      // Verificar permisos para ver entradas
+      const userRole = user?.rol?.toLowerCase();
+      const canViewEntradas = 
+        userRole === 'administrador' ||
+        (userRole === 'dependiente' && entradaAccessLevels?.dependiente !== 'none') ||
+        (userRole === 'almacenero' && entradaAccessLevels?.almacenero !== 'none') ||
+        (userRole === 'económico' && entradaAccessLevels?.economico !== 'none');
+      
+      if (!canViewEntradas) {
+        showToast({ type: 'error', message: 'No tienes permisos para ver entradas' });
+        return;
+      }
+      
+      // Guardar en AsyncStorage que se abrió desde alerta de vencimiento
+      await AsyncStorage.setItem('from_expiration_alert', 'true');
+      await AsyncStorage.setItem('expiration_alert_entrada_id', producto.id_entrada?.toString() || '');
+      await AsyncStorage.setItem('expiration_alert_producto_id', producto.servicioTienda?.servicio?.id_servicio?.toString() || '');
+      
+      // Navegar al formulario de la entrada
+      const mode = canViewEntradas && (userRole === 'administrador' || 
+        (userRole === 'dependiente' && entradaAccessLevels?.dependiente === 'edit') ||
+        (userRole === 'almacenero' && entradaAccessLevels?.almacenero === 'edit') ||
+        (userRole === 'económico' && entradaAccessLevels?.economico === 'edit')) ? 'edit' : 'view';
+      navigation.navigate('EntradaForm', { entrada: producto, mode });
+    } catch (error) {
+      // Error handling
+    }
   };
 
   useEffect(() => {
@@ -130,6 +224,46 @@ const HomeContent = () => {
       try {
         setLoadingExpiring(true);
         
+        if (isOfflineMode) {
+          // Cargar desde AsyncStorage en modo offline
+          const cachedProducts = await AsyncStorage.getItem('expiring_products');
+          if (cachedProducts) {
+            const productosConAlerta = JSON.parse(cachedProducts);
+            setExpiringProducts(productosConAlerta);
+            
+            // Mostrar toast de alerta si hay productos próximos a vencer
+            if (productosConAlerta.length > 0) {
+              const productosAgrupados = productosConAlerta.reduce((acc, producto) => {
+                const nombre = producto.nombreProducto;
+                if (!acc[nombre]) {
+                  acc[nombre] = { count: 0, levels: [] };
+                }
+                acc[nombre].count++;
+                acc[nombre].levels.push(producto.alerta.level);
+                return acc;
+              }, {});
+              
+              const mensajes = Object.entries(productosAgrupados).map(([nombre, data]) => {
+                return `hay ${data.count} entradas de ${nombre} próximas a vencer`;
+              });
+              
+              const message = mensajes.join('. ');
+              const messageCapitalized = message
+                .split('. ')
+                .map(sentence => sentence.charAt(0).toUpperCase() + sentence.slice(1))
+                .join('. ');
+              
+              showToast({
+                type: 'warning',
+                message: messageCapitalized,
+                duration: 8000
+              });
+            }
+          }
+          setLoadingExpiring(false);
+          return;
+        }
+        
         // Calcular fecha de vencimiento máximo (30 días desde hoy para el umbral amarillo)
         const hoy = new Date();
         const fechaMaxima = new Date(hoy);
@@ -161,6 +295,39 @@ const HomeContent = () => {
           .slice(0, 5); // Mostrar máximo 5 productos
         
         setExpiringProducts(productosConAlerta);
+        
+        // Guardar en AsyncStorage para modo offline
+        await AsyncStorage.setItem('expiring_products', JSON.stringify(productosConAlerta));
+        
+        // Mostrar toast de alerta si hay productos próximos a vencer
+        if (productosConAlerta.length > 0) {
+          // Agrupar por nombre de producto y contar entradas
+          const productosAgrupados = productosConAlerta.reduce((acc, producto) => {
+            const nombre = producto.nombreProducto;
+            if (!acc[nombre]) {
+              acc[nombre] = { count: 0, levels: [] };
+            }
+            acc[nombre].count++;
+            acc[nombre].levels.push(producto.alerta.level);
+            return acc;
+          }, {});
+          
+          const mensajes = Object.entries(productosAgrupados).map(([nombre, data]) => {
+            return `hay ${data.count} entradas de ${nombre} próximas a vencer`;
+          });
+          
+          const message = mensajes.join('. ');
+          const messageCapitalized = message
+            .split('. ')
+            .map(sentence => sentence.charAt(0).toUpperCase() + sentence.slice(1))
+            .join('. ');
+          
+          showToast({
+            type: 'warning',
+            message: messageCapitalized,
+            duration: 8000
+          });
+        }
       } catch (error) {
         // Error handling without console log
       } finally {
@@ -169,6 +336,38 @@ const HomeContent = () => {
     };
     
     fetchExpiringProducts();
+  }, []);
+
+  // Consultar información general para el RESUMEN
+  useEffect(() => {
+    const fetchSummaryData = async () => {
+      try {
+        setLoadingSummary(true);
+        
+        if (isOfflineMode) {
+          // Cargar desde AsyncStorage en modo offline
+          const cachedSummary = await AsyncStorage.getItem('summary_data');
+          if (cachedSummary) {
+            const parsed = JSON.parse(cachedSummary);
+            setSummaryData(parsed);
+          }
+          setLoadingSummary(false);
+          return;
+        }
+        
+        const response = await getGeneralInformation();
+        setSummaryData(response);
+        
+        // Guardar en AsyncStorage para modo offline
+        await AsyncStorage.setItem('summary_data', JSON.stringify(response));
+      } catch (error) {
+        // Error handling
+      } finally {
+        setLoadingSummary(false);
+      }
+    };
+    
+    fetchSummaryData();
   }, []);
 
   const isAdmin = user?.rol === 'Administrador';
@@ -354,6 +553,84 @@ const HomeContent = () => {
           </Card>
         </View>
 
+        {/* Alertas de Vencimiento */}
+        {expiringProducts.length > 0 && (
+          <View style={styles.expirationSection}>
+            <Text style={[styles.sectionTitle, { color: colors.outline }]}>
+              ALERTAS DE VENCIMIENTO
+            </Text>
+            <View style={styles.expirationList}>
+              {expiringProducts.map((producto, index) => (
+                <Card 
+                  key={producto.id || index} 
+                  style={[
+                    styles.expirationItem, 
+                    { 
+                      backgroundColor: colors.surface,
+                      borderLeftWidth: 4,
+                      borderLeftColor: getExpirationAlertColor(producto.alerta.level)
+                    }
+                  ]}
+                >
+                  <View style={styles.expirationHeader}>
+                    <View style={styles.expirationIconContainer}>
+                      {getExpirationAlertIcon(producto.alerta.level)}
+                    </View>
+                    <View style={styles.expirationContent}>
+                      <Text style={[styles.expirationProductName, { color: colors.onSurface }]}>
+                        {producto.nombreProducto}
+                      </Text>
+                      <Text style={[styles.expirationLote, { color: colors.outline }]}>
+                        Lote: {producto.codigoLote}
+                      </Text>
+                      <Text style={[styles.expirationQuantity, { color: colors.outline }]}>
+                        Cantidad restante: {producto.cantidad_restante || 0}
+                      </Text>
+                    </View>
+                    <View style={styles.expirationRight}>
+                      <Text 
+                        style={[
+                          styles.expirationLabel, 
+                          { color: getExpirationAlertColor(producto.alerta.level) }
+                        ]}
+                      >
+                        {producto.alerta.label}
+                      </Text>
+                      <Text style={[styles.expirationDays, { color: colors.outline }]}>
+                        {producto.alerta.days === 0 ? 'Hoy' : 
+                         producto.alerta.days === 1 ? 'Mañana' :
+                         producto.alerta.days === -1 ? 'Ayer' :
+                         producto.alerta.days < 0 ? `${Math.abs(producto.alerta.days)} días` :
+                         `${producto.alerta.days} días`}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.expirationActions}>
+                    <TouchableOpacity
+                      style={[styles.expirationActionButton, { backgroundColor: colors.primary }]}
+                      onPress={() => handleProductoPress(producto)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="cube" size={responsive.responsiveWidth(16)} color="#fff" />
+                      <Text style={styles.expirationActionText}>Producto</Text>
+                    </TouchableOpacity>
+                    {!isOfflineMode && (
+                      <TouchableOpacity
+                        style={[styles.expirationActionButton, { backgroundColor: colors.secondary }]}
+                        onPress={() => handleEntradaPress(producto)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="document" size={responsive.responsiveWidth(16)} color="#fff" />
+                        <Text style={styles.expirationActionText}>Entrada</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </Card>
+              ))}
+            </View>
+          </View>
+        )}
+
         {/* Módulos Principales */}
         <View style={styles.modulesSection}>
           <Text style={[styles.sectionTitle, { color: colors.outline }]}>
@@ -375,24 +652,23 @@ const HomeContent = () => {
                     opacity: module.hasPermission ? 1 : 0.5
                   }
                 ]}>
-                  <View style={styles.moduleIconContainer}>
-                    {renderIcon(module)}
+                  <View style={styles.moduleContent}>
+                    <View style={styles.moduleIconContainer}>
+                      {renderIcon(module)}
+                    </View>
+                    <Text style={[styles.moduleLabel, { color: colors.onSurface }]}>
+                      {module.label}
+                    </Text>
                   </View>
-                  <Text style={[styles.moduleLabel, { color: colors.onSurface }]}>
-                    {module.label}
-                  </Text>
-                  <Text style={[styles.moduleDescription, { color: colors.outline }]}>
-                    {module.description}
-                  </Text>
                   {module.hasPermission ? (
-                    <View style={styles.accessButton}>
+                    <View style={[styles.accessButton, { borderTopColor: `${module.color}30`, backgroundColor: `${module.color}08` }]}>
                       <Text style={[styles.accessButtonText, { color: module.color }]}>
                         Acceder
                       </Text>
                       <Ionicons name="arrow-forward" size={responsive.responsiveWidth(16)} color={module.color} />
                     </View>
                   ) : (
-                    <View style={[styles.accessButton, styles.disabledButton]}>
+                    <View style={[styles.accessButton, styles.disabledButton, { borderTopColor: `${colors.outline}30`, backgroundColor: `${colors.outline}08` }]}>
                       <Text style={[styles.accessButtonText, { color: colors.outline }]}>
                         Sin permisos
                       </Text>
@@ -417,10 +693,10 @@ const HomeContent = () => {
                   <Ionicons name="cube" size={responsive.responsiveWidth(20)} color={colors.primary} />
                 </View>
                 <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
-                  128
+                  {loadingSummary ? '...' : summaryData.cantidad_productos || 0}
                 </Text>
                 <Text style={[styles.statItemLabel, { color: colors.outline }]}>
-                  Productos
+                  Productos en stock
                 </Text>
               </View>
               <View style={styles.statItem}>
@@ -428,21 +704,10 @@ const HomeContent = () => {
                   <Ionicons name="cart" size={responsive.responsiveWidth(20)} color="#16A34A" />
                 </View>
                 <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
-                  56
+                  {loadingSummary ? '...' : (summaryData.total_ventas_cup || 0).toFixed(0)}
                 </Text>
                 <Text style={[styles.statItemLabel, { color: colors.outline }]}>
                   Ventas hoy
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <View style={[styles.statItemIconContainer, { backgroundColor: '#185FA515' }]}>
-                  <Ionicons name="people" size={responsive.responsiveWidth(20)} color="#185FA5" />
-                </View>
-                <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
-                  12
-                </Text>
-                <Text style={[styles.statItemLabel, { color: colors.outline }]}>
-                  Usuarios
                 </Text>
               </View>
               <View style={styles.statItem}>
@@ -450,68 +715,26 @@ const HomeContent = () => {
                   <Ionicons name="cash" size={responsive.responsiveWidth(20)} color={colors.secondary} />
                 </View>
                 <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
-                  7.8K
+                  {loadingSummary ? '...' : formatCurrency(summaryData.ganancia_cup || 0)}
                 </Text>
                 <Text style={[styles.statItemLabel, { color: colors.outline }]}>
-                  Ingresos (mes)
+                  Ganancia hoy (CUP)
+                </Text>
+              </View>
+              <View style={styles.statItem}>
+                <View style={[styles.statItemIconContainer, { backgroundColor: '#185FA515' }]}>
+                  <Ionicons name="people" size={responsive.responsiveWidth(20)} color="#185FA5" />
+                </View>
+                <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
+                  {loadingSummary ? '...' : summaryData.usuarios_activos || 0}
+                </Text>
+                <Text style={[styles.statItemLabel, { color: colors.outline }]}>
+                  Usuarios activos
                 </Text>
               </View>
             </View>
           </Card>
         </View>
-
-        {/* Alertas de Vencimiento */}
-        {expiringProducts.length > 0 && (
-          <View style={styles.expirationSection}>
-            <Text style={[styles.sectionTitle, { color: colors.outline }]}>
-              ALERTAS DE VENCIMIENTO
-            </Text>
-            <View style={styles.expirationList}>
-              {expiringProducts.map((producto, index) => (
-                <Card 
-                  key={producto.id || index} 
-                  style={[
-                    styles.expirationItem, 
-                    { 
-                      backgroundColor: colors.surface,
-                      borderLeftWidth: 4,
-                      borderLeftColor: getExpirationAlertColor(producto.alerta.level)
-                    }
-                  ]}
-                >
-                  <View style={styles.expirationIconContainer}>
-                    {getExpirationAlertIcon(producto.alerta.level)}
-                  </View>
-                  <View style={styles.expirationContent}>
-                    <Text style={[styles.expirationProductName, { color: colors.onSurface }]}>
-                      {producto.nombreProducto}
-                    </Text>
-                    <Text style={[styles.expirationLote, { color: colors.outline }]}>
-                      Lote: {producto.codigoLote}
-                    </Text>
-                  </View>
-                  <View style={styles.expirationRight}>
-                    <Text 
-                      style={[
-                        styles.expirationLabel, 
-                        { color: getExpirationAlertColor(producto.alerta.level) }
-                      ]}
-                    >
-                      {producto.alerta.label}
-                    </Text>
-                    <Text style={[styles.expirationDays, { color: colors.outline }]}>
-                      {producto.alerta.days === 0 ? 'Hoy' : 
-                       producto.alerta.days === 1 ? 'Mañana' :
-                       producto.alerta.days === -1 ? 'Ayer' :
-                       producto.alerta.days < 0 ? `${Math.abs(producto.alerta.days)} días` :
-                       `${producto.alerta.days} días`}
-                    </Text>
-                  </View>
-                </Card>
-              ))}
-            </View>
-          </View>
-        )}
 
         {/* Sección de Soporte */}
         <View style={styles.supportSection}>
@@ -531,22 +754,22 @@ const HomeContent = () => {
             </View>
             <View style={styles.supportContact}>
               <TouchableOpacity 
-                style={styles.supportContactItem}
+                style={[styles.supportContactItem, { backgroundColor: `${colors.primary}15` }]}
                 onPress={handleSupportCall}
                 activeOpacity={0.7}
               >
                 <Ionicons name="call" size={responsive.responsiveWidth(20)} color={colors.primary} />
-                <Text style={[styles.supportPhone, { color: colors.onSurface }]}>
+                <Text style={[styles.supportPhone, { color: colors.primary }]}>
                   56242671
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.supportContactItem}
+                style={[styles.supportContactItem, { backgroundColor: '#25D36615' }]}
                 onPress={handleWhatsApp}
                 activeOpacity={0.7}
               >
                 <Ionicons name="logo-whatsapp" size={responsive.responsiveWidth(20)} color="#25D366" />
-                <Text style={[styles.supportWhatsApp, { color: colors.onSurface }]}>
+                <Text style={[styles.supportWhatsApp, { color: '#25D366' }]}>
                   También por WhatsApp
                 </Text>
               </TouchableOpacity>
@@ -557,6 +780,16 @@ const HomeContent = () => {
         {/* Espacio inferior */}
         <View style={styles.bottomSpacer} />
       </ScrollView>
+      
+      <Toast 
+        visible={toast.visible}
+        type={toast.type}
+        message={toast.message}
+        code={toast.code}
+        duration={toast.duration}
+        onHide={hideToast}
+        toastKey={toast.key}
+      />
     </SafeAreaView>
   );
 };
@@ -687,43 +920,40 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   moduleCard: {
     borderRadius: 16,
-    padding: responsive.cardPadding,
+    paddingTop: responsive.responsiveMargin(12),
+    paddingHorizontal: 0,
+    paddingBottom: 0,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 4,
+    overflow: 'hidden',
+  },
+  moduleContent: {
+    paddingHorizontal: responsive.responsiveMargin(12),
+    alignItems: 'center',
   },
   moduleIconContainer: {
-    width: responsive.responsiveWidth(56),
-    height: responsive.responsiveHeight(56),
+    width: responsive.responsiveWidth(48),
+    height: responsive.responsiveHeight(48),
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: responsive.responsiveMargin(12),
+    marginBottom: responsive.responsiveMargin(8),
   },
   moduleIconImage: {
-    width: responsive.responsiveWidth(32),
-    height: responsive.responsiveHeight(32),
+    width: responsive.responsiveWidth(28),
+    height: responsive.responsiveHeight(28),
   },
   moduleLabel: {
     fontSize: responsive.fontSizes.body,
     fontWeight: '600',
     fontFamily: 'Hanken Grotesk',
     lineHeight: responsive.fontSizes.body * 1.4,
-    marginBottom: 4,
+    marginBottom: responsive.responsiveMargin(8),
     textAlign: 'center',
-    minHeight: responsive.responsiveFontSize(24) * 1.4,
-  },
-  moduleDescription: {
-    fontSize: responsive.fontSizes.bodySmall,
-    fontWeight: '400',
-    fontFamily: 'Inter',
-    lineHeight: responsive.fontSizes.bodySmall * 1.3,
-    textAlign: 'center',
-    marginBottom: 12,
-    minHeight: responsive.fontSizes.bodySmall * 1.3 * 2,
   },
   lockedContainer: {
     flexDirection: 'row',
@@ -738,7 +968,13 @@ const createStyles = (responsive) => StyleSheet.create({
   accessButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 0,
+    paddingVertical: responsive.responsiveMargin(8),
+    marginTop: responsive.responsiveMargin(8),
+    borderTopWidth: 1,
+    width: '100%',
   },
   disabledButton: {
     opacity: 0.5,
@@ -792,11 +1028,16 @@ const createStyles = (responsive) => StyleSheet.create({
   supportContact: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: responsive.gridGap,
   },
   supportContactItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingHorizontal: responsive.responsiveMargin(16),
+    paddingVertical: responsive.responsiveMargin(12),
+    borderRadius: 12,
+    flex: 1,
   },
   supportPhone: {
     fontSize: responsive.fontSizes.body,
@@ -828,8 +1069,7 @@ const createStyles = (responsive) => StyleSheet.create({
   expirationItem: {
     borderRadius: 14,
     padding: responsive.cardPadding,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'column',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
@@ -845,6 +1085,11 @@ const createStyles = (responsive) => StyleSheet.create({
     justifyContent: 'center',
     marginRight: responsive.responsiveMargin(12),
   },
+  expirationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(12),
+  },
   expirationContent: {
     flex: 1,
   },
@@ -856,6 +1101,12 @@ const createStyles = (responsive) => StyleSheet.create({
     marginBottom: 2,
   },
   expirationLote: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '400',
+    fontFamily: 'Inter',
+    lineHeight: responsive.fontSizes.bodySmall * 1.3,
+  },
+  expirationQuantity: {
     fontSize: responsive.fontSizes.bodySmall,
     fontWeight: '400',
     fontFamily: 'Inter',
@@ -876,6 +1127,27 @@ const createStyles = (responsive) => StyleSheet.create({
     fontWeight: '500',
     fontFamily: 'Inter',
     lineHeight: responsive.fontSizes.caption * 1.4,
+  },
+  expirationActions: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(8),
+    marginTop: responsive.responsiveMargin(12),
+  },
+  expirationActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: responsive.responsiveMargin(4),
+    paddingHorizontal: responsive.responsivePadding(12),
+    paddingVertical: responsive.responsivePadding(8),
+    borderRadius: 8,
+    flex: 1,
+  },
+  expirationActionText: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    color: '#fff',
   },
   bottomSpacer: {
     height: 20,

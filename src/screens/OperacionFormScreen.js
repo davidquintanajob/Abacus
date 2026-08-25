@@ -184,10 +184,6 @@ const OperacionFormContent = () => {
       showToast({ type: 'warning', message: 'Debe ingresar un motivo' });
       return;
     }
-    if (!formData.cambio_moneda || parseFloat(formData.cambio_moneda) <= 0) {
-      showToast({ type: 'warning', message: 'El cambio de moneda debe ser mayor que 0' });
-      return;
-    }
 
     // Validation for edit mode: non-admin users cannot edit others' operations
     if (isEditMode && !isAdmin && formData.usuario?.id_usuario !== user?.id_usuario) {
@@ -430,32 +426,18 @@ const OperacionFormContent = () => {
                   </View>
                 </View>
 
-                {/* Cantidad y Cambio de Moneda */}
-                <View style={styles.formRow}>
-                  <View style={[styles.formGroup, { flex: 1 }]}>
-                    <Text style={[styles.label, { color: colors.outline }]}>Cantidad *</Text>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                      placeholderTextColor={colors.outline}
-                      placeholder="0.00"
-                      value={formData.cantidad_operacion}
-                      onChangeText={handleCantidadChange}
-                      keyboardType="decimal-pad"
-                      editable={!isReadOnly}
-                    />
-                  </View>
-                  <View style={[styles.formGroup, { flex: 1 }]}>
-                    <Text style={[styles.label, { color: colors.outline }]}>Cambio de Moneda</Text>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                      placeholderTextColor={colors.outline}
-                      placeholder="1.00"
-                      value={formData.cambio_moneda}
-                      onChangeText={(text) => setFormData(prev => ({ ...prev, cambio_moneda: text }))}
-                      keyboardType="decimal-pad"
-                      editable={false}
-                    />
-                  </View>
+                {/* Cantidad */}
+                <View style={styles.formGroup}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Cantidad *</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="0.00"
+                    value={formData.cantidad_operacion}
+                    onChangeText={handleCantidadChange}
+                    keyboardType="decimal-pad"
+                    editable={!isReadOnly}
+                  />
                 </View>
 
                 {/* Motivo */}
@@ -580,6 +562,7 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   formCard: {
     padding: responsive.responsivePadding(16),
+    marginTop: responsive.responsiveMargin(24),
   },
   formGroup: {
     marginBottom: responsive.responsiveMargin(16),
