@@ -94,6 +94,41 @@ const ProductoFormContent = () => {
   const [showExpirationAlert, setShowExpirationAlert] = useState(false);
   const [expirationAlertData, setExpirationAlertData] = useState(null);
 
+  // Función para calcular el umbral dinámico
+  const calculateThreshold = (vidaUtil, percentage, minDays, maxDays) => {
+    const threshold = vidaUtil * percentage;
+    return Math.max(minDays, Math.min(maxDays, threshold));
+  };
+
+  // Función para determinar el nivel de alerta de una entrada
+  const getExpirationAlert = (fechaCreacion, fechaVencimiento) => {
+    const hoy = new Date();
+    const vencimiento = new Date(fechaVencimiento);
+    const creacion = new Date(fechaCreacion);
+    
+    // Calcular días
+    const vidaUtil = Math.ceil((vencimiento - creacion) / (1000 * 60 * 60 * 24));
+    const diasRestantes = Math.ceil((vencimiento - hoy) / (1000 * 60 * 60 * 24));
+    
+    // Si ya venció
+    if (diasRestantes <= 0) {
+      return { level: 'expired', days: diasRestantes, label: 'Vencido' };
+    }
+    
+    // Calcular umbrales
+    const umbralAmarillo = calculateThreshold(vidaUtil, 0.20, 3, 30);
+    const umbralRojo = calculateThreshold(vidaUtil, 0.10, 1, 7);
+    
+    // Determinar nivel
+    if (diasRestantes <= umbralRojo) {
+      return { level: 'critical', days: diasRestantes, label: 'Crítico' };
+    } else if (diasRestantes <= umbralAmarillo) {
+      return { level: 'warning', days: diasRestantes, label: 'Próximo a vencer' };
+    } else {
+      return { level: 'ok', days: diasRestantes, label: 'Vigente' };
+    }
+  };
+
   useEffect(() => {
     if (formData.codigoList.length > 0) {
       setIsCodesExpanded(true);
@@ -218,13 +253,14 @@ const ProductoFormContent = () => {
     loadApiBaseUrl();
   }, []);
 
-  // Verificar si se abrió desde alerta de vencimiento
+  // Verificar si se abrió desde alerta de vencimiento o si el producto tiene entradas próximas a vencer
   useEffect(() => {
     const checkExpirationAlert = async () => {
       try {
         const fromAlert = await AsyncStorage.getItem('from_expiration_alert');
         const productoId = await AsyncStorage.getItem('expiration_alert_producto_id');
         
+        // Verificar si se abrió desde alerta
         if (fromAlert === 'true' && productoId && producto?.id_servicio?.toString() === productoId) {
           // Limpiar el AsyncStorage
           await AsyncStorage.removeItem('from_expiration_alert');
@@ -237,6 +273,38 @@ const ProductoFormContent = () => {
             productoId: producto.id_servicio,
             message: 'Este producto tiene entradas próximas a vencer'
           });
+        } else if (producto?.id_servicio && !isOfflineMode) {
+          // Verificar automáticamente si el producto tiene entradas próximas a vencer
+          // Calcular fecha de vencimiento máximo (30 días desde hoy para el umbral amarillo)
+          const hoy = new Date();
+          const fechaMaxima = new Date(hoy);
+          fechaMaxima.setDate(fechaMaxima.getDate() + 30);
+          const fechaMaximaStr = fechaMaxima.toISOString().split('T')[0];
+          
+          // Consultar entradas del producto
+          const { getEntradas } = require('../services/entradaService');
+          const response = await getEntradas({ 
+            id_servicio: producto.id_servicio,
+            fecha_vencimiento_hasta: fechaMaximaStr 
+          }, 1, 100);
+          
+          if (response.data && response.data.length > 0) {
+            const hasExpiringEntries = response.data.some(entrada => {
+              if (!entrada.fecha || !entrada.fecha_vencimiento || entrada.cantidad_restante <= 0) {
+                return false;
+              }
+              const alerta = getExpirationAlert(entrada.fecha, entrada.fecha_vencimiento);
+              return alerta.level === 'critical' || alerta.level === 'warning' || alerta.level === 'expired';
+            });
+            
+            if (hasExpiringEntries) {
+              setShowExpirationAlert(true);
+              setExpirationAlertData({
+                productoId: producto.id_servicio,
+                message: 'Este producto tiene entradas próximas a vencer'
+              });
+            }
+          }
         }
       } catch (error) {
         // Error al verificar alerta de vencimiento

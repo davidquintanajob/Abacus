@@ -96,6 +96,41 @@ const EntradaFormContent = () => {
   const [showExpirationAlert, setShowExpirationAlert] = useState(false);
   const [expirationAlertData, setExpirationAlertData] = useState(null);
 
+  // Función para calcular el umbral dinámico
+  const calculateThreshold = (vidaUtil, percentage, minDays, maxDays) => {
+    const threshold = vidaUtil * percentage;
+    return Math.max(minDays, Math.min(maxDays, threshold));
+  };
+
+  // Función para determinar el nivel de alerta de una entrada
+  const getExpirationAlert = (fechaCreacion, fechaVencimiento) => {
+    const hoy = new Date();
+    const vencimiento = new Date(fechaVencimiento);
+    const creacion = new Date(fechaCreacion);
+    
+    // Calcular días
+    const vidaUtil = Math.ceil((vencimiento - creacion) / (1000 * 60 * 60 * 24));
+    const diasRestantes = Math.ceil((vencimiento - hoy) / (1000 * 60 * 60 * 24));
+    
+    // Si ya venció
+    if (diasRestantes <= 0) {
+      return { level: 'expired', days: diasRestantes, label: 'Vencido' };
+    }
+    
+    // Calcular umbrales
+    const umbralAmarillo = calculateThreshold(vidaUtil, 0.20, 3, 30);
+    const umbralRojo = calculateThreshold(vidaUtil, 0.10, 1, 7);
+    
+    // Determinar nivel
+    if (diasRestantes <= umbralRojo) {
+      return { level: 'critical', days: diasRestantes, label: 'Crítico' };
+    } else if (diasRestantes <= umbralAmarillo) {
+      return { level: 'warning', days: diasRestantes, label: 'Próximo a vencer' };
+    } else {
+      return { level: 'ok', days: diasRestantes, label: 'Vigente' };
+    }
+  };
+
   // Helper function to format date correctly without timezone issues
   const formatDateToLocal = (dateString, isDateOnly = false) => {
     if (!dateString) return '';
@@ -135,13 +170,14 @@ const EntradaFormContent = () => {
     fetchConfig();
   }, []);
 
-  // Verificar si se abrió desde alerta de vencimiento
+  // Verificar si se abrió desde alerta de vencimiento o si la entrada tiene vencimiento próximo
   useEffect(() => {
     const checkExpirationAlert = async () => {
       try {
         const fromAlert = await AsyncStorage.getItem('from_expiration_alert');
         const entradaId = await AsyncStorage.getItem('expiration_alert_entrada_id');
         
+        // Verificar si se abrió desde alerta
         if (fromAlert === 'true' && entradaId && entrada?.id_entrada?.toString() === entradaId) {
           // Limpiar el AsyncStorage
           await AsyncStorage.removeItem('from_expiration_alert');
@@ -154,6 +190,17 @@ const EntradaFormContent = () => {
             entradaId: entrada.id_entrada,
             message: 'Esta entrada está próxima a vencer'
           });
+        } else if (entrada?.fecha && entrada?.fecha_vencimiento && entrada?.cantidad_restante > 0) {
+          // Verificar automáticamente si la entrada tiene vencimiento próximo
+          const alerta = getExpirationAlert(entrada.fecha, entrada.fecha_vencimiento);
+          
+          if (alerta.level === 'critical' || alerta.level === 'warning' || alerta.level === 'expired') {
+            setShowExpirationAlert(true);
+            setExpirationAlertData({
+              entradaId: entrada.id_entrada,
+              message: alerta.label === 'Vencido' ? 'Esta entrada está vencida' : 'Esta entrada está próxima a vencer'
+            });
+          }
         }
       } catch (error) {
         // Error al verificar alerta de vencimiento
@@ -161,7 +208,7 @@ const EntradaFormContent = () => {
     };
     
     checkExpirationAlert();
-  }, [entrada?.id_entrada]);
+  }, [entrada?.id_entrada, entrada?.fecha, entrada?.fecha_vencimiento, entrada?.cantidad_restante]);
 
   useEffect(() => {
     const fetchCompleteEntrada = async () => {
