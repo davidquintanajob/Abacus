@@ -146,4 +146,18 @@ router.put('/', authenticate(), configController.updateConfig);
  */
 router.get('/tasa-cambio', authenticate(), configController.getTasaCambio);
 
+/**
+ * @swagger
+ * /config/ping:
+ *   get:
+ *     summary: Verifica que el servicio esté activo
+ *     description: Endpoint de salud que solo retorna un código 200 sin ningún contenido.
+ *     tags: [Configuración]
+ *     responses:
+ *       200:
+ *         description: Servicio disponible (sin cuerpo en la respuesta)
+ */
+router.get('/ping', (req, res) => {
+  res.sendStatus(200);
+});
 module.exports = router;
