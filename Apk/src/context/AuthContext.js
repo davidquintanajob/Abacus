@@ -129,6 +129,16 @@ export const AuthProvider = ({ children }) => {
       almacenero: false,
       economico: false,
     },
+    ventaAccessLevels: config?.ventaAccessLevels || {
+      dependiente: 'none',
+      almacenero: 'none',
+      economico: 'none',
+    },
+    ventaManagePermissions: config?.ventaManagePermissions || {
+      dependiente: false,
+      almacenero: false,
+      economico: false,
+    },
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

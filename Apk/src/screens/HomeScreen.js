@@ -375,7 +375,7 @@ const HomeContent = () => {
 
   const isAdmin = user?.rol === 'Administrador';
   const userRole = user?.rol?.toLowerCase();
-  const { entradaAccessLevels, salidaAccessLevels, operacionAccessLevels } = useAuth();
+  const { entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels } = useAuth();
   const { isOfflineMode } = useOffline();
   
   const canAccessSalidas = 
@@ -391,6 +391,13 @@ const HomeContent = () => {
     (userRole === 'dependiente' && operacionAccessLevels?.dependiente !== 'none') ||
     (userRole === 'almacenero' && operacionAccessLevels?.almacenero !== 'none') ||
     (userRole === 'económico' && operacionAccessLevels?.economico !== 'none'));
+
+  const canAccessVentas = 
+    !isOfflineMode &&
+    (isAdmin ||
+    (userRole === 'dependiente' && ventaAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'almacenero' && ventaAccessLevels?.almacenero !== 'none') ||
+    (userRole === 'económico' && ventaAccessLevels?.economico !== 'none'));
   
   const mainModules = [
     {
@@ -420,11 +427,11 @@ const HomeContent = () => {
       icon: require('../../assets/box.png'),
       iconType: 'image',
       label: 'Ventas',
-      description: 'Registrar ventas',
+      description: 'Gestionar ventas',
       color: '#185FA5',
-      screen: null,
-      permission: canAccessSalidas,
-      hasPermission: canAccessSalidas
+      screen: 'Ventas',
+      permission: canAccessVentas,
+      hasPermission: canAccessVentas
     },
     {
       id: 'operaciones',

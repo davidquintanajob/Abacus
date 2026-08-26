@@ -16,33 +16,40 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
   const responsive = useResponsive();
   const insets = useSafeAreaInsets() || { top: 0, bottom: 0, left: 0, right: 0 };
   const { toast, showToast, hideToast } = useToast();
-  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels } = useAuth();
+  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels } = useAuth();
   const { isOfflineMode } = useOffline();
   const [isSyncing, setIsSyncing] = useState(false);
 
   const isAdmin = user?.rol === 'Administrador';
   const userRole = user?.rol?.toLowerCase();
 
-  const canAccessEntradas = 
+  const canAccessEntradas =
     !isOfflineMode &&
     (isAdmin ||
     (userRole === 'dependiente' && entradaAccessLevels?.dependiente !== 'none') ||
     (userRole === 'almacenero' && entradaAccessLevels?.almacenero !== 'none') ||
     (userRole === 'económico' && entradaAccessLevels?.economico !== 'none'));
 
-  const canAccessSalidas = 
+  const canAccessSalidas =
     !isOfflineMode &&
     (isAdmin ||
     (userRole === 'dependiente' && salidaAccessLevels?.dependiente !== 'none') ||
     (userRole === 'almacenero' && salidaAccessLevels?.almacenero !== 'none') ||
     (userRole === 'económico' && salidaAccessLevels?.economico !== 'none'));
 
-  const canAccessOperaciones = 
+  const canAccessOperaciones =
     !isOfflineMode &&
     (isAdmin ||
     (userRole === 'dependiente' && operacionAccessLevels?.dependiente !== 'none') ||
     (userRole === 'almacenero' && operacionAccessLevels?.almacenero !== 'none') ||
     (userRole === 'económico' && operacionAccessLevels?.economico !== 'none'));
+
+  const canAccessVentas =
+    !isOfflineMode &&
+    (isAdmin ||
+    (userRole === 'dependiente' && ventaAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'almacenero' && ventaAccessLevels?.almacenero !== 'none') ||
+    (userRole === 'económico' && ventaAccessLevels?.economico !== 'none'));
 
   const menuItems = [
     { icon: require('../../../assets/bar-chart.png'), label: 'Panel', route: 'Home' },
@@ -50,6 +57,7 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
     { icon: require('../../../assets/product.png'), label: 'Productos', route: 'Productos' },
     ...(canAccessEntradas ? [{ icon: require('../../../assets/package-add.png'), label: 'Entradas', route: 'Entradas' }] : []),
     ...(canAccessSalidas ? [{ icon: require('../../../assets/box.png'), label: 'Salidas', route: 'Salidas' }] : []),
+    ...(canAccessVentas ? [{ icon: require('../../../assets/sales.png'), label: 'Ventas', route: 'Ventas' }] : []),
     ...(canAccessOperaciones ? [{ icon: require('../../../assets/report.png'), label: 'Operaciones', route: 'Operaciones' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/tienda.png'), label: 'Tiendas', route: 'Tiendas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/usuarios.png'), label: 'Usuarios', route: 'Usuarios' }] : []),

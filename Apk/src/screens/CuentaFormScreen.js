@@ -307,7 +307,7 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   scrollContent: {
     padding: responsive.responsivePadding(16),
-    paddingTop: responsive.responsivePadding(64),
+    paddingTop: responsive.responsivePadding(80),
     paddingBottom: responsive.responsivePadding(100),
   },
   loadingContainer: {

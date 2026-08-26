@@ -6,6 +6,7 @@ import { getTiendas } from './tiendaService';
 const SERVICIOS_KEY = '@abacus_servicios';
 const PRODUCTOS_KEY = '@abacus_productos';
 const TIENDAS_KEY = '@abacus_tiendas';
+const VENTAS_KEY = '@abacus_ventas';
 const HAS_OFFLINE_DATA_KEY = '@abacus_has_offline_data';
 
 export const storageService = {
@@ -241,6 +242,110 @@ export const storageService = {
       return jsonValue !== null ? JSON.parse(jsonValue) : [];
     } catch (error) {
       return [];
+    }
+  },
+
+  // Guardar ventas en AsyncStorage
+  saveVentas: async (ventas) => {
+    try {
+      await AsyncStorage.setItem(VENTAS_KEY, JSON.stringify(ventas));
+      return true;
+    } catch (error) {
+      return false;
+    }
+  },
+
+  // Obtener ventas de AsyncStorage
+  getVentas: async (filters = {}, page = 1, limit = 10) => {
+    try {
+      const jsonValue = await AsyncStorage.getItem(VENTAS_KEY);
+      let ventas = jsonValue !== null ? JSON.parse(jsonValue) : [];
+      
+      // Apply filters
+      if (filters.nota) {
+        ventas = ventas.filter(v => 
+          v.nota?.toLowerCase().includes(filters.nota.toLowerCase())
+        );
+      }
+
+      if (filters.id_tienda) {
+        ventas = ventas.filter(v => 
+          v.usuario?.tienda?.id_tienda === parseInt(filters.id_tienda)
+        );
+      }
+
+      if (filters.id_usuario) {
+        ventas = ventas.filter(v => 
+          v.usuario?.id_usuario === parseInt(filters.id_usuario)
+        );
+      }
+
+      if (filters.fecha_desde) {
+        const fechaDesde = new Date(filters.fecha_desde);
+        ventas = ventas.filter(v => 
+          new Date(v.fecha_hora) >= fechaDesde
+        );
+      }
+
+      if (filters.fecha_hasta) {
+        const fechaHasta = new Date(filters.fecha_hasta);
+        ventas = ventas.filter(v => 
+          new Date(v.fecha_hora) <= fechaHasta
+        );
+      }
+
+      if (filters.cantidad_min !== '' && filters.cantidad_min !== undefined) {
+        const minCantidad = parseFloat(filters.cantidad_min);
+        ventas = ventas.filter(v => 
+          (parseFloat(v.cantidad_cobrada_efectivo_cup) || 0) >= minCantidad
+        );
+      }
+
+      if (filters.cantidad_max !== '' && filters.cantidad_max !== undefined) {
+        const maxCantidad = parseFloat(filters.cantidad_max);
+        ventas = ventas.filter(v => 
+          (parseFloat(v.cantidad_cobrada_efectivo_cup) || 0) <= maxCantidad
+        );
+      }
+
+      // Pagination
+      const total = ventas.length;
+      const totalPages = Math.ceil(total / limit);
+      const startIndex = (page - 1) * limit;
+      const paginatedVentas = ventas.slice(startIndex, startIndex + limit);
+
+      return {
+        data: paginatedVentas,
+        pagination: {
+          total,
+          totalPages,
+          currentPage: page,
+          limit
+        }
+      };
+    } catch (error) {
+      return {
+        data: [],
+        pagination: {
+          total: 0,
+          totalPages: 1,
+          currentPage: 1,
+          limit
+        }
+      };
+    }
+  },
+
+  // Eliminar venta localmente
+  deleteVenta: async (id) => {
+    try {
+      const jsonValue = await AsyncStorage.getItem(VENTAS_KEY);
+      let ventas = jsonValue !== null ? JSON.parse(jsonValue) : [];
+      ventas = ventas.filter(v => v.id_lista_venta !== id);
+      await AsyncStorage.setItem(VENTAS_KEY, JSON.stringify(ventas));
+      return true;
+    } catch (error) {
+      return false;
     }
   },
 

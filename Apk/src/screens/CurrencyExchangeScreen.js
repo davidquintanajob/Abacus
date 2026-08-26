@@ -11,9 +11,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { configService } from '../services/configService';
 import { exchangeRateService } from '../services/exchangeRateService';
+import { getCuentas } from '../services/cuentaService';
+import { getTiendas } from '../services/tiendaService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import NetInfo from '@react-native-community/netinfo';
+import * as ImagePicker from 'expo-image-picker';
 
 const AccessLevelSwitch = ({ value, onChange, colors, responsive }) => {
   const levels = [
@@ -108,6 +111,16 @@ const CurrencyExchangeContent = () => {
     almacenero: false,
     economico: false,
   });
+  const [ventaAccessLevels, setVentaAccessLevels] = useState({
+    dependiente: 'none',
+    almacenero: 'none',
+    economico: 'none',
+  });
+  const [ventaManagePermissions, setVentaManagePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
   const [applyWeightedAverageCost, setApplyWeightedAverageCost] = useState(false);
   const [autoApplySuggestedCost, setAutoApplySuggestedCost] = useState({
     dependiente: false,
@@ -123,7 +136,21 @@ const CurrencyExchangeContent = () => {
   const [showSalidaManage, setShowSalidaManage] = useState(false);
   const [showOperacionPermissions, setShowOperacionPermissions] = useState(false);
   const [showOperacionManage, setShowOperacionManage] = useState(false);
+  const [showVentaPermissions, setShowVentaPermissions] = useState(false);
+  const [showVentaManage, setShowVentaManage] = useState(false);
   const [customSalidaTypes, setCustomSalidaTypes] = useState([]);
+  const [cuentaChangePermissions, setCuentaChangePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
+  const [showCuentaChangePermissions, setShowCuentaChangePermissions] = useState(false);
+  const [showComprobanteConfigCard, setShowComprobanteConfigCard] = useState(false);
+  const [showComprobanteConfig, setShowComprobanteConfig] = useState(false);
+  const [comprobanteConfig, setComprobanteConfig] = useState({
+    logo: null,
+    nombreNegocio: '',
+  });
   const [infoModal, setInfoModal] = useState({
     visible: false,
     title: '',
@@ -140,6 +167,19 @@ const CurrencyExchangeContent = () => {
     modificarSoloServicios: false,
     tipoDatoModificar: 'usd',
   });
+  
+  // Estados para configuración de cuentas por tienda
+  const [showSalesConfigCard, setShowSalesConfigCard] = useState(false);
+  const [showSalesConfig, setShowSalesConfig] = useState(false);
+  const [tiendaCuentasConfig, setTiendaCuentasConfig] = useState({});
+  const [selectedTienda, setSelectedTienda] = useState(null);
+  const [availableTiendas, setAvailableTiendas] = useState([]);
+  const [availableCuentas, setAvailableCuentas] = useState([]);
+  const [isLoadingTiendas, setIsLoadingTiendas] = useState(false);
+  const [isLoadingCuentas, setIsLoadingCuentas] = useState(false);
+  const [showCuentaSelector, setShowCuentaSelector] = useState(false);
+  const [selectorTipoCuenta, setSelectorTipoCuenta] = useState(null);
+  const [selectorIndex, setSelectorIndex] = useState(0);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
 
@@ -211,6 +251,12 @@ const CurrencyExchangeContent = () => {
       if (data.operacionManagePermissions) {
         setOperacionManagePermissions(data.operacionManagePermissions);
       }
+      if (data.ventaAccessLevels) {
+        setVentaAccessLevels(data.ventaAccessLevels);
+      }
+      if (data.ventaManagePermissions) {
+        setVentaManagePermissions(data.ventaManagePermissions);
+      }
       if (data.applyWeightedAverageCost !== undefined) {
         setApplyWeightedAverageCost(data.applyWeightedAverageCost);
       }
@@ -223,10 +269,190 @@ const CurrencyExchangeContent = () => {
       if (data.customSalidaTypes) {
         setCustomSalidaTypes(data.customSalidaTypes);
       }
+      if (data.tiendaCuentasConfig) {
+        setTiendaCuentasConfig(data.tiendaCuentasConfig);
+      }
+      if (data.cuentaChangePermissions) {
+        setCuentaChangePermissions(data.cuentaChangePermissions);
+      }
+      if (data.comprobanteConfig) {
+        setComprobanteConfig(data.comprobanteConfig);
+      }
     } catch (error) {
       showToast({ type: 'error', message: 'Error al cargar configuración' });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Funciones para configuración de comprobante
+  const handleSelectLogo = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showToast({ type: 'error', message: 'Se necesita permiso para acceder a la galería' });
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        setComprobanteConfig(prev => ({ ...prev, logo: result.assets[0].uri }));
+      }
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al seleccionar imagen' });
+    }
+  };
+
+  // Funciones para configuración de cuentas por tienda
+  const fetchTiendas = async () => {
+    try {
+      setIsLoadingTiendas(true);
+      const data = await getTiendas({}, 1, 100);
+      setAvailableTiendas(data.data || []);
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al cargar tiendas' });
+    } finally {
+      setIsLoadingTiendas(false);
+    }
+  };
+
+  const fetchCuentas = async () => {
+    try {
+      setIsLoadingCuentas(true);
+      const data = await getCuentas({}, 1, 100);
+      setAvailableCuentas(data.data || []);
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al cargar cuentas' });
+    } finally {
+      setIsLoadingCuentas(false);
+    }
+  };
+
+  const handleOpenSalesConfig = async () => {
+    try {
+      setShowSalesConfig(true);
+      await fetchTiendas();
+      await fetchCuentas();
+    } catch (error) {
+      console.error('Error al abrir configuración de ventas:', error);
+      showToast({ type: 'error', message: 'Error al cargar configuración' });
+      setShowSalesConfig(false);
+    }
+  };
+
+  const handleSelectTienda = (tienda) => {
+    setSelectedTienda(tienda);
+    // Inicializar configuración para esta tienda si no existe
+    if (!tiendaCuentasConfig[tienda.id_tienda]) {
+      setTiendaCuentasConfig(prev => ({
+        ...prev,
+        [tienda.id_tienda]: {
+          efectivo_cup: [],
+          efectivo_usd: [],
+          transferencia_cup: [],
+          transferencia_usd: [],
+        }
+      }));
+    }
+  };
+
+  const tiendaHasCuentas = (tiendaId) => {
+    const config = tiendaCuentasConfig[tiendaId];
+    if (!config) return false;
+    const totalCuentas = 
+      (config.efectivo_cup?.length || 0) +
+      (config.efectivo_usd?.length || 0) +
+      (config.transferencia_cup?.length || 0) +
+      (config.transferencia_usd?.length || 0);
+    return totalCuentas > 0;
+  };
+
+  const handleSelectCuenta = (cuenta) => {
+    if (!selectedTienda) return;
+    if (!selectorTipoCuenta) {
+      showToast({ type: 'error', message: 'Tipo de cuenta no especificado' });
+      return;
+    }
+    
+    const currentConfig = tiendaCuentasConfig[selectedTienda.id_tienda] || {
+      efectivo_cup: [],
+      efectivo_usd: [],
+      transferencia_cup: [],
+      transferencia_usd: [],
+    };
+    
+    const tipoCuenta = selectorTipoCuenta;
+    const currentCuentas = currentConfig[tipoCuenta] || [];
+    
+    // Verificar si ya está seleccionada
+    if (currentCuentas.some(c => c.id_cuenta === cuenta.id_cuenta)) {
+      showToast({ type: 'warning', message: 'Esta cuenta ya está seleccionada' });
+      return;
+    }
+    
+    // Verificar límite de 4 cuentas
+    if (currentCuentas.length >= 4) {
+      showToast({ type: 'warning', message: 'Máximo 4 cuentas por tipo' });
+      return;
+    }
+    
+    // Agregar cuenta
+    setTiendaCuentasConfig(prev => ({
+      ...prev,
+      [selectedTienda.id_tienda]: {
+        ...currentConfig,
+        [tipoCuenta]: [...currentCuentas, cuenta]
+      }
+    }));
+    
+    setShowCuentaSelector(false);
+    showToast({ type: 'success', message: 'Cuenta agregada correctamente' });
+  };
+
+  const handleRemoveCuenta = (tipoCuenta, cuentaIndex) => {
+    if (!selectedTienda) return;
+    
+    const currentConfig = tiendaCuentasConfig[selectedTienda.id_tienda];
+    const updatedCuentas = currentConfig[tipoCuenta].filter((_, index) => index !== cuentaIndex);
+    
+    setTiendaCuentasConfig(prev => ({
+      ...prev,
+      [selectedTienda.id_tienda]: {
+        ...currentConfig,
+        [tipoCuenta]: updatedCuentas
+      }
+    }));
+  };
+
+  const handleOpenCuentaSelector = (tipoCuenta, index = 0) => {
+    if (!tipoCuenta) {
+      showToast({ type: 'error', message: 'Tipo de cuenta no especificado' });
+      return;
+    }
+    setSelectorTipoCuenta(tipoCuenta);
+    setSelectorIndex(index);
+    setShowCuentaSelector(true);
+  };
+
+  const handleSaveSalesConfig = async () => {
+    try {
+      const updatedConfig = {
+        ...config,
+        tiendaCuentasConfig: tiendaCuentasConfig,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Configuración de cuentas guardada correctamente' });
+      setShowSalesConfig(false);
+      setSelectedTienda(null);
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al guardar configuración de cuentas' });
     }
   };
 
@@ -269,8 +495,13 @@ const CurrencyExchangeContent = () => {
         salidaManagePermissions: salidaManagePermissions,
         operacionAccessLevels: operacionAccessLevels,
         operacionManagePermissions: operacionManagePermissions,
+        ventaAccessLevels: ventaAccessLevels,
+        ventaManagePermissions: ventaManagePermissions,
         autoApplySuggestedCost: autoApplySuggestedCost,
         customSalidaTypes: customSalidaTypes,
+        tiendaCuentasConfig: tiendaCuentasConfig,
+        cuentaChangePermissions: cuentaChangePermissions,
+        comprobanteConfig: comprobanteConfig,
         monedaConfig: {
           modificarSoloServicios: currencyModalConfig.modificarSoloServicios,
           datosModificar: currencyModalConfig.datosModificar,
@@ -306,8 +537,8 @@ const CurrencyExchangeContent = () => {
     setInfoModal({ visible: false, title: '', description: '' });
   };
 
-  const togglePermission = async (key) => {
-    const newPermissions = { ...permissions, [key]: !permissions[key] };
+  const togglePermission = async (role) => {
+    const newPermissions = { ...permissions, [role]: !permissions[role] };
     setPermissions(newPermissions);
     
     try {
@@ -317,10 +548,28 @@ const CurrencyExchangeContent = () => {
       };
       await configService.updateConfig(updatedConfig);
       setConfig(updatedConfig);
-      showToast({ type: 'success', message: 'Permiso actualizado correctamente' });
+      showToast({ type: 'success', message: 'Permiso de productos y servicios actualizado correctamente' });
     } catch (error) {
-      showToast({ type: 'error', message: 'Error al actualizar permiso' });
+      showToast({ type: 'error', message: 'Error al actualizar permiso de productos y servicios' });
       setPermissions(permissions);
+    }
+  };
+
+  const toggleCuentaChangePermission = async (role) => {
+    const newCuentaChangePermissions = { ...cuentaChangePermissions, [role]: !cuentaChangePermissions[role] };
+    setCuentaChangePermissions(newCuentaChangePermissions);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        cuentaChangePermissions: newCuentaChangePermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Permiso de cambio de cuenta actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de cambio de cuenta' });
+      setCuentaChangePermissions(cuentaChangePermissions);
     }
   };
 
@@ -359,6 +608,44 @@ const CurrencyExchangeContent = () => {
       showToast({ type: 'success', message: 'Permiso de gestión de entradas actualizado correctamente' });
     } catch (error) {
       showToast({ type: 'error', message: 'Error al actualizar permiso de gestión de entradas' });
+    }
+  };
+
+  const updateVentaAccessLevel = async (role, newLevel) => {
+    const newVentaAccessLevels = { ...ventaAccessLevels, [role]: newLevel };
+    setVentaAccessLevels(newVentaAccessLevels);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        ventaAccessLevels: newVentaAccessLevels,
+      };
+      await configService.updateConfig(updatedConfig);
+      
+      await fetchConfig();
+      
+      showToast({ type: 'success', message: 'Nivel de acceso a ventas actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar nivel de acceso a ventas' });
+      setVentaAccessLevels(ventaAccessLevels);
+    }
+  };
+
+  const toggleVentaManagePermission = async (role) => {
+    const newVentaManagePermissions = { ...ventaManagePermissions, [role]: !ventaManagePermissions[role] };
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        ventaManagePermissions: newVentaManagePermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      
+      await fetchConfig();
+      
+      showToast({ type: 'success', message: 'Permiso de gestión de ventas actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de gestión de ventas' });
     }
   };
 
@@ -505,6 +792,75 @@ const CurrencyExchangeContent = () => {
   };
 
   const styles = createStyles(responsive);
+
+  const CuentaTipoConfig = ({ tipo, label, icon, color, config, onAdd, onRemove }) => {
+    const tiposCuentaDisplay = {
+      efectivo_cup: 'Efectivo CUP',
+      efectivo_usd: 'Efectivo USD',
+      transferencia_cup: 'Transferencia CUP',
+      transferencia_usd: 'Transferencia USD',
+    };
+
+    if (!tipo || !label || !icon) {
+      return null;
+    }
+
+    const safeConfig = config || [];
+    const displayTipo = tiposCuentaDisplay[tipo] || label;
+
+    return (
+      <View style={[styles.cuentaTipoSection, { borderColor: colors.outlineVariant }]}>
+        <View style={styles.cuentaTipoHeader}>
+          <View style={[styles.cuentaTipoIcon, { backgroundColor: `${color}20` }]}>
+            <Ionicons name={icon} size={20} color={color} />
+          </View>
+          <Text style={[styles.cuentaTipoLabel, { color: colors.onSurface }]}>
+            {label}
+          </Text>
+          <Text style={[styles.cuentaTipoCount, { color: colors.outline }]}>
+            {safeConfig.length}/4
+          </Text>
+        </View>
+
+        <View style={styles.cuentaTipoList}>
+          {safeConfig.length === 0 ? (
+            <Text style={[styles.cuentaTipoEmpty, { color: colors.outline }]}>
+              No hay cuentas seleccionadas
+            </Text>
+          ) : (
+            safeConfig.map((cuenta, index) => {
+              if (!cuenta || !cuenta.id_cuenta) return null;
+              return (
+                <View key={cuenta.id_cuenta} style={[styles.cuentaTipoItem, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                  <Text style={[styles.cuentaTipoItemName, { color: colors.onSurface }]} numberOfLines={1}>
+                    {cuenta.nombre || 'Sin nombre'}
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.cuentaTipoRemoveButton, { backgroundColor: `${color}20` }]}
+                    onPress={() => onRemove(index)}
+                  >
+                    <Ionicons name="close" size={16} color={color} />
+                  </TouchableOpacity>
+                </View>
+              );
+            })
+          )}
+        </View>
+
+        {safeConfig.length < 4 && (
+          <TouchableOpacity
+            style={[styles.cuentaTipoAddButton, { backgroundColor: `${color}20`, borderColor: color }]}
+            onPress={onAdd}
+          >
+            <Ionicons name="add" size={18} color={color} />
+            <Text style={[styles.cuentaTipoAddText, { color: color }]}>
+              Agregar cuenta {displayTipo}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -1613,6 +1969,397 @@ const CurrencyExchangeContent = () => {
           )}
         </Card>
 
+        <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
+          <View style={styles.permissionsHeader}>
+            <View style={styles.permissionsHeaderLeft}>
+              <Image source={require('../../assets/sales.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
+              <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
+                Configurar Cuentas para Ventas
+              </Text>
+            </View>
+            <TouchableOpacity 
+              style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+              onPress={() => setShowSalesConfigCard(!showSalesConfigCard)}
+            >
+              <Ionicons 
+                name={showSalesConfigCard ? "chevron-up" : "chevron-down"} 
+                size={responsive.responsiveWidth(24)} 
+                color={isDarkMode ? colors.primary : '#1976D2'} 
+              />
+            </TouchableOpacity>
+          </View>
+
+          {showSalesConfigCard && (
+            <>
+              <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                Configura hasta 4 cuentas por tipo de cuenta para cada tienda. Estas cuentas se usarán por defecto al realizar ventas.
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.configCuentasButton, { backgroundColor: colors.primary }]}
+                onPress={handleOpenSalesConfig}
+              >
+                <Ionicons name="settings-outline" size={responsive.responsiveWidth(20)} color="#fff" />
+                <Text style={styles.configCuentasButtonText}>Configurar Cuentas</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </Card>
+
+        <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
+          <View style={styles.permissionsHeader}>
+            <View style={styles.permissionsHeaderLeft}>
+              <Image source={require('../../assets/sales.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
+              <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
+                Cambio de Cuenta en Ventas
+              </Text>
+            </View>
+            <TouchableOpacity 
+              style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+              onPress={() => setShowCuentaChangePermissions(!showCuentaChangePermissions)}
+            >
+              <Ionicons 
+                name={showCuentaChangePermissions ? "chevron-up" : "chevron-down"} 
+                size={responsive.responsiveWidth(24)} 
+                color={isDarkMode ? colors.primary : '#1976D2'} 
+              />
+            </TouchableOpacity>
+          </View>
+
+          {showCuentaChangePermissions && (
+            <>
+              <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                Configura qué roles pueden cambiar la cuenta seleccionada al momento de realizar una venta
+              </Text>
+
+              <View style={styles.permissionItem}>
+                <View style={styles.permissionInfo}>
+                  <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                    Dependiente
+                  </Text>
+                  <TouchableOpacity 
+                    style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                    onPress={() => showInfoModal(
+                      'Cambio de Cuenta - Dependiente',
+                      'Cuando está activo, los usuarios con rol Dependiente pueden cambiar la cuenta seleccionada al momento de realizar una venta.'
+                    )}
+                  >
+                    <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                  </TouchableOpacity>
+                </View>
+                <Switch
+                  value={cuentaChangePermissions.dependiente}
+                  onValueChange={() => toggleCuentaChangePermission('dependiente')}
+                  trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                  thumbColor={cuentaChangePermissions.dependiente ? '#fff' : colors.outline}
+                />
+              </View>
+
+              <View style={styles.permissionItem}>
+                <View style={styles.permissionInfo}>
+                  <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                    Almacenero
+                  </Text>
+                  <TouchableOpacity 
+                    style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                    onPress={() => showInfoModal(
+                      'Cambio de Cuenta - Almacenero',
+                      'Cuando está activo, los usuarios con rol Almacenero pueden cambiar la cuenta seleccionada al momento de realizar una venta.'
+                    )}
+                  >
+                    <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                  </TouchableOpacity>
+                </View>
+                <Switch
+                  value={cuentaChangePermissions.almacenero}
+                  onValueChange={() => toggleCuentaChangePermission('almacenero')}
+                  trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                  thumbColor={cuentaChangePermissions.almacenero ? '#fff' : colors.outline}
+                />
+              </View>
+
+              <View style={styles.permissionItem}>
+                <View style={styles.permissionInfo}>
+                  <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                    Económico
+                  </Text>
+                  <TouchableOpacity 
+                    style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                    onPress={() => showInfoModal(
+                      'Cambio de Cuenta - Económico',
+                      'Cuando está activo, los usuarios con rol Económico pueden cambiar la cuenta seleccionada al momento de realizar una venta.'
+                    )}
+                  >
+                    <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                  </TouchableOpacity>
+                </View>
+                <Switch
+                  value={cuentaChangePermissions.economico}
+                  onValueChange={() => toggleCuentaChangePermission('economico')}
+                  trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                  thumbColor={cuentaChangePermissions.economico ? '#fff' : colors.outline}
+                />
+              </View>
+            </>
+          )}
+        </Card>
+
+        <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
+          <View style={styles.permissionsHeader}>
+            <View style={styles.permissionsHeaderLeft}>
+              <Image source={require('../../assets/sales.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
+              <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
+                Permisos de Ventas
+              </Text>
+            </View>
+            <TouchableOpacity 
+              style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+              onPress={() => setShowVentaPermissions(!showVentaPermissions)}
+            >
+              <Ionicons 
+                name={showVentaPermissions ? "chevron-up" : "chevron-down"} 
+                size={responsive.responsiveWidth(24)} 
+                color={isDarkMode ? colors.primary : '#1976D2'} 
+              />
+            </TouchableOpacity>
+          </View>
+
+          {showVentaPermissions && (
+            <>
+              <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                Configura el nivel de acceso a las ventas para cada rol
+              </Text>
+
+              <View style={styles.accessLevelExplanation}>
+                <View style={styles.accessLevelExplanationItem}>
+                  <Ionicons name="lock-closed" size={16} color={colors.outline} />
+                  <Text style={[styles.accessLevelExplanationText, { color: colors.outline }]}>
+                    <Text style={{ fontWeight: '600' }}>Sin acceso:</Text> No puede ver la pantalla de Ventas ni ninguna venta del sistema
+                  </Text>
+                </View>
+                <View style={styles.accessLevelExplanationItem}>
+                  <Ionicons name="storefront" size={16} color={colors.outline} />
+                  <Text style={[styles.accessLevelExplanationText, { color: colors.outline }]}>
+                    <Text style={{ fontWeight: '600' }}>Mi tienda:</Text> Puede ver la pantalla de Ventas pero solo las ventas de su tienda
+                  </Text>
+                </View>
+                <View style={styles.accessLevelExplanationItem}>
+                  <Ionicons name="globe" size={16} color={colors.outline} />
+                  <Text style={[styles.accessLevelExplanationText, { color: colors.outline }]}>
+                    <Text style={{ fontWeight: '600' }}>Todas las tiendas:</Text> Puede ver la pantalla de Ventas y las ventas de todas las tiendas
+                  </Text>
+                </View>
+              </View>
+
+          <View style={styles.permissionItem}>
+            <View style={styles.permissionInfo}>
+              <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                Dependiente
+              </Text>
+              <TouchableOpacity 
+                style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                onPress={() => showInfoModal(
+                  'Acceso a Ventas - Dependiente',
+                  'Define si los usuarios con rol Dependiente no tienen acceso a ventas, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
+                )}
+              >
+                <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+              </TouchableOpacity>
+            </View>
+            <AccessLevelSwitch
+              value={ventaAccessLevels.dependiente}
+              onChange={(newLevel) => updateVentaAccessLevel('dependiente', newLevel)}
+              colors={colors}
+              responsive={responsive}
+            />
+          </View>
+
+          <View style={styles.permissionItem}>
+            <View style={styles.permissionInfo}>
+              <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                Almacenero
+              </Text>
+              <TouchableOpacity 
+                style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                onPress={() => showInfoModal(
+                  'Acceso a Ventas - Almacenero',
+                  'Define si los usuarios con rol Almacenero no tienen acceso a ventas, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
+                )}
+              >
+                <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+              </TouchableOpacity>
+            </View>
+            <AccessLevelSwitch
+              value={ventaAccessLevels.almacenero}
+              onChange={(newLevel) => updateVentaAccessLevel('almacenero', newLevel)}
+              colors={colors}
+              responsive={responsive}
+            />
+          </View>
+
+          <View style={styles.permissionItem}>
+            <View style={styles.permissionInfo}>
+              <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                Económico
+              </Text>
+              <TouchableOpacity 
+                style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                onPress={() => showInfoModal(
+                  'Acceso a Ventas - Económico',
+                  'Define si los usuarios con rol Económico no tienen acceso a ventas, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
+                )}
+              >
+                <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+              </TouchableOpacity>
+            </View>
+            <AccessLevelSwitch
+              value={ventaAccessLevels.economico}
+              onChange={(newLevel) => updateVentaAccessLevel('economico', newLevel)}
+              colors={colors}
+              responsive={responsive}
+            />
+          </View>
+
+          {(ventaAccessLevels.dependiente !== 'none' || ventaAccessLevels.almacenero !== 'none' || ventaAccessLevels.economico !== 'none') && (
+            <View style={styles.permissionSection}>
+              <View style={styles.permissionSectionHeader}>
+                <Text style={[styles.permissionSectionTitle, { color: colors.onSurface }]}>
+                  Gestión de Ventas
+                </Text>
+                <TouchableOpacity 
+                  style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+                  onPress={() => setShowVentaManage(!showVentaManage)}
+                >
+                  <Ionicons 
+                    name={showVentaManage ? "chevron-up" : "chevron-down"} 
+                    size={responsive.responsiveWidth(20)} 
+                    color={isDarkMode ? colors.primary : '#1976D2'} 
+                  />
+                </TouchableOpacity>
+              </View>
+              {showVentaManage && (
+                <>
+                  <Text style={[styles.permissionSectionSubtitle, { color: colors.outline }]}>
+                    Configura qué roles pueden crear, editar y eliminar ventas (solo visible para roles con acceso)
+                  </Text>
+                  {ventaAccessLevels.dependiente !== 'none' && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Dependiente
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Ventas - Dependiente',
+                            'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar ventas. Cuando está desactivado, solo pueden ver la información sin poder gestionar ventas.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={ventaManagePermissions.dependiente}
+                        onValueChange={() => toggleVentaManagePermission('dependiente')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={ventaManagePermissions.dependiente ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                  {ventaAccessLevels.almacenero !== 'none' && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Almacenero
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Ventas - Almacenero',
+                            'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar ventas. Cuando está desactivado, solo pueden ver la información sin poder gestionar ventas.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={ventaManagePermissions.almacenero}
+                        onValueChange={() => toggleVentaManagePermission('almacenero')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={ventaManagePermissions.almacenero ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                  {ventaAccessLevels.economico !== 'none' && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Económico
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Ventas - Económico',
+                            'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar ventas. Cuando está desactivado, solo pueden ver la información sin poder gestionar ventas.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={ventaManagePermissions.economico}
+                        onValueChange={() => toggleVentaManagePermission('economico')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={ventaManagePermissions.economico ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+          )}
+
+            </>
+          )}
+        </Card>
+
+        <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
+          <View style={styles.permissionsHeader}>
+            <View style={styles.permissionsHeaderLeft}>
+              <Image source={require('../../assets/sales.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
+              <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
+                Configuración de Comprobante
+              </Text>
+            </View>
+            <TouchableOpacity 
+              style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+              onPress={() => setShowComprobanteConfigCard(!showComprobanteConfigCard)}
+            >
+              <Ionicons 
+                name={showComprobanteConfigCard ? "chevron-up" : "chevron-down"} 
+                size={responsive.responsiveWidth(24)} 
+                color={isDarkMode ? colors.primary : '#1976D2'} 
+              />
+            </TouchableOpacity>
+          </View>
+
+          {showComprobanteConfigCard && (
+            <>
+              <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                Personaliza el logo y nombre del negocio que aparecerán en los comprobantes de venta
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.configCuentasButton, { backgroundColor: colors.primary }]}
+                onPress={() => setShowComprobanteConfig(true)}
+              >
+                <Ionicons name="settings-outline" size={responsive.responsiveWidth(20)} color="#fff" />
+                <Text style={styles.configCuentasButtonText}>Configurar</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </Card>
+
       </ScrollView>
 
       <Modal
@@ -1814,6 +2561,334 @@ const CurrencyExchangeContent = () => {
                 onPress={handleCurrencyModalConfirm}
               >
                 <Text style={[styles.currencyModalButtonText, { color: '#fff' }]}>Aplicar Cambios</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showSalesConfig}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSalesConfig(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.currencyModalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Image source={require('../../assets/sales.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                Configurar Cuentas por Tienda
+              </Text>
+              <TouchableOpacity onPress={() => setShowSalesConfig(false)}>
+                <Ionicons name="close" size={responsive.responsiveWidth(24)} color={colors.outline} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.currencyModalScrollView}>
+              {!selectedTienda ? (
+                <>
+                  <Text style={[styles.currencyModalSubtitle, { color: colors.outline }]}>
+                    Selecciona una tienda para configurar sus cuentas por defecto
+                  </Text>
+                  
+                  {isLoadingTiendas ? (
+                    <View style={styles.ratesLoadingContainer}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                      <Text style={[styles.ratesLoadingText, { color: colors.outline }]}>
+                        Cargando tiendas...
+                      </Text>
+                    </View>
+                  ) : availableTiendas.length === 0 ? (
+                    <Text style={[styles.infoText, { color: colors.outline }]}>
+                      No hay tiendas disponibles
+                    </Text>
+                  ) : (
+                    <View style={styles.currencyModalOptions}>
+                      {availableTiendas.map((tienda) => {
+                        const hasConfig = tiendaCuentasConfig[tienda.id_tienda];
+                        const hasCuentas = tiendaHasCuentas(tienda.id_tienda);
+                        const isSelected = hasConfig && hasCuentas;
+                        
+                        return (
+                          <TouchableOpacity
+                            key={tienda.id_tienda}
+                            style={[styles.currencyModalOption, { 
+                              backgroundColor: isSelected ? colors.primary : 'transparent',
+                              borderColor: isSelected ? colors.primary : colors.outlineVariant 
+                            }]}
+                            onPress={() => handleSelectTienda(tienda)}
+                          >
+                            <Text style={[styles.currencyModalOptionText, { color: isSelected ? '#fff' : colors.onSurface }]}>
+                              {tienda.nombre}
+                            </Text>
+                            {isSelected && (
+                              <Ionicons name="checkmark" size={20} color="#fff" />
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+                </>
+              ) : (
+                <>
+                  <View style={styles.selectedTiendaHeader}>
+                    <TouchableOpacity onPress={() => setSelectedTienda(null)}>
+                      <Ionicons name="arrow-back" size={responsive.responsiveWidth(24)} color={colors.primary} />
+                    </TouchableOpacity>
+                    <Text style={[styles.selectedTiendaTitle, { color: colors.onSurface }]}>
+                      {selectedTienda.nombre}
+                    </Text>
+                    <View style={{ width: responsive.responsiveWidth(24) }} />
+                  </View>
+
+                  <CuentaTipoConfig
+                    tipo="efectivo_cup"
+                    label="Efectivo CUP"
+                    icon="cash"
+                    color="#4CAF50"
+                    config={tiendaCuentasConfig[selectedTienda.id_tienda]?.efectivo_cup || []}
+                    onAdd={() => handleOpenCuentaSelector('efectivo_cup')}
+                    onRemove={(index) => handleRemoveCuenta('efectivo_cup', index)}
+                    colors={colors}
+                    responsive={responsive}
+                  />
+
+                  <CuentaTipoConfig
+                    tipo="efectivo_usd"
+                    label="Efectivo USD"
+                    icon="logo-usd"
+                    color="#2196F3"
+                    config={tiendaCuentasConfig[selectedTienda.id_tienda]?.efectivo_usd || []}
+                    onAdd={() => handleOpenCuentaSelector('efectivo_usd')}
+                    onRemove={(index) => handleRemoveCuenta('efectivo_usd', index)}
+                    colors={colors}
+                    responsive={responsive}
+                  />
+
+                  <CuentaTipoConfig
+                    tipo="transferencia_cup"
+                    label="Transferencia CUP"
+                    icon="swap-horizontal"
+                    color="#FF9800"
+                    config={tiendaCuentasConfig[selectedTienda.id_tienda]?.transferencia_cup || []}
+                    onAdd={() => handleOpenCuentaSelector('transferencia_cup')}
+                    onRemove={(index) => handleRemoveCuenta('transferencia_cup', index)}
+                    colors={colors}
+                    responsive={responsive}
+                  />
+
+                  <CuentaTipoConfig
+                    tipo="transferencia_usd"
+                    label="Transferencia USD"
+                    icon="card"
+                    color="#9C27B0"
+                    config={tiendaCuentasConfig[selectedTienda.id_tienda]?.transferencia_usd || []}
+                    onAdd={() => handleOpenCuentaSelector('transferencia_usd')}
+                    onRemove={(index) => handleRemoveCuenta('transferencia_usd', index)}
+                    colors={colors}
+                    responsive={responsive}
+                  />
+                </>
+              )}
+            </ScrollView>
+
+            <View style={styles.currencyModalButtons}>
+              <TouchableOpacity
+                style={[styles.currencyModalButton, styles.currencyModalCancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
+                onPress={() => {
+                  setShowSalesConfig(false);
+                  setSelectedTienda(null);
+                }}
+              >
+                <Text style={[styles.currencyModalButtonText, { color: colors.onSurface }]}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.currencyModalButton, styles.currencyModalConfirmButton, { backgroundColor: colors.primary }]}
+                onPress={handleSaveSalesConfig}
+              >
+                <Text style={[styles.currencyModalButtonText, { color: '#fff' }]}>Guardar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showCuentaSelector}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCuentaSelector(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                Seleccionar Cuenta
+              </Text>
+              <TouchableOpacity onPress={() => setShowCuentaSelector(false)}>
+                <Ionicons name="close" size={responsive.responsiveWidth(24)} color={colors.outline} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.currencyModalScrollView}>
+              {isLoadingCuentas ? (
+                <View style={styles.ratesLoadingContainer}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={[styles.ratesLoadingText, { color: colors.outline }]}>
+                    Cargando cuentas...
+                  </Text>
+                </View>
+              ) : !selectorTipoCuenta ? (
+                <Text style={[styles.infoText, { color: colors.outline }]}>
+                  Tipo de cuenta no especificado
+                </Text>
+              ) : availableCuentas.length === 0 ? (
+                <Text style={[styles.infoText, { color: colors.outline }]}>
+                  No hay cuentas disponibles
+                </Text>
+              ) : (
+                <View style={styles.currencyModalOptions}>
+                  {(() => {
+                    // Mapeo de tipos internos a tipos del backend
+                    const tipoMapping = {
+                      'efectivo_cup': 'Efectivo CUP',
+                      'efectivo_usd': 'Efectivo USD',
+                      'transferencia_cup': 'Transferencia CUP',
+                      'transferencia_usd': 'Transferencia USD',
+                    };
+                    
+                    const tipoBuscado = tipoMapping[selectorTipoCuenta];
+                    const cuentasFiltradas = availableCuentas.filter(cuenta => cuenta.tipo_cuenta === tipoBuscado);
+                    
+                    if (cuentasFiltradas.length === 0) {
+                      return (
+                        <Text style={[styles.infoText, { color: colors.outline }]}>
+                          No hay cuentas de tipo "{tipoBuscado}" disponibles
+                        </Text>
+                      );
+                    }
+                    
+                    return cuentasFiltradas.map((cuenta) => (
+                      <TouchableOpacity
+                        key={cuenta.id_cuenta}
+                        style={[styles.currencyModalOption, { borderColor: colors.outlineVariant }]}
+                        onPress={() => handleSelectCuenta(cuenta)}
+                      >
+                        <View style={styles.cuentaOptionInfo}>
+                          <Text style={[styles.currencyModalOptionText, { color: colors.onSurface }]}>
+                            {cuenta.nombre}
+                          </Text>
+                          <Text style={[styles.cuentaOptionFondo, { color: colors.primary }]}>
+                            Fondo: {parseFloat(cuenta.fondo || 0).toFixed(2)}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ));
+                  })()}
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showComprobanteConfig}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowComprobanteConfig(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.currencyModalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                Configuración de Comprobante
+              </Text>
+              <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowComprobanteConfig(false)}>
+                <Ionicons name="close" size={responsive.responsiveWidth(24)} color={colors.outline} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.currencyModalScrollView}>
+              <View style={styles.formGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Nombre del Negocio</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Ej: Mi Tienda"
+                  value={comprobanteConfig.nombreNegocio}
+                  onChangeText={(text) => setComprobanteConfig(prev => ({ ...prev, nombreNegocio: text }))}
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Logo (opcional)</Text>
+                <TouchableOpacity
+                  style={[styles.uploadButton, { borderColor: colors.outlineVariant }]}
+                  onPress={handleSelectLogo}
+                >
+                  {comprobanteConfig.logo ? (
+                    <Image source={{ uri: comprobanteConfig.logo }} style={styles.logoPreview} />
+                  ) : (
+                    <View style={styles.uploadPlaceholder}>
+                      <Ionicons name="image" size={responsive.responsiveWidth(32)} color={colors.outline} />
+                      <Text style={[styles.uploadText, { color: colors.outline }]}>
+                        Toca para seleccionar logo
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.previewSection}>
+                <Text style={[styles.previewTitle, { color: colors.onSurface }]}>
+                  Previsualización
+                </Text>
+                <View style={[styles.comprobantePreview, { backgroundColor: '#fff', borderColor: '#000' }]}>
+                  {comprobanteConfig.logo && (
+                    <Image source={{ uri: comprobanteConfig.logo }} style={styles.comprobanteLogo} />
+                  )}
+                  <Text style={styles.comprobanteNegocioName}>
+                    {comprobanteConfig.nombreNegocio || 'Nombre del Negocio'}
+                  </Text>
+                  <View style={styles.comprobanteLine} />
+                  <Text style={styles.comprobanteText}>COMPROBANTE DE VENTA</Text>
+                  <View style={styles.comprobanteLine} />
+                  <Text style={styles.comprobanteText}>Fecha: {new Date().toLocaleDateString()}</Text>
+                  <Text style={styles.comprobanteText}>Hora: {new Date().toLocaleTimeString()}</Text>
+                  <View style={styles.comprobanteLine} />
+                  <Text style={styles.comprobanteText}>Producto 1................$10.00</Text>
+                  <Text style={styles.comprobanteText}>Producto 2................$15.00</Text>
+                  <View style={styles.comprobanteLine} />
+                  <Text style={styles.comprobanteTotal}>TOTAL: $25.00</Text>
+                  <View style={styles.comprobanteLine} />
+                  <Text style={styles.comprobanteText}>¡Gracias por su compra!</Text>
+                </View>
+              </View>
+            </ScrollView>
+
+            <View style={[styles.modalFooter, { backgroundColor: colors.surface }]}>
+              <TouchableOpacity
+                style={[styles.configCuentasButton, { backgroundColor: colors.primary }]}
+                onPress={async () => {
+                  try {
+                    const updatedConfig = {
+                      ...config,
+                      comprobanteConfig: comprobanteConfig,
+                    };
+                    await configService.updateConfig(updatedConfig);
+                    setConfig(updatedConfig);
+                    showToast({ type: 'success', message: 'Configuración de comprobante guardada correctamente' });
+                    setShowComprobanteConfig(false);
+                  } catch (error) {
+                    showToast({ type: 'error', message: 'Error al guardar configuración de comprobante' });
+                  }
+                }}
+              >
+                <Ionicons name="save" size={responsive.responsiveWidth(20)} color="#fff" />
+                <Text style={styles.configCuentasButtonText}>Guardar Configuración</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2232,5 +3307,205 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.body,
     fontWeight: '600',
     fontFamily: 'Inter',
+  },
+  cuentaTipoSection: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: responsive.responsivePadding(16),
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  cuentaTipoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(12),
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  cuentaTipoIcon: {
+    width: responsive.responsiveWidth(36),
+    height: responsive.responsiveHeight(36),
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cuentaTipoLabel: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    flex: 1,
+  },
+  cuentaTipoCount: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+  },
+  cuentaTipoList: {
+    gap: responsive.responsiveMargin(8),
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  cuentaTipoEmpty: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: responsive.responsivePadding(8),
+  },
+  cuentaTipoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: responsive.responsivePadding(12),
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  cuentaTipoItemName: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+    flex: 1,
+  },
+  cuentaTipoRemoveButton: {
+    width: responsive.responsiveWidth(28),
+    height: responsive.responsiveHeight(28),
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cuentaTipoAddButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: responsive.responsiveMargin(8),
+    paddingVertical: responsive.responsivePadding(10),
+    borderRadius: 6,
+    borderWidth: 1.5,
+  },
+  cuentaTipoAddText: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  selectedTiendaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: responsive.responsiveMargin(16),
+    paddingBottom: responsive.responsivePadding(12),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
+  selectedTiendaTitle: {
+    fontSize: responsive.fontSizes.h6,
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    flex: 1,
+    textAlign: 'center',
+  },
+  cuentaOptionInfo: {
+    flex: 1,
+  },
+  cuentaOptionFondo: {
+    fontSize: responsive.fontSizes.caption,
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(2),
+  },
+  uploadButton: {
+    borderWidth: 2,
+    borderRadius: 8,
+    padding: responsive.responsivePadding(20),
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: responsive.responsiveHeight(120),
+  },
+  uploadPlaceholder: {
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+  },
+  uploadText: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+  },
+  logoPreview: {
+    width: responsive.responsiveWidth(100),
+    height: responsive.responsiveHeight(100),
+    resizeMode: 'contain',
+  },
+  previewSection: {
+    marginTop: responsive.responsiveMargin(24),
+    marginBottom: responsive.responsiveMargin(24),
+  },
+  previewTitle: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  comprobantePreview: {
+    borderWidth: 1,
+    borderRadius: 4,
+    padding: responsive.responsivePadding(16),
+    alignItems: 'center',
+  },
+  comprobanteLogo: {
+    width: responsive.responsiveWidth(60),
+    height: responsive.responsiveHeight(60),
+    resizeMode: 'contain',
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  comprobanteNegocioName: {
+    fontSize: responsive.fontSizes.h6,
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+    color: '#000',
+    marginBottom: responsive.responsiveMargin(8),
+    textAlign: 'center',
+  },
+  comprobanteLine: {
+    width: '100%',
+    height: 1,
+    backgroundColor: '#000',
+    marginVertical: responsive.responsiveMargin(8),
+  },
+  comprobanteText: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+    color: '#000',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  comprobanteTotal: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+    color: '#000',
+    marginTop: responsive.responsiveMargin(8),
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  modalFooter: {
+    padding: responsive.responsivePadding(16),
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    right: responsive.responsivePadding(16),
+    top: responsive.responsivePadding(16),
+  },
+  configCuentasButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: responsive.responsiveMargin(8),
+    paddingVertical: responsive.responsivePadding(14),
+    paddingHorizontal: responsive.responsivePadding(16),
+    borderRadius: 8,
+    marginTop: responsive.responsiveMargin(16),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  configCuentasButtonText: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    color: '#fff',
   },
 });
