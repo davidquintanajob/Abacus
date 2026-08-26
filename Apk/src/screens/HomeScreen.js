@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Linking, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -29,8 +29,10 @@ const HomeContent = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [greeting, setGreeting] = useState('Buenos días');
   const [expiringProducts, setExpiringProducts] = useState([]);
+  const [allExpiringProducts, setAllExpiringProducts] = useState([]);
   const [loadingExpiring, setLoadingExpiring] = useState(false);
   const [currentDate, setCurrentDate] = useState('');
+  const [alertModalVisible, setAlertModalVisible] = useState(false);
   const [summaryData, setSummaryData] = useState({
     cantidad_productos: 0,
     total_ventas_cup: 0,
@@ -229,7 +231,8 @@ const HomeContent = () => {
           const cachedProducts = await AsyncStorage.getItem('expiring_products');
           if (cachedProducts) {
             const productosConAlerta = JSON.parse(cachedProducts);
-            setExpiringProducts(productosConAlerta);
+            setAllExpiringProducts(productosConAlerta);
+            setExpiringProducts(productosConAlerta.slice(0, 3));
             
             // Mostrar toast de alerta si hay productos próximos a vencer
             if (productosConAlerta.length > 0) {
@@ -291,10 +294,10 @@ const HomeContent = () => {
             };
           })
           .filter(item => item.alerta.level === 'critical' || item.alerta.level === 'warning' || item.alerta.level === 'expired')
-          .sort((a, b) => a.alerta.days - b.alerta.days) // Ordenar por días restantes (menor primero)
-          .slice(0, 5); // Mostrar máximo 5 productos
+          .sort((a, b) => a.alerta.days - b.alerta.days); // Ordenar por días restantes (menor primero)
         
-        setExpiringProducts(productosConAlerta);
+        setAllExpiringProducts(productosConAlerta);
+        setExpiringProducts(productosConAlerta.slice(0, 3)); // Mostrar máximo 3 productos
         
         // Guardar en AsyncStorage para modo offline
         await AsyncStorage.setItem('expiring_products', JSON.stringify(productosConAlerta));
@@ -578,13 +581,10 @@ const HomeContent = () => {
                     </View>
                     <View style={styles.expirationContent}>
                       <Text style={[styles.expirationProductName, { color: colors.onSurface }]}>
-                        {producto.nombreProducto}
+                        {producto.codigoLote}
                       </Text>
                       <Text style={[styles.expirationLote, { color: colors.outline }]}>
-                        Lote: {producto.codigoLote}
-                      </Text>
-                      <Text style={[styles.expirationQuantity, { color: colors.outline }]}>
-                        Cantidad restante: {producto.cantidad_restante || 0}
+                        Cant.Res: {producto.cantidad_restante || 0}
                       </Text>
                     </View>
                     <View style={styles.expirationRight}>
@@ -604,30 +604,40 @@ const HomeContent = () => {
                          `${producto.alerta.days} días`}
                       </Text>
                     </View>
-                  </View>
-                  <View style={styles.expirationActions}>
-                    <TouchableOpacity
-                      style={[styles.expirationActionButton, { backgroundColor: colors.primary }]}
-                      onPress={() => handleProductoPress(producto)}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="cube" size={responsive.responsiveWidth(16)} color="#fff" />
-                      <Text style={styles.expirationActionText}>Producto</Text>
-                    </TouchableOpacity>
-                    {!isOfflineMode && (
+                    <View style={styles.expirationActions}>
                       <TouchableOpacity
-                        style={[styles.expirationActionButton, { backgroundColor: colors.secondary }]}
-                        onPress={() => handleEntradaPress(producto)}
+                        style={[styles.expirationActionButton, { backgroundColor: colors.primary }]}
+                        onPress={() => handleProductoPress(producto)}
                         activeOpacity={0.7}
                       >
-                        <Ionicons name="document" size={responsive.responsiveWidth(16)} color="#fff" />
-                        <Text style={styles.expirationActionText}>Entrada</Text>
+                        <Ionicons name="cube" size={responsive.responsiveWidth(14)} color="#fff" />
                       </TouchableOpacity>
-                    )}
+                      {!isOfflineMode && (
+                        <TouchableOpacity
+                          style={[styles.expirationActionButton, { backgroundColor: colors.secondary }]}
+                          onPress={() => handleEntradaPress(producto)}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="document" size={responsive.responsiveWidth(14)} color="#fff" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
                 </Card>
               ))}
             </View>
+            {allExpiringProducts.length > 3 && (
+              <TouchableOpacity
+                style={[styles.seeMoreButton, { backgroundColor: `${colors.primary}15` }]}
+                onPress={() => setAlertModalVisible(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.seeMoreText, { color: colors.primary }]}>
+                  Ver más ({allExpiringProducts.length - 3} más)
+                </Text>
+                <Ionicons name="chevron-down" size={responsive.responsiveWidth(16)} color={colors.primary} />
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -790,6 +800,100 @@ const HomeContent = () => {
         onHide={hideToast}
         toastKey={toast.key}
       />
+      
+      {/* Modal de todas las alertas */}
+      <Modal
+        visible={alertModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setAlertModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                Todas las Alertas de Vencimiento
+              </Text>
+              <TouchableOpacity
+                onPress={() => setAlertModalVisible(false)}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={responsive.responsiveWidth(24)} color={colors.outline} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView 
+              style={styles.modalScroll} 
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.modalScrollContent}
+            >
+              <View style={styles.modalList}>
+                {allExpiringProducts.map((producto, index) => (
+                  <Card 
+                    key={producto.id || index} 
+                    style={[
+                      styles.modalExpirationItem, 
+                      { 
+                        backgroundColor: colors.surface,
+                        borderLeftWidth: 4,
+                        borderLeftColor: getExpirationAlertColor(producto.alerta.level)
+                      }
+                    ]}
+                  >
+                    <View style={styles.expirationHeader}>
+                      <View style={styles.expirationIconContainer}>
+                        {getExpirationAlertIcon(producto.alerta.level)}
+                      </View>
+                      <View style={styles.expirationContent}>
+                        <Text style={[styles.expirationProductName, { color: colors.onSurface }]}>
+                          {producto.codigoLote}
+                        </Text>
+                        <Text style={[styles.expirationLote, { color: colors.outline }]}>
+                          Cant.Res: {producto.cantidad_restante || 0}
+                        </Text>
+                      </View>
+                      <View style={styles.expirationRight}>
+                        <Text 
+                          style={[
+                            styles.expirationLabel, 
+                            { color: getExpirationAlertColor(producto.alerta.level) }
+                          ]}
+                        >
+                          {producto.alerta.label}
+                        </Text>
+                        <Text style={[styles.expirationDays, { color: colors.outline }]}>
+                          {producto.alerta.days === 0 ? 'Hoy' : 
+                           producto.alerta.days === 1 ? 'Mañana' :
+                           producto.alerta.days === -1 ? 'Ayer' :
+                           producto.alerta.days < 0 ? `${Math.abs(producto.alerta.days)} días` :
+                           `${producto.alerta.days} días`}
+                        </Text>
+                      </View>
+                      <View style={styles.expirationActions}>
+                        <TouchableOpacity
+                          style={[styles.expirationActionButton, { backgroundColor: colors.primary }]}
+                          onPress={() => handleProductoPress(producto)}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="cube" size={responsive.responsiveWidth(14)} color="#fff" />
+                        </TouchableOpacity>
+                        {!isOfflineMode && (
+                          <TouchableOpacity
+                            style={[styles.expirationActionButton, { backgroundColor: colors.secondary }]}
+                            onPress={() => handleEntradaPress(producto)}
+                            activeOpacity={0.7}
+                          >
+                            <Ionicons name="document" size={responsive.responsiveWidth(14)} color="#fff" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  </Card>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1068,7 +1172,7 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   expirationItem: {
     borderRadius: 14,
-    padding: responsive.cardPadding,
+    padding: responsive.responsivePadding(12),
     flexDirection: 'column',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -1088,7 +1192,7 @@ const createStyles = (responsive) => StyleSheet.create({
   expirationHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: responsive.responsiveMargin(12),
+    marginBottom: responsive.responsiveMargin(8),
   },
   expirationContent: {
     flex: 1,
@@ -1130,18 +1234,16 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   expirationActions: {
     flexDirection: 'row',
-    gap: responsive.responsiveMargin(8),
-    marginTop: responsive.responsiveMargin(12),
+    gap: responsive.responsiveMargin(6),
+    marginLeft: responsive.responsiveMargin(8),
   },
   expirationActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: responsive.responsiveMargin(4),
-    paddingHorizontal: responsive.responsivePadding(12),
-    paddingVertical: responsive.responsivePadding(8),
+    width: responsive.responsiveWidth(32),
+    height: responsive.responsiveHeight(32),
     borderRadius: 8,
-    flex: 1,
   },
   expirationActionText: {
     fontSize: responsive.fontSizes.bodySmall,
@@ -1151,5 +1253,73 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   bottomSpacer: {
     height: 20,
+  },
+  seeMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: responsive.responsiveMargin(4),
+    paddingVertical: responsive.responsiveMargin(12),
+    borderRadius: 12,
+    marginTop: responsive.responsiveMargin(8),
+  },
+  seeMoreText: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: responsive.horizontalPadding,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    width: '100%',
+    height: '80%',
+    borderRadius: 16,
+    padding: responsive.cardPadding,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    flexDirection: 'column',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  modalTitle: {
+    fontSize: responsive.responsiveFontSize(18),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+    lineHeight: responsive.responsiveFontSize(18) * 1.3,
+  },
+  modalCloseButton: {
+    padding: responsive.responsiveMargin(8),
+  },
+  modalScroll: {
+    flex: 1,
+    minHeight: 200,
+  },
+  modalScrollContent: {
+    paddingBottom: responsive.responsiveMargin(16),
+  },
+  modalList: {
+    gap: responsive.gridGap,
+  },
+  modalExpirationItem: {
+    borderRadius: 14,
+    padding: responsive.responsivePadding(12),
+    flexDirection: 'column',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
 });
