@@ -34,6 +34,7 @@ const VentasContent = () => {
 
   const [isLoading, setIsLoading] = useState(true);
   const [ventas, setVentas] = useState([]);
+  const [summary, setSummary] = useState(null);
   const [pagination, setPagination] = useState({ currentPage: 1, limit: 10, totalPages: 1, totalItems: 0 });
   const [error, setError] = useState(null);
 
@@ -66,6 +67,13 @@ const VentasContent = () => {
     return `${year}-${month}-${day}`;
   };
   const formattedDate = getLocalDate();
+
+  // Format number with spaces every 3 characters for better readability
+  const formatNumberWithSpaces = (num) => {
+    const parts = parseFloat(num).toFixed(2).split('.');
+    const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return `${integerPart}.${parts[1]}`;
+  };
 
   // Filter states
   const [filters, setFilters] = useState({ 
@@ -368,6 +376,7 @@ const VentasContent = () => {
         totalPages: data.pagination?.totalPages || 1,
         totalItems: data.pagination?.total || 0
       }));
+      setSummary(data.summary || null);
 
       await AsyncStorage.setItem('ventas_filters', JSON.stringify(effectiveFilters));
     } catch (error) {
@@ -1023,6 +1032,45 @@ const VentasContent = () => {
           </View>
         </Card>
 
+        {/* Summary Card */}
+        {summary && (
+          <Card style={[styles.summaryCard, { backgroundColor: colors.surface }]}>
+            <View style={styles.summaryHeader}>
+              <Text style={[styles.summaryTitle, { color: colors.onSurface }]}>Resumen de Ventas</Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.summaryGridContainer}
+            >
+              <View style={[styles.summaryItem, styles.summaryItemGreen]}>
+                <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Efectivo CUP</Text>
+                <Text style={[styles.summaryItemValue, { color: '#4CAF50' }]}>
+                  {formatNumberWithSpaces(summary.total_efectivo_cup || 0)}
+                </Text>
+              </View>
+              <View style={[styles.summaryItem, styles.summaryItemBlue]}>
+                <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Efectivo USD</Text>
+                <Text style={[styles.summaryItemValue, { color: '#2196F3' }]}>
+                  {formatNumberWithSpaces(summary.total_efectivo_usd || 0)}
+                </Text>
+              </View>
+              <View style={[styles.summaryItem, styles.summaryItemOrange]}>
+                <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Transferencia CUP</Text>
+                <Text style={[styles.summaryItemValue, { color: '#FF9800' }]}>
+                  {formatNumberWithSpaces(summary.total_transferencia_cup || 0)}
+                </Text>
+              </View>
+              <View style={[styles.summaryItem, styles.summaryItemPurple]}>
+                <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Transferencia USD</Text>
+                <Text style={[styles.summaryItemValue, { color: '#9C27B0' }]}>
+                  {formatNumberWithSpaces(summary.total_transferencia_usd || 0)}
+                </Text>
+              </View>
+            </ScrollView>
+          </Card>
+        )}
+
         {/* Action Buttons */}
         <View style={styles.actionButtonsContainer}>
           {!isOfflineMode && canManageVentas && (
@@ -1306,6 +1354,71 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   dropdownScroll: {
     maxHeight: responsive.responsiveHeight(150),
+  },
+  summaryCard: {
+    borderRadius: 16,
+    padding: responsive.responsivePadding(16),
+    marginBottom: responsive.responsiveMargin(16),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  summaryTitle: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+  },
+  summaryGridContainer: {
+    gap: responsive.responsiveMargin(6),
+  },
+  summaryItem: {
+    flex: 1,
+    minWidth: responsive.responsiveWidth(100),
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderRadius: 8,
+    padding: responsive.responsivePadding(8),
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'column',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  summaryItemGreen: {
+    borderColor: 'rgba(76, 175, 80, 0.2)',
+    backgroundColor: 'rgba(76, 175, 80, 0.05)',
+  },
+  summaryItemBlue: {
+    borderColor: 'rgba(33, 150, 243, 0.2)',
+    backgroundColor: 'rgba(33, 150, 243, 0.05)',
+  },
+  summaryItemOrange: {
+    borderColor: 'rgba(255, 152, 0, 0.2)',
+    backgroundColor: 'rgba(255, 152, 0, 0.05)',
+  },
+  summaryItemPurple: {
+    borderColor: 'rgba(156, 39, 176, 0.2)',
+    backgroundColor: 'rgba(156, 39, 176, 0.05)',
+  },
+  summaryItemLabel: {
+    fontSize: responsive.responsiveFontSize(10),
+    fontWeight: '500',
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(2),
+    textAlign: 'center',
+  },
+  summaryItemValue: {
+    fontSize: responsive.responsiveFontSize(13),
+    fontWeight: '700',
+    fontFamily: 'Inter',
+    textAlign: 'center',
   },
   dropdownSearchInput: {
     flexDirection: 'row',

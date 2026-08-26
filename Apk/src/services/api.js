@@ -3,22 +3,80 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { API_CONFIG } from '../config';
 import { navigationRef } from '../navigationRef';
+import NetInfo from '@react-native-community/netinfo';
+
+// Función para verificar si el servidor está disponible
+const checkServerAvailability = async (url) => {
+  try {
+    // Intentar hacer una petición simple al endpoint /health o raíz
+    await axios.get(`${url}/health`, { timeout: 2000 });
+    return true;
+  } catch (error) {
+    // Si falla /health, intentar con la raíz
+    try {
+      await axios.get(url, { timeout: 2000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+};
+
+// Función para verificar si el dispositivo está conectado a WiFi
+const isWifiConnected = async () => {
+  try {
+    const state = await NetInfo.fetch();
+    // isConnectionExpensive returns true for cellular data, false for WiFi
+    return !state.isConnectionExpensive && state.type === 'wifi';
+  } catch {
+    return false;
+  }
+};
 
 // Función para obtener la URL base de la API
 const getApiBaseUrl = async () => {
+  let userConfiguredURL;
   try {
     // Primero intentar leer la URL configurada por el usuario en Settings
-    const userConfiguredURL = await SecureStore.getItemAsync('serverIP');
-    if (userConfiguredURL) {
-      return userConfiguredURL;
-    }
+    userConfiguredURL = await SecureStore.getItemAsync('serverIP');
   } catch (error) {
     // Error reading serverIP from SecureStore
   }
 
-  // Fallback a config.js
+  // Verificar si el usuario ha activado la prioridad de WiFi
+  let prioritizeWifi = false;
+  try {
+    const prioritizeWifiValue = await SecureStore.getItemAsync('prioritizeWifiConnection');
+    prioritizeWifi = prioritizeWifiValue === 'true';
+  } catch (error) {
+    // Error reading prioritizeWifiConnection, default to false
+  }
+
+  // Solo aplicar lógica de priorización WiFi si el usuario lo ha activado
+  if (prioritizeWifi) {
+    // Verificar si estamos en WiFi
+    const wifiConnected = await isWifiConnected();
+
+    // Si estamos en WiFi y hay una URL configurada por el usuario (servidor local)
+    if (wifiConnected && userConfiguredURL) {
+      // Verificar si el servidor local está disponible
+      const serverAvailable = await checkServerAvailability(userConfiguredURL);
+      if (serverAvailable) {
+        return userConfiguredURL;
+      }
+    }
+  }
+
+  // Si no está activada la prioridad WiFi, o no estamos en WiFi, o el servidor local no está disponible,
+  // usar la URL remota configurada o fallback
   if (API_CONFIG.API_BASE_URL) {
     return API_CONFIG.API_BASE_URL;
+  }
+
+  // Si hay URL configurada por el usuario pero no está disponible,
+  // aún así intentar usarla (puede ser un problema temporal)
+  if (userConfiguredURL) {
+    return userConfiguredURL;
   }
 
   // Fallback final según plataforma

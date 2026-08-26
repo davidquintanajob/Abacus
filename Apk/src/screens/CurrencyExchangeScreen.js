@@ -17,6 +17,7 @@ import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import NetInfo from '@react-native-community/netinfo';
 import * as ImagePicker from 'expo-image-picker';
+import * as SecureStore from 'expo-secure-store';
 
 const AccessLevelSwitch = ({ value, onChange, colors, responsive }) => {
   const levels = [
@@ -180,11 +181,14 @@ const CurrencyExchangeContent = () => {
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
   const [selectorTipoCuenta, setSelectorTipoCuenta] = useState(null);
   const [selectorIndex, setSelectorIndex] = useState(0);
+  const [prioritizeWifiConnection, setPrioritizeWifiConnection] = useState(false);
+  const [showWifiConfig, setShowWifiConfig] = useState(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
 
   useEffect(() => {
     fetchConfig();
+    loadPrioritizeWifiConfig();
     // Cargar tasas automáticamente al inicio si hay conexión
     if (isConnected) {
       fetchExchangeRates();
@@ -200,6 +204,35 @@ const CurrencyExchangeContent = () => {
 
     return () => unsubscribe();
   }, []); // Solo se ejecuta al montar el componente
+
+  const loadPrioritizeWifiConfig = async () => {
+    try {
+      const storedValue = await SecureStore.getItemAsync('prioritizeWifiConnection');
+      if (storedValue !== null) {
+        setPrioritizeWifiConnection(storedValue === 'true');
+      }
+    } catch (error) {
+      console.error('Error loading prioritize wifi config:', error);
+    }
+  };
+
+  const togglePrioritizeWifiConnection = async () => {
+    const newValue = !prioritizeWifiConnection;
+    setPrioritizeWifiConnection(newValue);
+    
+    try {
+      await SecureStore.setItemAsync('prioritizeWifiConnection', newValue.toString());
+      showToast({ 
+        type: 'success', 
+        message: newValue 
+          ? 'Prioridad de conexión WiFi activada' 
+          : 'Prioridad de conexión WiFi desactivada' 
+      });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al guardar configuración de WiFi' });
+      setPrioritizeWifiConnection(prioritizeWifiConnection);
+    }
+  };
 
   const fetchExchangeRates = async (manualRetry = false) => {
     // Evitar reintentos si ya estamos cargando
@@ -2356,6 +2389,58 @@ const CurrencyExchangeContent = () => {
                 <Ionicons name="settings-outline" size={responsive.responsiveWidth(20)} color="#fff" />
                 <Text style={styles.configCuentasButtonText}>Configurar</Text>
               </TouchableOpacity>
+            </>
+          )}
+        </Card>
+
+        <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
+          <View style={styles.permissionsHeader}>
+            <View style={styles.permissionsHeaderLeft}>
+              <Image source={require('../../assets/wi-fi.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
+              <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
+                Priorizar Conexión WiFi Local
+              </Text>
+            </View>
+            <TouchableOpacity 
+              style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+              onPress={() => setShowWifiConfig(!showWifiConfig)}
+            >
+              <Ionicons 
+                name={showWifiConfig ? "chevron-up" : "chevron-down"} 
+                size={responsive.responsiveWidth(24)} 
+                color={isDarkMode ? colors.primary : '#1976D2'} 
+              />
+            </TouchableOpacity>
+          </View>
+
+          {showWifiConfig && (
+            <>
+              <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                Configura si la app debe priorizar la conexión al servidor local por WiFi
+              </Text>
+
+              <View style={styles.permissionItem}>
+                <View style={styles.permissionInfo}>
+                  <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                    Activar prioridad WiFi
+                  </Text>
+                  <TouchableOpacity 
+                    style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                    onPress={() => showInfoModal(
+                      'Priorizar Conexión WiFi Local',
+                      'Cuando está activo, la app priorizará la conexión al servidor local por WiFi cuando esté disponible. Esto mejora el rendimiento cuando usas un servidor local en tu red. Desactívalo si usas principalmente un servidor remoto.'
+                    )}
+                  >
+                    <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                  </TouchableOpacity>
+                </View>
+                <Switch
+                  value={prioritizeWifiConnection}
+                  onValueChange={togglePrioritizeWifiConnection}
+                  trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                  thumbColor={prioritizeWifiConnection ? '#fff' : colors.outline}
+                />
+              </View>
             </>
           )}
         </Card>
