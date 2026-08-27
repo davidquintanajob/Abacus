@@ -14,7 +14,7 @@ import { useOffline } from '../context/OfflineContext';
 import { createEntrada, updateEntrada, getEntradaById, getEntradas, createEntradasBulk } from '../services/entradaService';
 import { getProductos, getProductoById, updateProducto } from '../services/productoService';
 import { getTiendas } from '../services/tiendaService';
-import { configService } from '../services/configService';
+import configService from '../services/configService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import DateTimePicker from '@react-native-community/datetimepicker';

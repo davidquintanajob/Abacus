@@ -8,11 +8,11 @@ import NetInfo from '@react-native-community/netinfo';
 // Función para verificar si el servidor está disponible
 const checkServerAvailability = async (url) => {
   try {
-    // Intentar hacer una petición simple al endpoint /health o raíz
-    await axios.get(`${url}/health`, { timeout: 2000 });
+    // Intentar hacer una petición simple al endpoint /config/ping
+    await axios.get(`${url}/config/ping`, { timeout: 2000 });
     return true;
   } catch (error) {
-    // Si falla /health, intentar con la raíz
+    // Si falla /config/ping, intentar con la raíz
     try {
       await axios.get(url, { timeout: 2000 });
       return true;

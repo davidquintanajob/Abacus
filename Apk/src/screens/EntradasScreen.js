@@ -24,9 +24,9 @@ import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import ExportService from '../services/ExportService';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { CameraView } from 'expo-camera';
-import * as Camera from 'expo-camera';
-import { BarcodeEngine, ALLOWED_BARCODE_TYPES } from '../barcode';
+import { CameraView, Camera } from 'expo-camera';
+import BarcodeEngine from '../barcode/BarcodeEngine';
+import { ALLOWED_BARCODE_TYPES } from '../barcode/config/BarcodeTypes';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const EntradasContent = () => {

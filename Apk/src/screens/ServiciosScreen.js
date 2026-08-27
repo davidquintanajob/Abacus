@@ -16,8 +16,7 @@ import { getServicios, getServicioByCodigo, deleteServicio } from '../services/s
 import { getTiendas } from '../services/tiendaService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
-import { CameraView } from 'expo-camera';
-import * as Camera from 'expo-camera';
+import { CameraView, Camera } from 'expo-camera';
 import { storageService } from '../services/storageService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 

@@ -31,6 +31,7 @@ import OperacionFormScreen from './src/screens/OperacionFormScreen';
 import CuentasScreen from './src/screens/CuentasScreen';
 import CuentaFormScreen from './src/screens/CuentaFormScreen';
 import VentasScreen from './src/screens/VentasScreen';
+import SalesScreen from './src/screens/SalesScreen';
 import { navigationRef } from './src/navigationRef';
 
 const Stack = createNativeStackNavigator();
@@ -74,6 +75,7 @@ const AppStack = ({ initialRoute }) => (
     <Stack.Screen name="Cuentas" component={CuentasScreen} />
     <Stack.Screen name="CuentaForm" component={CuentaFormScreen} />
     <Stack.Screen name="Ventas" component={VentasScreen} />
+    <Stack.Screen name="Sales" component={SalesScreen} />
     <Stack.Screen name="BarcodeScanner" component={BarcodeScannerScreen} />
     <Stack.Screen name="CurrencyExchange" component={CurrencyExchangeScreen} />
   </Stack.Navigator>

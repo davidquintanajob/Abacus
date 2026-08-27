@@ -13,7 +13,7 @@ import { useOffline } from '../context/OfflineContext';
 import { createSalida, updateSalida, getSalidaById } from '../services/salidaService';
 import { getProductos, getProductoById } from '../services/productoService';
 import { getTiendas } from '../services/tiendaService';
-import { configService } from '../services/configService';
+import configService from '../services/configService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import DateTimePicker from '@react-native-community/datetimepicker';

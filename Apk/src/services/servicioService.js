@@ -102,3 +102,31 @@ export const deleteServicio = async (id) => {
     throw err;
   }
 };
+
+export const getServicioTiendas = async (filters = {}, page = 1, limit = 10) => {
+  try {
+    const queryParams = new URLSearchParams({
+      limit: limit.toString(),
+      page: page.toString(),
+    });
+
+    // Add filters
+    if (filters.id_tienda) queryParams.append('id_tienda', filters.id_tienda);
+    if (filters.id_servicio) queryParams.append('id_servicio', filters.id_servicio);
+    if (filters.codigo_barras_ean) queryParams.append('codigo_barras_ean', filters.codigo_barras_ean);
+    if (filters.fetchServicio !== undefined) queryParams.append('fetchServicio', filters.fetchServicio);
+    if (filters.fetchProducto !== undefined) queryParams.append('fetchProducto', filters.fetchProducto);
+    if (filters.fetchTienda !== undefined) queryParams.append('fetchTienda', filters.fetchTienda);
+
+    const response = await api.get(`/servicio-tienda/filter?${queryParams}`);
+    return response.data;
+  } catch (error) {
+    const errorMessage = error.response?.data?.errors?.[0] || 
+                        error.response?.data?.message || 
+                        error.message ||
+                        'Error al obtener servicios de tienda';
+    const err = new Error(errorMessage);
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
+  }
+};

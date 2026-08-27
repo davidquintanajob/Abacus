@@ -8,10 +8,11 @@ import { Card } from '../components/common/Card';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useToast } from '../hooks/useToast';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { Audio } from 'expo-av';
+import { CameraView, Camera } from 'expo-camera';
 import { Asset } from 'expo-asset';
-import { BarcodeEngine, ALLOWED_BARCODE_TYPES } from '../barcode';
+import * as FileSystem from 'expo-file-system';
+import BarcodeEngine from '../barcode/BarcodeEngine';
+import { ALLOWED_BARCODE_TYPES } from '../barcode/config/BarcodeTypes';
 
 const BarcodeScannerContent = () => {
   const navigation = useNavigation();
@@ -19,7 +20,7 @@ const BarcodeScannerContent = () => {
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
   const { toast, showToast, hideToast } = useToast();
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, setPermission] = useState(null);
   const [onCodeScanned, setOnCodeScanned] = useState(null);
 
   const [scannedCodes, setScannedCodes] = useState([]);
@@ -39,10 +40,17 @@ const BarcodeScannerContent = () => {
   
   // Initialize Barcode Engine
   const barcodeEngineRef = useRef(null);
-  
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setPermission(status);
+    })();
+  }, []);
+
   useEffect(() => {
     barcodeEngineRef.current = new BarcodeEngine('PRODUCT_CREATION');
-    
+
     // Start session when component mounts
     barcodeEngineRef.current.startSession();
     
@@ -134,19 +142,21 @@ const BarcodeScannerContent = () => {
     }
   }, [showTutorial, currentStep]);
 
-  // Load sound
+  // Load sound - temporarily disabled
   useEffect(() => {
     const loadSound = async () => {
       try {
-        const asset = Asset.fromModule(require('../../assets/beep.mp3'));
-        await asset.downloadAsync();
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: asset.localUri || asset.uri },
-          { shouldPlay: false }
-        );
-        setSound(sound);
+        // Sound loading disabled temporarily to fix Audio import error
+        // const { Audio: ExpoAudio } = await import('expo-av');
+        // const asset = Asset.fromModule(require('../../assets/beep.mp3'));
+        // await asset.downloadAsync();
+        // const { sound } = await ExpoAudio.Sound.createAsync(
+        //   { uri: asset.localUri || asset.uri },
+        //   { shouldPlay: false }
+        // );
+        // setSound(sound);
       } catch (error) {
-        // Error loading sound
+        console.log('Error loading sound:', error);
       }
     };
 
@@ -377,13 +387,14 @@ const BarcodeScannerContent = () => {
     );
   }
 
-  if (!permission.granted) {
+  if (permission !== 'granted') {
     const styles = createStyles(responsive);
-    
-    const handleRequestPermission = () => {
-      requestPermission();
+
+    const handleRequestPermission = async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setPermission(status);
     };
-    
+
     return (
       <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
         <StatusBar style={isDarkMode ? 'light' : 'dark'} />

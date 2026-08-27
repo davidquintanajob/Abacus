@@ -12,12 +12,11 @@ import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
 import { createServicio, updateServicio, getServicios, getServicioById } from '../services/servicioService';
 import { getTiendas } from '../services/tiendaService';
-import { configService } from '../services/configService';
+import configService from '../services/configService';
 import { storageService } from '../services/storageService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
-import { CameraView } from 'expo-camera';
-import * as Camera from 'expo-camera';
+import { CameraView, Camera } from 'expo-camera';
 
 const ServicioFormContent = () => {
   const navigation = useNavigation();

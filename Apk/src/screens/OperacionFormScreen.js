@@ -12,7 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
 import { createOperacion, updateOperacion, getOperacionById } from '../services/operacionService';
 import { getCuentas } from '../services/cuentaService';
-import { configService } from '../services/configService';
+import configService from '../services/configService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import DateTimePicker from '@react-native-community/datetimepicker';

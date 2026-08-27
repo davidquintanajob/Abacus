@@ -3,7 +3,7 @@ import api from './api';
 
 const CONFIG_KEY = '@abacus_config';
 
-export const configService = {
+const configService = {
   // Obtener configuración: intenta el backend primero, cae a AsyncStorage si falla
   getConfig: async () => {
     try {
@@ -45,3 +45,5 @@ export const configService = {
     }
   },
 };
+
+export default configService;

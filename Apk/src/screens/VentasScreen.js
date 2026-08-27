@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -363,11 +363,14 @@ const VentasContent = () => {
         effectiveFilters.id_tienda = user.id_tienda.toString();
       }
 
+      // Adjust date filters for Cuba timezone before sending to backend
+      const adjustedFilters = adjustFiltersForCubaTimezone(effectiveFilters);
+
       let data;
       if (isOfflineMode) {
-        data = await storageService.getVentas(effectiveFilters, pagination.currentPage, pagination.limit);
+        data = await storageService.getVentas(adjustedFilters, pagination.currentPage, pagination.limit);
       } else {
-        data = await getVentas(effectiveFilters, pagination.currentPage, pagination.limit);
+        data = await getVentas(adjustedFilters, pagination.currentPage, pagination.limit);
       }
 
       setVentas(data.data || []);
@@ -413,6 +416,20 @@ const VentasContent = () => {
     fetchVentas();
   };
 
+  const handleEdit = (venta) => {
+    // TODO: Implement edit functionality
+    Alert.alert(
+      'Editar Venta',
+      'La funcionalidad de editar ventas aún no está implementada.',
+      [
+        {
+          text: 'OK',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
   const handleDelete = (venta) => {
     Alert.alert(
       'Eliminar Venta',
@@ -450,17 +467,73 @@ const VentasContent = () => {
     console.log('Venta pressed:', venta);
   };
 
+  // Format a Date object to YYYY-MM-DD using local timezone (avoids UTC offset issues)
+  const formatLocalDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Parse a YYYY-MM-DD string as a local date (avoids UTC midnight offset issues)
+  const parseLocalDate = (dateStr) => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  };
+
+  // Format ISO date string to local date string using Cuba timezone (UTC-4)
+  const formatCubaDate = (isoDateStr) => {
+    const date = new Date(isoDateStr);
+    // Convert UTC to Cuba timezone (UTC-4)
+    const cubaOffset = -4; // Cuba is UTC-4
+    const utcTime = date.getTime() + (date.getTimezoneOffset() * 60000);
+    const cubaTime = new Date(utcTime + (cubaOffset * 3600000));
+    return cubaTime.toLocaleDateString('es-ES', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+  };
+
+  // Adjust date filters to Cuba timezone (UTC-4) before sending to backend
+  const adjustFiltersForCubaTimezone = (filters) => {
+    const adjustedFilters = { ...filters };
+
+    if (adjustedFilters.fecha_desde) {
+      // Backend interprets "2024-08-27" as UTC 2024-08-27 00:00:00
+      // Cuba 00:00:00 = UTC 04:00:00 (since Cuba is UTC-4)
+      // To filter from Cuba 00:00:00 on 2024-08-27, we need UTC 2024-08-27 04:00:00
+      // Send ISO datetime instead of just date
+      const [year, month, day] = adjustedFilters.fecha_desde.split('-').map(Number);
+      const cubaMidnightUTC = new Date(Date.UTC(year, month - 1, day, 4, 0, 0));
+      adjustedFilters.fecha_desde = cubaMidnightUTC.toISOString();
+    }
+
+    if (adjustedFilters.fecha_hasta) {
+      // Backend adds 1 day to fecha_hasta and uses it as UTC
+      // Cuba 23:59:59 on day D = UTC 03:59:59 on day D+1
+      // To filter until Cuba 23:59:59 on 2024-08-27, we need UTC 2024-08-28 03:59:59
+      // But backend will add 1 day, so we send UTC 2024-08-27 03:59:59
+      // Backend will convert it to UTC 2024-08-28 03:59:59
+      const [year, month, day] = adjustedFilters.fecha_hasta.split('-').map(Number);
+      const cubaEndOfDayUTC = new Date(Date.UTC(year, month - 1, day, 3, 59, 59));
+      adjustedFilters.fecha_hasta = cubaEndOfDayUTC.toISOString();
+    }
+
+    return adjustedFilters;
+  };
+
   const handleFechaDesdeChange = (event, selectedDate) => {
     setShowFechaDesdePicker(false);
     if (selectedDate) {
-      setFilters(prev => ({ ...prev, fecha_desde: selectedDate.toISOString().split('T')[0] }));
+      setFilters(prev => ({ ...prev, fecha_desde: formatLocalDate(selectedDate) }));
     }
   };
 
   const handleFechaHastaChange = (event, selectedDate) => {
     setShowFechaHastaPicker(false);
     if (selectedDate) {
-      setFilters(prev => ({ ...prev, fecha_hasta: selectedDate.toISOString().split('T')[0] }));
+      setFilters(prev => ({ ...prev, fecha_hasta: formatLocalDate(selectedDate) }));
     }
   };
 
@@ -537,7 +610,12 @@ const VentasContent = () => {
         currentRoute="Ventas"
       />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView 
+        style={styles.content} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Page Title */}
         <View style={styles.pageTitleContainer}>
           <Text style={[styles.pageTitle, { color: colors.onSurface }]}>Gestión de Ventas</Text>
@@ -976,7 +1054,7 @@ const VentasContent = () => {
                   </TouchableOpacity>
                   {showFechaDesdePicker && (
                     <DateTimePicker
-                      value={filters.fecha_desde ? new Date(filters.fecha_desde) : new Date()}
+                      value={filters.fecha_desde ? parseLocalDate(filters.fecha_desde) : new Date()}
                       mode="date"
                       display="default"
                       onChange={handleFechaDesdeChange}
@@ -996,7 +1074,7 @@ const VentasContent = () => {
                   </TouchableOpacity>
                   {showFechaHastaPicker && (
                     <DateTimePicker
-                      value={filters.fecha_hasta ? new Date(filters.fecha_hasta) : new Date()}
+                      value={filters.fecha_hasta ? parseLocalDate(filters.fecha_hasta) : new Date()}
                       mode="date"
                       display="default"
                       onChange={handleFechaHastaChange}
@@ -1076,10 +1154,7 @@ const VentasContent = () => {
           {!isOfflineMode && canManageVentas && (
             <TouchableOpacity
               style={[styles.addButton, { backgroundColor: colors.primary }]}
-              onPress={() => {
-                // TODO: Navigate to VentaFormScreen when implemented
-                showToast({ type: 'info', message: 'Formulario de venta en desarrollo' });
-              }}
+              onPress={() => navigation.navigate('Sales')}
             >
               <Ionicons name="add-circle-outline" size={responsive.responsiveWidth(20)} color="#fff" />
               <Text style={[styles.addButtonText, { color: '#fff' }]}>Agregar Venta</Text>
@@ -1130,21 +1205,21 @@ const VentasContent = () => {
                         </Text>
                       </View>
                       <Text style={[styles.ventaTienda, { color: colors.outline }]}>
-                        Tienda: {venta.usuario?.tienda?.nombre || 'N/A'}
+                        Tienda: {venta.ventas?.[0]?.servicioTienda?.tienda?.nombre || 'N/A'}
                       </Text>
                       <Text style={[styles.ventaUsuario, { color: colors.outline }]}>
-                        Usuario: {venta.usuario?.nombre_natural || 'N/A'}
+                        Usuario: {venta.operaciones?.[0]?.usuario?.nombre_natural || 'N/A'}
                       </Text>
                       <View style={styles.cantidadRow}>
                         <Text style={[styles.ventaCantidad, { color: colors.primary }]}>
-                          Total CUP: ${venta.cantidad_cobrada_efectivo_cup || 0}
+                          Total CUP: ${(parseFloat(venta.cantidad_cobrada_efectivo_cup || 0) + parseFloat(venta.cantidad_cobrada_transferencia_cup || 0)).toFixed(2)}
                         </Text>
                         <Text style={[styles.ventaCantidad, { color: colors.primary }]}>
-                          Total USD: ${venta.cantidad_cobrada_efectivo_usd || 0}
+                          Total USD: ${(parseFloat(venta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(venta.cantidad_cobrada_transferencia_usd || 0)).toFixed(2)}
                         </Text>
                       </View>
                       <Text style={[styles.ventaFecha, { color: colors.outline }]}>
-                        Fecha: {new Date(venta.fecha_hora).toLocaleDateString()}
+                        Fecha: {formatCubaDate(venta.fecha_hora)}
                       </Text>
                     </View>
                     {canManageVentas && (
@@ -1192,10 +1267,10 @@ const VentasContent = () => {
                           {venta.nota || 'Sin nota'}
                         </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
-                          {venta.usuario?.tienda?.nombre || 'N/A'}
+                          {venta.ventas?.[0]?.servicioTienda?.tienda?.nombre || 'N/A'}
                         </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
-                          {venta.usuario?.nombre_natural || 'N/A'}
+                          {venta.operaciones?.[0]?.usuario?.nombre_natural || 'N/A'}
                         </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
                           ${venta.cantidad_cobrada_efectivo_cup || 0}
@@ -1204,10 +1279,10 @@ const VentasContent = () => {
                           ${venta.cantidad_cobrada_efectivo_usd || 0}
                         </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(120) }]}>
-                          {new Date(venta.fecha_hora).toLocaleDateString()}
+                          {formatCubaDate(venta.fecha_hora)}
                         </Text>
                         {canManageVentas && (
-                          <View style={[styles.tableCellText, { width: responsive.responsiveWidth(100), justifyContent: 'center' }]}>
+                          <View style={[styles.tableCellText, { width: responsive.responsiveWidth(100), justifyContent: 'center', flexDirection: 'row', gap: responsive.responsiveWidth(8) }]}>
                             <TouchableOpacity
                               style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
                               onPress={(e) => {
@@ -1255,6 +1330,7 @@ const VentasContent = () => {
           </>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

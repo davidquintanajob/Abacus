@@ -14,14 +14,15 @@ import { useOffline } from '../context/OfflineContext';
 import { createProducto, updateProducto, getProductoById } from '../services/productoService';
 import { getTiendas } from '../services/tiendaService';
 import { getApiBaseUrl } from '../services/api';
-import { configService } from '../services/configService';
+import configService from '../services/configService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, Camera } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import { comprimirImagen, uriToBase64 } from '../utils/imageUtils';
-import { BarcodeEngine, ALLOWED_BARCODE_TYPES } from '../barcode';
+import BarcodeEngine from '../barcode/BarcodeEngine';
+import { ALLOWED_BARCODE_TYPES } from '../barcode/config/BarcodeTypes';
 
 const ProductoFormContent = () => {
   const navigation = useNavigation();
@@ -59,7 +60,7 @@ const ProductoFormContent = () => {
   const [cameraModalVisible, setCameraModalVisible] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const cameraRef = useRef(null);
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, setPermission] = useState(null);
   const [galleryModalVisible, setGalleryModalVisible] = useState(false);
   const [mediaAssets, setMediaAssets] = useState([]);
   const [apiBaseUrl, setApiBaseUrl] = useState('');
@@ -251,6 +252,13 @@ const ProductoFormContent = () => {
     fetchTiendas();
     fetchConfig();
     loadApiBaseUrl();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setPermission(status);
+    })();
   }, []);
 
   // Verificar si se abrió desde alerta de vencimiento o si el producto tiene entradas próximas a vencer
@@ -696,7 +704,8 @@ const ProductoFormContent = () => {
 
   const handleOpenScanner = async () => {
     if (!permission?.granted) {
-      const { status } = await requestPermission();
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setPermission(status);
       if (status !== 'granted') {
         showToast({ type: 'error', message: 'Se requiere permiso de cámara para escanear códigos' });
         return;
@@ -911,7 +920,8 @@ const ProductoFormContent = () => {
   const handleTakePhoto = async () => {
     setShowImagePickerModal(false);
     if (!permission?.granted) {
-      const { status } = await requestPermission();
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setPermission(status);
       if (status !== 'granted') {
         showToast({ type: 'error', message: 'Se requiere permiso de cámara para tomar fotos' });
         return;
@@ -2202,7 +2212,7 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   scrollContent: {
     padding: responsive.responsivePadding(16),
-    paddingTop: responsive.responsivePadding(65),
+    paddingTop: responsive.responsivePadding(80),
   },
   formCard: {
     borderRadius: 16,

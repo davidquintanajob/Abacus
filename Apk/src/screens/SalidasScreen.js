@@ -18,7 +18,7 @@ import { getUsuarios } from '../services/usuarioService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import { storageService } from '../services/storageService';
-import { configService } from '../services/configService';
+import configService from '../services/configService';
 import * as XLSX from 'xlsx';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';

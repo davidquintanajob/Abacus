@@ -9,7 +9,7 @@ import { Sidebar } from '../components/layout/Sidebar';
 import { Card } from '../components/common/Card';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
-import { configService } from '../services/configService';
+import configService from '../services/configService';
 import { exchangeRateService } from '../services/exchangeRateService';
 import { getCuentas } from '../services/cuentaService';
 import { getTiendas } from '../services/tiendaService';
@@ -331,11 +331,22 @@ const CurrencyExchangeContent = () => {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 1,
+        quality: 0.8,
+        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets[0]) {
-        setComprobanteConfig(prev => ({ ...prev, logo: result.assets[0].uri }));
+        const asset = result.assets[0];
+        // Store as a base64 data URI so it works in PDF generation without any file reading
+        if (asset.base64) {
+          const ext = (asset.uri.split('.').pop() || 'jpeg').toLowerCase();
+          const mime = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+          const dataUri = `data:${mime};base64,${asset.base64}`;
+          setComprobanteConfig(prev => ({ ...prev, logo: dataUri }));
+        } else {
+          // Fallback to URI if base64 unavailable
+          setComprobanteConfig(prev => ({ ...prev, logo: asset.uri }));
+        }
       }
     } catch (error) {
       showToast({ type: 'error', message: 'Error al seleccionar imagen' });
