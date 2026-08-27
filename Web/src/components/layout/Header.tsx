@@ -4,14 +4,13 @@ import React from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '../../context/ThemeContext';
-import { Menu, ArrowLeft, Moon, Sun, Bell, User, WifiOff, Grid, List, Settings } from 'lucide-react';
+import { Menu, ArrowLeft, Moon, Sun, Bell, User, WifiOff, Grid, List } from 'lucide-react';
 
 interface HeaderProps {
   onMenuPress?: () => void;
   onProfilePress?: () => void;
   onThemePress?: () => void;
   onNotificationsPress?: () => void;
-  onSettingsPress?: () => void;
   showBackButton?: boolean;
   onBackPress?: () => void;
   isDark?: boolean;
@@ -30,7 +29,6 @@ export const Header = ({
   onProfilePress,
   onThemePress,
   onNotificationsPress,
-  onSettingsPress,
   showBackButton = false,
   onBackPress,
   isDark = false,
@@ -48,13 +46,6 @@ export const Header = ({
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const showBack = typeof showBackButton === 'boolean' ? showBackButton : showBackButton === 'true';
 
-  const handleSettingsPress = () => {
-    if (onSettingsPress) {
-      onSettingsPress();
-    } else {
-      router.push('/settings');
-    }
-  };
 
   const handleProfilePress = () => {
     if (onProfilePress) {
@@ -135,14 +126,6 @@ export const Header = ({
       </div>
       
       <div className="flex items-center gap-1 md:gap-2">
-        {!showMinimalHeader && currentRoute !== 'Settings' && (
-          <button
-            onClick={handleSettingsPress}
-            className="p-1 md:p-2 rounded-full hover:bg-black/5 transition-colors"
-          >
-            <Settings size={24} className="md:w-8 md:h-8 lg:w-9 lg:h-9" style={{ color: colors.primary }} />
-          </button>
-        )}
         {!showMinimalHeader && showViewToggle && onViewModeToggle && (
           <button
             onClick={onViewModeToggle}

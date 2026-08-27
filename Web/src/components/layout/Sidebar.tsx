@@ -55,7 +55,6 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home' }: Side
     ...(isAdmin ? [{ icon: '/icon-tiendas.png', label: 'Tiendas', route: 'Tiendas' }] : []),
     ...(isAdmin ? [{ icon: '/icon-usuarios.png', label: 'Usuarios', route: 'Usuarios' }] : []),
     ...(isAdmin ? [{ icon: '/icon-admin.png', label: 'Configuraciones del Admin', route: 'CurrencyExchange' }] : []),
-    { icon: '/icon-config.png', label: 'Configuración', route: 'Settings' },
   ];
 
   const handleLogout = async () => {
@@ -85,7 +84,6 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home' }: Side
       'Tiendas': '/tiendas',
       'Usuarios': '/usuarios',
       'CurrencyExchange': '/admin',
-      'Settings': '/settings',
       'Profile': '/profile',
     };
     

@@ -6,7 +6,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../hooks/useToast';
 import { Toast } from '../../components/common/Toast';
-import { Settings, Eye, EyeOff, User, Lock, Wifi } from 'lucide-react';
+import { Eye, EyeOff, User, Lock, Wifi } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
@@ -49,10 +49,6 @@ export default function LoginPage() {
     router.push('/password-recovery');
   };
 
-  const handleSettings = () => {
-    router.push('/settings?from=Login');
-  };
-
   return (
     <div
       className="min-h-screen flex items-center justify-center p-4"
@@ -67,14 +63,6 @@ export default function LoginPage() {
         onHide={hideToast}
         toastKey={toast.key}
       />
-
-      {/* Settings Button */}
-      <button
-        onClick={handleSettings}
-        className="fixed top-4 right-4 p-2 md:p-3 rounded-full hover:bg-black/5 transition-colors z-10"
-      >
-        <Settings size={24} className="md:w-8 md:h-8 lg:w-9 lg:h-9" style={{ color: colors.outline }} />
-      </button>
 
       <div className="w-full max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl">
         {/* Logo Section */}

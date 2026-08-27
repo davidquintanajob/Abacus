@@ -1,5 +1,41 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Configuración del Entorno
+
+Antes de iniciar el proyecto, es necesario configurar las variables de entorno:
+
+1. **Crear el archivo `.env` a partir del ejemplo:**
+   ```bash
+   # En Windows (PowerShell)
+   Copy-Item .env.example .env
+
+   # En Windows (CMD)
+   copy .env.example .env
+
+   # En Linux/Mac
+   cp .env.example .env
+   ```
+
+2. **Editar el archivo `.env` con tu configuración:**
+   ```env
+   # API Configuration
+   # URL del backend API (local o en la nube)
+   # Para desarrollo local: http://localhost:8787 (puerto por defecto del backend)
+   # Para producción en la nube: https://tu-backend-api.com
+   NEXT_PUBLIC_API_URL=http://localhost:8787
+
+   # Web Server Port
+   # Puerto donde correrá la aplicación web
+   PORT=3000
+   ```
+
+**Importante:**
+- La variable `NEXT_PUBLIC_API_URL` define dónde está tu backend API
+- Para desarrollo local usa `http://localhost:8787` (el puerto del backend Abacus)
+- Para producción en la nube, cambia esta URL a la de tu backend en la nube
+- No incluyas el archivo `.env` en el control de versiones (ya está en `.gitignore`)
+- El archivo `.env.example` sirve como guía para tus compañeros de equipo
+
 ## Getting Started
 
 First, run the development server:
