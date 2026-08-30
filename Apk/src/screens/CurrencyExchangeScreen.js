@@ -17,7 +17,6 @@ import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import NetInfo from '@react-native-community/netinfo';
 import * as ImagePicker from 'expo-image-picker';
-import * as SecureStore from 'expo-secure-store';
 
 const AccessLevelSwitch = ({ value, onChange, colors, responsive }) => {
   const levels = [
@@ -152,6 +151,7 @@ const CurrencyExchangeContent = () => {
     logo: null,
     nombreNegocio: '',
   });
+  const [showSalesConfigurations, setShowSalesConfigurations] = useState(false);
   const [infoModal, setInfoModal] = useState({
     visible: false,
     title: '',
@@ -188,7 +188,6 @@ const CurrencyExchangeContent = () => {
 
   useEffect(() => {
     fetchConfig();
-    loadPrioritizeWifiConfig();
     // Cargar tasas automáticamente al inicio si hay conexión
     if (isConnected) {
       fetchExchangeRates();
@@ -205,23 +204,17 @@ const CurrencyExchangeContent = () => {
     return () => unsubscribe();
   }, []); // Solo se ejecuta al montar el componente
 
-  const loadPrioritizeWifiConfig = async () => {
-    try {
-      const storedValue = await SecureStore.getItemAsync('prioritizeWifiConnection');
-      if (storedValue !== null) {
-        setPrioritizeWifiConnection(storedValue === 'true');
-      }
-    } catch (error) {
-      console.error('Error loading prioritize wifi config:', error);
-    }
-  };
-
   const togglePrioritizeWifiConnection = async () => {
     const newValue = !prioritizeWifiConnection;
     setPrioritizeWifiConnection(newValue);
     
     try {
-      await SecureStore.setItemAsync('prioritizeWifiConnection', newValue.toString());
+      const updatedConfig = {
+        ...config,
+        prioritizeWifiConnection: newValue,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
       showToast({ 
         type: 'success', 
         message: newValue 
@@ -311,6 +304,9 @@ const CurrencyExchangeContent = () => {
       if (data.comprobanteConfig) {
         setComprobanteConfig(data.comprobanteConfig);
       }
+      if (data.prioritizeWifiConnection !== undefined) {
+        setPrioritizeWifiConnection(data.prioritizeWifiConnection);
+      }
     } catch (error) {
       showToast({ type: 'error', message: 'Error al cargar configuración' });
     } finally {
@@ -319,6 +315,16 @@ const CurrencyExchangeContent = () => {
   };
 
   // Funciones para configuración de comprobante
+  const formatComprobanteNumber = (num) => {
+    const formatted = parseFloat(num).toFixed(2);
+    // Remove .00 if no decimal part
+    const withoutZeros = formatted.endsWith('.00') ? formatted.slice(0, -3) : formatted;
+    // Add spaces every 3 digits
+    const parts = withoutZeros.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return parts.join('.');
+  };
+
   const handleSelectLogo = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -546,6 +552,7 @@ const CurrencyExchangeContent = () => {
         tiendaCuentasConfig: tiendaCuentasConfig,
         cuentaChangePermissions: cuentaChangePermissions,
         comprobanteConfig: comprobanteConfig,
+        prioritizeWifiConnection: prioritizeWifiConnection,
         monedaConfig: {
           modificarSoloServicios: currencyModalConfig.modificarSoloServicios,
           datosModificar: currencyModalConfig.datosModificar,
@@ -677,6 +684,7 @@ const CurrencyExchangeContent = () => {
 
   const toggleVentaManagePermission = async (role) => {
     const newVentaManagePermissions = { ...ventaManagePermissions, [role]: !ventaManagePermissions[role] };
+    setVentaManagePermissions(newVentaManagePermissions);
     
     try {
       const updatedConfig = {
@@ -2018,131 +2026,134 @@ const CurrencyExchangeContent = () => {
             <View style={styles.permissionsHeaderLeft}>
               <Image source={require('../../assets/sales.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
               <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
-                Configurar Cuentas para Ventas
+                Configuraciones de Ventas
               </Text>
             </View>
             <TouchableOpacity 
               style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
-              onPress={() => setShowSalesConfigCard(!showSalesConfigCard)}
+              onPress={() => setShowSalesConfigurations(!showSalesConfigurations)}
             >
               <Ionicons 
-                name={showSalesConfigCard ? "chevron-up" : "chevron-down"} 
+                name={showSalesConfigurations ? "chevron-up" : "chevron-down"} 
                 size={responsive.responsiveWidth(24)} 
                 color={isDarkMode ? colors.primary : '#1976D2'} 
               />
             </TouchableOpacity>
           </View>
 
-          {showSalesConfigCard && (
+          {showSalesConfigurations && (
             <>
-              <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
-                Configura hasta 4 cuentas por tipo de cuenta para cada tienda. Estas cuentas se usarán por defecto al realizar ventas.
-              </Text>
-
-              <TouchableOpacity
-                style={[styles.configCuentasButton, { backgroundColor: colors.primary }]}
-                onPress={handleOpenSalesConfig}
-              >
-                <Ionicons name="settings-outline" size={responsive.responsiveWidth(20)} color="#fff" />
-                <Text style={styles.configCuentasButtonText}>Configurar Cuentas</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </Card>
-
-        <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
-          <View style={styles.permissionsHeader}>
-            <View style={styles.permissionsHeaderLeft}>
-              <Image source={require('../../assets/sales.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
-              <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
-                Cambio de Cuenta en Ventas
-              </Text>
-            </View>
-            <TouchableOpacity 
-              style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
-              onPress={() => setShowCuentaChangePermissions(!showCuentaChangePermissions)}
-            >
-              <Ionicons 
-                name={showCuentaChangePermissions ? "chevron-up" : "chevron-down"} 
-                size={responsive.responsiveWidth(24)} 
-                color={isDarkMode ? colors.primary : '#1976D2'} 
-              />
-            </TouchableOpacity>
-          </View>
-
-          {showCuentaChangePermissions && (
-            <>
-              <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
-                Configura qué roles pueden cambiar la cuenta seleccionada al momento de realizar una venta
-              </Text>
-
-              <View style={styles.permissionItem}>
-                <View style={styles.permissionInfo}>
-                  <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
-                    Dependiente
-                  </Text>
-                  <TouchableOpacity 
-                    style={[styles.infoButton, { backgroundColor: colors.primary }]}
-                    onPress={() => showInfoModal(
-                      'Cambio de Cuenta - Dependiente',
-                      'Cuando está activo, los usuarios con rol Dependiente pueden cambiar la cuenta seleccionada al momento de realizar una venta.'
-                    )}
-                  >
-                    <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
-                  </TouchableOpacity>
-                </View>
-                <Switch
-                  value={cuentaChangePermissions.dependiente}
-                  onValueChange={() => toggleCuentaChangePermission('dependiente')}
-                  trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-                  thumbColor={cuentaChangePermissions.dependiente ? '#fff' : colors.outline}
-                />
+              {/* Configurar Cuentas para Ventas */}
+              <View style={styles.subSection}>
+                <Text style={[styles.subSectionTitle, { color: colors.onSurface }]}>
+                  Configurar Cuentas para Ventas
+                </Text>
+                <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                  Configura hasta 4 cuentas por tipo de cuenta para cada tienda. Estas cuentas se usarán por defecto al realizar ventas.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.configCuentasButton, { backgroundColor: colors.primary }]}
+                  onPress={handleOpenSalesConfig}
+                >
+                  <Ionicons name="settings-outline" size={responsive.responsiveWidth(20)} color="#fff" />
+                  <Text style={styles.configCuentasButtonText}>Configurar Cuentas</Text>
+                </TouchableOpacity>
               </View>
 
-              <View style={styles.permissionItem}>
-                <View style={styles.permissionInfo}>
-                  <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
-                    Almacenero
-                  </Text>
-                  <TouchableOpacity 
-                    style={[styles.infoButton, { backgroundColor: colors.primary }]}
-                    onPress={() => showInfoModal(
-                      'Cambio de Cuenta - Almacenero',
-                      'Cuando está activo, los usuarios con rol Almacenero pueden cambiar la cuenta seleccionada al momento de realizar una venta.'
-                    )}
-                  >
-                    <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
-                  </TouchableOpacity>
+              {/* Cambio de Cuenta en Ventas */}
+              <View style={styles.subSection}>
+                <Text style={[styles.subSectionTitle, { color: colors.onSurface }]}>
+                  Cambio de Cuenta en Ventas
+                </Text>
+                <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                  Configura qué roles pueden cambiar la cuenta seleccionada al momento de realizar una venta
+                </Text>
+
+                <View style={styles.permissionItem}>
+                  <View style={styles.permissionInfo}>
+                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                      Dependiente
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                      onPress={() => showInfoModal(
+                        'Cambio de Cuenta - Dependiente',
+                        'Cuando está activo, los usuarios con rol Dependiente pueden cambiar la cuenta seleccionada al momento de realizar una venta.'
+                      )}
+                    >
+                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Switch
+                    value={cuentaChangePermissions.dependiente}
+                    onValueChange={() => toggleCuentaChangePermission('dependiente')}
+                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                    thumbColor={cuentaChangePermissions.dependiente ? '#fff' : colors.outline}
+                  />
                 </View>
-                <Switch
-                  value={cuentaChangePermissions.almacenero}
-                  onValueChange={() => toggleCuentaChangePermission('almacenero')}
-                  trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-                  thumbColor={cuentaChangePermissions.almacenero ? '#fff' : colors.outline}
-                />
+
+                <View style={styles.permissionItem}>
+                  <View style={styles.permissionInfo}>
+                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                      Almacenero
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                      onPress={() => showInfoModal(
+                        'Cambio de Cuenta - Almacenero',
+                        'Cuando está activo, los usuarios con rol Almacenero pueden cambiar la cuenta seleccionada al momento de realizar una venta.'
+                      )}
+                    >
+                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Switch
+                    value={cuentaChangePermissions.almacenero}
+                    onValueChange={() => toggleCuentaChangePermission('almacenero')}
+                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                    thumbColor={cuentaChangePermissions.almacenero ? '#fff' : colors.outline}
+                  />
+                </View>
+
+                <View style={styles.permissionItem}>
+                  <View style={styles.permissionInfo}>
+                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                      Económico
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                      onPress={() => showInfoModal(
+                        'Cambio de Cuenta - Económico',
+                        'Cuando está activo, los usuarios con rol Económico pueden cambiar la cuenta seleccionada al momento de realizar una venta.'
+                      )}
+                    >
+                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Switch
+                    value={cuentaChangePermissions.economico}
+                    onValueChange={() => toggleCuentaChangePermission('economico')}
+                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                    thumbColor={cuentaChangePermissions.economico ? '#fff' : colors.outline}
+                  />
+                </View>
               </View>
 
-              <View style={styles.permissionItem}>
-                <View style={styles.permissionInfo}>
-                  <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
-                    Económico
-                  </Text>
-                  <TouchableOpacity 
-                    style={[styles.infoButton, { backgroundColor: colors.primary }]}
-                    onPress={() => showInfoModal(
-                      'Cambio de Cuenta - Económico',
-                      'Cuando está activo, los usuarios con rol Económico pueden cambiar la cuenta seleccionada al momento de realizar una venta.'
-                    )}
-                  >
-                    <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
-                  </TouchableOpacity>
-                </View>
-                <Switch
-                  value={cuentaChangePermissions.economico}
-                  onValueChange={() => toggleCuentaChangePermission('economico')}
-                  trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-                  thumbColor={cuentaChangePermissions.economico ? '#fff' : colors.outline}
-                />
+              {/* Configuración de Comprobante */}
+              <View style={styles.subSection}>
+                <Text style={[styles.subSectionTitle, { color: colors.onSurface }]}>
+                  Configuración de Comprobante
+                </Text>
+                <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                  Personaliza el logo y nombre del negocio que aparecerán en los comprobantes de venta
+                </Text>
+                <TouchableOpacity
+                  style={[styles.configCuentasButton, { backgroundColor: colors.primary }]}
+                  onPress={() => setShowComprobanteConfig(true)}
+                >
+                  <Ionicons name="settings-outline" size={responsive.responsiveWidth(20)} color="#fff" />
+                  <Text style={styles.configCuentasButtonText}>Configurar</Text>
+                </TouchableOpacity>
               </View>
             </>
           )}
@@ -2363,43 +2374,6 @@ const CurrencyExchangeContent = () => {
             </View>
           )}
 
-            </>
-          )}
-        </Card>
-
-        <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
-          <View style={styles.permissionsHeader}>
-            <View style={styles.permissionsHeaderLeft}>
-              <Image source={require('../../assets/sales.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
-              <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
-                Configuración de Comprobante
-              </Text>
-            </View>
-            <TouchableOpacity 
-              style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
-              onPress={() => setShowComprobanteConfigCard(!showComprobanteConfigCard)}
-            >
-              <Ionicons 
-                name={showComprobanteConfigCard ? "chevron-up" : "chevron-down"} 
-                size={responsive.responsiveWidth(24)} 
-                color={isDarkMode ? colors.primary : '#1976D2'} 
-              />
-            </TouchableOpacity>
-          </View>
-
-          {showComprobanteConfigCard && (
-            <>
-              <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
-                Personaliza el logo y nombre del negocio que aparecerán en los comprobantes de venta
-              </Text>
-
-              <TouchableOpacity
-                style={[styles.configCuentasButton, { backgroundColor: colors.primary }]}
-                onPress={() => setShowComprobanteConfig(true)}
-              >
-                <Ionicons name="settings-outline" size={responsive.responsiveWidth(20)} color="#fff" />
-                <Text style={styles.configCuentasButtonText}>Configurar</Text>
-              </TouchableOpacity>
             </>
           )}
         </Card>
@@ -2944,21 +2918,41 @@ const CurrencyExchangeContent = () => {
                 </Text>
                 <View style={[styles.comprobantePreview, { backgroundColor: '#fff', borderColor: '#000' }]}>
                   {comprobanteConfig.logo && (
-                    <Image source={{ uri: comprobanteConfig.logo }} style={styles.comprobanteLogo} />
+                    <View style={styles.comprobanteLogoContainer}>
+                      <Image 
+                        source={{ uri: comprobanteConfig.logo }} 
+                        style={styles.comprobanteLogo}
+                      />
+                    </View>
                   )}
                   <Text style={styles.comprobanteNegocioName}>
                     {comprobanteConfig.nombreNegocio || 'Nombre del Negocio'}
                   </Text>
+                  <Text style={styles.comprobanteText}>DEPENDIENTE: Juan Pérez</Text>
+                  <Text style={styles.comprobanteText}>
+                    {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  </Text>
+                  <View style={styles.comprobanteTableHeader}>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Producto</Text>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Cant</Text>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Total</Text>
+                  </View>
                   <View style={styles.comprobanteLine} />
-                  <Text style={styles.comprobanteText}>COMPROBANTE DE VENTA</Text>
-                  <View style={styles.comprobanteLine} />
-                  <Text style={styles.comprobanteText}>Fecha: {new Date().toLocaleDateString()}</Text>
-                  <Text style={styles.comprobanteText}>Hora: {new Date().toLocaleTimeString()}</Text>
-                  <View style={styles.comprobanteLine} />
-                  <Text style={styles.comprobanteText}>Producto 1................$10.00</Text>
-                  <Text style={styles.comprobanteText}>Producto 2................$15.00</Text>
-                  <View style={styles.comprobanteLine} />
-                  <Text style={styles.comprobanteTotal}>TOTAL: $25.00</Text>
+                  <View style={styles.comprobanteTableRow}>
+                    <Text style={styles.comprobanteTableColumn}>Producto 1</Text>
+                    <Text style={styles.comprobanteTableColumn}>1</Text>
+                    <Text style={styles.comprobanteTableColumn}>${formatComprobanteNumber(10)}</Text>
+                  </View>
+                  <View style={styles.comprobanteTableRow}>
+                    <Text style={styles.comprobanteTableColumn}>Producto 2</Text>
+                    <Text style={styles.comprobanteTableColumn}>2</Text>
+                    <Text style={styles.comprobanteTableColumn}>${formatComprobanteNumber(30)}</Text>
+                  </View>
+                  <View style={styles.comprobanteTableRow}>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>TOTAL</Text>
+                    <Text style={styles.comprobanteTableColumn}></Text>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>${formatComprobanteNumber(40)}</Text>
+                  </View>
                   <View style={styles.comprobanteLine} />
                   <Text style={styles.comprobanteText}>¡Gracias por su compra!</Text>
                 </View>
@@ -3130,6 +3124,18 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.bodySmall,
     fontFamily: 'Inter',
     marginBottom: responsive.responsiveMargin(20),
+  },
+  subSection: {
+    marginTop: responsive.responsiveMargin(24),
+    paddingTop: responsive.responsivePadding(16),
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  subSectionTitle: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    marginBottom: responsive.responsiveMargin(8),
   },
   accessLevelExplanation: {
     marginBottom: responsive.responsiveMargin(20),
@@ -3545,13 +3551,34 @@ const createStyles = (responsive) => StyleSheet.create({
     resizeMode: 'contain',
     marginBottom: responsive.responsiveMargin(8),
   },
+  comprobanteLogoContainer: {
+    marginBottom: responsive.responsiveMargin(8),
+  },
   comprobanteNegocioName: {
-    fontSize: responsive.fontSizes.h6,
+    fontSize: responsive.responsiveFontSize(24),
     fontWeight: '700',
     fontFamily: 'Hanken Grotesk',
-    color: '#000',
-    marginBottom: responsive.responsiveMargin(8),
+    marginBottom: responsive.responsiveMargin(4),
     textAlign: 'center',
+  },
+  comprobanteTableHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  comprobanteTableRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  comprobanteTableColumn: {
+    flex: 1,
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+    textAlign: 'left',
+  },
+  comprobanteTableColumnBold: {
+    fontWeight: '700',
   },
   comprobanteLine: {
     width: '100%',

@@ -45,6 +45,11 @@ const VentasContent = () => {
   const isInitializedRef = useRef(false);
   const filtersRef = useRef(filters);
   const userTiendaRef = useRef(user?.id_tienda);
+  const summaryScrollViewRef = useRef(null);
+  const autoScrollIntervalRef = useRef(null);
+  const scrollXRef = useRef(0);
+  const directionRef = useRef(1);
+  const isPausedRef = useRef(false);
 
   useEffect(() => {
     isInitializedRef.current = isInitialized;
@@ -57,6 +62,54 @@ const VentasContent = () => {
   useEffect(() => {
     userTiendaRef.current = user?.id_tienda;
   }, [user?.id_tienda]);
+
+  // Auto-scroll for summary section (infinite carousel)
+  const startAutoScroll = () => {
+    if (!summaryScrollViewRef.current) return;
+
+    // Reset refs when starting
+    scrollXRef.current = 0;
+    directionRef.current = 1;
+    isPausedRef.current = false;
+
+    const scrollAmount = 2; // pixels per interval
+    const intervalDuration = 30; // ms
+    const maxScroll = 2000; // increased to show all cards
+
+    const scroll = () => {
+      if (isPausedRef.current || !summaryScrollViewRef.current) return;
+
+      scrollXRef.current += scrollAmount * directionRef.current;
+
+      // Reset to start when reaching the end (infinite carousel)
+      if (scrollXRef.current >= maxScroll) {
+        scrollXRef.current = 0;
+      }
+
+      summaryScrollViewRef.current.scrollTo({ x: scrollXRef.current, animated: true });
+    };
+
+    autoScrollIntervalRef.current = setInterval(scroll, intervalDuration);
+  };
+
+  const stopAutoScroll = () => {
+    if (autoScrollIntervalRef.current) {
+      clearInterval(autoScrollIntervalRef.current);
+      autoScrollIntervalRef.current = null;
+    }
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (summary) {
+        startAutoScroll();
+      }
+
+      return () => {
+        stopAutoScroll();
+      };
+    }, [summary])
+  );
 
   // Get current date in YYYY-MM-DD format for default filters (local timezone)
   const getLocalDate = () => {
@@ -417,17 +470,8 @@ const VentasContent = () => {
   };
 
   const handleEdit = (venta) => {
-    // TODO: Implement edit functionality
-    Alert.alert(
-      'Editar Venta',
-      'La funcionalidad de editar ventas aún no está implementada.',
-      [
-        {
-          text: 'OK',
-          style: 'cancel',
-        },
-      ]
-    );
+    const mode = canManageVentas ? 'edit' : 'view';
+    navigation.navigate('VentaEdit', { venta, mode });
   };
 
   const handleDelete = (venta) => {
@@ -463,8 +507,8 @@ const VentasContent = () => {
   };
 
   const handleVentaPress = (venta) => {
-    // TODO: Navigate to venta detail screen when implemented
-    console.log('Venta pressed:', venta);
+    const mode = canManageVentas ? 'edit' : 'view';
+    navigation.navigate('VentaEdit', { venta, mode });
   };
 
   // Format a Date object to YYYY-MM-DD using local timezone (avoids UTC offset issues)
@@ -1117,9 +1161,19 @@ const VentasContent = () => {
               <Text style={[styles.summaryTitle, { color: colors.onSurface }]}>Resumen de Ventas</Text>
             </View>
             <ScrollView
+              ref={summaryScrollViewRef}
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.summaryGridContainer}
+              scrollEventThrottle={16}
+              onScrollBeginDrag={() => {
+                stopAutoScroll();
+              }}
+              onScrollEndDrag={() => {
+                if (summary) {
+                  startAutoScroll();
+                }
+              }}
             >
               <View style={[styles.summaryItem, styles.summaryItemGreen]}>
                 <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Efectivo CUP</Text>
@@ -1225,6 +1279,19 @@ const VentasContent = () => {
                     {canManageVentas && (
                       <View style={styles.ventaActions}>
                         <TouchableOpacity
+                          style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleEdit(venta);
+                          }}
+                        >
+                          <Image
+                            source={require('../../assets/editar.png')}
+                            style={styles.actionIconSmall}
+                            resizeMode="contain"
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
                           style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
                           onPress={(e) => {
                             e.stopPropagation();
@@ -1282,20 +1349,27 @@ const VentasContent = () => {
                           {formatCubaDate(venta.fecha_hora)}
                         </Text>
                         {canManageVentas && (
-                          <View style={[styles.tableCellText, { width: responsive.responsiveWidth(100), justifyContent: 'center', flexDirection: 'row', gap: responsive.responsiveWidth(8) }]}>
-                            <TouchableOpacity
-                              style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                              onPress={(e) => {
-                                e.stopPropagation();
-                                handleDelete(venta);
-                              }}
-                            >
-                              <Image
-                                source={require('../../assets/basura.png')}
-                                style={styles.actionIconSmall}
-                                resizeMode="contain"
-                              />
-                            </TouchableOpacity>
+                          <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(100) }]}>
+                            <View style={styles.tableActionsRow}>
+                              <TouchableOpacity
+                                style={[styles.tableActionButton, styles.tableEditButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                                onPress={(e) => {
+                                  e.stopPropagation();
+                                  handleEdit(venta);
+                                }}
+                              >
+                                <Ionicons name="create-outline" size={responsive.responsiveWidth(18)} color={colors.primary} />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[styles.tableActionButton, styles.tableDeleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                                onPress={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(venta);
+                                }}
+                              >
+                                <Ionicons name="trash-outline" size={responsive.responsiveWidth(18)} color={colors.error} />
+                              </TouchableOpacity>
+                            </View>
                           </View>
                         )}
                       </View>
@@ -1702,7 +1776,33 @@ const createStyles = (responsive) => StyleSheet.create({
     width: responsive.responsiveWidth(22),
     height: responsive.responsiveHeight(22),
   },
+  editButtonSmall: {
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
   deleteButtonSmall: {
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  tableActionsCell: {
+    justifyContent: 'center',
+  },
+  tableActionsRow: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(8),
+  },
+  tableActionButton: {
+    width: responsive.responsiveWidth(32),
+    height: responsive.responsiveHeight(32),
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tableEditButton: {
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  tableDeleteButton: {
     borderWidth: 1,
     borderColor: 'transparent',
   },
