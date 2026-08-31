@@ -64,7 +64,7 @@ export default function LoginPage() {
         toastKey={toast.key}
       />
 
-      <div className="w-full max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl">
+      <div className="w-full max-w-md md:max-w-md lg:max-w-md xl:max-w-md">
         {/* Logo Section */}
         <div className="text-center mb-8 md:mb-12">
           <div
@@ -104,7 +104,7 @@ export default function LoginPage() {
               Nombre de Usuario
             </label>
             <div
-              className="flex items-center border rounded-xl px-4 py-3 md:px-5 md:py-4"
+              className="flex items-center border rounded-xl px-4 py-3 md:px-4 md:py-3"
               style={{
                 backgroundColor: colors.surface,
                 borderColor: colors.outlineVariant,
@@ -131,7 +131,7 @@ export default function LoginPage() {
               Contraseña
             </label>
             <div
-              className="flex items-center border rounded-xl px-4 py-3 md:px-5 md:py-4"
+              className="flex items-center border rounded-xl px-4 py-3 md:px-4 md:py-3"
               style={{
                 backgroundColor: colors.surface,
                 borderColor: colors.outlineVariant,

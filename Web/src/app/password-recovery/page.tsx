@@ -67,7 +67,7 @@ export default function PasswordRecoveryPage() {
 
       {/* Content - Centered */}
       <div className="flex-1 flex items-center justify-center">
-        <div className="w-full max-w-md md:max-w-lg lg:max-w-xl xl:max-w-2xl">
+        <div className="w-full max-w-md md:max-w-md lg:max-w-md xl:max-w-md">
           {/* Icon */}
           <div
             className="w-24 h-24 md:w-32 md:h-32 mx-auto mb-6 md:mb-8 rounded-full flex items-center justify-center shadow-lg"
@@ -124,7 +124,7 @@ export default function PasswordRecoveryPage() {
           {/* Call Support Button */}
           <button
             onClick={handleCallSupport}
-            className="w-full flex items-center justify-center py-4 md:py-5 px-6 rounded-2xl shadow-lg transition-all hover:opacity-90"
+            className="w-full flex items-center justify-center py-4 md:py-4 px-6 rounded-2xl shadow-lg transition-all hover:opacity-90"
             style={{
               backgroundColor: colors.primary,
               color: colors.onPrimary,

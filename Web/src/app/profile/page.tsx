@@ -238,7 +238,7 @@ export default function ProfilePage() {
             Contraseña Actual
           </label>
           <div
-            className="flex items-center border rounded-lg px-4 py-3 md:px-5 md:py-4"
+            className="flex items-center border rounded-lg px-4 py-3 md:px-4 md:py-3"
             style={{
               backgroundColor: colors.background,
               borderColor: colors.outlineVariant,
@@ -271,7 +271,7 @@ export default function ProfilePage() {
             Nueva Contraseña
           </label>
           <div
-            className="flex items-center border rounded-lg px-4 py-3 md:px-5 md:py-4"
+            className="flex items-center border rounded-lg px-4 py-3 md:px-4 md:py-3"
             style={{
               backgroundColor: colors.background,
               borderColor: colors.outlineVariant,
@@ -304,7 +304,7 @@ export default function ProfilePage() {
             Confirmar Nueva Contraseña
           </label>
           <div
-            className="flex items-center border rounded-lg px-4 py-3 md:px-5 md:py-4"
+            className="flex items-center border rounded-lg px-4 py-3 md:px-4 md:py-3"
             style={{
               backgroundColor: colors.background,
               borderColor: colors.outlineVariant,
@@ -338,7 +338,7 @@ export default function ProfilePage() {
               setNewPassword('');
               setConfirmPassword('');
             }}
-            className="flex-1 py-3 md:py-4 rounded-lg font-semibold border-2 transition-all hover:opacity-90"
+            className="flex-1 py-3 md:py-3 rounded-lg font-semibold border-2 transition-all hover:opacity-90"
             style={{
               backgroundColor: colors.surface,
               borderColor: isDarkMode ? colors.outline : colors.outlineVariant,
@@ -352,7 +352,7 @@ export default function ProfilePage() {
           <button
             onClick={handleChangePassword}
             disabled={isChangingPassword}
-            className="flex-1 py-3 md:py-4 rounded-lg font-semibold shadow-md transition-all hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
+            className="flex-1 py-3 md:py-3 rounded-lg font-semibold shadow-md transition-all hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
             style={{
               backgroundColor: colors.primary,
               color: '#fff',
@@ -408,7 +408,7 @@ export default function ProfilePage() {
         paddingRight: isMobile ? '20px' : isTablet ? '32px' : '40px',
         paddingBottom: '120px',
         paddingLeft: isMobile ? '20px' : isTablet ? '32px' : '40px',
-        maxWidth: isDesktop ? '900px' : '100%',
+        maxWidth: isDesktop ? '600px' : '100%',
       }}>
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20">
@@ -472,7 +472,7 @@ export default function ProfilePage() {
 
             <button
               onClick={() => setShowChangePassword(!showChangePassword)}
-              className="w-full flex items-center justify-center gap-2 py-4 md:py-5 rounded-xl shadow-md mb-6 transition-all hover:opacity-90"
+              className="w-full flex items-center justify-center gap-2 py-4 md:py-4 rounded-xl shadow-md mb-6 transition-all hover:opacity-90"
               style={{ backgroundColor: colors.surface }}
             >
               <Lock size={isDesktop ? 24 : isTablet ? 22 : 20} style={{ color: colors.primary }} />

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "../context/ThemeContext";
 import { AuthProvider } from "../context/AuthContext";
+import { ViewModeProvider } from "../context/ViewModeContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,7 +29,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
           <AuthProvider>
-            {children}
+            <ViewModeProvider>
+              {children}
+            </ViewModeProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>
