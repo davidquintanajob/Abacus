@@ -1,0 +1,108 @@
+import api from '../lib/api';
+
+interface ApiError extends Error {
+  code?: number | string | null;
+}
+
+export const getServicios = async (filters: any = {}, page: number = 1, limit: number = 10) => {
+  try {
+    const queryParams = new URLSearchParams({
+      limit: limit.toString(),
+      page: page.toString(),
+    });
+
+    // Add filters
+    if (filters.nombre) queryParams.append('nombre', filters.nombre);
+    if (filters.codigo) queryParams.append('codigo', filters.codigo);
+    if (filters.categoria) queryParams.append('categoria', filters.categoria);
+    if (filters.esvendible !== undefined && filters.esvendible !== '') queryParams.append('esvendible', filters.esvendible === 'true' ? 'true' : 'false');
+    if (filters.id_tienda) queryParams.append('id_tienda', filters.id_tienda);
+    if (filters.fetchProducto !== undefined) queryParams.append('fetchProducto', filters.fetchProducto);
+
+    const response = await api.get(`/servicio/filter?${queryParams}`);
+    return response.data;
+  } catch (error: any) {
+    const errorMessage = error.response?.data?.errors?.[0] || 
+                        error.response?.data?.message || 
+                        error.message ||
+                        'Error al obtener servicios';
+    const err = new Error(errorMessage) as ApiError;
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
+  }
+};
+
+export const getServicioById = async (id: string | number) => {
+  try {
+    const response = await api.get(`/servicio/${id}`);
+    return response.data;
+  } catch (error: any) {
+    const errorMessage = error.response?.data?.errors?.[0] || 
+                        error.response?.data?.message || 
+                        error.message ||
+                        'Error al obtener datos del servicio';
+    const err = new Error(errorMessage) as ApiError;
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
+  }
+};
+
+export const createServicio = async (servicioData: any) => {
+  try {
+    const response = await api.post('/servicio', servicioData);
+    return response.data;
+  } catch (error: any) {
+    const errorMessage = error.response?.data?.errors?.[0] || 
+                        error.response?.data?.message || 
+                        error.message ||
+                        'Error al crear servicio';
+    const err = new Error(errorMessage) as ApiError;
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
+  }
+};
+
+export const updateServicio = async (id: string | number, servicioData: any) => {
+  try {
+    const response = await api.put(`/servicio/${id}`, servicioData);
+    return response.data;
+  } catch (error: any) {
+    const errorMessage = error.response?.data?.errors?.[0] || 
+                        error.response?.data?.message || 
+                        error.message ||
+                        'Error al actualizar servicio';
+    const err = new Error(errorMessage) as ApiError;
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
+  }
+};
+
+export const getServicioByCodigo = async (codigo: string) => {
+  try {
+    const response = await api.get(`/servicio/codigo/${codigo}`);
+    return response.data;
+  } catch (error: any) {
+    const errorMessage = error.response?.data?.errors?.[0] || 
+                        error.response?.data?.message || 
+                        error.message ||
+                        'Error al obtener servicio por código';
+    const err = new Error(errorMessage) as ApiError;
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
+  }
+};
+
+export const deleteServicio = async (id: string | number) => {
+  try {
+    const response = await api.delete(`/servicio/${id}`);
+    return response.data;
+  } catch (error: any) {
+    const errorMessage = error.response?.data?.errors?.[0] || 
+                        error.response?.data?.message || 
+                        error.message ||
+                        'Error al eliminar servicio';
+    const err = new Error(errorMessage) as ApiError;
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
+  }
+};
