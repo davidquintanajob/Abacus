@@ -48,8 +48,6 @@ const VentasContent = () => {
   const summaryScrollViewRef = useRef(null);
   const autoScrollIntervalRef = useRef(null);
   const scrollXRef = useRef(0);
-  const directionRef = useRef(1);
-  const isPausedRef = useRef(false);
 
   useEffect(() => {
     isInitializedRef.current = isInitialized;
@@ -66,27 +64,30 @@ const VentasContent = () => {
   // Auto-scroll for summary section (infinite carousel)
   const startAutoScroll = () => {
     if (!summaryScrollViewRef.current) return;
+    
+    // Stop any existing interval
+    if (autoScrollIntervalRef.current) {
+      clearInterval(autoScrollIntervalRef.current);
+    }
 
-    // Reset refs when starting
     scrollXRef.current = 0;
-    directionRef.current = 1;
-    isPausedRef.current = false;
 
-    const scrollAmount = 2; // pixels per interval
+    const scrollAmount = 1; // pixels per interval
     const intervalDuration = 30; // ms
-    const maxScroll = 2000; // increased to show all cards
 
     const scroll = () => {
-      if (isPausedRef.current || !summaryScrollViewRef.current) return;
+      if (!summaryScrollViewRef.current) return;
 
-      scrollXRef.current += scrollAmount * directionRef.current;
+      scrollXRef.current += scrollAmount;
 
-      // Reset to start when reaching the end (infinite carousel)
-      if (scrollXRef.current >= maxScroll) {
+      // Simple infinite scroll: when reaching 10000px, reset to 0
+      // Since we have 10x duplicated content, this creates a seamless loop
+      if (scrollXRef.current >= 10000) {
         scrollXRef.current = 0;
+        summaryScrollViewRef.current.scrollTo({ x: 0, animated: false });
+      } else {
+        summaryScrollViewRef.current.scrollTo({ x: scrollXRef.current, animated: true });
       }
-
-      summaryScrollViewRef.current.scrollTo({ x: scrollXRef.current, animated: true });
     };
 
     autoScrollIntervalRef.current = setInterval(scroll, intervalDuration);
@@ -1175,30 +1176,34 @@ const VentasContent = () => {
                 }
               }}
             >
-              <View style={[styles.summaryItem, styles.summaryItemGreen]}>
-                <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Efectivo CUP</Text>
-                <Text style={[styles.summaryItemValue, { color: '#4CAF50' }]}>
-                  {formatNumberWithSpaces(summary.total_efectivo_cup || 0)}
-                </Text>
-              </View>
-              <View style={[styles.summaryItem, styles.summaryItemBlue]}>
-                <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Efectivo USD</Text>
-                <Text style={[styles.summaryItemValue, { color: '#2196F3' }]}>
-                  {formatNumberWithSpaces(summary.total_efectivo_usd || 0)}
-                </Text>
-              </View>
-              <View style={[styles.summaryItem, styles.summaryItemOrange]}>
-                <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Transferencia CUP</Text>
-                <Text style={[styles.summaryItemValue, { color: '#FF9800' }]}>
-                  {formatNumberWithSpaces(summary.total_transferencia_cup || 0)}
-                </Text>
-              </View>
-              <View style={[styles.summaryItem, styles.summaryItemPurple]}>
-                <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Transferencia USD</Text>
-                <Text style={[styles.summaryItemValue, { color: '#9C27B0' }]}>
-                  {formatNumberWithSpaces(summary.total_transferencia_usd || 0)}
-                </Text>
-              </View>
+              {[...Array(10)].map((_, setIndex) => (
+                <React.Fragment key={setIndex}>
+                  <View style={[styles.summaryItem, styles.summaryItemGreen]}>
+                    <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Efectivo CUP</Text>
+                    <Text style={[styles.summaryItemValue, { color: '#4CAF50' }]}>
+                      {formatNumberWithSpaces(summary.total_efectivo_cup || 0)}
+                    </Text>
+                  </View>
+                  <View style={[styles.summaryItem, styles.summaryItemBlue]}>
+                    <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Efectivo USD</Text>
+                    <Text style={[styles.summaryItemValue, { color: '#2196F3' }]}>
+                      {formatNumberWithSpaces(summary.total_efectivo_usd || 0)}
+                    </Text>
+                  </View>
+                  <View style={[styles.summaryItem, styles.summaryItemOrange]}>
+                    <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Transferencia CUP</Text>
+                    <Text style={[styles.summaryItemValue, { color: '#FF9800' }]}>
+                      {formatNumberWithSpaces(summary.total_transferencia_cup || 0)}
+                    </Text>
+                  </View>
+                  <View style={[styles.summaryItem, styles.summaryItemPurple]}>
+                    <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>Transferencia USD</Text>
+                    <Text style={[styles.summaryItemValue, { color: '#9C27B0' }]}>
+                      {formatNumberWithSpaces(summary.total_transferencia_usd || 0)}
+                    </Text>
+                  </View>
+                </React.Fragment>
+              ))}
             </ScrollView>
           </Card>
         )}
@@ -1255,7 +1260,7 @@ const VentasContent = () => {
                     <View style={styles.ventaInfo}>
                       <View style={styles.ventaHeader}>
                         <Text style={[styles.ventaNota, { color: colors.onSurface }]} numberOfLines={2} ellipsizeMode="tail">
-                          {venta.nota || 'Sin nota'}
+                          {venta.nota || ''}
                         </Text>
                       </View>
                       <Text style={[styles.ventaTienda, { color: colors.outline }]}>
@@ -1331,7 +1336,7 @@ const VentasContent = () => {
                     >
                       <View style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? colors.surface : colors.surfaceVariant }]}>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]} numberOfLines={2}>
-                          {venta.nota || 'Sin nota'}
+                          {venta.nota || ''}
                         </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
                           {venta.ventas?.[0]?.servicioTienda?.tienda?.nombre || 'N/A'}
@@ -1534,10 +1539,7 @@ const createStyles = (responsive) => StyleSheet.create({
     minWidth: responsive.responsiveWidth(100),
     backgroundColor: 'rgba(0, 0, 0, 0.02)',
     borderRadius: 8,
-    padding: responsive.responsivePadding(8),
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'column',
+    padding: responsive.responsivePadding(10),
     borderWidth: 1,
     borderColor: 'transparent',
   },

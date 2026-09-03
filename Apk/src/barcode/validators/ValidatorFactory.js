@@ -13,6 +13,7 @@ import UPC_EValidator from './UPC_EValidator';
 import ITF14Validator from './ITF14Validator';
 import Code128Validator from './Code128Validator';
 import Code39Validator from './Code39Validator';
+import QRValidator from './QRValidator';
 
 class ValidatorFactory {
   constructor(logger) {
@@ -27,6 +28,7 @@ class ValidatorFactory {
       [BARCODE_TYPES.ITF14]: new ITF14Validator(logger),
       [BARCODE_TYPES.CODE128]: new Code128Validator(logger),
       [BARCODE_TYPES.CODE39]: new Code39Validator(logger),
+      [BARCODE_TYPES.QR]: new QRValidator(logger),
     };
   }
 

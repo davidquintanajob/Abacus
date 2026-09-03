@@ -15,6 +15,7 @@ import { getServicios, getServicioByCodigo } from '../services/servicioService';
 import { createVenta } from '../services/ventaService';
 import { getTiendas } from '../services/tiendaService';
 import { getCuentas } from '../services/cuentaService';
+import { getOfertaById } from '../services/ofertaService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import { storageService } from '../services/storageService';
@@ -113,8 +114,22 @@ const SalesContent = () => {
         try {
           setIsSearching(true);
           const filters = { nombre: searchText, fetchProducto: true };
+          if (selectedTienda) {
+            filters.id_tienda = selectedTienda.id_tienda;
+          }
           const data = await getServicios(filters, 1, 10);
-          setSearchResults(data.data || []);
+          
+          // Filter out products with zero stock in the selected store
+          const filteredResults = (data.data || []).filter(servicio => {
+            if (!selectedTienda) return true;
+            const servicioTienda = servicio.tiendas_servicio?.find(t => t.id_tienda === selectedTienda.id_tienda);
+            // Allow services without tienda relationship (cantidad could be null/undefined)
+            if (!servicioTienda) return false;
+            const stock = parseFloat(servicioTienda.cantidad || 0);
+            return stock > 0;
+          });
+          
+          setSearchResults(filteredResults);
           setShowSearchDropdown(true);
         } catch (error) {
           console.error('Error searching productos:', error);
@@ -408,8 +423,19 @@ const SalesContent = () => {
       };
 
       // If it's an offer, load components
-      if (newItem.esOferta) {
-        // TODO: Load offer components
+      if (newItem.esOferta && servicio.ofertas_que_incluyen?.length > 0) {
+        try {
+          const ofertaId = servicio.ofertas_que_incluyen[0].id_oferta;
+          const oferta = await getOfertaById(ofertaId);
+          if (oferta && oferta.componentes) {
+            newItem.componentes = oferta.componentes.map(comp => ({
+              nombre: comp.servicio?.nombre || 'Componente',
+              cantidad: comp.cantidad || 1
+            }));
+          }
+        } catch (error) {
+          console.error('Error loading offer components:', error);
+        }
       }
 
       console.log('[SalesScreen] Adding item to sale:', newItem);
@@ -440,6 +466,23 @@ const SalesContent = () => {
         return;
       }
 
+      // Check if product already exists in sale list
+      const existingItem = saleItems.find(item => 
+        item.id_servicio_tienda === servicioTienda.id_servicio_tienda
+      );
+
+      if (existingItem) {
+        console.log('[SalesScreen] Product already in list, increasing quantity');
+        updateItemQuantity(saleItems.indexOf(existingItem), existingItem.cantidad + 1);
+        if (Platform.OS === 'android') {
+          Vibration.vibrate(100);
+        }
+        playSound();
+        showToast({ type: 'success', message: 'Cantidad aumentada' });
+        setSearchText('');
+        return;
+      }
+
       const newItem = {
         id_servicio_tienda: servicioTienda.id_servicio_tienda,
         id_servicio: servicio.id_servicio,
@@ -454,8 +497,19 @@ const SalesContent = () => {
       };
 
       // If it's an offer, load components
-      if (newItem.esOferta) {
-        // TODO: Load offer components
+      if (newItem.esOferta && servicio.ofertas_que_incluyen?.length > 0) {
+        try {
+          const ofertaId = servicio.ofertas_que_incluyen[0].id_oferta;
+          const oferta = await getOfertaById(ofertaId);
+          if (oferta && oferta.componentes) {
+            newItem.componentes = oferta.componentes.map(comp => ({
+              nombre: comp.servicio?.nombre || 'Componente',
+              cantidad: comp.cantidad || 1
+            }));
+          }
+        } catch (error) {
+          console.error('Error loading offer components:', error);
+        }
       }
 
       console.log('[SalesScreen] Adding item to sale:', newItem);
@@ -465,6 +519,7 @@ const SalesContent = () => {
       }
       playSound();
       showToast({ type: 'success', message: 'Producto agregado correctamente' });
+      setSearchText('');
     } catch (error) {
       console.error('[SalesScreen] Error adding product:', error);
       showToast({ type: 'error', message: 'Error al agregar producto' });
@@ -762,7 +817,10 @@ const SalesContent = () => {
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.primary }]}>Nueva Venta</Text>
         <TouchableOpacity onPress={() => setShowCamera(!showCamera)} style={styles.cameraToggle}>
-          <Ionicons name={showCamera ? "eye-off" : "eye"} size={24} color={colors.primary} />
+          <Ionicons name="barcode" size={24} color={colors.primary} />
+          <Text style={[styles.cameraToggleText, { color: colors.primary }]}>
+            {showCamera ? "Escáner activo" : "Escáner desactivado"}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -889,9 +947,20 @@ const SalesContent = () => {
               <View key={index} style={[styles.itemCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
                 {item.imagen && (() => {
                   const isBase64 = item.imagen.startsWith('data:');
-                  const fullImageUrl = isBase64 ? item.imagen : (apiBaseUrl ? `${apiBaseUrl}${item.imagen}` : item.imagen);
+                  let fullImageUrl;
+                  if (isBase64) {
+                    fullImageUrl = item.imagen;
+                  } else {
+                    // Ensure proper URL construction
+                    const imagePath = item.imagen.startsWith('/') ? item.imagen : `/${item.imagen}`;
+                    fullImageUrl = apiBaseUrl ? `${apiBaseUrl}${imagePath}` : item.imagen;
+                  }
                   return (
-                    <Image source={{ uri: fullImageUrl }} style={styles.itemImage} />
+                    <Image 
+                      source={{ uri: fullImageUrl }} 
+                      style={styles.itemImage}
+                      onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
+                    />
                   );
                 })()}
                 <View style={styles.itemContent}>
@@ -901,6 +970,15 @@ const SalesContent = () => {
                   </Text>
                   {item.esOferta && (
                     <Text style={[styles.offerBadge, { color: colors.primary }]}>Oferta</Text>
+                  )}
+                  {item.esOferta && item.componentes && item.componentes.length > 0 && (
+                    <View style={styles.componentsContainer}>
+                      {item.componentes.map((comp, compIndex) => (
+                        <Text key={compIndex} style={[styles.componentText, { color: colors.outline }]}>
+                          • {comp.nombre} x{comp.cantidad}
+                        </Text>
+                      ))}
+                    </View>
                   )}
                 </View>
                 <View style={styles.itemActions}>
@@ -1207,7 +1285,13 @@ const createStyles = (responsive) => StyleSheet.create({
     fontWeight: '700',
   },
   cameraToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
     padding: responsive.responsiveWidth(8),
+  },
+  cameraToggleText: {
+    fontSize: responsive.responsiveWidth(12),
+    marginLeft: responsive.responsiveWidth(4),
   },
   content: {
     flex: 1,
@@ -1423,6 +1507,13 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveWidth(10),
     fontWeight: '600',
     marginTop: responsive.responsiveHeight(4),
+  },
+  componentsContainer: {
+    marginTop: responsive.responsiveHeight(4),
+  },
+  componentText: {
+    fontSize: responsive.responsiveWidth(11),
+    marginTop: responsive.responsiveHeight(2),
   },
   itemActions: {
     flexDirection: 'row',

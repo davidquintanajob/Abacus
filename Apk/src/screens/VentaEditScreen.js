@@ -72,13 +72,16 @@ const VentaEditContent = () => {
   const [servicioSearchText, setServicioSearchText] = useState('');
   const [servicioSearchResults, setServicioSearchResults] = useState([]);
   const [isSearchingServicios, setIsSearchingServicios] = useState(false);
+  
+  const [hasLoadedUsuarios, setHasLoadedUsuarios] = useState(false);
+  const [hasLoadedTiendas, setHasLoadedTiendas] = useState(false);
+  const [hasLoadedCuentas, setHasLoadedCuentas] = useState(false);
+  const [isLoadingUsuarios, setIsLoadingUsuarios] = useState(false);
+  const [isLoadingTiendas, setIsLoadingTiendas] = useState(false);
+  const [isLoadingCuentas, setIsLoadingCuentas] = useState(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isReadOnly = isViewMode || isOfflineMode;
-
-  useEffect(() => {
-    fetchInitialData();
-  }, []);
 
   useEffect(() => {
     if (venta?.id_lista_venta) {
@@ -86,29 +89,29 @@ const VentaEditContent = () => {
     }
   }, [venta?.id_lista_venta]);
 
-  const fetchInitialData = async () => {
-    try {
-      const [tiendasData, usuariosData, serviciosData, cuentasData] = await Promise.all([
-        getTiendas({}, 1, 1000),
-        getUsuarios({ activo: true }, 1, 1000),
-        getServicios({}, 1, 1000),
-        getCuentas({ activo: true }, 1, 1000),
-      ]);
-      
-      setTiendas(tiendasData.data || []);
-      setUsuarios(usuariosData.data || []);
-      setServicios(serviciosData.data || []);
-      setCuentas(cuentasData.data || []);
-    } catch (error) {
-      console.error('Error fetching initial data:', error);
-      showToast({ type: 'error', message: 'Error al cargar datos iniciales' });
-    }
-  };
-
   const fetchVentaData = async () => {
     try {
       setIsFetchingVenta(true);
       const ventaData = await getVentaById(venta.id_lista_venta);
+      
+      // Extract data from venta response to avoid unnecessary API calls
+      const ventaUsuario = ventaData.operaciones?.[0]?.usuario;
+      const ventaCuentas = ventaData.operaciones?.map(op => op.cuenta).filter(Boolean) || [];
+      const ventaTienda = ventaData.ventas?.[0]?.servicioTienda?.tienda;
+      
+      // Set dropdown data from venta response (only what's needed for display)
+      if (ventaUsuario) {
+        setUsuarios([ventaUsuario]);
+        setHasLoadedUsuarios(true);
+      }
+      if (ventaCuentas.length > 0) {
+        setCuentas(ventaCuentas);
+        setHasLoadedCuentas(true);
+      }
+      if (ventaTienda) {
+        setTiendas([ventaTienda]);
+        setHasLoadedTiendas(true);
+      }
       
       setFormData({
         fecha_hora: ventaData.fecha_hora,
@@ -140,6 +143,49 @@ const VentaEditContent = () => {
       showToast({ type: 'error', message: 'Error al cargar datos de la venta' });
     } finally {
       setIsFetchingVenta(false);
+    }
+  };
+
+  // Lazy load functions for dropdowns
+  const fetchUsuarios = async () => {
+    if (hasLoadedUsuarios || isLoadingUsuarios) return;
+    try {
+      setIsLoadingUsuarios(true);
+      const data = await getUsuarios({ activo: true }, 1, 1000);
+      setUsuarios(data.data || []);
+      setHasLoadedUsuarios(true);
+    } catch (error) {
+      console.error('Error fetching usuarios:', error);
+    } finally {
+      setIsLoadingUsuarios(false);
+    }
+  };
+
+  const fetchTiendas = async () => {
+    if (hasLoadedTiendas || isLoadingTiendas) return;
+    try {
+      setIsLoadingTiendas(true);
+      const data = await getTiendas({}, 1, 1000);
+      setTiendas(data.data || []);
+      setHasLoadedTiendas(true);
+    } catch (error) {
+      console.error('Error fetching tiendas:', error);
+    } finally {
+      setIsLoadingTiendas(false);
+    }
+  };
+
+  const fetchCuentas = async () => {
+    if (hasLoadedCuentas || isLoadingCuentas) return;
+    try {
+      setIsLoadingCuentas(true);
+      const data = await getCuentas({ activo: true }, 1, 1000);
+      setCuentas(data.data || []);
+      setHasLoadedCuentas(true);
+    } catch (error) {
+      console.error('Error fetching cuentas:', error);
+    } finally {
+      setIsLoadingCuentas(false);
     }
   };
 
@@ -430,7 +476,12 @@ const VentaEditContent = () => {
               <Text style={[styles.label, { color: colors.outline }]}>Usuario *</Text>
               <TouchableOpacity
                 style={[styles.dropdown, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, borderColor: colors.outlineVariant }]}
-                onPress={() => !isReadOnly && setShowUsuarioDropdown(!showUsuarioDropdown)}
+                onPress={() => {
+                  if (!isReadOnly) {
+                    fetchUsuarios();
+                    setShowUsuarioDropdown(!showUsuarioDropdown);
+                  }
+                }}
                 disabled={isReadOnly}
               >
                 <Text style={[styles.dropdownText, { color: formData.id_usuario ? colors.onSurface : colors.outline }]}>
@@ -447,20 +498,27 @@ const VentaEditContent = () => {
               
               {showUsuarioDropdown && !isReadOnly && (
                 <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                  <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                    {usuarios.map((usuario, index) => (
-                      <TouchableOpacity
-                        key={usuario.id_usuario}
-                        style={[styles.dropdownItem, index === usuarios.length - 1 && styles.dropdownItemLast]}
-                        onPress={() => {
-                          setFormData(prev => ({ ...prev, id_usuario: usuario.id_usuario }));
-                          setShowUsuarioDropdown(false);
-                        }}
-                      >
-                        <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{usuario.nombre_natural}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+                  {isLoadingUsuarios ? (
+                    <View style={styles.dropdownLoadingContainer}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                      <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando usuarios...</Text>
+                    </View>
+                  ) : (
+                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                      {usuarios.map((usuario, index) => (
+                        <TouchableOpacity
+                          key={usuario.id_usuario}
+                          style={[styles.dropdownItem, index === usuarios.length - 1 && styles.dropdownItemLast]}
+                          onPress={() => {
+                            setFormData(prev => ({ ...prev, id_usuario: usuario.id_usuario }));
+                            setShowUsuarioDropdown(false);
+                          }}
+                        >
+                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{usuario.nombre_natural}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  )}
                 </View>
               )}
             </View>
@@ -501,7 +559,12 @@ const VentaEditContent = () => {
                 <Text style={[styles.label, { color: colors.outline }]}>Cuenta</Text>
                 <TouchableOpacity
                   style={[styles.dropdown, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={() => !isReadOnly && setShowCuentaEfectivoCupDropdown(!showCuentaEfectivoCupDropdown)}
+                  onPress={() => {
+                    if (!isReadOnly) {
+                      fetchCuentas();
+                      setShowCuentaEfectivoCupDropdown(!showCuentaEfectivoCupDropdown);
+                    }
+                  }}
                   disabled={isReadOnly}
                 >
                   <Text style={[styles.dropdownText, { color: formData.id_cuenta_efectivo_cup ? colors.onSurface : colors.outline }]}>
@@ -518,20 +581,27 @@ const VentaEditContent = () => {
                 
                 {showCuentaEfectivoCupDropdown && !isReadOnly && (
                   <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                      {cuentas.filter(c => c.tipo_cuenta === 'Efectivo CUP').map((cuenta, index) => (
-                        <TouchableOpacity
-                          key={cuenta.id_cuenta}
-                          style={[styles.dropdownItem, index === cuentas.filter(c => c.tipo_cuenta === 'Efectivo CUP').length - 1 && styles.dropdownItemLast]}
-                          onPress={() => {
-                            setFormData(prev => ({ ...prev, id_cuenta_efectivo_cup: cuenta.id_cuenta }));
-                            setShowCuentaEfectivoCupDropdown(false);
-                          }}
-                        >
-                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
+                    {isLoadingCuentas ? (
+                      <View style={styles.dropdownLoadingContainer}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                        <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando cuentas...</Text>
+                      </View>
+                    ) : (
+                      <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                        {cuentas.filter(c => c.tipo_cuenta === 'Efectivo CUP').map((cuenta, index) => (
+                          <TouchableOpacity
+                            key={cuenta.id_cuenta}
+                            style={[styles.dropdownItem, index === cuentas.filter(c => c.tipo_cuenta === 'Efectivo CUP').length - 1 && styles.dropdownItemLast]}
+                            onPress={() => {
+                              setFormData(prev => ({ ...prev, id_cuenta_efectivo_cup: cuenta.id_cuenta }));
+                              setShowCuentaEfectivoCupDropdown(false);
+                            }}
+                          >
+                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    )}
                   </View>
                 )}
               </View>
@@ -554,7 +624,12 @@ const VentaEditContent = () => {
                 <Text style={[styles.label, { color: colors.outline }]}>Cuenta</Text>
                 <TouchableOpacity
                   style={[styles.dropdown, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={() => !isReadOnly && setShowCuentaEfectivoUsdDropdown(!showCuentaEfectivoUsdDropdown)}
+                  onPress={() => {
+                    if (!isReadOnly) {
+                      fetchCuentas();
+                      setShowCuentaEfectivoUsdDropdown(!showCuentaEfectivoUsdDropdown);
+                    }
+                  }}
                   disabled={isReadOnly}
                 >
                   <Text style={[styles.dropdownText, { color: formData.id_cuenta_efectivo_usd ? colors.onSurface : colors.outline }]}>
@@ -571,20 +646,27 @@ const VentaEditContent = () => {
                 
                 {showCuentaEfectivoUsdDropdown && !isReadOnly && (
                   <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                      {cuentas.filter(c => c.tipo_cuenta === 'Efectivo USD').map((cuenta, index) => (
-                        <TouchableOpacity
-                          key={cuenta.id_cuenta}
-                          style={[styles.dropdownItem, index === cuentas.filter(c => c.tipo_cuenta === 'Efectivo USD').length - 1 && styles.dropdownItemLast]}
-                          onPress={() => {
-                            setFormData(prev => ({ ...prev, id_cuenta_efectivo_usd: cuenta.id_cuenta }));
-                            setShowCuentaEfectivoUsdDropdown(false);
-                          }}
-                        >
-                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
+                    {isLoadingCuentas ? (
+                      <View style={styles.dropdownLoadingContainer}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                        <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando cuentas...</Text>
+                      </View>
+                    ) : (
+                      <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                        {cuentas.filter(c => c.tipo_cuenta === 'Efectivo USD').map((cuenta, index) => (
+                          <TouchableOpacity
+                            key={cuenta.id_cuenta}
+                            style={[styles.dropdownItem, index === cuentas.filter(c => c.tipo_cuenta === 'Efectivo USD').length - 1 && styles.dropdownItemLast]}
+                            onPress={() => {
+                              setFormData(prev => ({ ...prev, id_cuenta_efectivo_usd: cuenta.id_cuenta }));
+                              setShowCuentaEfectivoUsdDropdown(false);
+                            }}
+                          >
+                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    )}
                   </View>
                 )}
               </View>
@@ -607,7 +689,12 @@ const VentaEditContent = () => {
                 <Text style={[styles.label, { color: colors.outline }]}>Cuenta</Text>
                 <TouchableOpacity
                   style={[styles.dropdown, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={() => !isReadOnly && setShowCuentaTransferenciaCupDropdown(!showCuentaTransferenciaCupDropdown)}
+                  onPress={() => {
+                    if (!isReadOnly) {
+                      fetchCuentas();
+                      setShowCuentaTransferenciaCupDropdown(!showCuentaTransferenciaCupDropdown);
+                    }
+                  }}
                   disabled={isReadOnly}
                 >
                   <Text style={[styles.dropdownText, { color: formData.id_cuenta_transferencia_cup ? colors.onSurface : colors.outline }]}>
@@ -624,20 +711,27 @@ const VentaEditContent = () => {
                 
                 {showCuentaTransferenciaCupDropdown && !isReadOnly && (
                   <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                      {cuentas.filter(c => c.tipo_cuenta === 'Transferencia CUP').map((cuenta, index) => (
-                        <TouchableOpacity
-                          key={cuenta.id_cuenta}
-                          style={[styles.dropdownItem, index === cuentas.filter(c => c.tipo_cuenta === 'Transferencia CUP').length - 1 && styles.dropdownItemLast]}
-                          onPress={() => {
-                            setFormData(prev => ({ ...prev, id_cuenta_transferencia_cup: cuenta.id_cuenta }));
-                            setShowCuentaTransferenciaCupDropdown(false);
-                          }}
-                        >
-                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
+                    {isLoadingCuentas ? (
+                      <View style={styles.dropdownLoadingContainer}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                        <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando cuentas...</Text>
+                      </View>
+                    ) : (
+                      <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                        {cuentas.filter(c => c.tipo_cuenta === 'Transferencia CUP').map((cuenta, index) => (
+                          <TouchableOpacity
+                            key={cuenta.id_cuenta}
+                            style={[styles.dropdownItem, index === cuentas.filter(c => c.tipo_cuenta === 'Transferencia CUP').length - 1 && styles.dropdownItemLast]}
+                            onPress={() => {
+                              setFormData(prev => ({ ...prev, id_cuenta_transferencia_cup: cuenta.id_cuenta }));
+                              setShowCuentaTransferenciaCupDropdown(false);
+                            }}
+                          >
+                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    )}
                   </View>
                 )}
               </View>
@@ -660,7 +754,12 @@ const VentaEditContent = () => {
                 <Text style={[styles.label, { color: colors.outline }]}>Cuenta</Text>
                 <TouchableOpacity
                   style={[styles.dropdown, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={() => !isReadOnly && setShowCuentaTransferenciaUsdDropdown(!showCuentaTransferenciaUsdDropdown)}
+                  onPress={() => {
+                    if (!isReadOnly) {
+                      fetchCuentas();
+                      setShowCuentaTransferenciaUsdDropdown(!showCuentaTransferenciaUsdDropdown);
+                    }
+                  }}
                   disabled={isReadOnly}
                 >
                   <Text style={[styles.dropdownText, { color: formData.id_cuenta_transferencia_usd ? colors.onSurface : colors.outline }]}>
@@ -677,20 +776,27 @@ const VentaEditContent = () => {
                 
                 {showCuentaTransferenciaUsdDropdown && !isReadOnly && (
                   <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                      {cuentas.filter(c => c.tipo_cuenta === 'Transferencia USD').map((cuenta, index) => (
-                        <TouchableOpacity
-                          key={cuenta.id_cuenta}
-                          style={[styles.dropdownItem, index === cuentas.filter(c => c.tipo_cuenta === 'Transferencia USD').length - 1 && styles.dropdownItemLast]}
-                          onPress={() => {
-                            setFormData(prev => ({ ...prev, id_cuenta_transferencia_usd: cuenta.id_cuenta }));
-                            setShowCuentaTransferenciaUsdDropdown(false);
-                          }}
-                        >
-                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
+                    {isLoadingCuentas ? (
+                      <View style={styles.dropdownLoadingContainer}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                        <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando cuentas...</Text>
+                      </View>
+                    ) : (
+                      <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                        {cuentas.filter(c => c.tipo_cuenta === 'Transferencia USD').map((cuenta, index) => (
+                          <TouchableOpacity
+                            key={cuenta.id_cuenta}
+                            style={[styles.dropdownItem, index === cuentas.filter(c => c.tipo_cuenta === 'Transferencia USD').length - 1 && styles.dropdownItemLast]}
+                            onPress={() => {
+                              setFormData(prev => ({ ...prev, id_cuenta_transferencia_usd: cuenta.id_cuenta }));
+                              setShowCuentaTransferenciaUsdDropdown(false);
+                            }}
+                          >
+                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    )}
                   </View>
                 )}
               </View>
@@ -965,6 +1071,17 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   dropdownItemText: {
     fontSize: responsive.responsiveFontSize(16),
+    fontFamily: 'Inter',
+  },
+  dropdownLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: responsive.responsivePadding(16),
+    gap: responsive.responsiveMargin(8),
+  },
+  dropdownLoadingText: {
+    fontSize: responsive.responsiveFontSize(14),
     fontFamily: 'Inter',
   },
   sectionHeader: {

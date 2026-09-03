@@ -13,6 +13,7 @@ export const BARCODE_TYPES = {
   ITF14: 'itf14',
   CODE128: 'code128',
   CODE39: 'code39',
+  QR: 'qr',
 };
 
 /**
@@ -27,6 +28,7 @@ export const BARCODE_LENGTHS = {
   [BARCODE_TYPES.ITF14]: 14,
   [BARCODE_TYPES.CODE128]: null,  // Variable length
   [BARCODE_TYPES.CODE39]: null,  // Variable length
+  [BARCODE_TYPES.QR]: null,  // Variable length
 };
 
 /**
@@ -42,6 +44,7 @@ export const CHECKSUM_REQUIREMENTS = {
   [BARCODE_TYPES.ITF14]: true,
   [BARCODE_TYPES.CODE128]: false,  // Has internal checksum validated by ML Kit
   [BARCODE_TYPES.CODE39]: false,  // No standard checksum
+  [BARCODE_TYPES.QR]: false,  // QR has internal error correction
 };
 
 /**
@@ -56,6 +59,7 @@ export const ALLOWED_BARCODE_TYPES = [
   BARCODE_TYPES.ITF14,
   BARCODE_TYPES.CODE128,
   BARCODE_TYPES.CODE39,
+  BARCODE_TYPES.QR,
 ];
 
 /**
@@ -70,4 +74,5 @@ export const BARCODE_TYPE_NAMES = {
   [BARCODE_TYPES.ITF14]: 'ITF-14',
   [BARCODE_TYPES.CODE128]: 'Code 128',
   [BARCODE_TYPES.CODE39]: 'Code 39',
+  [BARCODE_TYPES.QR]: 'QR Code',
 };
