@@ -84,7 +84,7 @@ const createServicio = async (req, res) => {
 
 const filterServicios = async (req, res) => {
   try {
-    const { limit, page, fetchProducto, tienda_nombre, id_tienda, ...filters } = req.query;
+    const { limit, page, fetchProducto, tienda_nombre, id_tienda, conStock, ...filters } = req.query;
 
     let limitNum = parseInt(limit, 10) || 10;
     if (isNaN(limitNum) || limitNum < 1) {
@@ -123,6 +123,27 @@ const filterServicios = async (req, res) => {
       }
     }
 
+    // Nuevo: parsear conStock
+    let conStockFilter = false;
+    if (conStock !== undefined) {
+      if (conStock === "true") conStockFilter = true;
+      else if (conStock === "false") conStockFilter = false;
+      else if (typeof conStock !== "boolean") {
+        throwError("El filtro 'conStock' debe ser true o false", 400);
+      } else {
+        conStockFilter = conStock;
+      }
+    }
+
+    // Validación: si conStock es true, debe haber filtro de tienda
+    if (conStockFilter && !includeProductos) {
+      // Si fetchProducto es false, no tiene sentido, pero no es error, simplemente ignoramos
+      // o podríamos devolver un warning, pero lo dejamos pasar.
+    }
+    if (conStockFilter && !id_tienda && !tienda_nombre) {
+      throwError("El filtro 'conStock' requiere que se filtre por tienda (id_tienda o tienda_nombre)", 400);
+    }
+
     let parsedIdTienda;
     if (id_tienda !== undefined) {
       parsedIdTienda = parseInt(id_tienda, 10);
@@ -137,6 +158,7 @@ const filterServicios = async (req, res) => {
       tienda_nombre,
       parsedIdTienda,
       includeProductos,
+      conStockFilter,   // nuevo parámetro
       limitNum,
       offset
     );

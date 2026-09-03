@@ -258,7 +258,15 @@ const getServicioByCodigo = async (codigo) => {
   return servicio;
 };
 
-const filterServicios = async (filterCriteria = {}, tienda_nombre, id_tienda, includeProductos, limit = 10, offset = 0) => {
+const filterServicios = async (
+  filterCriteria = {},
+  tienda_nombre,
+  id_tienda,
+  includeProductos,
+  conStock = false,   // nuevo parámetro
+  limit = 10,
+  offset = 0
+) => {
   const whereClause = {};
   const { codigo: codigoFilter, ...serviceFilterCriteria } = filterCriteria;
 
@@ -271,6 +279,7 @@ const filterServicios = async (filterCriteria = {}, tienda_nombre, id_tienda, in
     }
   }
 
+  // Incluye para la consulta principal (solo para obtener IDs)
   const includeProducto = { model: Producto, as: "producto" };
   const includeServicioTienda = {
     model: ServicioTienda,
@@ -278,10 +287,134 @@ const filterServicios = async (filterCriteria = {}, tienda_nombre, id_tienda, in
     include: [{ model: Tienda, as: "tienda" }],
   };
 
+  // Construcción de includes para la consulta de IDs
+  const matchingIncludes = [];
+
+  if (codigoFilter !== undefined && codigoFilter !== null && codigoFilter !== "") {
+    const normalizedCodigo = String(codigoFilter).trim();
+    matchingIncludes.push({
+      model: Codigo,
+      as: "codigos",
+      required: true,
+      where: { codigo_barras_ean: { [Op.iLike]: `%${normalizedCodigo}%` } },
+    });
+  }
+
+  // Filtro por tienda: se usa para obtener los IDs que coinciden con la tienda (sin condición de cantidad aún)
+  let tiendaIds = [];
+  if (id_tienda !== undefined && id_tienda !== null && id_tienda !== "") {
+    const parsedIdTienda = parseInt(id_tienda, 10);
+    if (isNaN(parsedIdTienda) || parsedIdTienda < 1) {
+      throwError("El parámetro 'id_tienda' debe ser un número entero positivo", 400);
+    }
+    tiendaIds.push(parsedIdTienda);
+    matchingIncludes.push({
+      model: ServicioTienda,
+      as: "tiendas_servicio",
+      required: true,
+      where: { id_tienda: parsedIdTienda },
+    });
+  } else if (tienda_nombre && typeof tienda_nombre === "string" && tienda_nombre.trim()) {
+    const normalizedTiendaNombre = tienda_nombre.trim();
+    // Obtenemos los ids de tienda que coinciden con el nombre (para usarlos en el filtro de stock)
+    const tiendas = await Tienda.findAll({
+      where: { nombre: { [Op.iLike]: `%${normalizedTiendaNombre}%` } },
+      attributes: ["id_tienda"],
+      raw: true,
+    });
+    tiendaIds = tiendas.map(t => t.id_tienda);
+    if (tiendaIds.length === 0) {
+      // Si no hay tiendas, no habrá resultados
+      return { rows: [], count: 0 };
+    }
+    matchingIncludes.push({
+      model: ServicioTienda,
+      as: "tiendas_servicio",
+      required: true,
+      include: [{
+        model: Tienda,
+        as: "tienda",
+        where: { nombre: { [Op.iLike]: `%${normalizedTiendaNombre}%` } },
+        required: true,
+      }],
+    });
+  }
+
+  // Consulta para obtener IDs de servicios que cumplen los filtros (sin stock)
+  const matchingIdsOptions = {
+    attributes: ["id_servicio"],
+    where: whereClause,
+    order: [["id_servicio", "ASC"]],
+    distinct: true,
+    raw: true,
+  };
+  if (matchingIncludes.length > 0) {
+    matchingIdsOptions.include = matchingIncludes;
+  }
+
+  const matchingServicios = await Servicio.findAll(matchingIdsOptions);
+  let matchedIds = matchingServicios.map((item) => item.id_servicio);
+
+  // Si no hay coincidencias, retornar vacío
+  if (matchedIds.length === 0) {
+    return { rows: [], count: 0 };
+  }
+
+  // Aplicar filtro de exclusión de productos si fetchProducto es false
+  if (includeProductos === false) {
+    const productosIds = await Producto.findAll({
+      attributes: ["id_servicio"],
+      raw: true,
+    }).then((rows) => rows.map((item) => item.id_servicio));
+    matchedIds = matchedIds.filter(id => !productosIds.includes(id));
+    if (matchedIds.length === 0) {
+      return { rows: [], count: 0 };
+    }
+  }
+
+  // --- NUEVA LÓGICA: filtro de stock solo para productos ---
+  if (includeProductos === true && conStock === true && tiendaIds.length > 0) {
+    // 1. Obtener todos los IDs de servicios que son productos
+    const allProductIds = await Producto.findAll({
+      attributes: ["id_servicio"],
+      raw: true,
+    }).then(rows => rows.map(r => r.id_servicio));
+    const productIdSet = new Set(allProductIds);
+
+    // 2. Obtener los IDs de productos que tienen cantidad > 0 en alguna de las tiendas filtradas
+    const stockProductRows = await ServicioTienda.findAll({
+      attributes: ["id_servicio"],
+      where: {
+        id_tienda: { [Op.in]: tiendaIds },
+        cantidad: { [Op.gt]: 0 }
+      },
+      raw: true,
+    });
+    const stockProductIds = new Set(stockProductRows.map(r => r.id_servicio));
+
+    // 3. Filtrar matchedIds: los que son productos deben estar en stockProductIds
+    matchedIds = matchedIds.filter(id => {
+      if (productIdSet.has(id)) {
+        return stockProductIds.has(id);
+      }
+      return true; // servicios que no son productos se mantienen
+    });
+
+    if (matchedIds.length === 0) {
+      return { rows: [], count: 0 };
+    }
+  }
+
+  // Paginación y obtención de los registros completos
+  const pagedIds = matchedIds.slice(offset, offset + limit);
   const includeList = [
-    includeProducto,
+    { model: Producto, as: "producto" },
     { model: Codigo, as: "codigos" },
-    includeServicioTienda,
+    {
+      model: ServicioTienda,
+      as: "tiendas_servicio",
+      include: [{ model: Tienda, as: "tienda" }],
+    },
     {
       model: Servicio,
       as: "componentes",
@@ -312,77 +445,6 @@ const filterServicios = async (filterCriteria = {}, tienda_nombre, id_tienda, in
     },
   ];
 
-  const matchingIdsOptions = {
-    attributes: ["id_servicio"],
-    where: whereClause,
-    order: [["id_servicio", "ASC"]],
-    distinct: true,
-    raw: true,
-  };
-
-  const matchingIncludes = [];
-
-  if (codigoFilter !== undefined && codigoFilter !== null && codigoFilter !== "") {
-    const normalizedCodigo = String(codigoFilter).trim();
-    matchingIncludes.push({
-      model: Codigo,
-      as: "codigos",
-      required: true,
-      where: { codigo_barras_ean: { [Op.iLike]: `%${normalizedCodigo}%` } },
-    });
-  }
-
-  if (id_tienda !== undefined && id_tienda !== null && id_tienda !== "") {
-    const parsedIdTienda = parseInt(id_tienda, 10);
-    if (isNaN(parsedIdTienda) || parsedIdTienda < 1) {
-      throwError("El parámetro 'id_tienda' debe ser un número entero positivo", 400);
-    }
-
-    matchingIncludes.push({
-      model: ServicioTienda,
-      as: "tiendas_servicio",
-      required: true,
-      where: { id_tienda: parsedIdTienda },
-    });
-  }
-
-  if (tienda_nombre && typeof tienda_nombre === "string" && tienda_nombre.trim()) {
-    const normalizedTiendaNombre = tienda_nombre.trim();
-    matchingIncludes.push({
-      model: ServicioTienda,
-      as: "tiendas_servicio",
-      required: true,
-      include: [{
-        model: Tienda,
-        as: "tienda",
-        where: { nombre: { [Op.iLike]: `%${normalizedTiendaNombre}%` } },
-        required: true,
-      }],
-    });
-  }
-
-  if (matchingIncludes.length > 0) {
-    matchingIdsOptions.include = matchingIncludes;
-  }
-
-  const matchingServicios = await Servicio.findAll(matchingIdsOptions);
-  const matchedIds = matchingServicios.map((item) => item.id_servicio);
-
-  let filteredIds = matchedIds;
-  if (includeProductos === false) {
-    const productosIds = await Producto.findAll({
-      attributes: ["id_servicio"],
-      raw: true,
-    }).then((rows) => rows.map((item) => item.id_servicio));
-
-    filteredIds = matchedIds.filter((id) => !productosIds.includes(id));
-  }
-
-  if (filteredIds.length === 0) {
-    return { rows: [], count: 0 };
-  }
-
-  const pagedIds = filteredIds.slice(offset, offset + limit);
   const rows = pagedIds.length > 0
     ? await Servicio.findAll({
         where: { id_servicio: { [Op.in]: pagedIds } },
@@ -393,7 +455,7 @@ const filterServicios = async (filterCriteria = {}, tienda_nombre, id_tienda, in
 
   return {
     rows,
-    count: filteredIds.length,
+    count: matchedIds.length,
   };
 };
 

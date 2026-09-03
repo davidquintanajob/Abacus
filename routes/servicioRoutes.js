@@ -159,9 +159,20 @@ const authenticate = require("../helpers/authenticate");
  *           type: boolean
  *           default: false
  *         description: Si es false, devuelve solo los servicios que no son productos. Si es true, devuelve todos los servicios, incluidos los que son productos.
+ *       - in: query
+ *         name: conStock
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: |
+ *           Solo tiene efecto cuando fetchProducto=true y se filtra por tienda (id_tienda o tienda_nombre).
+ *           Si es true, los productos se filtran para incluir solo aquellos con cantidad > 0 en la tienda especificada.
+ *           Los servicios que no son productos se devuelven sin esta restricción.
  *     responses:
  *       200:
  *         description: Lista de servicios con paginación
+ *       400:
+ *         description: Parámetros inválidos o conflicto de condiciones
  */
 router.get("/servicio/filter", authenticate(), servicioController.filterServicios);
 
