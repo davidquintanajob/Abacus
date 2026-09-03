@@ -148,6 +148,98 @@ router.get('/tasa-cambio', authenticate(), configController.getTasaCambio);
 
 /**
  * @swagger
+ * /config/audit-logs:
+ *   get:
+ *     summary: Obtener registros del archivo de auditoría (audit.log)
+ *     description: |
+ *       Devuelve los registros de auditoría filtrados por usuario, endpoint y rango de fechas,
+ *       junto con las sumatorias de tráfico (entrada y salida) en KB, MB y GB.
+ *     tags: [Configuración]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: usuario
+ *         schema:
+ *           type: string
+ *         description: |
+ *           Filtro por usuario (puede ser ID, nombre o parte de ambos). 
+ *           Busca en el campo "Usuario: X (nombre)".
+ *       - in: query
+ *         name: endpoint
+ *         schema:
+ *           type: string
+ *         description: Filtro parcial por endpoint (ruta y/o método, p.ej. "/servicio").
+ *       - in: query
+ *         name: fecha_desde
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: |
+ *           Fecha y hora de inicio (formato ISO: YYYY-MM-DD o YYYY-MM-DD HH:mm:ss).
+ *           Si solo se proporciona fecha, se toma desde las 00:00:00.
+ *       - in: query
+ *         name: fecha_hasta
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: |
+ *           Fecha y hora de fin (formato ISO: YYYY-MM-DD o YYYY-MM-DD HH:mm:ss).
+ *           Si solo se proporciona fecha, se toma hasta las 23:59:59.
+ *     responses:
+ *       200:
+ *         description: Registros filtrados y sumatorias
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 datos:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       timestamp:
+ *                         type: string
+ *                         example: "2026-09-03 09:10:47"
+ *                       usuario:
+ *                         type: string
+ *                         example: "1 (David Quintana )"
+ *                       endpoint:
+ *                         type: string
+ *                         example: "GET /servicio/filter?limit=10&page=1&fetchProducto=true"
+ *                       reqSizeKB:
+ *                         type: number
+ *                         example: 0.001953125
+ *                       resSizeKB:
+ *                         type: number
+ *                         example: 8.2470703125
+ *                 sumatorias:
+ *                   type: object
+ *                   properties:
+ *                     totalReqKB:
+ *                       type: number
+ *                     totalResKB:
+ *                       type: number
+ *                     totalReqMB:
+ *                       type: number
+ *                     totalResMB:
+ *                       type: number
+ *                     totalReqGB:
+ *                       type: number
+ *                     totalResGB:
+ *                       type: number
+ *       400:
+ *         description: Parámetros de filtro inválidos
+ *       404:
+ *         description: Archivo de auditoría no encontrado
+ *       500:
+ *         description: Error interno del servidor
+ */
+router.get('/audit-logs', authenticate(), configController.getAuditLogs);
+
+/**
+ * @swagger
  * /config/ping:
  *   get:
  *     summary: Verifica que el servicio esté activo
@@ -160,4 +252,5 @@ router.get('/tasa-cambio', authenticate(), configController.getTasaCambio);
 router.get('/ping', (req, res) => {
   res.sendStatus(200);
 });
+
 module.exports = router;

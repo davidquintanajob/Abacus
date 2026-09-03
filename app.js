@@ -2,12 +2,15 @@
 const express = require("express");
 const cors = require("cors");
 const logger = require("./helpers/logger.js");
+const { auditLogger } = require("./helpers/auditLogger");
 const sequelize = require("./helpers/database.js");
 const swaggerJsdoc = require("swagger-jsdoc");
 const swaggerUi = require("swagger-ui-express");
 require("dotenv").config();
 const path = require("path");
 const fs = require("fs");
+const jwt = require("jsonwebtoken");
+const { throwError } = require("./helpers/errorLauncher"); // <-- Importar throwError
 
 // <-- NUEVO: Importar el gestor de licencias
 const { SecureLicenseManager } = require("./helpers/SecureLicenseManager");
@@ -56,10 +59,153 @@ app.use((req, res, next) => {
       detail: status.message
     });
   }
-  // Opcional: puedes registrar el estado en cada request (solo para depuración)
-  // logger.debug(`Licencia válida - Días restantes: ${status.remainingDays}`);
   next();
 });
+
+// ========== NUEVO MIDDLEWARE: VALIDACIÓN DE VERSIÓN DE APK ==========
+app.use((req, res, next) => {
+  // Obtener header (insensible a mayúsculas)
+  const apkVersionHeader = req.headers['apk-version'] || req.headers['apk_version'];
+  if (!apkVersionHeader) {
+    // No se envió el header, continuar sin validar
+    return next();
+  }
+
+  // Validar formato: debe ser x.x.x
+  const versionPattern = /^\d+\.\d+\.\d+$/;
+  if (!versionPattern.test(apkVersionHeader)) {
+    throwError('Formato de versión de APK inválido. Debe ser x.x.x', 400);
+  }
+
+  // Obtener rango de versiones soportadas desde variable de entorno
+  const supportRange = process.env.APK_SUPORT_VERSION;
+  if (!supportRange) {
+    // Si no está definida, emitimos warning y permitimos (o podemos denegar, pero elegimos permitir)
+    console.warn('⚠️ Variable APK_SUPORT_VERSION no definida, omitiendo validación de versión');
+    return next();
+  }
+
+  // Validar formato del rango: "x.x.x-y.y.y"
+  const rangePattern = /^\d+\.\d+\.\d+-\d+\.\d+\.\d+$/;
+  if (!rangePattern.test(supportRange)) {
+    console.error('❌ Variable APK_SUPORT_VERSION con formato inválido. Debe ser x.x.x-y.y.y');
+    throwError('Configuración de soporte de versiones inválida', 500);
+  }
+
+  const [minVersion, maxVersion] = supportRange.split('-');
+
+  // Función de comparación semántica
+  const compareVersions = (v1, v2) => {
+    const parts1 = v1.split('.').map(Number);
+    const parts2 = v2.split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+      if (parts1[i] !== parts2[i]) {
+        return parts1[i] < parts2[i] ? -1 : 1;
+      }
+    }
+    return 0;
+  };
+
+  const isGreaterOrEqual = compareVersions(apkVersionHeader, minVersion) >= 0;
+  const isLessOrEqual = compareVersions(apkVersionHeader, maxVersion) <= 0;
+
+  if (!isGreaterOrEqual || !isLessOrEqual) {
+    throwError(
+      `Versión de APK no soportada. Versión actual: ${apkVersionHeader}. Versiones soportadas: ${supportRange}`,
+      400
+    );
+  }
+
+  // Si todo ok, continuar
+  next();
+});
+// ================================================================
+
+// ========== MIDDLEWARE DE AUTENTICACIÓN GLOBAL (opcional) ==========
+// Intenta decodificar el token y asigna req.user si es válido.
+// No bloquea si no hay token o es inválido.
+app.use((req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader) {
+    const parts = authHeader.split(' ');
+    if (parts.length === 2 && parts[0] === 'Bearer') {
+      const token = parts[1];
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        req.user = decoded;
+      } catch (err) {
+        // Token inválido, no asignamos req.user
+        console.log('[Auth] Token inválido o expirado');
+      }
+    }
+  }
+  next();
+});
+// ================================================================
+
+// ========== MIDDLEWARE DE AUDITORÍA ==========
+app.use((req, res, next) => {
+
+  let reqSizeBytes = 0;
+  if (req.body) {
+    try {
+      if (typeof req.body === 'object') {
+        reqSizeBytes = Buffer.byteLength(JSON.stringify(req.body), 'utf8');
+      } else {
+        reqSizeBytes = Buffer.byteLength(String(req.body), 'utf8');
+      }
+    } catch (e) {
+      reqSizeBytes = 0;
+    }
+  }
+
+  const originalSend = res.send;
+  res.send = function (data) {
+
+    let resSizeBytes = 0;
+    if (data) {
+      try {
+        if (Buffer.isBuffer(data)) {
+          resSizeBytes = data.length;
+        } else if (typeof data === 'string') {
+          resSizeBytes = Buffer.byteLength(data, 'utf8');
+        } else if (typeof data === 'object') {
+          resSizeBytes = Buffer.byteLength(JSON.stringify(data), 'utf8');
+        } else {
+          resSizeBytes = Buffer.byteLength(String(data), 'utf8');
+        }
+      } catch (e) {
+        resSizeBytes = 0;
+      }
+    }
+
+    let usuario = 'anonimo';
+    if (req.user && typeof req.user === 'object') {
+      const id = req.user.id || req.user.id_usuario || req.user.userId || '';
+      const nombre = req.user.nombre || req.user.nombre_usuario || req.user.username || req.user.nombreUsuario || '';
+      if (id || nombre) {
+        usuario = `${id} (${nombre})`.trim();
+        if (usuario === '()') usuario = 'anonimo';
+      }
+    }
+
+    const endpoint = `${req.method} ${req.originalUrl || req.url || 'ruta_desconocida'}`;
+
+    const logData = {
+      usuario,
+      endpoint,
+      reqSize: reqSizeBytes / 1024,
+      resSize: resSizeBytes / 1024,
+    };
+
+    auditLogger.info('Audit', logData);
+
+    return originalSend.call(this, data);
+  };
+
+  next();
+});
+// =====================================================
 
 // Configuración de Swagger
 const swaggerOptions = {
@@ -124,16 +270,18 @@ app.use("/", informesRoutes);
 // Inicializar la base de datos y arrancar el servidor
 const startApp = async () => {
   try {
-    // Crear carpetas necesarias (local_config, fotos)
+    // Crear carpetas necesarias
     const monedaDir = path.join(__dirname, "local_config");
     if (!fs.existsSync(monedaDir)) fs.mkdirSync(monedaDir, { recursive: true });
     const fotosDir = path.join(__dirname, "fotos");
     if (!fs.existsSync(fotosDir)) fs.mkdirSync(fotosDir, { recursive: true });
-    // Subcarpetas (opcional)
     ["servicio_complejo", "paciente", "consulta"].forEach((sub) => {
       const subDir = path.join(fotosDir, sub);
       if (!fs.existsSync(subDir)) fs.mkdirSync(subDir, { recursive: true });
     });
+
+    const logsDir = path.join(__dirname, "logs");
+    if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
 
     // Importar modelos y establecer asociaciones
     const { Usuario } = require("./models/usuario");
@@ -152,37 +300,20 @@ const startApp = async () => {
     const { ListaVenta } = require("./models/lista_venta");
     const { VentaEntrada } = require("./models/venta_entrada");
 
-    // Agrupar todos los modelos en un objeto para pasarlos a las asociaciones
     const models = {
-      Usuario,
-      Tienda,
-      Servicio,
-      Producto,
-      ServicioTienda,
-      Oferta,
-      Codigo,
-      Entrada,
-      Salida,
-      SalidaEntrada,
-      Cuenta,
-      Operacion,
-      Venta,
-      ListaVenta,
-      VentaEntrada
+      Usuario, Tienda, Servicio, Producto, ServicioTienda, Oferta, Codigo,
+      Entrada, Salida, SalidaEntrada, Cuenta, Operacion, Venta, ListaVenta, VentaEntrada
     };
 
-    // Ejecutar el método associate de cada modelo si existe
     Object.values(models).forEach((model) => {
       if (typeof model.associate === "function") {
         model.associate(models);
       }
     });
 
-    // Sincronizar todas las tablas (con alter: true para actualizar sin perder datos)
     await sequelize.sync({ alter: true });
     console.log("✅ Tablas sincronizadas correctamente");
 
-    // <-- NUEVO: Verificar el estado de la licencia al iniciar y mostrar notificación
     const licenseInfo = SecureLicenseManager.getLicenseInfo();
     if (licenseInfo) {
       const status = SecureLicenseManager.checkLicense();
@@ -209,7 +340,6 @@ const startApp = async () => {
   }
 };
 
-// Cierre limpio
 process.on("SIGINT", async () => {
   await sequelize.close();
   process.exit(0);

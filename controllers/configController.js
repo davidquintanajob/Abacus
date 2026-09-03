@@ -12,6 +12,7 @@ const { Op } = require('sequelize');
 const CONFIG_FILE = path.join(__dirname, '..', 'local_config', 'config.json');
 const LOGO_DIR = path.join(__dirname, '..', 'local_config_logo');
 const LOGO_FILE = path.join(LOGO_DIR, 'logo.web');
+const AUDIT_LOG_FILE = path.join(__dirname, '..', 'logs', 'audit.log');
 
 // Función auxiliar para manejar errores (igual que en usuarioController)
 const handleError = (res, error) => {
@@ -38,6 +39,30 @@ const ensureConfigFile = async () => {
   } catch {
     await fs.writeFile(CONFIG_FILE, '{}', 'utf8');
   }
+};
+
+// --- Función para parsear una línea del audit.log ---
+const parseAuditLine = (line) => {
+  // Formato esperado:
+  // "2026-09-03 09:10:47 | Usuario: 1 (David Quintana ) | Endpoint: GET /servicio/filter?limit=10&page=1&fetchProducto=true | Req: 0.00000 KB | Res: 8.24707 KB"
+  const parts = line.split(' | ');
+  if (parts.length < 5) return null;
+  const timestamp = parts[0].trim();
+  const usuarioPart = parts[1].trim();
+  const usuario = usuarioPart.replace('Usuario: ', '').trim();
+  const endpointPart = parts[2].trim();
+  const endpoint = endpointPart.replace('Endpoint: ', '').trim();
+  const reqPart = parts[3].trim();
+  const resPart = parts[4].trim();
+
+  const reqMatch = reqPart.match(/Req:\s*([\d.]+)\s*KB/);
+  const resMatch = resPart.match(/Res:\s*([\d.]+)\s*KB/);
+
+  if (!reqMatch || !resMatch) return null;
+  const reqSizeKB = parseFloat(reqMatch[1]);
+  const resSizeKB = parseFloat(resMatch[1]);
+
+  return { timestamp, usuario, endpoint, reqSizeKB, resSizeKB };
 };
 
 class ConfigController {
@@ -270,6 +295,115 @@ class ConfigController {
         status: 400,
         message: 'el servidor de Abacus no se ha podido conectar con ElToque'
       });
+    }
+  }
+
+  /**
+   * GET /config/audit-logs
+   * Lee el archivo audit.log, aplica filtros y devuelve los registros y sumatorias.
+   */
+  async getAuditLogs(req, res) {
+    try {
+      const { usuario, endpoint, fecha_desde, fecha_hasta } = req.query;
+
+      // Verificar que el archivo existe
+      try {
+        await fs.access(AUDIT_LOG_FILE);
+      } catch {
+        return res.status(404).json({ errors: ['Archivo de auditoría no encontrado'] });
+      }
+
+      // Leer el archivo línea por línea
+      const content = await fs.readFile(AUDIT_LOG_FILE, 'utf8');
+      const lines = content.split('\n').filter(line => line.trim() !== '');
+
+      // Parsear cada línea
+      const parsedLines = [];
+      for (const line of lines) {
+        const parsed = parseAuditLine(line);
+        if (parsed) {
+          parsedLines.push(parsed);
+        }
+      }
+
+      // Aplicar filtros
+      let filtered = parsedLines;
+
+      // Filtro por usuario (búsqueda parcial en el campo usuario)
+      if (usuario) {
+        const usuarioLower = usuario.toLowerCase();
+        filtered = filtered.filter(entry => entry.usuario.toLowerCase().includes(usuarioLower));
+      }
+
+      // Filtro por endpoint (búsqueda parcial en el campo endpoint)
+      if (endpoint) {
+        const endpointLower = endpoint.toLowerCase();
+        filtered = filtered.filter(entry => entry.endpoint.toLowerCase().includes(endpointLower));
+      }
+
+      // Filtro por fecha_desde
+      if (fecha_desde) {
+        let since = new Date(fecha_desde);
+        if (isNaN(since.getTime())) {
+          throwError('fecha_desde no es una fecha válida (formato ISO: YYYY-MM-DD o YYYY-MM-DD HH:mm:ss)', 400);
+        }
+        // Si no tiene hora, ajustar a las 00:00:00
+        if (fecha_desde.length <= 10) {
+          since.setHours(0, 0, 0, 0);
+        }
+        filtered = filtered.filter(entry => {
+          const entryDate = new Date(entry.timestamp);
+          return entryDate >= since;
+        });
+      }
+
+      // Filtro por fecha_hasta
+      if (fecha_hasta) {
+        let until = new Date(fecha_hasta);
+        if (isNaN(until.getTime())) {
+          throwError('fecha_hasta no es una fecha válida (formato ISO: YYYY-MM-DD o YYYY-MM-DD HH:mm:ss)', 400);
+        }
+        if (fecha_hasta.length <= 10) {
+          until.setHours(23, 59, 59, 999);
+        }
+        filtered = filtered.filter(entry => {
+          const entryDate = new Date(entry.timestamp);
+          return entryDate <= until;
+        });
+      }
+
+      // Ordenar por timestamp (más reciente primero)
+      filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+      // Calcular sumatorias
+      let totalReqKB = 0;
+      let totalResKB = 0;
+      for (const entry of filtered) {
+        totalReqKB += entry.reqSizeKB;
+        totalResKB += entry.resSizeKB;
+      }
+
+      // Convertir a MB y GB
+      const totalReqMB = totalReqKB / 1024;
+      const totalResMB = totalResKB / 1024;
+      const totalReqGB = totalReqMB / 1024;
+      const totalResGB = totalResMB / 1024;
+
+      // Respuesta
+      res.status(200).json({
+        datos: filtered,
+        sumatorias: {
+          totalReqKB,
+          totalResKB,
+          totalReqMB,
+          totalResMB,
+          totalReqGB,
+          totalResGB,
+        }
+      });
+
+    } catch (error) {
+      handleError(res, error);
     }
   }
 }
