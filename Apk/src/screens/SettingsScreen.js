@@ -48,7 +48,22 @@ const SettingsContent = () => {
   // Cargar IP guardada al iniciar
   useEffect(() => {
     loadServerIP();
+    checkVersionError();
   }, []);
+
+  const checkVersionError = async () => {
+    try {
+      const versionError = await SecureStore.getItemAsync('versionError');
+      if (versionError) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'PasswordRecovery' }],
+        });
+      }
+    } catch (error) {
+      // Error checking version error
+    }
+  };
 
   const loadServerIP = async () => {
     try {

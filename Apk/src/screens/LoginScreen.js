@@ -10,6 +10,7 @@ import { useResponsive } from '../hooks/useResponsive';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import { storageService } from '../services/storageService';
+import * as SecureStore from 'expo-secure-store';
 
 const LoginContent = () => {
   const navigation = useNavigation();
@@ -25,7 +26,22 @@ const LoginContent = () => {
 
   useEffect(() => {
     checkOfflineData();
+    checkVersionError();
   }, []);
+
+  const checkVersionError = async () => {
+    try {
+      const versionError = await SecureStore.getItemAsync('versionError');
+      if (versionError) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'PasswordRecovery' }],
+        });
+      }
+    } catch (error) {
+      // Error checking version error
+    }
+  };
 
   const checkOfflineData = async () => {
     const hasData = await storageService.hasOfflineData();

@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import { API_CONFIG } from '../config';
 import { navigationRef } from '../navigationRef';
 import NetInfo from '@react-native-community/netinfo';
+import packageJson from '../../package.json';
 
 // Función para verificar si el servidor está disponible
 const checkServerAvailability = async (url) => {
@@ -110,6 +111,10 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Añadir versión de la APK
+    config.headers['Apk-version'] = packageJson.version;
+
     return config;
   },
   (error) => {
@@ -123,6 +128,31 @@ api.interceptors.response.use(
   async (error) => {
     const requestUrl = error.config?.url || '';
     const isLoginRequest = requestUrl.includes('/usuario/login');
+
+    // Detectar error de versión incompatible
+    const isVersionError = error.response?.status === 426 || 
+                          error.response?.data?.message?.toLowerCase().includes('versión') ||
+                          error.response?.data?.errors?.[0]?.toLowerCase().includes('versión') ||
+                          error.response?.data?.errors?.[0]?.toLowerCase().includes('version');
+
+    if (isVersionError) {
+      // Guardar el error de versión en SecureStore
+      const versionError = {
+        message: error.response?.data?.message || error.response?.data?.errors?.[0] || 'Versión de la aplicación incompatible con el servidor',
+        code: error.response?.status || 426,
+        currentVersion: packageJson.version
+      };
+      await SecureStore.setItemAsync('versionError', JSON.stringify(versionError));
+
+      // Redirigir a PasswordRecoveryScreen
+      if (navigationRef.isReady()) {
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: 'PasswordRecovery' }],
+        });
+      }
+      return Promise.reject(error);
+    }
 
     // Solo redirigir a Login por 401/403 si NO es el intento de login en sí.
     // Un 401 en /login significa credenciales incorrectas — el screen lo maneja.

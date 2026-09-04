@@ -14,6 +14,7 @@ import { useToast } from '../hooks/useToast';
 import { useOffline } from '../context/OfflineContext';
 import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { getEntradas } from '../services/entradaService';
 import { getGeneralInformation } from '../services/informesService';
 import packageJson from '../../package.json';
@@ -50,7 +51,22 @@ const HomeContent = () => {
     if (route.params?.isOfflineMode) {
       enableOfflineMode();
     }
+    checkVersionError();
   }, [route.params?.isOfflineMode]);
+
+  const checkVersionError = async () => {
+    try {
+      const versionError = await SecureStore.getItemAsync('versionError');
+      if (versionError) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'PasswordRecovery' }],
+        });
+      }
+    } catch (error) {
+      // Error checking version error
+    }
+  };
 
   // Establecer fecha actual
   useEffect(() => {

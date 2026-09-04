@@ -1,21 +1,41 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Platform, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
+import * as SecureStore from 'expo-secure-store';
+import packageJson from '../../package.json';
 
 const PasswordRecoveryContent = () => {
   const navigation = useNavigation();
+  const route = useRoute();
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
   const { toast, showToast, hideToast } = useToast();
+  const [versionError, setVersionError] = useState(null);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
+
+  useEffect(() => {
+    checkVersionError();
+  }, []);
+
+  const checkVersionError = async () => {
+    try {
+      const errorJson = await SecureStore.getItemAsync('versionError');
+      if (errorJson) {
+        const error = JSON.parse(errorJson);
+        setVersionError(error);
+      }
+    } catch (error) {
+      // Error reading version error
+    }
+  };
 
   const handleCallSupport = async () => {
     const phoneNumber = '+5356242671';
@@ -82,91 +102,160 @@ const PasswordRecoveryContent = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}
-          >
-            <Ionicons 
-              name="arrow-back" 
-              size={responsive.responsiveWidth(24)} 
-              color={colors.primary} 
-            />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.primary }]}>
-            Recuperar Contraseña
-          </Text>
-        </View>
+        {versionError ? (
+          <>
+            {/* Version Error Header */}
+            <View style={styles.header}>
+              <Text style={[styles.headerTitle, { color: '#EF4444' }]}>
+                Actualización Requerida
+              </Text>
+            </View>
 
-        {/* Icon */}
-        <View style={[styles.iconContainer, { backgroundColor: colors.surface }]}>
-          <Ionicons 
-            name="lock-closed-outline" 
-            size={responsive.responsiveWidth(80)} 
-            color={colors.primary} 
-          />
-        </View>
+            {/* Error Icon */}
+            <View style={[styles.iconContainer, { backgroundColor: '#FEF2F2' }]}>
+              <Ionicons 
+                name="warning-outline" 
+                size={responsive.responsiveWidth(80)} 
+                color="#EF4444" 
+              />
+            </View>
 
-        {/* Title */}
-        <Text style={[styles.title, { color: colors.onSurface }]}>
-          ¿Olvidaste tu contraseña?
-        </Text>
-
-        {/* Description */}
-        <View style={styles.descriptionContainer}>
-          <Text style={[styles.description, { color: colors.onSurfaceVariant }]}>
-            Para restablecer tu contraseña, por favor comunícate con:
-          </Text>
-          
-          <View style={styles.listItem}>
-            <Ionicons 
-              name="person-outline" 
-              size={responsive.responsiveWidth(20)} 
-              color={colors.primary} 
-              style={styles.listIcon}
-            />
-            <Text style={[styles.listText, { color: colors.onSurface }]}>
-              Tu administrador o jefe del negocio
+            {/* Error Title */}
+            <Text style={[styles.title, { color: colors.onSurface }]}>
+              Versión Incompatible
             </Text>
-          </View>
-          
-          <View style={styles.listItem}>
-            <Ionicons 
-              name="headset-outline" 
-              size={responsive.responsiveWidth(20)} 
-              color={colors.primary} 
-              style={styles.listIcon}
-            />
-            <Text style={[styles.listText, { color: colors.onSurface }]}>
-              El soporte técnico
+
+            {/* Error Description */}
+            <View style={styles.descriptionContainer}>
+              <Text style={[styles.description, { color: colors.onSurfaceVariant }]}>
+                {versionError.message}
+              </Text>
+              
+              <View style={[styles.versionInfo, { backgroundColor: colors.surface }]}>
+                <View style={styles.versionItem}>
+                  <Text style={[styles.versionLabel, { color: colors.outline }]}>
+                    Versión actual:
+                  </Text>
+                  <Text style={[styles.versionValue, { color: colors.onSurface }]}>
+                    {versionError.currentVersion}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={[styles.note, { color: colors.outline }]}>
+                Por favor, actualiza la aplicación a la última versión para continuar usando el sistema. Contacta al soporte técnico si necesitas ayuda.
+              </Text>
+            </View>
+
+            {/* Call Support Button */}
+            <TouchableOpacity
+              onPress={handleCallSupport}
+              style={[styles.callButton, { backgroundColor: '#EF4444' }]}
+              activeOpacity={0.8}
+            >
+              <Ionicons 
+                name="call-outline" 
+                size={responsive.responsiveWidth(24)} 
+                color="#fff" 
+                style={styles.callIcon}
+              />
+              <Text style={[styles.callButtonText, { color: '#fff' }]}>
+                Llamar al Soporte
+              </Text>
+              <Text style={[styles.callButtonSubtext, { color: '#fff' }]}>
+                +53 56242671
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            {/* Header */}
+            <View style={styles.header}>
+              <TouchableOpacity
+                onPress={() => navigation.goBack()}
+                style={styles.backButton}
+              >
+                <Ionicons 
+                  name="arrow-back" 
+                  size={responsive.responsiveWidth(24)} 
+                  color={colors.primary} 
+                />
+              </TouchableOpacity>
+              <Text style={[styles.headerTitle, { color: colors.primary }]}>
+                Recuperar Contraseña
+              </Text>
+            </View>
+
+            {/* Icon */}
+            <View style={[styles.iconContainer, { backgroundColor: colors.surface }]}>
+              <Ionicons 
+                name="lock-closed-outline" 
+                size={responsive.responsiveWidth(80)} 
+                color={colors.primary} 
+              />
+            </View>
+
+            {/* Title */}
+            <Text style={[styles.title, { color: colors.onSurface }]}>
+              ¿Olvidaste tu contraseña?
             </Text>
-          </View>
 
-          <Text style={[styles.note, { color: colors.outline }]}>
-            Por razones de seguridad, no puedes restablecer tu contraseña por ti mismo. El administrador te asignará una nueva contraseña temporal que podrás cambiar después de iniciar sesión.
-          </Text>
-        </View>
+            {/* Description */}
+            <View style={styles.descriptionContainer}>
+              <Text style={[styles.description, { color: colors.onSurfaceVariant }]}>
+                Para restablecer tu contraseña, por favor comunícate con:
+              </Text>
+              
+              <View style={styles.listItem}>
+                <Ionicons 
+                  name="person-outline" 
+                  size={responsive.responsiveWidth(20)} 
+                  color={colors.primary} 
+                  style={styles.listIcon}
+                />
+                <Text style={[styles.listText, { color: colors.onSurface }]}>
+                  Tu administrador o jefe del negocio
+                </Text>
+              </View>
+              
+              <View style={styles.listItem}>
+                <Ionicons 
+                  name="headset-outline" 
+                  size={responsive.responsiveWidth(20)} 
+                  color={colors.primary} 
+                  style={styles.listIcon}
+                />
+                <Text style={[styles.listText, { color: colors.onSurface }]}>
+                  El soporte técnico
+                </Text>
+              </View>
 
-        {/* Call Support Button */}
-        <TouchableOpacity
-          onPress={handleCallSupport}
-          style={[styles.callButton, { backgroundColor: colors.primary }]}
-          activeOpacity={0.8}
-        >
-          <Ionicons 
-            name="call-outline" 
-            size={responsive.responsiveWidth(24)} 
-            color={colors.onPrimary} 
-            style={styles.callIcon}
-          />
-          <Text style={[styles.callButtonText, { color: colors.onPrimary }]}>
-            Llamar al Soporte
-          </Text>
-          <Text style={[styles.callButtonSubtext, { color: colors.onPrimary }]}>
-            +53 56242671
-          </Text>
-        </TouchableOpacity>
+              <Text style={[styles.note, { color: colors.outline }]}>
+                Por razones de seguridad, no puedes restablecer tu contraseña por ti mismo. El administrador te asignará una nueva contraseña temporal que podrás cambiar después de iniciar sesión.
+              </Text>
+            </View>
+
+            {/* Call Support Button */}
+            <TouchableOpacity
+              onPress={handleCallSupport}
+              style={[styles.callButton, { backgroundColor: colors.primary }]}
+              activeOpacity={0.8}
+            >
+              <Ionicons 
+                name="call-outline" 
+                size={responsive.responsiveWidth(24)} 
+                color={colors.onPrimary} 
+                style={styles.callIcon}
+              />
+              <Text style={[styles.callButtonText, { color: colors.onPrimary }]}>
+                Llamar al Soporte
+              </Text>
+              <Text style={[styles.callButtonSubtext, { color: colors.onPrimary }]}>
+                +53 56242671
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -257,6 +346,26 @@ const createStyles = (responsive) => StyleSheet.create({
     lineHeight: responsive.fontSizes.bodySmall * 1.5,
     marginTop: responsive.responsiveMargin(24),
     fontStyle: 'italic',
+  },
+  versionInfo: {
+    padding: responsive.responsivePadding(16),
+    borderRadius: 12,
+    marginBottom: responsive.responsiveMargin(20),
+  },
+  versionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  versionLabel: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+  },
+  versionValue: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'JetBrains Mono',
   },
   callButton: {
     flexDirection: 'row',
