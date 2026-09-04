@@ -14,6 +14,7 @@ export const getServicios = async (filters = {}, page = 1, limit = 10) => {
     if (filters.esvendible !== undefined && filters.esvendible !== '') queryParams.append('esvendible', filters.esvendible === 'true' ? true : false);
     if (filters.id_tienda) queryParams.append('id_tienda', filters.id_tienda);
     if (filters.fetchProducto !== undefined) queryParams.append('fetchProducto', filters.fetchProducto);
+    if (filters.conStock !== undefined) queryParams.append('conStock', filters.conStock);
 
     const response = await api.get(`/servicio/filter?${queryParams}`);
     return response.data;

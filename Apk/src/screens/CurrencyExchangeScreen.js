@@ -3540,6 +3540,7 @@ const createStyles = (responsive) => StyleSheet.create({
     marginBottom: responsive.responsiveMargin(12),
   },
   comprobantePreview: {
+    backgroundColor: '#fff',
     borderWidth: 1,
     borderRadius: 4,
     padding: responsive.responsivePadding(16),

@@ -15,7 +15,7 @@ import { getServicios, getServicioByCodigo } from '../services/servicioService';
 import { createVenta } from '../services/ventaService';
 import { getTiendas } from '../services/tiendaService';
 import { getCuentas } from '../services/cuentaService';
-import { getOfertaById } from '../services/ofertaService';
+import { getApiBaseUrl } from '../services/api';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import { storageService } from '../services/storageService';
@@ -113,23 +113,13 @@ const SalesContent = () => {
       if (searchText.length > 0) {
         try {
           setIsSearching(true);
-          const filters = { nombre: searchText, fetchProducto: true };
+          const filters = { nombre: searchText, fetchProducto: true, conStock: true };
           if (selectedTienda) {
             filters.id_tienda = selectedTienda.id_tienda;
           }
           const data = await getServicios(filters, 1, 10);
           
-          // Filter out products with zero stock in the selected store
-          const filteredResults = (data.data || []).filter(servicio => {
-            if (!selectedTienda) return true;
-            const servicioTienda = servicio.tiendas_servicio?.find(t => t.id_tienda === selectedTienda.id_tienda);
-            // Allow services without tienda relationship (cantidad could be null/undefined)
-            if (!servicioTienda) return false;
-            const stock = parseFloat(servicioTienda.cantidad || 0);
-            return stock > 0;
-          });
-          
-          setSearchResults(filteredResults);
+          setSearchResults(data.data || []);
           setShowSearchDropdown(true);
         } catch (error) {
           console.error('Error searching productos:', error);
@@ -168,8 +158,13 @@ const SalesContent = () => {
   }, []);
 
   const loadApiBaseUrl = async () => {
-    const baseUrl = await getApiBaseUrl();
-    setApiBaseUrl(baseUrl);
+    try {
+      const baseUrl = await getApiBaseUrl();
+      setApiBaseUrl(baseUrl);
+    } catch (error) {
+      console.error('Error loading API base URL:', error);
+      setApiBaseUrl('');
+    }
   };
 
   useEffect(() => {
@@ -409,33 +404,38 @@ const SalesContent = () => {
 
       console.log('[SalesScreen] Found servicioTienda:', servicioTienda);
 
+      // Build full image URL
+      let fullImageUrl = null;
+      if (servicio.producto?.imagen) {
+        const isBase64 = servicio.producto.imagen.startsWith('data:');
+        if (isBase64) {
+          fullImageUrl = servicio.producto.imagen;
+        } else {
+          const imagePath = servicio.producto.imagen.startsWith('/') ? servicio.producto.imagen : `/${servicio.producto.imagen}`;
+          const currentBaseUrl = await getApiBaseUrl();
+          fullImageUrl = currentBaseUrl ? `${currentBaseUrl}${imagePath}` : servicio.producto.imagen;
+        }
+      }
+
       const newItem = {
         id_servicio_tienda: servicioTienda.id_servicio_tienda,
         id_servicio: servicio.id_servicio,
         codigo_barras_ean: code,
         nombre: servicio.nombre || 'Sin nombre',
-        imagen: servicio.producto?.imagen || null,
+        imagen: fullImageUrl,
         cantidad: 1,
         precio_cup: parseFloat(servicioTienda.precio_cup || 0),
         precio_usd: parseFloat(servicioTienda.precio_usd || 0),
-        esOferta: servicio.ofertas_que_incluyen?.length > 0,
+        esOferta: servicio.componentes?.length > 0,
         componentes: [],
       };
 
-      // If it's an offer, load components
-      if (newItem.esOferta && servicio.ofertas_que_incluyen?.length > 0) {
-        try {
-          const ofertaId = servicio.ofertas_que_incluyen[0].id_oferta;
-          const oferta = await getOfertaById(ofertaId);
-          if (oferta && oferta.componentes) {
-            newItem.componentes = oferta.componentes.map(comp => ({
-              nombre: comp.servicio?.nombre || 'Componente',
-              cantidad: comp.cantidad || 1
-            }));
-          }
-        } catch (error) {
-          console.error('Error loading offer components:', error);
-        }
+      // If it's an offer, load components from servicio.componentes
+      if (newItem.esOferta && servicio.componentes?.length > 0) {
+        newItem.componentes = servicio.componentes.map(comp => ({
+          nombre: comp.nombre || 'Componente',
+          cantidad: comp.Oferta?.cantidad || 1
+        }));
       }
 
       console.log('[SalesScreen] Adding item to sale:', newItem);
@@ -483,33 +483,38 @@ const SalesContent = () => {
         return;
       }
 
+      // Build full image URL
+      let fullImageUrl = null;
+      if (servicio.producto?.imagen) {
+        const isBase64 = servicio.producto.imagen.startsWith('data:');
+        if (isBase64) {
+          fullImageUrl = servicio.producto.imagen;
+        } else {
+          const imagePath = servicio.producto.imagen.startsWith('/') ? servicio.producto.imagen : `/${servicio.producto.imagen}`;
+          const currentBaseUrl = await getApiBaseUrl();
+          fullImageUrl = currentBaseUrl ? `${currentBaseUrl}${imagePath}` : servicio.producto.imagen;
+        }
+      }
+
       const newItem = {
         id_servicio_tienda: servicioTienda.id_servicio_tienda,
         id_servicio: servicio.id_servicio,
         codigo_barras_ean: servicio.codigos?.[0]?.codigo_barras_ean || '',
         nombre: servicio.nombre || 'Sin nombre',
-        imagen: servicio.producto?.imagen || null,
+        imagen: fullImageUrl,
         cantidad: 1,
         precio_cup: parseFloat(servicioTienda.precio_cup || 0),
         precio_usd: parseFloat(servicioTienda.precio_usd || 0),
-        esOferta: servicio.ofertas_que_incluyen?.length > 0,
+        esOferta: servicio.componentes?.length > 0,
         componentes: [],
       };
 
-      // If it's an offer, load components
-      if (newItem.esOferta && servicio.ofertas_que_incluyen?.length > 0) {
-        try {
-          const ofertaId = servicio.ofertas_que_incluyen[0].id_oferta;
-          const oferta = await getOfertaById(ofertaId);
-          if (oferta && oferta.componentes) {
-            newItem.componentes = oferta.componentes.map(comp => ({
-              nombre: comp.servicio?.nombre || 'Componente',
-              cantidad: comp.cantidad || 1
-            }));
-          }
-        } catch (error) {
-          console.error('Error loading offer components:', error);
-        }
+      // If it's an offer, load components from servicio.componentes
+      if (newItem.esOferta && servicio.componentes?.length > 0) {
+        newItem.componentes = servicio.componentes.map(comp => ({
+          nombre: comp.nombre || 'Componente',
+          cantidad: comp.Oferta?.cantidad || 1
+        }));
       }
 
       console.log('[SalesScreen] Adding item to sale:', newItem);
@@ -945,24 +950,13 @@ const SalesContent = () => {
           ) : (
             saleItems.map((item, index) => (
               <View key={index} style={[styles.itemCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                {item.imagen && (() => {
-                  const isBase64 = item.imagen.startsWith('data:');
-                  let fullImageUrl;
-                  if (isBase64) {
-                    fullImageUrl = item.imagen;
-                  } else {
-                    // Ensure proper URL construction
-                    const imagePath = item.imagen.startsWith('/') ? item.imagen : `/${item.imagen}`;
-                    fullImageUrl = apiBaseUrl ? `${apiBaseUrl}${imagePath}` : item.imagen;
-                  }
-                  return (
-                    <Image 
-                      source={{ uri: fullImageUrl }} 
-                      style={styles.itemImage}
-                      onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
-                    />
-                  );
-                })()}
+                {item.imagen && (
+                  <Image 
+                    source={{ uri: item.imagen }} 
+                    style={styles.itemImage}
+                    onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
+                  />
+                )}
                 <View style={styles.itemContent}>
                   <Text style={[styles.itemName, { color: colors.onSurface }]}>{item.nombre}</Text>
                   <Text style={[styles.itemPrice, { color: colors.outline }]}>
