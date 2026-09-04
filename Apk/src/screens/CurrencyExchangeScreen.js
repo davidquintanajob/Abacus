@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Switch, Modal, Image } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -325,6 +326,45 @@ const CurrencyExchangeContent = () => {
     return parts.join('.');
   };
 
+  const convertToGrayscale = (base64Data) => {
+    try {
+      const matches = base64Data.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
+      if (!matches) return base64Data;
+      
+      const mimeType = matches[1];
+      const base64String = matches[2];
+      
+      const binaryString = atob(base64String);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      if (mimeType !== 'image/jpeg') {
+        return base64Data;
+      }
+      
+      for (let i = 0; i < bytes.length; i += 3) {
+        if (i + 2 < bytes.length) {
+          const avg = Math.round((bytes[i] + bytes[i + 1] + bytes[i + 2]) / 3);
+          bytes[i] = avg;
+          bytes[i + 1] = avg;
+          bytes[i + 2] = avg;
+        }
+      }
+      
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const grayBase64 = btoa(binary);
+      
+      return `data:${mimeType};base64,${grayBase64}`;
+    } catch (error) {
+      return base64Data;
+    }
+  };
+
   const handleSelectLogo = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -439,6 +479,23 @@ const CurrencyExchangeContent = () => {
     
     const tipoCuenta = selectorTipoCuenta;
     const currentCuentas = currentConfig[tipoCuenta] || [];
+    
+    // Mapeo de tipo de configuración a tipo de cuenta esperado
+    const tipoCuentaEsperado = {
+      efectivo_cup: 'Efectivo CUP',
+      efectivo_usd: 'Efectivo USD',
+      transferencia_cup: 'Transferencia CUP',
+      transferencia_usd: 'Transferencia USD',
+    };
+    
+    // Validar que la cuenta tenga el tipo correcto
+    if (cuenta.tipo_cuenta !== tipoCuentaEsperado[tipoCuenta]) {
+      showToast({ 
+        type: 'error', 
+        message: `La cuenta "${cuenta.nombre}" es de tipo "${cuenta.tipo_cuenta}" pero se requiere tipo "${tipoCuentaEsperado[tipoCuenta]}"` 
+      });
+      return;
+    }
     
     // Verificar si ya está seleccionada
     if (currentCuentas.some(c => c.id_cuenta === cuenta.id_cuenta)) {
@@ -2900,7 +2957,24 @@ const CurrencyExchangeContent = () => {
                   onPress={handleSelectLogo}
                 >
                   {comprobanteConfig.logo ? (
-                    <Image source={{ uri: comprobanteConfig.logo }} style={styles.logoPreview} />
+                    <View style={styles.logoPreview}>
+                      <WebView
+                        source={{
+                          html: `
+                            <svg viewBox="0 0 100 100" style="width: 100%; height: 100%;">
+                              <defs>
+                                <filter id="grayscale">
+                                  <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0"/>
+                                </filter>
+                              </defs>
+                              <image href="${comprobanteConfig.logo}" width="100" height="100" filter="url(#grayscale)" preserveAspectRatio="xMidYMid meet"/>
+                            </svg>
+                          `
+                        }}
+                        style={{ width: '100%', height: '100%' }}
+                        scrollEnabled={false}
+                      />
+                    </View>
                   ) : (
                     <View style={styles.uploadPlaceholder}>
                       <Ionicons name="image" size={responsive.responsiveWidth(32)} color={colors.outline} />
@@ -2919,10 +2993,24 @@ const CurrencyExchangeContent = () => {
                 <View style={[styles.comprobantePreview, { backgroundColor: '#fff', borderColor: '#000' }]}>
                   {comprobanteConfig.logo && (
                     <View style={styles.comprobanteLogoContainer}>
-                      <Image 
-                        source={{ uri: comprobanteConfig.logo }} 
-                        style={styles.comprobanteLogo}
-                      />
+                      <View style={styles.comprobanteLogo}>
+                        <WebView
+                          source={{
+                            html: `
+                              <svg viewBox="0 0 100 100" style="width: 100%; height: 100%;">
+                                <defs>
+                                  <filter id="grayscale">
+                                    <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0"/>
+                                  </filter>
+                                </defs>
+                                <image href="${comprobanteConfig.logo}" width="100" height="100" filter="url(#grayscale)" preserveAspectRatio="xMidYMid meet"/>
+                              </svg>
+                            `
+                          }}
+                          style={{ width: '100%', height: '100%' }}
+                          scrollEnabled={false}
+                        />
+                      </View>
                     </View>
                   )}
                   <Text style={styles.comprobanteNegocioName}>
@@ -2933,7 +3021,7 @@ const CurrencyExchangeContent = () => {
                     {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                   </Text>
                   <View style={styles.comprobanteTableHeader}>
-                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Producto</Text>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Servicio/Producto</Text>
                     <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Cant</Text>
                     <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Total</Text>
                   </View>

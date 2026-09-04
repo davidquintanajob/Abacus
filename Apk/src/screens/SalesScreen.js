@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Modal, KeyboardAvoidingView, Platform, Keyboard, Dimensions, Image, Vibration, ActivityIndicator } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -122,7 +123,6 @@ const SalesContent = () => {
           setSearchResults(data.data || []);
           setShowSearchDropdown(true);
         } catch (error) {
-          console.error('Error searching productos:', error);
           setSearchResults([]);
         } finally {
           setIsSearching(false);
@@ -162,7 +162,6 @@ const SalesContent = () => {
       const baseUrl = await getApiBaseUrl();
       setApiBaseUrl(baseUrl);
     } catch (error) {
-      console.error('Error loading API base URL:', error);
       setApiBaseUrl('');
     }
   };
@@ -199,19 +198,39 @@ const SalesContent = () => {
         });
       }
     } catch (error) {
-      console.error('Error loading config:', error);
     }
   };
 
   // Auto-select first configured account for each type
   useEffect(() => {
     if (cuentaConfig) {
+      const tipoCuentaEsperado = {
+        efectivo_cup: 'Efectivo CUP',
+        efectivo_usd: 'Efectivo USD',
+        transferencia_cup: 'Transferencia CUP',
+        transferencia_usd: 'Transferencia USD',
+      };
+      
       const newSelectedCuentas = {};
+      let hasInconsistency = false;
+      
       ['efectivo_cup', 'efectivo_usd', 'transferencia_cup', 'transferencia_usd'].forEach(tipo => {
         if (cuentaConfig[tipo]?.length > 0) {
-          newSelectedCuentas[tipo] = cuentaConfig[tipo][0];
+          const cuenta = cuentaConfig[tipo][0];
+          
+          // Validar que la cuenta tenga el tipo correcto
+          if (cuenta.tipo_cuenta !== tipoCuentaEsperado[tipo]) {
+            hasInconsistency = true;
+            showToast({ 
+              type: 'error', 
+              message: `Error de configuración: La cuenta "${cuenta.nombre}" es de tipo "${cuenta.tipo_cuenta}" pero está configurada como "${tipo}". Por favor reconfigure las cuentas en Configuraciones del Admin.` 
+            });
+          } else {
+            newSelectedCuentas[tipo] = cuenta;
+          }
         }
       });
+      
       setSelectedCuentas(newSelectedCuentas);
     }
   }, [cuentaConfig]);
@@ -254,7 +273,6 @@ const SalesContent = () => {
       const cuentasData = await getCuentas({}, 1, 1000);
       setAvailableCuentas(cuentasData.data || []);
     } catch (error) {
-      console.error('Error loading initial data:', error);
       showToast({ type: 'error', message: 'Error al cargar datos iniciales' });
     } finally {
       setIsLoading(false);
@@ -268,7 +286,6 @@ const SalesContent = () => {
         setCuentaConfig(data.tiendaCuentasConfig[tiendaId]);
       }
     } catch (error) {
-      console.error('Error loading cuenta config:', error);
     }
   };
 
@@ -297,7 +314,6 @@ const SalesContent = () => {
         // );
         // setSound(sound);
       } catch (error) {
-        console.log('Error loading sound:', error);
       }
     };
 
@@ -309,7 +325,6 @@ const SalesContent = () => {
       try {
         await sound.replayAsync();
       } catch (error) {
-        console.error('Error playing sound:', error);
       }
     }
   };
@@ -339,7 +354,6 @@ const SalesContent = () => {
         setIsScanning(true);
       }, 1500);
     } catch (error) {
-      console.error('Error processing barcode:', error);
       showToast({ type: 'error', message: 'Error al procesar código' });
       
       // Re-enable scanning on error
@@ -351,58 +365,42 @@ const SalesContent = () => {
 
   const addProductByCode = async (code) => {
     try {
-      console.log('[SalesScreen] addProductByCode called with code:', code);
-      console.log('[SalesScreen] selectedTienda:', selectedTienda);
-
       if (!selectedTienda) {
         showToast({ type: 'warning', message: 'Selecciona una tienda primero' });
         return;
       }
 
-      // Check if product already exists in sale list
-      const existingItem = saleItems.find(item => 
-        item.codigo_barras_ean?.trim().toLowerCase() === code.trim().toLowerCase()
+      const existingItem = saleItems.find(
+        item => item.codigo_barras_ean?.trim().toLowerCase() === code.trim().toLowerCase()
       );
 
       if (existingItem) {
-        console.log('[SalesScreen] Product already in list, increasing quantity');
         updateItemQuantity(saleItems.indexOf(existingItem), existingItem.cantidad + 1);
         if (Platform.OS === 'android') {
           Vibration.vibrate(100);
         }
-        playSound();
-        showToast({ type: 'success', message: 'Cantidad aumentada' });
         return;
       }
 
       // Use getServicios with codigo filter to search both services and products
       const filters = { codigo: code, fetchProducto: true };
-      console.log('[SalesScreen] Searching with filters:', filters);
       
       const data = await getServicios(filters, 1, 10);
-      console.log('[SalesScreen] Search results:', data);
       
       const servicio = data.data?.[0];
 
       if (!servicio) {
-        console.log('[SalesScreen] No service/product found with code:', code);
         showToast({ type: 'error', message: 'Producto o servicio no encontrado' });
         return;
       }
-
-      console.log('[SalesScreen] Found servicio:', servicio);
-      console.log('[SalesScreen] Servicio tiendas_servicio:', servicio.tiendas_servicio);
 
       // Find the servicio_tienda for the selected store (using tiendas_servicio, not tiendas)
       const servicioTienda = servicio.tiendas_servicio?.find(t => t.id_tienda === selectedTienda.id_tienda);
 
       if (!servicioTienda) {
-        console.log('[SalesScreen] No servicio_tienda found for tienda:', selectedTienda.id_tienda);
         showToast({ type: 'error', message: 'Producto no disponible en esta tienda' });
         return;
       }
-
-      console.log('[SalesScreen] Found servicioTienda:', servicioTienda);
 
       // Build full image URL
       let fullImageUrl = null;
@@ -438,7 +436,6 @@ const SalesContent = () => {
         }));
       }
 
-      console.log('[SalesScreen] Adding item to sale:', newItem);
       setSaleItems(prev => [...prev, newItem]);
       if (Platform.OS === 'android') {
         Vibration.vibrate(100);
@@ -446,7 +443,6 @@ const SalesContent = () => {
       playSound();
       showToast({ type: 'success', message: 'Producto agregado correctamente' });
     } catch (error) {
-      console.error('[SalesScreen] Error adding product:', error);
       showToast({ type: 'error', message: 'Error al agregar producto' });
     }
   };
@@ -472,8 +468,7 @@ const SalesContent = () => {
       );
 
       if (existingItem) {
-        console.log('[SalesScreen] Product already in list, increasing quantity');
-        updateItemQuantity(saleItems.indexOf(existingItem), existingItem.cantidad + 1);
+          updateItemQuantity(saleItems.indexOf(existingItem), existingItem.cantidad + 1);
         if (Platform.OS === 'android') {
           Vibration.vibrate(100);
         }
@@ -517,7 +512,6 @@ const SalesContent = () => {
         }));
       }
 
-      console.log('[SalesScreen] Adding item to sale:', newItem);
       setSaleItems(prev => [...prev, newItem]);
       if (Platform.OS === 'android') {
         Vibration.vibrate(100);
@@ -526,7 +520,6 @@ const SalesContent = () => {
       showToast({ type: 'success', message: 'Producto agregado correctamente' });
       setSearchText('');
     } catch (error) {
-      console.error('[SalesScreen] Error adding product:', error);
       showToast({ type: 'error', message: 'Error al agregar producto' });
     }
   };
@@ -572,8 +565,12 @@ const SalesContent = () => {
   };
 
   const calculatePaidTotal = () => {
-    const cup = parseFloat(paymentAmounts.efectivo_cup || 0) + parseFloat(paymentAmounts.transferencia_cup || 0);
-    const usd = parseFloat(paymentAmounts.efectivo_usd || 0) + parseFloat(paymentAmounts.transferencia_usd || 0);
+    const parseAmount = (value) => {
+      const parsed = parseFloat(value);
+      return isNaN(parsed) ? 0 : parsed;
+    };
+    const cup = parseAmount(paymentAmounts.efectivo_cup) + parseAmount(paymentAmounts.transferencia_cup);
+    const usd = parseAmount(paymentAmounts.efectivo_usd) + parseAmount(paymentAmounts.transferencia_usd);
     const cambio = parseFloat(config.cupToUsdRate || 1);
     return cup + (usd * cambio);
   };
@@ -610,17 +607,27 @@ const SalesContent = () => {
     try {
       setIsSubmitting(true);
 
+      const parseAmount = (value) => {
+        const parsed = parseFloat(value);
+        return isNaN(parsed) ? 0 : parsed;
+      };
+
+      const efectivoCup = parseAmount(paymentAmounts.efectivo_cup);
+      const efectivoUsd = parseAmount(paymentAmounts.efectivo_usd);
+      const transferenciaCup = parseAmount(paymentAmounts.transferencia_cup);
+      const transferenciaUsd = parseAmount(paymentAmounts.transferencia_usd);
+
       const ventaData = {
         fecha_hora: new Date().toISOString(),
         nota: ventaNota,
-        cantidad_cobrada_efectivo_cup: parseFloat(paymentAmounts.efectivo_cup || 0),
-        cantidad_cobrada_efectivo_usd: parseFloat(paymentAmounts.efectivo_usd || 0),
-        cantidad_cobrada_transferencia_cup: parseFloat(paymentAmounts.transferencia_cup || 0),
-        cantidad_cobrada_transferencia_usd: parseFloat(paymentAmounts.transferencia_usd || 0),
-        id_cuenta_efectivo_cup: selectedCuentas.efectivo_cup?.id_cuenta || null,
-        id_cuenta_efectivo_usd: selectedCuentas.efectivo_usd?.id_cuenta || null,
-        id_cuenta_transferencia_cup: selectedCuentas.transferencia_cup?.id_cuenta || null,
-        id_cuenta_transferencia_usd: selectedCuentas.transferencia_usd?.id_cuenta || null,
+        cantidad_cobrada_efectivo_cup: efectivoCup,
+        cantidad_cobrada_efectivo_usd: efectivoUsd,
+        cantidad_cobrada_transferencia_cup: transferenciaCup,
+        cantidad_cobrada_transferencia_usd: transferenciaUsd,
+        id_cuenta_efectivo_cup: efectivoCup > 0 ? selectedCuentas.efectivo_cup?.id_cuenta : null,
+        id_cuenta_efectivo_usd: efectivoUsd > 0 ? selectedCuentas.efectivo_usd?.id_cuenta : null,
+        id_cuenta_transferencia_cup: transferenciaCup > 0 ? selectedCuentas.transferencia_cup?.id_cuenta : null,
+        id_cuenta_transferencia_usd: transferenciaUsd > 0 ? selectedCuentas.transferencia_usd?.id_cuenta : null,
         id_usuario: user.id_usuario,
         cambio_moneda: config.cupToUsdRate || 1,
         ventas: saleItems.map(item => ({
@@ -630,6 +637,7 @@ const SalesContent = () => {
           precio_cobrado_usd: item.precio_usd,
         })),
       };
+
 
       const result = await createVenta(ventaData);
       
@@ -650,11 +658,57 @@ const SalesContent = () => {
         transferencia_usd: '',
       });
     } catch (error) {
-      console.error('Error submitting sale:', error);
       const errorMessage = error.response?.data?.errors?.[0] || error.message || 'Error al realizar venta';
       showToast({ type: 'error', message: errorMessage });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const formatComprobanteNumber = (num) => {
+    const formatted = parseFloat(num).toFixed(2);
+    const withoutZeros = formatted.endsWith('.00') ? formatted.slice(0, -3) : formatted;
+    const parts = withoutZeros.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return parts.join('.');
+  };
+
+  const convertToGrayscale = (base64Data) => {
+    try {
+      const matches = base64Data.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
+      if (!matches) return base64Data;
+      
+      const mimeType = matches[1];
+      const base64String = matches[2];
+      
+      const binaryString = atob(base64String);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      if (mimeType !== 'image/jpeg') {
+        return base64Data;
+      }
+      
+      for (let i = 0; i < bytes.length; i += 3) {
+        if (i + 2 < bytes.length) {
+          const avg = Math.round((bytes[i] + bytes[i + 1] + bytes[i + 2]) / 3);
+          bytes[i] = avg;
+          bytes[i + 1] = avg;
+          bytes[i + 2] = avg;
+        }
+      }
+      
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const grayBase64 = btoa(binary);
+      
+      return `data:${mimeType};base64,${grayBase64}`;
+    } catch (error) {
+      return base64Data;
     }
   };
 
@@ -663,10 +717,9 @@ const SalesContent = () => {
       const totalCUP = comprobanteSaleItems.reduce((sum, item) => sum + (item.cantidad * item.precio_cup), 0);
       const totalUSD = comprobanteSaleItems.reduce((sum, item) => sum + (item.cantidad * item.precio_usd), 0);
 
-      // Use logo directly — it's stored as a base64 data URI or remote URL
       let logoBase64 = '';
       if (comprobanteConfig.logo) {
-        logoBase64 = comprobanteConfig.logo; // already a data: URI or https:// URL
+        logoBase64 = comprobanteConfig.logo;
       }
 
       const html = `
@@ -680,12 +733,18 @@ const SalesContent = () => {
               font-family: Arial, sans-serif;
               padding: 20px;
               margin: 0;
+              background-color: #fff;
             }
             .header {
               text-align: center;
-              margin-bottom: 20px;
+              margin-bottom: 15px;
             }
             .logo {
+              max-width: 100px;
+              max-height: 100px;
+              margin-bottom: 10px;
+            }
+            .logo-svg {
               max-width: 100px;
               max-height: 100px;
               margin-bottom: 10px;
@@ -695,59 +754,76 @@ const SalesContent = () => {
               font-weight: bold;
               margin-bottom: 10px;
             }
-            .title {
-              font-size: 16px;
-              font-weight: 600;
+            .text {
+              font-size: 12px;
               margin-bottom: 5px;
             }
-            .date {
-              font-size: 12px;
-              color: #666;
-              margin-bottom: 20px;
+            .text-centered {
+              text-align: center;
+              margin-top: 10px;
             }
-            .divider {
-              border-top: 1px solid #e0e0e0;
-              margin: 15px 0;
-            }
-            .item {
-              margin-bottom: 10px;
-            }
-            .item-name {
-              font-weight: 600;
-              font-size: 14px;
-            }
-            .item-details {
-              font-size: 12px;
-              color: #666;
-            }
-            .total {
+            .table-header {
               display: flex;
               justify-content: space-between;
               font-weight: bold;
-              font-size: 18px;
-              margin-top: 20px;
+              font-size: 12px;
+              margin-bottom: 5px;
+            }
+            .table-column {
+              flex: 1;
+              text-align: left;
+            }
+            .table-column-bold {
+              font-weight: bold;
+            }
+            .line {
+              border-top: 1px solid #000;
+              margin: 10px 0;
+            }
+            .table-row {
+              display: flex;
+              justify-content: space-between;
+              font-size: 12px;
+              margin-bottom: 5px;
             }
           </style>
         </head>
         <body>
           <div class="header">
-            ${logoBase64 ? `<img src="${logoBase64}" class="logo" />` : ''}
+            ${logoBase64 ? `
+              <svg class="logo-svg" viewBox="0 0 100 100">
+                <defs>
+                  <filter id="grayscale">
+                    <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0"/>
+                  </filter>
+                </defs>
+                <image href="${logoBase64}" width="100" height="100" filter="url(#grayscale)"/>
+              </svg>
+            ` : ''}
             ${comprobanteConfig.nombreNegocio ? `<div class="business-name">${comprobanteConfig.nombreNegocio}</div>` : ''}
-            <div class="title">COMPROBANTE DE PAGO</div>
-            <div class="date">${new Date().toLocaleString()}</div>
+            <div class="text">DEPENDIENTE: ${user?.nombre_natural || 'N/A'}</div>
+            <div class="text">${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
           </div>
-          <div class="divider"></div>
+          <div class="table-header">
+            <div class="table-column table-column-bold">Servicio/Producto</div>
+            <div class="table-column table-column-bold">Cant</div>
+            <div class="table-column table-column-bold">Total</div>
+          </div>
+          <div class="line"></div>
           ${comprobanteSaleItems.map(item => `
-            <div class="item">
-              <div class="item-name">${item.nombre}</div>
-              <div class="item-details">${item.cantidad} x $${item.precio_cup.toFixed(2)} = $${(item.cantidad * item.precio_cup).toFixed(2)}</div>
+            <div class="table-row">
+              <div class="table-column">${item.nombre}</div>
+              <div class="table-column">${item.cantidad}</div>
+              <div class="table-column">$${formatComprobanteNumber(item.cantidad * item.precio_cup)}</div>
             </div>
           `).join('')}
-          <div class="divider"></div>
-          <div class="total">
-            <span>TOTAL:</span>
-            <span>$${totalCUP.toFixed(2)} CUP</span>
+          <div class="table-row">
+            <div class="table-column table-column-bold">TOTAL</div>
+            <div class="table-column"></div>
+            <div class="table-column table-column-bold">$${formatComprobanteNumber(totalCUP)}</div>
           </div>
+          <div class="line"></div>
+          <div class="text-centered text">¡Gracias por su compra!</div>
         </body>
         </html>
       `;
@@ -761,11 +837,9 @@ const SalesContent = () => {
         });
       }
       
-      // Close modal and navigate to VentasScreen after sharing
       setShowComprobanteModal(false);
       navigation.navigate('Ventas');
     } catch (error) {
-      console.error('Error generating comprobante:', error);
       showToast({ type: 'error', message: 'Error al generar comprobante' });
     }
   };
@@ -954,7 +1028,6 @@ const SalesContent = () => {
                   <Image 
                     source={{ uri: item.imagen }} 
                     style={styles.itemImage}
-                    onError={(e) => console.log('Image load error:', e.nativeEvent.error)}
                   />
                 )}
                 <View style={styles.itemContent}>
@@ -1087,14 +1160,16 @@ const SalesContent = () => {
             </Text>
           </View>
 
-          <View style={[styles.remainingSection, { backgroundColor: getRemainingAmount() > 0 ? colors.errorContainer : colors.successContainer }]}>
-            <Text style={[styles.remainingLabel, { color: getRemainingAmount() > 0 ? colors.error : '#fff' }]}>
-              {getRemainingAmount() > 0 ? 'Falta por pagar:' : 'Pago completo:'}
-            </Text>
-            <Text style={[styles.remainingAmount, { color: getRemainingAmount() > 0 ? colors.error : '#fff' }]}>
-              ${Math.abs(getRemainingAmount()).toFixed(2)} CUP
-            </Text>
-          </View>
+          {getRemainingAmount() > 0.01 && (
+            <View style={[styles.remainingSection, { backgroundColor: colors.errorContainer }]}>
+              <Text style={[styles.remainingLabel, { color: colors.error }]}>
+                Falta por pagar:
+              </Text>
+              <Text style={[styles.remainingAmount, { color: colors.error }]}>
+                ${getRemainingAmount().toFixed(2)} CUP
+              </Text>
+            </View>
+          )}
 
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Nota</Text>
@@ -1190,33 +1265,56 @@ const SalesContent = () => {
                 <Text style={[styles.modalDescription, { color: colors.outline }]}>
                   Se generará un PDF con el comprobante de la venta.
                 </Text>
-                <View style={styles.comprobantePreview}>
+                <View style={[styles.comprobantePreview, { backgroundColor: '#fff', borderColor: '#000' }]}>
                   {comprobanteConfig.logo && (
-                    <Image source={{ uri: comprobanteConfig.logo }} style={styles.comprobanteLogo} />
+                    <View style={styles.comprobanteLogoContainer}>
+                      <View style={styles.comprobanteLogo}>
+                        <WebView
+                          source={{
+                            html: `
+                              <svg viewBox="0 0 100 100" style="width: 100%; height: 100%;">
+                                <defs>
+                                  <filter id="grayscale">
+                                    <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0"/>
+                                  </filter>
+                                </defs>
+                                <image href="${comprobanteConfig.logo}" width="100" height="100" filter="url(#grayscale)" preserveAspectRatio="xMidYMid meet"/>
+                              </svg>
+                            `
+                          }}
+                          style={{ width: '100%', height: '100%' }}
+                          scrollEnabled={false}
+                        />
+                      </View>
+                    </View>
                   )}
-                  {comprobanteConfig.nombreNegocio && (
-                    <Text style={styles.comprobanteBusinessName}>{comprobanteConfig.nombreNegocio}</Text>
-                  )}
-                  <Text style={styles.comprobanteTitle}>COMPROBANTE DE PAGO</Text>
-                  <Text style={styles.comprobanteDate}>{new Date().toLocaleString()}</Text>
-                  
-                  <View style={styles.comprobanteDivider} />
-                  
+                  <Text style={styles.comprobanteNegocioName}>
+                    {comprobanteConfig.nombreNegocio || 'Nombre del Negocio'}
+                  </Text>
+                  <Text style={[styles.comprobanteText, styles.comprobanteTextCentered]}>DEPENDIENTE: {user?.nombre_natural || 'N/A'}</Text>
+                  <Text style={[styles.comprobanteText, styles.comprobanteTextCentered]}>
+                    {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  </Text>
+                  <View style={styles.comprobanteTableHeader}>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Servicio/Producto</Text>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Cant</Text>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Total</Text>
+                  </View>
+                  <View style={styles.comprobanteLine} />
                   {comprobanteSaleItems.map((item, index) => (
-                    <View key={index} style={styles.comprobanteItem}>
-                      <Text style={styles.comprobanteItemName}>{item.nombre}</Text>
-                      <Text style={styles.comprobanteItemDetails}>
-                        {item.cantidad} x ${item.precio_cup.toFixed(2)} = ${(item.cantidad * item.precio_cup).toFixed(2)}
-                      </Text>
+                    <View key={index} style={styles.comprobanteTableRow}>
+                      <Text style={styles.comprobanteTableColumn}>{item.nombre}</Text>
+                      <Text style={styles.comprobanteTableColumn}>{item.cantidad}</Text>
+                      <Text style={styles.comprobanteTableColumn}>${formatComprobanteNumber(item.cantidad * item.precio_cup)}</Text>
                     </View>
                   ))}
-                  
-                  <View style={styles.comprobanteDivider} />
-                  
-                  <View style={styles.comprobanteTotal}>
-                    <Text style={styles.comprobanteTotalLabel}>TOTAL:</Text>
-                    <Text style={styles.comprobanteTotalAmount}>${comprobanteSaleItems.reduce((sum, item) => sum + (item.cantidad * item.precio_cup), 0).toFixed(2)} CUP</Text>
+                  <View style={styles.comprobanteTableRow}>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>TOTAL</Text>
+                    <Text style={styles.comprobanteTableColumn}></Text>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>${formatComprobanteNumber(comprobanteSaleItems.reduce((sum, item) => sum + (item.cantidad * item.precio_cup), 0))}</Text>
                   </View>
+                  <View style={styles.comprobanteLine} />
+                  <Text style={[styles.comprobanteText, styles.comprobanteTextCentered]}>¡Gracias por su compra!</Text>
                 </View>
               </View>
             </ScrollView>
@@ -1730,19 +1828,60 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   comprobanteItemDetails: {
     fontSize: responsive.responsiveWidth(12),
+    color: '#666',
   },
   comprobanteTotal: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: responsive.responsiveHeight(16),
   },
   comprobanteTotalLabel: {
-    fontSize: responsive.responsiveWidth(16),
+    fontSize: responsive.responsiveWidth(18),
     fontWeight: '700',
   },
   comprobanteTotalAmount: {
     fontSize: responsive.responsiveWidth(18),
     fontWeight: '700',
+  },
+  comprobanteLogoContainer: {
+    alignItems: 'center',
+    marginBottom: responsive.responsiveHeight(10),
+  },
+  comprobanteNegocioName: {
+    fontSize: responsive.responsiveWidth(18),
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: responsive.responsiveHeight(10),
+  },
+  comprobanteText: {
+    fontSize: responsive.responsiveWidth(12),
+    marginBottom: responsive.responsiveHeight(5),
+  },
+  comprobanteTextCentered: {
+    textAlign: 'center',
+  },
+  comprobanteTableHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: responsive.responsiveHeight(5),
+  },
+  comprobanteTableColumn: {
+    flex: 1,
+    fontSize: responsive.responsiveWidth(12),
+  },
+  comprobanteTableColumnBold: {
+    fontWeight: 'bold',
+  },
+  comprobanteLine: {
+    height: 1,
+    backgroundColor: '#000',
+    marginVertical: responsive.responsiveHeight(10),
+  },
+  comprobanteTableRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: responsive.responsiveHeight(5),
   },
   shareButton: {
     flexDirection: 'row',
