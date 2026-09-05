@@ -83,7 +83,7 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home' }: Side
       'Operaciones': '/operaciones',
       'Tiendas': '/tiendas',
       'Usuarios': '/usuarios',
-      'CurrencyExchange': '/admin',
+      'CurrencyExchange': '/configuracion',
       'Profile': '/profile',
     };
     

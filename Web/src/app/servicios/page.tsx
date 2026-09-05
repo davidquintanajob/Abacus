@@ -11,6 +11,7 @@ import { Sidebar } from '../../components/layout/Sidebar';
 import { Toast } from '../../components/common/Toast';
 import { getServicios, deleteServicio } from '../../services/servicioService';
 import { getTiendas } from '../../services/tiendaService';
+import { useResponsive } from '../../hooks/useResponsive';
 import { 
   Search, 
   RefreshCw, 
@@ -24,7 +25,8 @@ import {
   Grid,
   List,
   AlertCircle,
-  Download
+  Tag,
+  FileText
 } from 'lucide-react';
 
 export default function ServiciosPage() {
@@ -33,6 +35,7 @@ export default function ServiciosPage() {
   const { token, user } = useAuth();
   const { viewMode, toggleViewMode } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
+  const { isMobile, isTablet, isDesktop } = useResponsive();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -44,22 +47,8 @@ export default function ServiciosPage() {
   const [filters, setFilters] = useState({ nombre: '', codigo: '', categoria: '', esvendible: '', id_tienda: '' });
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [showFieldSelectionModal, setShowFieldSelectionModal] = useState(false);
-  const [exportType, setExportType] = useState<'inventory_excel' | 'inventory_pdf' | 'qr' | 'barcode' | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
-  const [selectedFields, setSelectedFields] = useState({
-    nombre: true,
-    codigo_qr_barra: false,
-    codigo: false,
-    categoria: false,
-    esvendible: false,
-    precio_cup: false,
-    costo_cup: false,
-    precio_usd: false,
-    costo_usd: false,
-    nota: false
-  });
+  const [showTiendaDropdown, setShowTiendaDropdown] = useState(false);
+  const [tiendaSearchText, setTiendaSearchText] = useState('');
   const [tiendas, setTiendas] = useState<any[]>([]);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
@@ -67,6 +56,10 @@ export default function ServiciosPage() {
 
   useEffect(() => {
     fetchTiendas();
+    // Auto-load user's tienda if available
+    if (user?.id_tienda) {
+      setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
+    }
     fetchServicios();
   }, [pagination.currentPage]);
 
@@ -172,86 +165,8 @@ export default function ServiciosPage() {
     router.push('/profile');
   };
 
-  const handleExportToCSV = async () => {
-    try {
-      setIsExporting(true);
-      
-      // Get all services for export (ignore pagination)
-      const data = await getServicios(filters, 1, 10000);
-      const allServicios = data.data || [];
-
-      if (allServicios.length === 0) {
-        showToast({ type: 'warning', message: 'No hay servicios para exportar' });
-        return;
-      }
-
-      // Build headers based on selected fields
-      const headers = [];
-      if (selectedFields.nombre) headers.push('Nombre');
-      if (selectedFields.categoria) headers.push('Categoría');
-      if (selectedFields.esvendible) headers.push('Estado');
-      if (selectedFields.codigo) headers.push('Códigos');
-      if (selectedFields.precio_cup) headers.push('Precio CUP');
-      if (selectedFields.precio_usd) headers.push('Precio USD');
-      if (selectedFields.costo_cup) headers.push('Costo CUP');
-      if (selectedFields.costo_usd) headers.push('Costo USD');
-      if (selectedFields.nota) headers.push('Nota');
-
-      const csvContent = [
-        headers.join(','),
-        ...allServicios.map((servicio: any) => {
-          const row = [];
-          if (selectedFields.nombre) row.push(`"${servicio.nombre || ''}"`);
-          if (selectedFields.categoria) row.push(`"${servicio.categoria || ''}"`);
-          if (selectedFields.esvendible) row.push(servicio.esvendible ? 'Vendible' : 'No vendible');
-          if (selectedFields.codigo) row.push(`"${servicio.codigos?.map((c: any) => c.codigo_barras_ean).join('; ') || ''}"`);
-          if (selectedFields.precio_cup) row.push(servicio.tiendas_servicio?.[0]?.precio_cup || '0');
-          if (selectedFields.precio_usd) row.push(servicio.tiendas_servicio?.[0]?.precio_usd || '0');
-          if (selectedFields.costo_cup) row.push(servicio.tiendas_servicio?.[0]?.costo_cup || '0');
-          if (selectedFields.costo_usd) row.push(servicio.tiendas_servicio?.[0]?.costo_usd || '0');
-          if (selectedFields.nota) row.push(`"${servicio.nota || ''}"`);
-          return row.join(',');
-        })
-      ].join('\n');
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `servicios_${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      showToast({ type: 'success', message: 'Servicios exportados correctamente' });
-    } catch (err: any) {
-      showToast({ type: 'error', message: 'Error al exportar: ' + err.message });
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const handleExportClick = () => {
-    setShowExportModal(true);
-  };
-
-  const handleExportTypeSelect = (type: 'inventory_excel' | 'inventory_pdf' | 'qr' | 'barcode') => {
-    setExportType(type);
-    setShowExportModal(false);
-    setShowFieldSelectionModal(true);
-  };
-
-  const handleFieldSelectionConfirm = async () => {
-    setShowFieldSelectionModal(false);
-    
-    if (exportType === 'inventory_excel') {
-      await handleExportToCSV();
-    } else if (exportType === 'inventory_pdf') {
-      showToast({ type: 'warning', message: 'Exportación a PDF próximamente disponible' });
-    } else if (exportType === 'qr' || exportType === 'barcode') {
-      showToast({ type: 'warning', message: 'Exportación a QR/Barcode próximamente disponible' });
-    }
+  const handleAddOferta = () => {
+    router.push('/servicios/form?mode=add&isOferta=true');
   };
 
   return (
@@ -290,7 +205,19 @@ export default function ServiciosPage() {
           currentRoute="Servicios"
         />
 
-        <div className="pt-20 px-4 md:px-4 lg:px-4 pb-8 max-w-4xl mx-auto">
+        <div 
+          style={{ 
+            marginTop: '80px',
+            marginRight: 'auto',
+            marginBottom: '0',
+            marginLeft: 'auto',
+            paddingTop: isMobile ? '20px' : '80px',
+            paddingRight: isMobile ? '20px' : '16px',
+            paddingBottom: '120px',
+            paddingLeft: isMobile ? '20px' : '16px',
+            maxWidth: isMobile ? '100%' : '56rem',
+          }}
+        >
           {/* Page Title */}
           <div className="text-center mb-6 mt-4">
             <h1 
@@ -304,7 +231,10 @@ export default function ServiciosPage() {
           {/* Filter Section */}
           <div 
             className="rounded-2xl p-5 mb-6 shadow-lg"
-            style={{ backgroundColor: colors.surface }}
+            style={{ 
+              backgroundColor: colors.surface,
+              padding: isMobile ? '16px' : '20px'
+            }}
           >
             <div className="flex justify-between items-center mb-4">
               <h2 
@@ -343,7 +273,9 @@ export default function ServiciosPage() {
                   backgroundColor: colors.background, 
                   color: colors.onSurface, 
                   borderColor: colors.outlineVariant,
-                  fontFamily: 'Inter, sans-serif'
+                  fontFamily: 'Inter, sans-serif',
+                  fontSize: isMobile ? '14px' : '16px',
+                  padding: isMobile ? '12px' : '16px'
                 }}
                 placeholder="Buscar por nombre..."
                 value={filters.nombre}
@@ -351,8 +283,95 @@ export default function ServiciosPage() {
               />
             </div>
 
+            <div className="mb-4">
+              <label 
+                className="block text-sm font-medium mb-2"
+                style={{ color: colors.outline }}
+              >
+                Tienda
+              </label>
+              <div className="relative">
+                <button
+                  className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2 flex justify-between items-center"
+                  style={{ 
+                    backgroundColor: colors.background, 
+                    color: colors.onSurface, 
+                    borderColor: colors.outlineVariant,
+                    fontFamily: 'Inter, sans-serif',
+                    fontSize: isMobile ? '14px' : '16px',
+                    padding: isMobile ? '12px' : '16px'
+                  }}
+                  onClick={() => setShowTiendaDropdown(!showTiendaDropdown)}
+                >
+                  <span>
+                    {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda))?.nombre || 'Todas las tiendas'}
+                  </span>
+                  {showTiendaDropdown ? (
+                    <ChevronUp size={20} style={{ color: colors.outline }} />
+                  ) : (
+                    <ChevronDown size={20} style={{ color: colors.outline }} />
+                  )}
+                </button>
+                
+                {showTiendaDropdown && (
+                  <div 
+                    className="absolute z-10 w-full mt-1 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                    style={{ backgroundColor: colors.surface, borderColor: colors.outlineVariant, borderWidth: '1px' }}
+                  >
+                    <button
+                      className="w-full px-4 py-3 text-left hover:opacity-80 transition-opacity"
+                      style={{ color: colors.onSurface, fontSize: isMobile ? '14px' : '16px' }}
+                      onClick={() => {
+                        setFilters(prev => ({ ...prev, id_tienda: '' }));
+                        setShowTiendaDropdown(false);
+                      }}
+                    >
+                      Todas las tiendas
+                    </button>
+                    {tiendas.map((tienda) => (
+                      <button
+                        key={tienda.id_tienda}
+                        className="w-full px-4 py-3 text-left hover:opacity-80 transition-opacity"
+                        style={{ color: colors.onSurface, fontSize: isMobile ? '14px' : '16px' }}
+                        onClick={() => {
+                          setFilters(prev => ({ ...prev, id_tienda: tienda.id_tienda.toString() }));
+                          setShowTiendaDropdown(false);
+                        }}
+                      >
+                        {tienda.nombre}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {showAdvancedFilters && (
               <>
+                <div className="mb-4">
+                  <label 
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: colors.outline }}
+                  >
+                    Código
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2"
+                    style={{ 
+                      backgroundColor: colors.background, 
+                      color: colors.onSurface, 
+                      borderColor: colors.outlineVariant,
+                      fontFamily: 'Inter, sans-serif',
+                      fontSize: isMobile ? '14px' : '16px',
+                      padding: isMobile ? '12px' : '16px'
+                    }}
+                    placeholder="Buscar por código..."
+                    value={filters.codigo}
+                    onChange={(e) => setFilters(prev => ({ ...prev, codigo: e.target.value }))}
+                  />
+                </div>
+
                 <div className="mb-4">
                   <label 
                     className="block text-sm font-medium mb-2"
@@ -367,7 +386,9 @@ export default function ServiciosPage() {
                       backgroundColor: colors.background, 
                       color: colors.onSurface, 
                       borderColor: colors.outlineVariant,
-                      fontFamily: 'Inter, sans-serif'
+                      fontFamily: 'Inter, sans-serif',
+                      fontSize: isMobile ? '14px' : '16px',
+                      padding: isMobile ? '12px' : '16px'
                     }}
                     placeholder="Buscar por categoría..."
                     value={filters.categoria}
@@ -449,24 +470,46 @@ export default function ServiciosPage() {
             </div>
           </div>
 
-          {/* Add Button - Only for Admin */}
+          {/* Add Buttons - Only for Admin */}
           {isAdmin && (
             <div className="flex gap-3 mb-6">
               <button
-                className="flex-1 rounded-xl px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
-                style={{ backgroundColor: colors.primary, color: '#fff' }}
+                className="flex-1 rounded-xl px-4 py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90 shadow-lg"
+                style={{ 
+                  backgroundColor: colors.primary, 
+                  color: '#fff',
+                  padding: isMobile ? '12px 16px' : '16px 20px',
+                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                }}
                 onClick={handleAdd}
               >
-                <Plus size={20} />
-                <span className="font-medium">Agregar Servicio</span>
+                <Plus size={isMobile ? 20 : 24} color="#fff" />
+                <span className="font-medium" style={{ 
+                  fontSize: isMobile ? '14px' : '16px',
+                  fontWeight: '600',
+                  fontFamily: 'Inter, sans-serif'
+                }}>
+                  Agregar Servicio
+                </span>
               </button>
               <button
-                className="rounded-xl px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
-                style={{ backgroundColor: colors.surface, color: colors.onSurface, border: `2px solid ${colors.outlineVariant}` }}
-                onClick={handleExportClick}
+                className="flex-1 rounded-xl px-4 py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90 shadow-lg"
+                style={{ 
+                  backgroundColor: colors.primary, 
+                  color: '#fff',
+                  padding: isMobile ? '12px 16px' : '16px 20px',
+                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                }}
+                onClick={handleAddOferta}
               >
-                <Download size={20} />
-                <span className="font-medium">Exportar</span>
+                <Plus size={isMobile ? 20 : 24} color="#fff" />
+                <span className="font-medium" style={{ 
+                  fontSize: isMobile ? '14px' : '16px',
+                  fontWeight: '600',
+                  fontFamily: 'Inter, sans-serif'
+                }}>
+                  Agregar Servicio (Oferta)
+                </span>
               </button>
             </div>
           )}
@@ -506,22 +549,45 @@ export default function ServiciosPage() {
                 servicios.map((servicio) => (
                   <div
                     key={servicio.id_servicio}
-                    className="rounded-xl p-4 shadow-lg cursor-pointer transition-transform hover:scale-[1.02] mb-3"
-                    style={{ backgroundColor: colors.surface }}
+                    className="rounded-xl p-4 shadow-lg cursor-pointer transition-transform hover:scale-[1.02] mb-3 relative"
+                    style={{ 
+                      backgroundColor: colors.surface,
+                      padding: isMobile ? '12px' : '16px'
+                    }}
                     onClick={() => handleServicioPress(servicio)}
                   >
-                    <div className="flex justify-between items-center">
-                      <div className="flex-1">
-                        <div className="flex items-center mb-1">
+                    {/* Offer Flag */}
+                    {servicio.componentes && servicio.componentes.length > 0 && (
+                      <div 
+                        className="absolute -top-2 -left-2 w-8 h-8 rounded-full flex items-center justify-center z-10"
+                        style={{ backgroundColor: '#4CAF50' }}
+                      >
+                        <Tag size={14} color="#fff" />
+                      </div>
+                    )}
+                    
+                    {/* Note Flag */}
+                    {servicio.nota && (
+                      <div 
+                        className="absolute -top-2 -left-2 w-8 h-8 rounded-full flex items-center justify-center z-10"
+                        style={{ backgroundColor: '#2196F3' }}
+                      >
+                        <FileText size={14} color="#fff" />
+                      </div>
+                    )}
+
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1 pr-16">
+                        <div className="flex items-center mb-3">
                           <h3 
-                            className="font-semibold text-base truncate mr-2"
+                            className="font-semibold text-base truncate mr-2 md:truncate-none"
                             style={{ 
                               color: colors.onSurface,
                               fontFamily: 'Hanken Grotesk, sans-serif',
                               maxWidth: 'calc(100% - 80px)'
                             }}
                           >
-                            {servicio.nombre.length > 15 ? servicio.nombre.substring(0, 15) + '...' : servicio.nombre}
+                            {servicio.nombre}
                           </h3>
                           <span 
                             className="px-3 py-1 rounded-full text-xs font-semibold"
@@ -534,18 +600,40 @@ export default function ServiciosPage() {
                             {servicio.esvendible ? 'Vendible' : 'No vendible'}
                           </span>
                         </div>
-                        <p className="text-sm" style={{ color: colors.outline, fontFamily: 'Inter, sans-serif' }}>
+                        <p className="text-sm mb-2 w-full" style={{ 
+                          color: colors.outline, 
+                          fontFamily: 'Inter, sans-serif',
+                          textAlign: 'left'
+                        }}>
                           Categoría: {servicio.categoria}
                         </p>
+                        {filters.id_tienda && (
+                          <>
+                            <p className="text-sm font-medium" style={{ 
+                              color: colors.primary, 
+                              fontFamily: 'Inter, sans-serif',
+                              textAlign: 'left'
+                            }}>
+                              Precio CUP: ${servicio.tiendas_servicio?.find((ts: any) => ts.id_tienda === parseInt(filters.id_tienda))?.precio_cup || servicio.tiendas_servicio?.[0]?.precio_cup || '0'}
+                            </p>
+                            <p className="text-sm font-medium" style={{ 
+                              color: colors.primary, 
+                              fontFamily: 'Inter, sans-serif',
+                              textAlign: 'left'
+                            }}>
+                              Precio USD: ${servicio.tiendas_servicio?.find((ts: any) => ts.id_tienda === parseInt(filters.id_tienda))?.precio_usd || servicio.tiendas_servicio?.[0]?.precio_usd || '0'}
+                            </p>
+                          </>
+                        )}
                       </div>
                       {isAdmin && (
-                        <div className="flex gap-2 ml-3">
+                        <div className="flex gap-2">
                           <button
                             className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors hover:opacity-80"
                             style={{ backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }}
                             onClick={(e) => handleEdit(servicio, e)}
                           >
-                            <Edit size={22} style={{ color: colors.primary }} />
+                            <img src="/editar.png" alt="Editar" className="w-5 h-5" />
                           </button>
                           <button
                             className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors hover:opacity-80"
@@ -555,7 +643,7 @@ export default function ServiciosPage() {
                               handleDelete(servicio);
                             }}
                           >
-                            <Trash2 size={22} style={{ color: colors.error }} />
+                            <img src="/basura.png" alt="Eliminar" className="w-5 h-5" />
                           </button>
                         </div>
                       )}
@@ -567,9 +655,11 @@ export default function ServiciosPage() {
                   <table className="w-full" style={{ backgroundColor: colors.surface }}>
                     <thead>
                       <tr style={{ backgroundColor: colors.primary }}>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-white" style={{ width: '250px' }}>Nombre</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-white" style={{ width: '150px' }}>Categoría</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-white" style={{ width: '200px' }}>Nombre</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-white" style={{ width: '120px' }}>Categoría</th>
                         <th className="px-4 py-3 text-left text-sm font-semibold text-white" style={{ width: '100px' }}>Estado</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-white" style={{ width: '100px' }}>Precio CUP</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-white" style={{ width: '100px' }}>Precio USD</th>
                         {isAdmin && (
                           <th className="px-4 py-3 text-left text-sm font-semibold text-white" style={{ width: '100px' }}>Acciones</th>
                         )}
@@ -583,14 +673,38 @@ export default function ServiciosPage() {
                           style={{ backgroundColor: index % 2 === 0 ? colors.surface : colors.surfaceVariant }}
                           onClick={() => handleServicioPress(servicio)}
                         >
-                          <td className="px-4 py-3 text-sm" style={{ color: colors.onSurface }}>
-                            {servicio.nombre}
+                          <td className="px-4 py-3 text-sm relative" style={{ color: colors.onSurface }}>
+                            <div className="flex items-center gap-2">
+                              {servicio.componentes && servicio.componentes.length > 0 && (
+                                <div 
+                                  className="w-5 h-5 rounded flex items-center justify-center"
+                                  style={{ backgroundColor: '#4CAF50' }}
+                                >
+                                  <Tag size={12} color="#fff" />
+                                </div>
+                              )}
+                              {servicio.nota && (
+                                <div 
+                                  className="w-5 h-5 rounded flex items-center justify-center"
+                                  style={{ backgroundColor: '#2196F3' }}
+                                >
+                                  <FileText size={12} color="#fff" />
+                                </div>
+                              )}
+                              {servicio.nombre}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-sm" style={{ color: colors.onSurface }}>
                             {servicio.categoria || 'N/A'}
                           </td>
                           <td className="px-4 py-3 text-sm font-medium" style={{ color: servicio.esvendible ? '#4CAF50' : '#F44336' }}>
                             {servicio.esvendible ? 'Vendible' : 'No vendible'}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium" style={{ color: colors.primary }}>
+                            ${servicio.tiendas_servicio?.find((ts: any) => ts.id_tienda === parseInt(filters.id_tienda))?.precio_cup || servicio.tiendas_servicio?.[0]?.precio_cup || '0'}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium" style={{ color: colors.primary }}>
+                            ${servicio.tiendas_servicio?.find((ts: any) => ts.id_tienda === parseInt(filters.id_tienda))?.precio_usd || servicio.tiendas_servicio?.[0]?.precio_usd || '0'}
                           </td>
                           {isAdmin && (
                             <td className="px-4 py-3">
@@ -631,7 +745,7 @@ export default function ServiciosPage() {
                     onClick={handlePrevPage}
                     disabled={pagination.currentPage === 1}
                   >
-                    <ChevronLeft size={20} />
+                    <span className="text-xl font-bold">&lt;</span>
                   </button>
                   <span style={{ color: colors.onSurface }}>
                     Página {pagination.currentPage} de {pagination.totalPages}
@@ -642,7 +756,7 @@ export default function ServiciosPage() {
                     onClick={handleNextPage}
                     disabled={pagination.currentPage === pagination.totalPages}
                   >
-                    <ChevronRight size={20} />
+                    <span className="text-xl font-bold">&gt;</span>
                   </button>
                 </div>
               )}
@@ -657,181 +771,6 @@ export default function ServiciosPage() {
           )}
         </div>
       </div>
-
-      {/* Export Modal */}
-      {showExportModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div 
-            className="rounded-2xl p-6 max-w-md w-full shadow-2xl"
-            style={{ backgroundColor: colors.surface }}
-          >
-            <h2 
-              className="text-xl font-bold mb-4"
-              style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
-            >
-              Exportar Inventario
-            </h2>
-            <div className="space-y-3">
-              <button
-                className="w-full rounded-lg px-4 py-3 flex items-center gap-3 transition-colors hover:opacity-90"
-                style={{ backgroundColor: colors.primary, color: '#fff' }}
-                onClick={() => handleExportTypeSelect('inventory_excel')}
-              >
-                <Download size={20} />
-                <span>Excel (CSV)</span>
-              </button>
-              <button
-                className="w-full rounded-lg px-4 py-3 flex items-center gap-3 transition-colors hover:opacity-90"
-                style={{ backgroundColor: colors.surface, color: colors.onSurface, border: `2px solid ${colors.outlineVariant}` }}
-                onClick={() => handleExportTypeSelect('inventory_pdf')}
-              >
-                <Download size={20} />
-                <span>PDF</span>
-              </button>
-              <button
-                className="w-full rounded-lg px-4 py-3 flex items-center gap-3 transition-colors hover:opacity-90"
-                style={{ backgroundColor: colors.surface, color: colors.onSurface, border: `2px solid ${colors.outlineVariant}` }}
-                onClick={() => handleExportTypeSelect('qr')}
-              >
-                <Download size={20} />
-                <span>Códigos QR</span>
-              </button>
-              <button
-                className="w-full rounded-lg px-4 py-3 flex items-center gap-3 transition-colors hover:opacity-90"
-                style={{ backgroundColor: colors.surface, color: colors.onSurface, border: `2px solid ${colors.outlineVariant}` }}
-                onClick={() => handleExportTypeSelect('barcode')}
-              >
-                <Download size={20} />
-                <span>Códigos de Barras</span>
-              </button>
-            </div>
-            <button
-              className="w-full mt-4 rounded-lg px-4 py-3 transition-colors hover:opacity-90"
-              style={{ backgroundColor: colors.error, color: '#fff' }}
-              onClick={() => setShowExportModal(false)}
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Field Selection Modal */}
-      {showFieldSelectionModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div 
-            className="rounded-2xl p-6 max-w-md w-full shadow-2xl max-h-[80vh] overflow-y-auto"
-            style={{ backgroundColor: colors.surface }}
-          >
-            <h2 
-              className="text-xl font-bold mb-4"
-              style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
-            >
-              Seleccionar Campos
-            </h2>
-            <div className="space-y-3 mb-6">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedFields.nombre}
-                  onChange={(e) => setSelectedFields(prev => ({ ...prev, nombre: e.target.checked }))}
-                  className="w-5 h-5"
-                />
-                <span style={{ color: colors.onSurface }}>Nombre</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedFields.categoria}
-                  onChange={(e) => setSelectedFields(prev => ({ ...prev, categoria: e.target.checked }))}
-                  className="w-5 h-5"
-                />
-                <span style={{ color: colors.onSurface }}>Categoría</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedFields.esvendible}
-                  onChange={(e) => setSelectedFields(prev => ({ ...prev, esvendible: e.target.checked }))}
-                  className="w-5 h-5"
-                />
-                <span style={{ color: colors.onSurface }}>Estado</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedFields.codigo}
-                  onChange={(e) => setSelectedFields(prev => ({ ...prev, codigo: e.target.checked }))}
-                  className="w-5 h-5"
-                />
-                <span style={{ color: colors.onSurface }}>Códigos</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedFields.precio_cup}
-                  onChange={(e) => setSelectedFields(prev => ({ ...prev, precio_cup: e.target.checked }))}
-                  className="w-5 h-5"
-                />
-                <span style={{ color: colors.onSurface }}>Precio CUP</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedFields.precio_usd}
-                  onChange={(e) => setSelectedFields(prev => ({ ...prev, precio_usd: e.target.checked }))}
-                  className="w-5 h-5"
-                />
-                <span style={{ color: colors.onSurface }}>Precio USD</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedFields.costo_cup}
-                  onChange={(e) => setSelectedFields(prev => ({ ...prev, costo_cup: e.target.checked }))}
-                  className="w-5 h-5"
-                />
-                <span style={{ color: colors.onSurface }}>Costo CUP</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedFields.costo_usd}
-                  onChange={(e) => setSelectedFields(prev => ({ ...prev, costo_usd: e.target.checked }))}
-                  className="w-5 h-5"
-                />
-                <span style={{ color: colors.onSurface }}>Costo USD</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedFields.nota}
-                  onChange={(e) => setSelectedFields(prev => ({ ...prev, nota: e.target.checked }))}
-                  className="w-5 h-5"
-                />
-                <span style={{ color: colors.onSurface }}>Nota</span>
-              </label>
-            </div>
-            <div className="flex gap-3">
-              <button
-                className="flex-1 rounded-lg px-4 py-3 transition-colors hover:opacity-90"
-                style={{ backgroundColor: colors.error, color: '#fff' }}
-                onClick={() => setShowFieldSelectionModal(false)}
-              >
-                Cancelar
-              </button>
-              <button
-                className="flex-1 rounded-lg px-4 py-3 transition-colors hover:opacity-90"
-                style={{ backgroundColor: colors.primary, color: '#fff' }}
-                onClick={handleFieldSelectionConfirm}
-                disabled={isExporting}
-              >
-                {isExporting ? 'Exportando...' : 'Exportar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }
