@@ -63,7 +63,7 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home' }: Side
         setIsSyncing(true);
         await logout();
         onClose?.();
-        window.location.href = '/login';
+        router.push('/login');
       } catch (error: any) {
         setIsSyncing(false);
         showToast({ type: 'error', message: 'No se pudo cerrar sesión', code: error.code ?? null });

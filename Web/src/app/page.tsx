@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { Header } from '../components/layout/Header';
@@ -15,6 +16,7 @@ import { useResponsive } from '../hooks/useResponsive';
 
 
 export default function HomePage() {
+  const router = useRouter();
   const { colors, isDark, toggleTheme } = useTheme();
   const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels } = useAuth();
   const { isMobile, isTablet, isDesktop } = useResponsive();
@@ -153,13 +155,13 @@ export default function HomePage() {
 
   const handleLogoPress = () => {
     if (user) {
-      window.location.href = '/';
+      router.push('/');
     }
   };
 
   const handleModulePress = (module: any) => {
     if (module.hasPermission && module.screen) {
-      window.location.href = module.screen;
+      router.push(module.screen);
     }
   };
 

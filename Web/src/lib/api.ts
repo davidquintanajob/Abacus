@@ -33,6 +33,7 @@ api.interceptors.response.use(
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
+        // Usar window.location.href para redirección completa en caso de error 401
         window.location.href = '/login';
       }
     }
