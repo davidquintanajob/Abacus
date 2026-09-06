@@ -48,6 +48,7 @@ const VentasContent = () => {
   const summaryScrollViewRef = useRef(null);
   const autoScrollIntervalRef = useRef(null);
   const scrollXRef = useRef(0);
+  const isAutoScrollPausedRef = useRef(false);
 
   useEffect(() => {
     isInitializedRef.current = isInitialized;
@@ -63,20 +64,19 @@ const VentasContent = () => {
 
   // Auto-scroll for summary section (infinite carousel)
   const startAutoScroll = () => {
-    if (!summaryScrollViewRef.current) return;
+    if (!summaryScrollViewRef.current || isAutoScrollPausedRef.current) return;
     
     // Stop any existing interval
     if (autoScrollIntervalRef.current) {
       clearInterval(autoScrollIntervalRef.current);
     }
 
-    scrollXRef.current = 0;
-
+    // Don't reset scrollXRef.current - continue from current position
     const scrollAmount = 1; // pixels per interval
     const intervalDuration = 30; // ms
 
     const scroll = () => {
-      if (!summaryScrollViewRef.current) return;
+      if (!summaryScrollViewRef.current || isAutoScrollPausedRef.current) return;
 
       scrollXRef.current += scrollAmount;
 
@@ -100,14 +100,30 @@ const VentasContent = () => {
     }
   };
 
+  const toggleAutoScroll = () => {
+    isAutoScrollPausedRef.current = !isAutoScrollPausedRef.current;
+    if (!isAutoScrollPausedRef.current) {
+      // Get current scroll position and continue from there
+      summaryScrollViewRef.current?.measure((x, y, width, height, pageX, pageY) => {
+        // We'll use the current scrollXRef value as starting point
+        startAutoScroll();
+      });
+    } else {
+      stopAutoScroll();
+    }
+  };
+
   useFocusEffect(
     React.useCallback(() => {
       if (summary) {
+        isAutoScrollPausedRef.current = false;
+        scrollXRef.current = 0;
         startAutoScroll();
       }
 
       return () => {
         stopAutoScroll();
+        isAutoScrollPausedRef.current = false;
       };
     }, [summary])
   );
@@ -660,7 +676,11 @@ const VentasContent = () => {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <ScrollView 
+          showsVerticalScrollIndicator={false} 
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scrollContent}
+        >
         {/* Page Title */}
         <View style={styles.pageTitleContainer}>
           <Text style={[styles.pageTitle, { color: colors.onSurface }]}>Gestión de Ventas</Text>
@@ -1170,10 +1190,15 @@ const VentasContent = () => {
               onScrollBeginDrag={() => {
                 stopAutoScroll();
               }}
-              onScrollEndDrag={() => {
-                if (summary) {
+              onScrollEndDrag={(event) => {
+                // Update scrollXRef to current position after manual scroll
+                scrollXRef.current = event.nativeEvent.contentOffset.x;
+                if (summary && !isAutoScrollPausedRef.current) {
                   startAutoScroll();
                 }
+              }}
+              onTouchStart={() => {
+                toggleAutoScroll();
               }}
             >
               {[...Array(10)].map((_, setIndex) => (
@@ -1257,6 +1282,11 @@ const VentasContent = () => {
                   activeOpacity={0.7}
                 >
                   <Card style={[styles.ventaCard, { backgroundColor: colors.surface }]}>
+                    {venta.nota && (
+                      <View style={[styles.noteFlag, { backgroundColor: '#2196F3' }]}>
+                        <Ionicons name="document-text-outline" size={responsive.responsiveWidth(14)} color="#fff" />
+                      </View>
+                    )}
                     <View style={styles.ventaInfo}>
                       <View style={styles.ventaHeader}>
                         <Text style={[styles.ventaNota, { color: colors.onSurface }]} numberOfLines={2} ellipsizeMode="tail">
@@ -1335,9 +1365,18 @@ const VentasContent = () => {
                       activeOpacity={0.7}
                     >
                       <View style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? colors.surface : colors.surfaceVariant }]}>
-                        <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]} numberOfLines={2}>
-                          {venta.nota || ''}
-                        </Text>
+                        <View style={[styles.tableCellWithFlags, { width: responsive.responsiveWidth(150) }]}>
+                          <View style={styles.tableFlagsContainer}>
+                            {venta.nota && (
+                              <View style={[styles.tableNoteFlag, { backgroundColor: '#2196F3' }]}>
+                                <Ionicons name="document-text-outline" size={responsive.responsiveWidth(12)} color="#fff" />
+                              </View>
+                            )}
+                          </View>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface }]} numberOfLines={2}>
+                            {venta.nota || ''}
+                          </Text>
+                        </View>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
                           {venta.ventas?.[0]?.servicioTienda?.tienda?.nombre || 'N/A'}
                         </Text>
@@ -1424,6 +1463,8 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
     padding: responsive.responsivePadding(16),
   },
   pageTitleContainer: {
@@ -1724,6 +1765,17 @@ const createStyles = (responsive) => StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  noteFlag: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    width: responsive.responsiveWidth(24),
+    height: responsive.responsiveHeight(24),
+    borderRadius: responsive.responsiveWidth(12),
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
   ventaInfo: {
     flex: 1,
   },
@@ -1863,5 +1915,22 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(13),
     fontFamily: 'Inter',
     paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableCellWithFlags: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableFlagsContainer: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(4),
+    marginRight: responsive.responsiveMargin(6),
+  },
+  tableNoteFlag: {
+    width: responsive.responsiveWidth(18),
+    height: responsive.responsiveHeight(18),
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

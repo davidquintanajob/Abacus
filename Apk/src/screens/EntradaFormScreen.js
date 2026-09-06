@@ -30,7 +30,7 @@ const EntradaFormContent = () => {
   const productoInputRef = useRef(null);
   const multipleProductoInputRefs = useRef({});
 
-  const { entrada, mode, productoPreSeleccionado, canViewAllEntradas: canViewAllEntradasParam, entradaData, fromModal } = route.params || { mode: 'add' };
+  const { entrada, mode, productoPreSeleccionado, canViewAllEntradas: canViewAllEntradasParam, entradaData, fromModal, tiendaPreSeleccionada } = route.params || { mode: 'add' };
 
   const isViewMode = mode === 'view';
   const isEditMode = mode === 'edit';
@@ -284,7 +284,7 @@ const EntradaFormContent = () => {
     if (productoPreSeleccionado && isAddMode) {
       let costoCup = '';
       let costoUsd = '';
-      
+
       // Auto-fill costs from the product (cost is unique across all stores)
       if (formData.tienda) {
         const tiendaServicio = productoPreSeleccionado.tiendas_servicio?.find(
@@ -293,24 +293,34 @@ const EntradaFormContent = () => {
         costoCup = tiendaServicio?.costo_cup?.toString() || '';
         costoUsd = tiendaServicio?.costo_usd?.toString() || '';
       }
-      
+
       // If no tienda selected or no specific tienda cost, use first tienda's cost
       if (!costoCup && !costoUsd) {
         const firstTiendaServicio = productoPreSeleccionado.tiendas_servicio?.[0];
         costoCup = firstTiendaServicio?.costo_cup?.toString() || '';
         costoUsd = firstTiendaServicio?.costo_usd?.toString() || '';
       }
-      
+
       setFormData(prev => ({
         ...prev,
         producto: productoPreSeleccionado,
         costo_cup: costoCup,
         costo_usd: costoUsd,
       }));
-      
+
       setProductoSearchText((productoPreSeleccionado.nombre || '').trimEnd());
     }
   }, [productoPreSeleccionado, isAddMode, formData.tienda]);
+
+  // Preload tienda when coming from SalesScreen
+  useEffect(() => {
+    if (tiendaPreSeleccionada && isAddMode && !formData.tienda) {
+      setFormData(prev => ({
+        ...prev,
+        tienda: tiendaPreSeleccionada,
+      }));
+    }
+  }, [tiendaPreSeleccionada, isAddMode]);
 
   // Efecto para restaurar datos cuando regresa de ProductoFormScreen
   useEffect(() => {

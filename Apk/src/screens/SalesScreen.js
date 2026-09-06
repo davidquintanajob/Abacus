@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert,
 import { WebView } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { Header } from '../components/layout/Header';
@@ -33,13 +34,17 @@ const SalesContent = () => {
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
   const { toast, showToast, hideToast } = useToast();
-  const { user, ventaAccessLevels, cuentaChangePermissions } = useAuth();
+  const { user, ventaAccessLevels, cuentaChangePermissions, entradaAccessLevels, entradaManagePermissions } = useAuth();
   const [permission, setPermission] = useState(null);
 
   const [isScanning, setIsScanning] = useState(true);
   const [sound, setSound] = useState();
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [showCamera, setShowCamera] = useState(true);
+  const [cameraKey, setCameraKey] = useState(0);
+  // Track last scanned code and timestamp for duplicate detection
+  const [lastScannedCode, setLastScannedCode] = useState(null);
+  const [lastScannedTimestamp, setLastScannedTimestamp] = useState(null);
 
   const [saleItems, setSaleItems] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -74,8 +79,14 @@ const SalesContent = () => {
     transferencia_cup: '',
     transferencia_usd: '',
   });
+  // Toggle for decimal precision in payment section (default: 2 decimals)
+  const [show5Decimals, setShow5Decimals] = useState(false);
   const [ventaNota, setVentaNota] = useState('');
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
+  // State for pending product without stock
+  const [pendingProduct, setPendingProduct] = useState(null);
+  // State to preserve sale when navigating to entrada
+  const [preservedSaleState, setPreservedSaleState] = useState(null);
   const [selectorTipoCuenta, setSelectorTipoCuenta] = useState(null);
   const [availableCuentas, setAvailableCuentas] = useState([]);
 
@@ -142,10 +153,50 @@ const SalesContent = () => {
 
   useEffect(() => {
     barcodeEngineRef.current.startSession();
-    
+
     loadConfig();
     loadInitialData();
     loadApiBaseUrl();
+
+    // Restore sale state when screen comes into focus
+    const unsubscribe = navigation.addListener('focus', async () => {
+      try {
+        const preservedState = await AsyncStorage.getItem('preservedSaleState');
+
+        if (preservedState) {
+          const parsedState = JSON.parse(preservedState);
+
+          setSaleItems(parsedState.saleItems);
+          setPaymentAmounts(parsedState.paymentAmounts);
+          setVentaNota(parsedState.ventaNota);
+          setSelectedTienda(parsedState.selectedTienda);
+          setSelectedCuentas(parsedState.selectedCuentas);
+
+          // Clear AsyncStorage
+          await AsyncStorage.removeItem('preservedSaleState');
+
+          // If there was a pending product, add it to the list
+          if (parsedState.pendingProduct) {
+            // Add product directly without stock check since we just created an entry
+            await addProductByCodeDirect(parsedState.pendingProduct);
+          }
+        }
+      } catch (error) {
+        console.error('Error restoring sale state:', error);
+      }
+
+      // Restart barcode engine if needed
+      if (barcodeEngineRef.current) {
+        barcodeEngineRef.current.startSession();
+      }
+
+      // Force camera re-initialization to fix black screen
+      setShowCamera(false);
+      setTimeout(() => {
+        setShowCamera(true);
+        setCameraKey(prev => prev + 1);
+      }, 100);
+    });
 
     return () => {
       if (barcodeEngineRef.current) {
@@ -154,6 +205,7 @@ const SalesContent = () => {
       if (sound) {
         sound.unloadAsync();
       }
+      unsubscribe();
     };
   }, []);
 
@@ -279,6 +331,57 @@ const SalesContent = () => {
     }
   };
 
+  // Check if user can change stores based on ventaAccessLevels
+  const canChangeStores = () => {
+    const userRole = user?.rol?.toLowerCase();
+    return userRole === 'administrador' ||
+           (userRole === 'dependiente' && ventaAccessLevels?.dependiente === 'all_stores') ||
+           (userRole === 'almacenero' && ventaAccessLevels?.almacenero === 'all_stores') ||
+           (userRole === 'económico' && ventaAccessLevels?.economico === 'all_stores');
+  };
+
+  // Check if user has entrada permissions (Gestión de Entradas)
+  const hasEntradaPermissions = () => {
+    const userRole = user?.rol?.toLowerCase();
+    return userRole === 'administrador' ||
+           (userRole === 'dependiente' && entradaManagePermissions?.dependiente) ||
+           (userRole === 'almacenero' && entradaManagePermissions?.almacenero) ||
+           (userRole === 'económico' && entradaManagePermissions?.economico);
+  };
+
+  // Handle navigation to entrada form for product without stock
+  const handleCreateEntrada = async (servicio, servicioTienda, code) => {
+    // Preserve current sale state using AsyncStorage
+    const saleStateToPreserve = {
+      saleItems,
+      paymentAmounts,
+      ventaNota,
+      selectedTienda,
+      selectedCuentas,
+      pendingProduct: {
+        servicio,
+        servicioTienda,
+        code,
+        selectedTienda,
+      },
+    };
+
+    try {
+      await AsyncStorage.setItem('preservedSaleState', JSON.stringify(saleStateToPreserve));
+    } catch (error) {
+      console.error('Error preserving sale state:', error);
+    }
+
+    // Navigate to EntradaFormScreen with product data
+    navigation.navigate('EntradaForm', {
+      productoPreSeleccionado: servicio,
+      tiendaPreSeleccionada: selectedTienda,
+      fromSales: true,
+      barcodeCode: code,
+      mode: 'add',
+    });
+  };
+
   const loadCuentaConfig = async (tiendaId) => {
     try {
       const data = await configService.getConfig();
@@ -306,18 +409,27 @@ const SalesContent = () => {
   useEffect(() => {
     const loadSound = async () => {
       try {
-        // Sound loading disabled temporarily to fix Audio import error
-        // const { Audio } = await import('expo-av');
-        // const { sound } = await Audio.Sound.createAsync(
-        //   require('../../assets/beep.mp3'),
-        //   { shouldPlay: false }
-        // );
-        // setSound(sound);
+        const { Audio: ExpoAudio } = await import('expo-av');
+        const { Asset } = await import('expo-asset');
+        const asset = Asset.fromModule(require('../../assets/beep.mp3'));
+        await asset.downloadAsync();
+        const { sound } = await ExpoAudio.Sound.createAsync(
+          { uri: asset.localUri || asset.uri },
+          { shouldPlay: false }
+        );
+        setSound(sound);
       } catch (error) {
+        console.log('Error loading sound:', error);
       }
     };
 
     loadSound();
+
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
   }, []);
 
   const playSound = async () => {
@@ -336,18 +448,61 @@ const SalesContent = () => {
 
     try {
       const rawCode = scanningResult.data;
-      
+      const currentTime = Date.now();
+
+      // Check if same code was scanned and MORE than 2 seconds have passed
+      if (lastScannedCode === rawCode && lastScannedTimestamp && (currentTime - lastScannedTimestamp) >= 2000) {
+        // Find existing item and increment quantity
+        const existingItem = saleItems.find(
+          item => item.codigo_barras_ean?.trim().toLowerCase() === rawCode.trim().toLowerCase()
+        );
+
+        if (existingItem) {
+          const itemIndex = saleItems.indexOf(existingItem);
+          updateItemQuantity(itemIndex, existingItem.cantidad + 1);
+          if (Platform.OS === 'android') {
+            Vibration.vibrate(100);
+          }
+          playSound();
+          showToast({ type: 'success', message: 'Cantidad aumentada' });
+
+          // Update last scanned timestamp
+          setLastScannedTimestamp(currentTime);
+
+          // Re-enable scanning after 1.5 seconds
+          setTimeout(() => {
+            setIsScanning(true);
+          }, 1500);
+          return;
+        }
+      }
+
+      // If same code scanned within 2 seconds, ignore to prevent accidental duplicates
+      if (lastScannedCode === rawCode && lastScannedTimestamp && (currentTime - lastScannedTimestamp) < 2000) {
+        showToast({ type: 'warning', message: 'Espere 2 segundos antes de escanear el mismo producto' });
+
+        // Re-enable scanning after 1.5 seconds
+        setTimeout(() => {
+          setIsScanning(true);
+        }, 1500);
+        return;
+      }
+
       // Disable scanning immediately to prevent duplicate detections
       setIsScanning(false);
 
-      const result = await barcodeEngineRef.current.processScanningResult({ 
-        data: rawCode, 
-        type: scanningResult.type 
+      const result = await barcodeEngineRef.current.processScanningResult({
+        data: rawCode,
+        type: scanningResult.type
       });
-      
+
       if (result && result.success) {
         await addProductByCode(rawCode);
       }
+
+      // Update last scanned code and timestamp
+      setLastScannedCode(rawCode);
+      setLastScannedTimestamp(currentTime);
 
       // Re-enable scanning after 1.5 seconds
       setTimeout(() => {
@@ -355,11 +510,61 @@ const SalesContent = () => {
       }, 1500);
     } catch (error) {
       showToast({ type: 'error', message: 'Error al procesar código' });
-      
+
       // Re-enable scanning on error
       setTimeout(() => {
         setIsScanning(true);
       }, 1500);
+    }
+  };
+
+  const addProductByCodeDirect = async (pendingProduct) => {
+    try {
+      const { servicio, servicioTienda, code, selectedTienda } = pendingProduct;
+
+      // Build full image URL
+      let fullImageUrl = null;
+      if (servicio.producto?.imagen) {
+        const isBase64 = servicio.producto.imagen.startsWith('data:');
+        if (isBase64) {
+          fullImageUrl = servicio.producto.imagen;
+        } else {
+          const imagePath = servicio.producto.imagen.startsWith('/') ? servicio.producto.imagen : `/${servicio.producto.imagen}`;
+          const currentBaseUrl = await getApiBaseUrl();
+          fullImageUrl = currentBaseUrl ? `${currentBaseUrl}${imagePath}` : servicio.producto.imagen;
+        }
+      }
+
+      const newItem = {
+        id_servicio_tienda: servicioTienda.id_servicio_tienda,
+        id_servicio: servicio.id_servicio,
+        codigo_barras_ean: code,
+        nombre: servicio.nombre || 'Sin nombre',
+        imagen: fullImageUrl,
+        cantidad: 1,
+        precio_cup: parseFloat(servicioTienda.precio_cup || 0),
+        precio_usd: parseFloat(servicioTienda.precio_usd || 0),
+        esOferta: servicio.componentes?.length > 0,
+        componentes: [],
+      };
+
+      // If it's an offer, load components from servicio.componentes
+      if (newItem.esOferta && servicio.componentes?.length > 0) {
+        newItem.componentes = servicio.componentes.map(comp => ({
+          nombre: comp.nombre || 'Componente',
+          cantidad: comp.Oferta?.cantidad || 1
+        }));
+      }
+
+      setSaleItems(prev => [...prev, newItem]);
+      if (Platform.OS === 'android') {
+        Vibration.vibrate(100);
+      }
+      playSound();
+      showToast({ type: 'success', message: 'Producto agregado correctamente' });
+    } catch (error) {
+      console.error('Error in addProductByCodeDirect:', error);
+      showToast({ type: 'error', message: 'Error al agregar producto' });
     }
   };
 
@@ -399,6 +604,53 @@ const SalesContent = () => {
 
       if (!servicioTienda) {
         showToast({ type: 'error', message: 'Producto no disponible en esta tienda' });
+        return;
+      }
+
+      // Check if product has stock
+      const stock = servicioTienda.cantidad || 0;
+      if (stock <= 0) {
+        showToast({ 
+          type: 'info', 
+          message: `El producto "${servicio.nombre}" no tiene cantidad en existencia en la tienda "${selectedTienda.nombre}"` 
+        });
+
+        // Store pending product for potential entrada creation
+        setPendingProduct({
+          servicio,
+          servicioTienda,
+          code,
+          selectedTienda
+        });
+
+        // Check if user has entrada permissions
+        if (hasEntradaPermissions()) {
+          Alert.alert(
+            'Producto sin stock',
+            `El producto "${servicio.nombre}" no tiene existencia. ¿Deseas agregar una entrada de este producto para realizar la venta?`,
+            [
+              {
+                text: 'Cancelar',
+                style: 'cancel',
+              },
+              {
+                text: 'Crear entrada',
+                onPress: () => handleCreateEntrada(servicio, servicioTienda, code),
+              },
+            ]
+          );
+        } else {
+          Alert.alert(
+            'Producto sin stock',
+            'Para agregar una entrada de este producto, comunícate con el administrador o con alguien que tenga permisos para gestionar entradas.',
+            [
+              {
+                text: 'Entendido',
+                style: 'cancel',
+              },
+            ]
+          );
+        }
         return;
       }
 
@@ -579,6 +831,34 @@ const SalesContent = () => {
     return calculateTotal() - calculatePaidTotal();
   };
 
+  // Helper function to format number with 2 decimal places (default)
+  const formatNumber2Decimals = (value) => {
+    if (value === null || value === undefined || value === '') return '';
+    const num = parseFloat(value);
+    if (isNaN(num)) return '';
+    return num.toFixed(2);
+  };
+
+  // Helper function to format number with 5 decimal places (when toggle is active)
+  const formatNumber5Decimals = (value) => {
+    if (value === null || value === undefined || value === '') return '';
+    const num = parseFloat(value);
+    if (isNaN(num)) return '';
+    return num.toFixed(5);
+  };
+
+  // Get the display value for a payment field based on toggle state
+  const getPaymentDisplayValue = (tipo) => {
+    const value = paymentAmounts[tipo];
+    if (show5Decimals) {
+      // When toggle is active, show 5 decimals
+      return formatNumber5Decimals(value);
+    } else {
+      // When toggle is inactive (default), show 2 decimals
+      return formatNumber2Decimals(value);
+    }
+  };
+
   const handleSelectCuenta = (cuenta, tipoCuenta) => {
     setSelectedCuentas(prev => ({
       ...prev,
@@ -600,7 +880,7 @@ const SalesContent = () => {
 
     const remaining = getRemainingAmount();
     if (remaining > 0.01) {
-      showToast({ type: 'error', message: `Falta por pagar: $${remaining.toFixed(2)} CUP` });
+      showToast({ type: 'error', message: `Falta por pagar: $${show5Decimals ? formatNumber5Decimals(remaining) : formatNumber2Decimals(remaining)} CUP` });
       return;
     }
 
@@ -908,6 +1188,7 @@ const SalesContent = () => {
         {showCamera && !isKeyboardVisible && (
           <View style={styles.cameraContainer}>
             <CameraView
+              key={cameraKey}
               style={styles.camera}
               barcodeScannerSettings={{
                 barcodeTypes: ALLOWED_BARCODE_TYPES,
@@ -930,22 +1211,33 @@ const SalesContent = () => {
         <Card style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Tienda</Text>
-            <TouchableOpacity
-              style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-              onPress={() => setShowTiendaSelector(!showTiendaSelector)}
-            >
-              <Text style={[styles.dropdownText, { color: selectedTienda ? colors.onSurface : colors.outline }]}>
-                {selectedTienda?.nombre || 'Seleccionar tienda...'}
-              </Text>
-              <Ionicons 
-                name={showTiendaSelector ? "chevron-up" : "chevron-down"} 
-                size={responsive.responsiveWidth(20)} 
-                color={colors.outline} 
-              />
-            </TouchableOpacity>
+            {canChangeStores() ? (
+              <TouchableOpacity
+                style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                onPress={() => setShowTiendaSelector(!showTiendaSelector)}
+              >
+                <Text style={[styles.dropdownText, { color: selectedTienda ? colors.onSurface : colors.outline }]}>
+                  {selectedTienda?.nombre || 'Seleccionar tienda...'}
+                </Text>
+                <Ionicons
+                  name={showTiendaSelector ? "chevron-up" : "chevron-down"}
+                  size={responsive.responsiveWidth(20)}
+                  color={colors.outline}
+                />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.tiendaInfoContainer}>
+                <Text style={[styles.tiendaInfoText, { color: colors.onSurface }]}>
+                  {selectedTienda?.nombre || 'Tienda no asignada'}
+                </Text>
+                <Text style={[styles.dependienteInfoText, { color: colors.outline }]}>
+                  {user?.rol ? `${user.rol}: ` : ''}{user?.nombre_natural || user?.nombre_usuario || 'Usuario'}
+                </Text>
+              </View>
+            )}
           </View>
-          
-          {showTiendaSelector && (
+
+          {canChangeStores() && showTiendaSelector && (
             <ScrollView style={styles.dropdownMenu} nestedScrollEnabled={true}>
               {availableTiendas.map((tienda) => (
                 <TouchableOpacity
@@ -1033,18 +1325,25 @@ const SalesContent = () => {
                 <View style={styles.itemContent}>
                   <Text style={[styles.itemName, { color: colors.onSurface }]}>{item.nombre}</Text>
                   <Text style={[styles.itemPrice, { color: colors.outline }]}>
-                    ${item.precio_cup.toFixed(2)} CUP / ${item.precio_usd.toFixed(2)} USD
+                    <Text style={{ fontWeight: 'bold' }}>
+                      ${show5Decimals ? formatNumber5Decimals(item.precio_cup) : formatNumber2Decimals(item.precio_cup)} CUP
+                    </Text>
+                    {' / '}
+                    ${show5Decimals ? formatNumber5Decimals(item.precio_usd) : formatNumber2Decimals(item.precio_usd)} USD
                   </Text>
                   {item.esOferta && (
-                    <Text style={[styles.offerBadge, { color: colors.primary }]}>Oferta</Text>
+                    <Text style={[styles.offerBadge, { color: colors.primary }]}>Contenido total</Text>
                   )}
                   {item.esOferta && item.componentes && item.componentes.length > 0 && (
                     <View style={styles.componentsContainer}>
-                      {item.componentes.map((comp, compIndex) => (
-                        <Text key={compIndex} style={[styles.componentText, { color: colors.outline }]}>
-                          • {comp.nombre} x{comp.cantidad}
-                        </Text>
-                      ))}
+                      {item.componentes.map((comp, compIndex) => {
+                        const totalQuantity = comp.cantidad * item.cantidad;
+                        return (
+                          <Text key={compIndex} style={[styles.componentText, { color: colors.outline }]}>
+                            • {comp.nombre} x{totalQuantity}
+                          </Text>
+                        );
+                      })}
                     </View>
                   )}
                 </View>
@@ -1098,11 +1397,28 @@ const SalesContent = () => {
 
         {/* Payment Section */}
         <Card style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
-          <View style={styles.sectionHeader}>
+          <View style={styles.sectionHeaderWithSwitch}>
             <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Pago</Text>
+            <View style={styles.decimalSwitchContainer}>
+              <Text style={[styles.decimalLabel, { color: colors.outline }]}>
+                {show5Decimals ? '5 decimales' : '2 decimales'}
+              </Text>
+              <TouchableOpacity
+                style={[styles.decimalSwitch, { backgroundColor: show5Decimals ? colors.primary : colors.outlineVariant }]}
+                onPress={() => setShow5Decimals(!show5Decimals)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.decimalSwitchThumb, {
+                  backgroundColor: show5Decimals ? '#fff' : colors.outline,
+                  transform: [{ translateX: show5Decimals ? 20 : 0 }]
+                }]} />
+              </TouchableOpacity>
+            </View>
           </View>
 
-          {['efectivo_cup', 'efectivo_usd', 'transferencia_cup', 'transferencia_usd'].map((tipo) => {
+          {['efectivo_cup', 'efectivo_usd', 'transferencia_cup', 'transferencia_usd']
+            .filter(tipo => cuentaConfig[tipo]?.length > 0)
+            .map((tipo) => {
             const label = tipo.replace('_', ' ').toUpperCase();
             const hasCuentas = cuentaConfig[tipo]?.length > 0;
             const selectedCuenta = selectedCuentas[tipo];
@@ -1111,44 +1427,35 @@ const SalesContent = () => {
               <View key={tipo} style={styles.paymentRow}>
                 <View style={styles.paymentLabel}>
                   <Text style={[styles.paymentLabelText, { color: colors.onSurface }]}>{label}</Text>
-                  {!hasCuentas && (
-                    <Text style={[styles.noCuentaWarning, { color: colors.error }]}>
-                      Sin cuenta asignada
-                    </Text>
-                  )}
                 </View>
                 
-                {hasCuentas && (
-                  <View style={styles.paymentInputRow}>
-                    <TouchableOpacity
-                      style={[styles.cuentaSelector, { backgroundColor: colors.background, borderColor: colors.outlineVariant, flex: 0.6 }]}
-                      onPress={() => {
-                        setSelectorTipoCuenta(tipo);
-                        setShowCuentaSelector(true);
-                      }}
-                      disabled={!hasCuentas}
-                    >
-                      <Text style={[styles.cuentaSelectorText, { color: selectedCuenta ? colors.onSurface : colors.outline }]} numberOfLines={1}>
-                        {selectedCuenta?.nombre || 'Seleccionar cuenta...'}
-                      </Text>
-                      <Ionicons name="chevron-down" size={responsive.responsiveWidth(16)} color={colors.outline} />
-                    </TouchableOpacity>
-                    
-                    <TextInput
-                      style={[styles.paymentInput, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant, flex: 0.4 }]}
-                      placeholder="0.00"
-                      placeholderTextColor={colors.outline}
-                      value={paymentAmounts[tipo]}
-                      onChangeText={(text) => {
-                        // Remove any minus signs
-                        const sanitizedText = text.replace(/-/g, '');
-                        setPaymentAmounts(prev => ({ ...prev, [tipo]: sanitizedText }));
-                      }}
-                      keyboardType="decimal-pad"
-                      editable={hasCuentas}
-                    />
-                  </View>
-                )}
+                <View style={styles.paymentInputRow}>
+                  <TouchableOpacity
+                    style={[styles.cuentaSelector, { backgroundColor: colors.background, borderColor: colors.outlineVariant, flex: 0.6 }]}
+                    onPress={() => {
+                      setSelectorTipoCuenta(tipo);
+                      setShowCuentaSelector(true);
+                    }}
+                  >
+                    <Text style={[styles.cuentaSelectorText, { color: selectedCuenta ? colors.onSurface : colors.outline }]} numberOfLines={1}>
+                      {selectedCuenta?.nombre || 'Seleccionar cuenta...'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={responsive.responsiveWidth(16)} color={colors.outline} />
+                  </TouchableOpacity>
+                  
+                  <TextInput
+                    style={[styles.paymentInput, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant, flex: 0.4 }]}
+                    placeholder={show5Decimals ? "0.00000" : "0.00"}
+                    placeholderTextColor={colors.outline}
+                    value={getPaymentDisplayValue(tipo)}
+                    onChangeText={(text) => {
+                      // Remove any minus signs
+                      const sanitizedText = text.replace(/-/g, '');
+                      setPaymentAmounts(prev => ({ ...prev, [tipo]: sanitizedText }));
+                    }}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
               </View>
             );
           })}
@@ -1156,7 +1463,7 @@ const SalesContent = () => {
           <View style={[styles.totalSection, { backgroundColor: colors.primary }]}>
             <Text style={[styles.totalLabel, { color: '#fff' }]}>Total a pagar:</Text>
             <Text style={[styles.totalAmount, { color: '#fff' }]}>
-              ${calculateTotal().toFixed(2)} CUP
+              ${show5Decimals ? formatNumber5Decimals(calculateTotal()) : formatNumber2Decimals(calculateTotal())} CUP
             </Text>
           </View>
 
@@ -1166,7 +1473,7 @@ const SalesContent = () => {
                 Falta por pagar:
               </Text>
               <Text style={[styles.remainingAmount, { color: colors.error }]}>
-                ${getRemainingAmount().toFixed(2)} CUP
+                ${show5Decimals ? formatNumber5Decimals(getRemainingAmount()) : formatNumber2Decimals(getRemainingAmount())} CUP
               </Text>
             </View>
           )}
@@ -1502,6 +1809,32 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveWidth(18),
     fontWeight: '600',
   },
+  sectionHeaderWithSwitch: {
+    marginBottom: responsive.responsiveHeight(12),
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  decimalSwitchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  decimalLabel: {
+    fontSize: responsive.responsiveWidth(12),
+    marginRight: responsive.responsiveWidth(8),
+  },
+  decimalSwitch: {
+    width: responsive.responsiveWidth(44),
+    height: responsive.responsiveHeight(24),
+    borderRadius: responsive.responsiveWidth(12),
+    padding: responsive.responsiveWidth(2),
+    justifyContent: 'center',
+  },
+  decimalSwitchThumb: {
+    width: responsive.responsiveWidth(20),
+    height: responsive.responsiveHeight(20),
+    borderRadius: responsive.responsiveWidth(10),
+  },
   dropdown: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1512,6 +1845,18 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   dropdownText: {
     fontSize: responsive.responsiveWidth(14),
+  },
+  tiendaInfoContainer: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  tiendaInfoText: {
+    fontSize: responsive.responsiveWidth(14),
+    fontWeight: '600',
+  },
+  dependienteInfoText: {
+    fontSize: responsive.responsiveWidth(12),
+    marginTop: responsive.responsiveHeight(2),
   },
   dropdownMenu: {
     maxHeight: responsive.responsiveHeight(200),

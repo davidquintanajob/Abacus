@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Keyboard, Dimensions, Image, Vibration, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -12,12 +12,15 @@ import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
 import { getVentaById, updateVenta } from '../services/ventaService';
 import { getTiendas } from '../services/tiendaService';
+import { getApiBaseUrl } from '../services/api';
 import { getUsuarios } from '../services/usuarioService';
 import { getServicios } from '../services/servicioService';
 import { getCuentas } from '../services/cuentaService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { CameraView, Camera } from 'expo-camera';
+import { ALLOWED_BARCODE_TYPES } from '../barcode/config/BarcodeTypes';
 
 const VentaEditContent = () => {
   const navigation = useNavigation();
@@ -36,7 +39,48 @@ const VentaEditContent = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingVenta, setIsFetchingVenta] = useState(false);
-  
+
+  // Camera state (disabled by default)
+  const [permission, setPermission] = useState(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [cameraKey, setCameraKey] = useState(0);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  // SalesScreen-like state
+  const [selectedTienda, setSelectedTienda] = useState(null);
+  const [availableTiendas, setAvailableTiendas] = useState([]);
+  const [showTiendaSelector, setShowTiendaSelector] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [saleItems, setSaleItems] = useState([]);
+  const [cuentaConfig, setCuentaConfig] = useState({
+    efectivo_cup: [],
+    efectivo_usd: [],
+    transferencia_cup: [],
+    transferencia_usd: [],
+  });
+  const [selectedCuentas, setSelectedCuentas] = useState({
+    efectivo_cup: null,
+    efectivo_usd: null,
+    transferencia_cup: null,
+    transferencia_usd: null,
+  });
+  const [paymentAmounts, setPaymentAmounts] = useState({
+    efectivo_cup: '',
+    efectivo_usd: '',
+    transferencia_cup: '',
+    transferencia_usd: '',
+  });
+  const [show5Decimals, setShow5Decimals] = useState(false);
+  const [ventaNota, setVentaNota] = useState('');
+  const [showCuentaSelector, setShowCuentaSelector] = useState(false);
+  const [selectorTipoCuenta, setSelectorTipoCuenta] = useState(null);
+  const [availableCuentas, setAvailableCuentas] = useState([]);
+
+  // Original VentaEditScreen state
   const [tiendas, setTiendas] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [servicios, setServicios] = useState([]);
@@ -51,7 +95,8 @@ const VentaEditContent = () => {
   const [showCuentaTransferenciaUsdDropdown, setShowCuentaTransferenciaUsdDropdown] = useState(false);
   
   const [showFechaPicker, setShowFechaPicker] = useState(false);
-  
+  const searchDebounceRef = useRef(null);
+
   const [formData, setFormData] = useState({
     fecha_hora: new Date().toISOString(),
     nota: '',
@@ -84,20 +129,236 @@ const VentaEditContent = () => {
   const isReadOnly = isViewMode || isOfflineMode;
 
   useEffect(() => {
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setPermission(status);
+    })();
+
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
+      setIsKeyboardVisible(true);
+    });
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+      setIsKeyboardVisible(false);
+    });
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     if (venta?.id_lista_venta) {
       fetchVentaData();
     }
+    // Load tiendas for selector
+    loadTiendas();
   }, [venta?.id_lista_venta]);
+
+  useEffect(() => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+
+    searchDebounceRef.current = setTimeout(async () => {
+      if (searchText.length > 0) {
+        try {
+          setIsSearching(true);
+          const filters = { nombre: searchText, fetchProducto: true, conStock: true };
+          if (selectedTienda) {
+            filters.id_tienda = selectedTienda.id_tienda;
+          }
+          const data = await getServicios(filters, 1, 10);
+
+          setSearchResults(data.data || []);
+          setShowSearchDropdown(true);
+        } catch (error) {
+          setSearchResults([]);
+        } finally {
+          setIsSearching(false);
+        }
+      } else {
+        setSearchResults([]);
+        setShowSearchDropdown(false);
+      }
+    }, 500);
+
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, [searchText, selectedTienda]);
+
+  const loadTiendas = async () => {
+    try {
+      const tiendasData = await getTiendas();
+      setAvailableTiendas(tiendasData.data || []);
+    } catch (error) {
+      console.error('Error loading tiendas:', error);
+    }
+  };
+
+  const addProductBySearch = async (servicio) => {
+    try {
+      if (!selectedTienda) {
+        showToast({ type: 'warning', message: 'Selecciona una tienda primero' });
+        return;
+      }
+
+      // Find the servicio_tienda for the selected store
+      const servicioTienda = servicio.tiendas_servicio?.find(t => t.id_tienda === selectedTienda.id_tienda);
+
+      if (!servicioTienda) {
+        showToast({ type: 'error', message: 'Producto no disponible en esta tienda' });
+        return;
+      }
+
+      // Check if product already exists in sale list
+      const existingItem = saleItems.find(item =>
+        item.id_servicio_tienda === servicioTienda.id_servicio_tienda
+      );
+
+      if (existingItem) {
+        updateItemQuantity(saleItems.indexOf(existingItem), existingItem.cantidad + 1);
+        if (Platform.OS === 'android') {
+          Vibration.vibrate(100);
+        }
+        showToast({ type: 'success', message: 'Cantidad aumentada' });
+        setSearchText('');
+        return;
+      }
+
+      // Build full image URL
+      let fullImageUrl = null;
+      if (servicio.producto?.imagen) {
+        const isBase64 = servicio.producto.imagen.startsWith('data:');
+        if (isBase64) {
+          fullImageUrl = servicio.producto.imagen;
+        } else {
+          const imagePath = servicio.producto.imagen.startsWith('/') ? servicio.producto.imagen : `/${servicio.producto.imagen}`;
+          const currentBaseUrl = await getApiBaseUrl();
+          fullImageUrl = currentBaseUrl ? `${currentBaseUrl}${imagePath}` : servicio.producto.imagen;
+        }
+      }
+
+      const newItem = {
+        id_servicio_tienda: servicioTienda.id_servicio_tienda,
+        id_servicio: servicio.id_servicio,
+        codigo_barras_ean: servicio.codigos?.[0]?.codigo_barras_ean || '',
+        nombre: servicio.nombre || 'Sin nombre',
+        imagen: fullImageUrl,
+        cantidad: 1,
+        precio_cup: parseFloat(servicioTienda.precio_cup || 0),
+        precio_usd: parseFloat(servicioTienda.precio_usd || 0),
+        esOferta: servicio.componentes?.length > 0,
+        componentes: [],
+      };
+
+      // If it's an offer, load components from servicio.componentes
+      if (newItem.esOferta && servicio.componentes?.length > 0) {
+        newItem.componentes = servicio.componentes.map(comp => ({
+          nombre: comp.nombre || 'Componente',
+          cantidad: comp.Oferta?.cantidad || 1
+        }));
+      }
+
+      setSaleItems(prev => [...prev, newItem]);
+      if (Platform.OS === 'android') {
+        Vibration.vibrate(100);
+      }
+      showToast({ type: 'success', message: 'Producto agregado correctamente' });
+      setSearchText('');
+    } catch (error) {
+      console.error('Error adding product by search:', error);
+      showToast({ type: 'error', message: 'Error al agregar producto' });
+    }
+  };
 
   const fetchVentaData = async () => {
     try {
       setIsFetchingVenta(true);
       const ventaData = await getVentaById(venta.id_lista_venta);
-      
+
       // Extract data from venta response to avoid unnecessary API calls
       const ventaUsuario = ventaData.operaciones?.[0]?.usuario;
       const ventaCuentas = ventaData.operaciones?.map(op => op.cuenta).filter(Boolean) || [];
       const ventaTienda = ventaData.ventas?.[0]?.servicioTienda?.tienda;
+
+      // Set tienda
+      if (ventaTienda) {
+        setSelectedTienda(ventaTienda);
+      }
+
+      // Set sale items from ventas
+      const items = await Promise.all(ventaData.ventas?.map(async (v) => {
+        const servicio = v.servicio || v.servicioTienda?.servicio;
+
+        // Build full image URL
+        let fullImageUrl = null;
+        if (servicio?.producto?.imagen) {
+          const isBase64 = servicio.producto.imagen.startsWith('data:');
+          if (isBase64) {
+            fullImageUrl = servicio.producto.imagen;
+          } else {
+            const imagePath = servicio.producto.imagen.startsWith('/') ? servicio.producto.imagen : `/${servicio.producto.imagen}`;
+            const currentBaseUrl = await getApiBaseUrl();
+            fullImageUrl = currentBaseUrl ? `${currentBaseUrl}${imagePath}` : servicio.producto.imagen;
+          }
+        }
+
+        return {
+          id_servicio_tienda: v.id_servicio_tienda,
+          id_servicio: v.id_servicio,
+          codigo_barras_ean: servicio?.producto?.codigo_barras_ean || '',
+          nombre: servicio?.nombre || 'Sin nombre',
+          imagen: fullImageUrl,
+          cantidad: v.cantidad,
+          precio_cup: v.precio_cobrado_cup || 0,
+          precio_usd: v.precio_cobrado_usd || 0,
+          esOferta: servicio?.componentes?.length > 0,
+          componentes: servicio?.componentes?.map(comp => ({
+            nombre: comp.nombre || 'Componente',
+            cantidad: comp.Oferta?.cantidad || 1
+          })) || [],
+        };
+      }) || []);
+      setSaleItems(items);
+
+      // Set payment amounts from operaciones
+      const payments = {
+        efectivo_cup: '',
+        efectivo_usd: '',
+        transferencia_cup: '',
+        transferencia_usd: '',
+      };
+      ventaData.operaciones?.forEach(op => {
+        if (op.tipo_operacion === 'Efectivo CUP') {
+          payments.efectivo_cup = op.cantidad_cobrada?.toString() || '';
+          setSelectedCuentas(prev => ({ ...prev, efectivo_cup: op.cuenta }));
+        } else if (op.tipo_operacion === 'Efectivo USD') {
+          payments.efectivo_usd = op.cantidad_cobrada?.toString() || '';
+          setSelectedCuentas(prev => ({ ...prev, efectivo_usd: op.cuenta }));
+        } else if (op.tipo_operacion === 'Transferencia CUP') {
+          payments.transferencia_cup = op.cantidad_cobrada?.toString() || '';
+          setSelectedCuentas(prev => ({ ...prev, transferencia_cup: op.cuenta }));
+        } else if (op.tipo_operacion === 'Transferencia USD') {
+          payments.transferencia_usd = op.cantidad_cobrada?.toString() || '';
+          setSelectedCuentas(prev => ({ ...prev, transferencia_usd: op.cuenta }));
+        }
+      });
+      setPaymentAmounts(payments);
+
+      // Set nota
+      setVentaNota(ventaData.nota || '');
+
+      // Set original form data for additional fields
+      setFormData({
+        id_usuario: ventaUsuario?.id_usuario || null,
+        cambio_moneda: ventaData.cambio_moneda?.toString() || '1',
+        fecha_hora: ventaData.fecha_hora || new Date().toISOString(),
+        nota: ventaData.nota || '',
+      });
       
       // Set dropdown data from venta response (only what's needed for display)
       if (ventaUsuario) {
@@ -148,7 +409,7 @@ const VentaEditContent = () => {
 
   // Lazy load functions for dropdowns
   const fetchUsuarios = async () => {
-    if (hasLoadedUsuarios || isLoadingUsuarios) return;
+    if (isLoadingUsuarios) return;
     try {
       setIsLoadingUsuarios(true);
       const data = await getUsuarios({ activo: true }, 1, 1000);
@@ -381,18 +642,73 @@ const VentaEditContent = () => {
     return calculateTotalToReceive() - calculateTotalReceived();
   };
 
+  // SalesScreen-like helper functions
+  const updateItemQuantity = (index, newQuantity) => {
+    if (newQuantity < 0) return;
+    setSaleItems(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], cantidad: newQuantity };
+      return updated;
+    });
+  };
+
+  const removeItem = (index) => {
+    Alert.alert(
+      'Eliminar Producto',
+      '¿Estás seguro de que quieres eliminar este producto?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: () => {
+            setSaleItems(prev => prev.filter((_, i) => i !== index));
+            showToast({ type: 'success', message: 'Producto eliminado' });
+          },
+        },
+      ]
+    );
+  };
+
+  const calculateTotal = () => {
+    return saleItems.reduce((total, item) => {
+      return total + (item.precio_cup * item.cantidad);
+    }, 0);
+  };
+
+  const formatNumber2Decimals = (num) => {
+    return parseFloat(num).toFixed(2);
+  };
+
+  const formatNumber5Decimals = (num) => {
+    return parseFloat(num).toFixed(5);
+  };
+
+  const getPaymentDisplayValue = (tipo) => {
+    const value = paymentAmounts[tipo];
+    if (!value) return '';
+    return show5Decimals ? formatNumber5Decimals(parseFloat(value) || 0) : formatNumber2Decimals(parseFloat(value) || 0);
+  };
+
   const styles = createStyles(responsive);
 
   if (isFetchingVenta) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
         <StatusBar style={isDarkMode ? 'light' : 'dark'} />
-        <Header 
-          showBackButton={true}
-          onBackPress={() => navigation.goBack()}
-          isDark={isDarkMode}
-          title={isViewMode ? 'Información de Venta' : 'Editar Venta'}
-        />
+        {/* Header */}
+        <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.outlineVariant }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={colors.primary} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.primary }]}>Editar Venta</Text>
+          <TouchableOpacity onPress={() => setShowCamera(!showCamera)} style={styles.cameraToggle}>
+            <Ionicons name="barcode" size={24} color={colors.primary} />
+            <Text style={[styles.cameraToggleText, { color: colors.primary }]}>
+              {showCamera ? "Escáner activo" : "Escáner desactivado"}
+            </Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.outline }]}>
@@ -404,7 +720,7 @@ const VentaEditContent = () => {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} animated={true} />
       
       <Toast
@@ -417,58 +733,313 @@ const VentaEditContent = () => {
         toastKey={toast.key}
       />
       
-      <Header 
-        showBackButton={true}
-        onBackPress={() => navigation.goBack()}
-        isDark={isDarkMode}
-        title="Editar Venta"
-      />
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.outlineVariant }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={colors.primary} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: colors.primary }]}>Editar Venta</Text>
+        <TouchableOpacity onPress={() => setShowCamera(!showCamera)} style={styles.cameraToggle}>
+          <Ionicons name="barcode" size={24} color={colors.primary} />
+          <Text style={[styles.cameraToggleText, { color: colors.primary }]}>
+            {showCamera ? "Escáner activo" : "Escáner desactivado"}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex1}
         keyboardVerticalOffset={20}
       >
-        <ScrollView 
+        <ScrollView
           style={styles.content}
-          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
         >
-          <Card style={[styles.formCard, { backgroundColor: colors.surface }]}>
-            {/* Fecha */}
-            <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.outline }]}>Fecha *</Text>
-              <TouchableOpacity
-                style={[styles.input, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                onPress={() => !isReadOnly && setShowFechaPicker(true)}
-                disabled={isReadOnly}
-              >
-                <Text style={[styles.inputText, { color: colors.onSurface }]}>
-                  {new Date(formData.fecha_hora).toLocaleDateString('es-ES')}
+          {/* Camera Section */}
+          {showCamera && !isKeyboardVisible && (
+            <View style={styles.cameraContainer}>
+              <CameraView
+                key={cameraKey}
+                style={styles.camera}
+                barcodeScannerSettings={{
+                  barcodeTypes: ALLOWED_BARCODE_TYPES,
+                }}
+              />
+              <View style={styles.cameraOverlay}>
+                <View style={[styles.corner, styles.topLeft]} />
+                <View style={[styles.corner, styles.topRight]} />
+                <View style={[styles.corner, styles.bottomLeft]} />
+                <View style={[styles.corner, styles.bottomRight]} />
+                <Text style={[styles.cameraHint, { color: '#fff' }]}>
+                  Apunta al código de barras
                 </Text>
-              </TouchableOpacity>
-              {showFechaPicker && !isReadOnly && (
-                <DateTimePicker
-                  value={new Date(formData.fecha_hora)}
-                  mode="date"
-                  display="default"
-                  onChange={handleFechaChange}
+              </View>
+            </View>
+          )}
+
+          {/* Store Selector and Product Search */}
+          <Card style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Tienda</Text>
+              <TouchableOpacity
+                style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                onPress={() => setShowTiendaSelector(!showTiendaSelector)}
+              >
+                <Text style={[styles.dropdownText, { color: selectedTienda ? colors.onSurface : colors.outline }]}>
+                  {selectedTienda?.nombre || 'Seleccionar tienda...'}
+                </Text>
+                <Ionicons
+                  name={showTiendaSelector ? "chevron-up" : "chevron-down"}
+                  size={responsive.responsiveWidth(20)}
+                  color={colors.outline}
                 />
-              )}
+              </TouchableOpacity>
             </View>
 
-            {/* Nota */}
-            <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.outline }]}>Nota</Text>
+            {showTiendaSelector && (
+              <ScrollView style={styles.dropdownMenu} nestedScrollEnabled={true}>
+                {availableTiendas.map((tienda) => (
+                  <TouchableOpacity
+                    key={tienda.id_tienda}
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      setSelectedTienda(tienda);
+                      setShowTiendaSelector(false);
+                    }}
+                  >
+                    <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            <View style={{ marginTop: responsive.responsiveHeight(12) }}>
+              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Buscar producto</Text>
+            </View>
+
+            <View style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+              <Ionicons name="search" size={responsive.responsiveWidth(20)} color={colors.outline} />
               <TextInput
-                style={[styles.input, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                style={[styles.searchInput, { color: colors.onSurface }]}
+                placeholder="Buscar producto o servicio..."
                 placeholderTextColor={colors.outline}
-                placeholder="Nota opcional..."
-                value={formData.nota}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, nota: text }))}
-                editable={!isReadOnly}
+                value={searchText}
+                onChangeText={setSearchText}
               />
+            </View>
+
+            {showSearchDropdown && (
+              <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                {isSearching ? (
+                  <View style={styles.dropdownLoadingContainer}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Buscando...</Text>
+                  </View>
+                ) : searchResults.length > 0 ? (
+                  <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                    {searchResults.map((servicio, index) => (
+                      <TouchableOpacity
+                        key={servicio.id_servicio}
+                        style={[styles.dropdownItem, index === searchResults.length - 1 && styles.dropdownItemLast]}
+                        onPress={() => addProductBySearch(servicio)}
+                      >
+                        <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{servicio.nombre}</Text>
+                        {servicio.producto && (
+                          <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>Producto</Text>
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <Text style={[styles.dropdownEmptyText, { color: colors.outline }]}>
+                    No se encontraron resultados
+                  </Text>
+                )}
+              </View>
+            )}
+          </Card>
+
+          {/* Sale Items List */}
+          <Card style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                Productos ({saleItems.length})
+              </Text>
+            </View>
+
+            {saleItems.length === 0 ? (
+              <Text style={[styles.emptyText, { color: colors.outline }]}>
+                No hay productos agregados
+              </Text>
+            ) : (
+              saleItems.map((item, index) => (
+                <View key={index} style={[styles.itemCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                  {item.imagen && (
+                    <Image
+                      source={{ uri: item.imagen }}
+                      style={styles.itemImage}
+                    />
+                  )}
+                  <View style={styles.itemContent}>
+                    <Text style={[styles.itemName, { color: colors.onSurface }]}>{item.nombre}</Text>
+                    <Text style={[styles.itemPrice, { color: colors.outline }]}>
+                      <Text style={{ fontWeight: 'bold' }}>
+                        ${show5Decimals ? formatNumber5Decimals(item.precio_cup) : formatNumber2Decimals(item.precio_cup)} CUP
+                      </Text>
+                      {' / '}
+                      ${show5Decimals ? formatNumber5Decimals(item.precio_usd) : formatNumber2Decimals(item.precio_usd)} USD
+                    </Text>
+                    {item.esOferta && (
+                      <Text style={[styles.offerBadge, { color: colors.primary }]}>Contenido total</Text>
+                    )}
+                    {item.esOferta && item.componentes && item.componentes.length > 0 && (
+                      <View style={styles.componentsContainer}>
+                        {item.componentes.map((comp, compIndex) => {
+                          const totalQuantity = comp.cantidad * item.cantidad;
+                          return (
+                            <Text key={compIndex} style={[styles.componentText, { color: colors.outline }]}>
+                              • {comp.nombre} x{totalQuantity}
+                            </Text>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.itemActions}>
+                    <TouchableOpacity
+                      style={[styles.quantityButton, { backgroundColor: colors.primaryContainer }]}
+                      onPress={() => updateItemQuantity(index, item.cantidad - 1)}
+                    >
+                      <Ionicons name="remove" size={responsive.responsiveWidth(16)} color={isDark ? colors.primary : '#fff'} />
+                    </TouchableOpacity>
+                    <TextInput
+                      style={[styles.quantityInput, { color: colors.onSurface }]}
+                      value={item.cantidad === 0 ? '' : item.cantidad.toString()}
+                      onChangeText={(text) => {
+                        if (text === '') {
+                          updateItemQuantity(index, 0);
+                          return;
+                        }
+                        const newQuantity = parseInt(text) || 0;
+                        if (newQuantity > 0) {
+                          updateItemQuantity(index, newQuantity);
+                        }
+                      }}
+                      onBlur={() => {
+                        if (item.cantidad === 0) {
+                          updateItemQuantity(index, 1);
+                        }
+                      }}
+                      keyboardType="number-pad"
+                      textAlign="center"
+                    />
+                    <TouchableOpacity
+                      style={[styles.quantityButton, { backgroundColor: colors.primaryContainer }]}
+                      onPress={() => updateItemQuantity(index, item.cantidad + 1)}
+                    >
+                      <Ionicons name="add" size={responsive.responsiveWidth(16)} color={isDark ? colors.primary : '#fff'} />
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.deleteButton, { backgroundColor: colors.errorContainer }]}
+                    onPress={() => removeItem(index)}
+                  >
+                    <Ionicons name="close" size={responsive.responsiveWidth(16)} color={colors.error} />
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+          </Card>
+
+          {/* Payment Section */}
+          <Card style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
+            <View style={styles.sectionHeaderWithSwitch}>
+              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Pago</Text>
+              <View style={styles.decimalSwitchContainer}>
+                <Text style={[styles.decimalLabel, { color: colors.outline }]}>
+                  {show5Decimals ? '5 decimales' : '2 decimales'}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.decimalSwitch, { backgroundColor: show5Decimals ? colors.primary : colors.outlineVariant }]}
+                  onPress={() => setShow5Decimals(!show5Decimals)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.decimalSwitchThumb, {
+                    backgroundColor: show5Decimals ? '#fff' : colors.outline,
+                    transform: [{ translateX: show5Decimals ? 20 : 0 }]
+                  }]} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {['efectivo_cup', 'efectivo_usd', 'transferencia_cup', 'transferencia_usd']
+              .filter(tipo => cuentaConfig[tipo]?.length > 0)
+              .map((tipo) => {
+              const label = tipo.replace('_', ' ').toUpperCase();
+              const selectedCuenta = selectedCuentas[tipo];
+
+              return (
+                <View key={tipo} style={styles.paymentRow}>
+                  <View style={styles.paymentLabel}>
+                    <Text style={[styles.paymentLabelText, { color: colors.onSurface }]}>{label}</Text>
+                  </View>
+
+                  <View style={styles.paymentInputRow}>
+                    <TouchableOpacity
+                      style={[styles.cuentaSelector, { backgroundColor: colors.background, borderColor: colors.outlineVariant, flex: 0.6 }]}
+                      onPress={() => {
+                        setSelectorTipoCuenta(tipo);
+                        setShowCuentaSelector(true);
+                      }}
+                    >
+                      <Text style={[styles.cuentaSelectorText, { color: selectedCuenta ? colors.onSurface : colors.outline }]} numberOfLines={1}>
+                        {selectedCuenta?.nombre || 'Seleccionar cuenta...'}
+                      </Text>
+                      <Ionicons name="chevron-down" size={responsive.responsiveWidth(16)} color={colors.outline} />
+                    </TouchableOpacity>
+
+                    <TextInput
+                      style={[styles.paymentInput, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant, flex: 0.4 }]}
+                      placeholder={show5Decimals ? "0.00000" : "0.00"}
+                      placeholderTextColor={colors.outline}
+                      value={getPaymentDisplayValue(tipo)}
+                      onChangeText={(text) => {
+                        const sanitizedText = text.replace(/-/g, '');
+                        setPaymentAmounts(prev => ({ ...prev, [tipo]: sanitizedText }));
+                      }}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+              );
+            })}
+
+            <View style={[styles.totalSection, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.totalLabel, { color: '#fff' }]}>Total a pagar:</Text>
+              <Text style={[styles.totalAmount, { color: '#fff' }]}>
+                ${show5Decimals ? formatNumber5Decimals(calculateTotal()) : formatNumber2Decimals(calculateTotal())} CUP
+              </Text>
+            </View>
+
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Nota</Text>
+            </View>
+            <TextInput
+              style={[styles.notaInput, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+              placeholder="Agregar nota a la venta (opcional)..."
+              placeholderTextColor={colors.outline}
+              value={ventaNota}
+              onChangeText={setVentaNota}
+              multiline
+              numberOfLines={3}
+            />
+          </Card>
+
+          {/* Additional Fields Card - Usuario, Cambio de Moneda, Fecha */}
+          <Card style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Información Adicional</Text>
             </View>
 
             {/* Usuario */}
@@ -488,14 +1059,14 @@ const VentaEditContent = () => {
                   {usuarios.find(u => u.id_usuario === formData.id_usuario)?.nombre_natural || 'Seleccionar usuario...'}
                 </Text>
                 {!isReadOnly && (
-                  <Ionicons 
-                    name={showUsuarioDropdown ? "chevron-up" : "chevron-down"} 
-                    size={responsive.responsiveWidth(20)} 
-                    color={colors.outline} 
+                  <Ionicons
+                    name={showUsuarioDropdown ? "chevron-up" : "chevron-down"}
+                    size={responsive.responsiveWidth(20)}
+                    color={colors.outline}
                   />
                 )}
               </TouchableOpacity>
-              
+
               {showUsuarioDropdown && !isReadOnly && (
                 <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
                   {isLoadingUsuarios ? (
@@ -537,433 +1108,80 @@ const VentaEditContent = () => {
               />
             </View>
 
-            {/* Formas de Cobro */}
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Formas de Cobro</Text>
-            </View>
-
-            <View style={styles.formRow}>
-              <View style={[styles.formColumn, styles.formGroup]}>
-                <Text style={[styles.label, { color: colors.outline }]}>Efectivo CUP</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                  placeholderTextColor={colors.outline}
-                  placeholder="0.00"
-                  value={formData.cantidad_cobrada_efectivo_cup}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, cantidad_cobrada_efectivo_cup: text }))}
-                  keyboardType="numeric"
-                  editable={!isReadOnly}
+            {/* Fecha */}
+            <View style={styles.formGroup}>
+              <Text style={[styles.label, { color: colors.outline }]}>Fecha *</Text>
+              <TouchableOpacity
+                style={[styles.input, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                onPress={() => !isReadOnly && setShowFechaPicker(true)}
+                disabled={isReadOnly}
+              >
+                <Text style={[styles.inputText, { color: colors.onSurface }]}>
+                  {new Date(formData.fecha_hora).toLocaleDateString('es-ES')}
+                </Text>
+              </TouchableOpacity>
+              {showFechaPicker && !isReadOnly && (
+                <DateTimePicker
+                  value={new Date(formData.fecha_hora)}
+                  mode="date"
+                  display="default"
+                  onChange={handleFechaChange}
                 />
-              </View>
-              <View style={[styles.formColumn, styles.formGroup]}>
-                <Text style={[styles.label, { color: colors.outline }]}>Cuenta</Text>
-                <TouchableOpacity
-                  style={[styles.dropdown, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={() => {
-                    if (!isReadOnly) {
-                      fetchCuentas();
-                      setShowCuentaEfectivoCupDropdown(!showCuentaEfectivoCupDropdown);
-                    }
-                  }}
-                  disabled={isReadOnly}
-                >
-                  <Text style={[styles.dropdownText, { color: formData.id_cuenta_efectivo_cup ? colors.onSurface : colors.outline }]}>
-                    {cuentas.find(c => c.id_cuenta === formData.id_cuenta_efectivo_cup)?.nombre || 'Seleccionar...'}
-                  </Text>
-                  {!isReadOnly && (
-                    <Ionicons 
-                      name={showCuentaEfectivoCupDropdown ? "chevron-up" : "chevron-down"} 
-                      size={responsive.responsiveWidth(20)} 
-                      color={colors.outline} 
-                    />
-                  )}
-                </TouchableOpacity>
-                
-                {showCuentaEfectivoCupDropdown && !isReadOnly && (
-                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    {isLoadingCuentas ? (
-                      <View style={styles.dropdownLoadingContainer}>
-                        <ActivityIndicator size="small" color={colors.primary} />
-                        <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando cuentas...</Text>
-                      </View>
-                    ) : (
-                      <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                        {cuentas.filter(c => c.tipo_cuenta === 'Efectivo CUP').map((cuenta, index) => (
-                          <TouchableOpacity
-                            key={cuenta.id_cuenta}
-                            style={[styles.dropdownItem, index === cuentas.filter(c => c.tipo_cuenta === 'Efectivo CUP').length - 1 && styles.dropdownItemLast]}
-                            onPress={() => {
-                              setFormData(prev => ({ ...prev, id_cuenta_efectivo_cup: cuenta.id_cuenta }));
-                              setShowCuentaEfectivoCupDropdown(false);
-                            }}
-                          >
-                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    )}
-                  </View>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.formRow}>
-              <View style={[styles.formColumn, styles.formGroup]}>
-                <Text style={[styles.label, { color: colors.outline }]}>Efectivo USD</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                  placeholderTextColor={colors.outline}
-                  placeholder="0.00"
-                  value={formData.cantidad_cobrada_efectivo_usd}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, cantidad_cobrada_efectivo_usd: text }))}
-                  keyboardType="numeric"
-                  editable={!isReadOnly}
-                />
-              </View>
-              <View style={[styles.formColumn, styles.formGroup]}>
-                <Text style={[styles.label, { color: colors.outline }]}>Cuenta</Text>
-                <TouchableOpacity
-                  style={[styles.dropdown, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={() => {
-                    if (!isReadOnly) {
-                      fetchCuentas();
-                      setShowCuentaEfectivoUsdDropdown(!showCuentaEfectivoUsdDropdown);
-                    }
-                  }}
-                  disabled={isReadOnly}
-                >
-                  <Text style={[styles.dropdownText, { color: formData.id_cuenta_efectivo_usd ? colors.onSurface : colors.outline }]}>
-                    {cuentas.find(c => c.id_cuenta === formData.id_cuenta_efectivo_usd)?.nombre || 'Seleccionar...'}
-                  </Text>
-                  {!isReadOnly && (
-                    <Ionicons 
-                      name={showCuentaEfectivoUsdDropdown ? "chevron-up" : "chevron-down"} 
-                      size={responsive.responsiveWidth(20)} 
-                      color={colors.outline} 
-                    />
-                  )}
-                </TouchableOpacity>
-                
-                {showCuentaEfectivoUsdDropdown && !isReadOnly && (
-                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    {isLoadingCuentas ? (
-                      <View style={styles.dropdownLoadingContainer}>
-                        <ActivityIndicator size="small" color={colors.primary} />
-                        <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando cuentas...</Text>
-                      </View>
-                    ) : (
-                      <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                        {cuentas.filter(c => c.tipo_cuenta === 'Efectivo USD').map((cuenta, index) => (
-                          <TouchableOpacity
-                            key={cuenta.id_cuenta}
-                            style={[styles.dropdownItem, index === cuentas.filter(c => c.tipo_cuenta === 'Efectivo USD').length - 1 && styles.dropdownItemLast]}
-                            onPress={() => {
-                              setFormData(prev => ({ ...prev, id_cuenta_efectivo_usd: cuenta.id_cuenta }));
-                              setShowCuentaEfectivoUsdDropdown(false);
-                            }}
-                          >
-                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    )}
-                  </View>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.formRow}>
-              <View style={[styles.formColumn, styles.formGroup]}>
-                <Text style={[styles.label, { color: colors.outline }]}>Transferencia CUP</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                  placeholderTextColor={colors.outline}
-                  placeholder="0.00"
-                  value={formData.cantidad_cobrada_transferencia_cup}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, cantidad_cobrada_transferencia_cup: text }))}
-                  keyboardType="numeric"
-                  editable={!isReadOnly}
-                />
-              </View>
-              <View style={[styles.formColumn, styles.formGroup]}>
-                <Text style={[styles.label, { color: colors.outline }]}>Cuenta</Text>
-                <TouchableOpacity
-                  style={[styles.dropdown, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={() => {
-                    if (!isReadOnly) {
-                      fetchCuentas();
-                      setShowCuentaTransferenciaCupDropdown(!showCuentaTransferenciaCupDropdown);
-                    }
-                  }}
-                  disabled={isReadOnly}
-                >
-                  <Text style={[styles.dropdownText, { color: formData.id_cuenta_transferencia_cup ? colors.onSurface : colors.outline }]}>
-                    {cuentas.find(c => c.id_cuenta === formData.id_cuenta_transferencia_cup)?.nombre || 'Seleccionar...'}
-                  </Text>
-                  {!isReadOnly && (
-                    <Ionicons 
-                      name={showCuentaTransferenciaCupDropdown ? "chevron-up" : "chevron-down"} 
-                      size={responsive.responsiveWidth(20)} 
-                      color={colors.outline} 
-                    />
-                  )}
-                </TouchableOpacity>
-                
-                {showCuentaTransferenciaCupDropdown && !isReadOnly && (
-                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    {isLoadingCuentas ? (
-                      <View style={styles.dropdownLoadingContainer}>
-                        <ActivityIndicator size="small" color={colors.primary} />
-                        <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando cuentas...</Text>
-                      </View>
-                    ) : (
-                      <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                        {cuentas.filter(c => c.tipo_cuenta === 'Transferencia CUP').map((cuenta, index) => (
-                          <TouchableOpacity
-                            key={cuenta.id_cuenta}
-                            style={[styles.dropdownItem, index === cuentas.filter(c => c.tipo_cuenta === 'Transferencia CUP').length - 1 && styles.dropdownItemLast]}
-                            onPress={() => {
-                              setFormData(prev => ({ ...prev, id_cuenta_transferencia_cup: cuenta.id_cuenta }));
-                              setShowCuentaTransferenciaCupDropdown(false);
-                            }}
-                          >
-                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    )}
-                  </View>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.formRow}>
-              <View style={[styles.formColumn, styles.formGroup]}>
-                <Text style={[styles.label, { color: colors.outline }]}>Transferencia USD</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                  placeholderTextColor={colors.outline}
-                  placeholder="0.00"
-                  value={formData.cantidad_cobrada_transferencia_usd}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, cantidad_cobrada_transferencia_usd: text }))}
-                  keyboardType="numeric"
-                  editable={!isReadOnly}
-                />
-              </View>
-              <View style={[styles.formColumn, styles.formGroup]}>
-                <Text style={[styles.label, { color: colors.outline }]}>Cuenta</Text>
-                <TouchableOpacity
-                  style={[styles.dropdown, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={() => {
-                    if (!isReadOnly) {
-                      fetchCuentas();
-                      setShowCuentaTransferenciaUsdDropdown(!showCuentaTransferenciaUsdDropdown);
-                    }
-                  }}
-                  disabled={isReadOnly}
-                >
-                  <Text style={[styles.dropdownText, { color: formData.id_cuenta_transferencia_usd ? colors.onSurface : colors.outline }]}>
-                    {cuentas.find(c => c.id_cuenta === formData.id_cuenta_transferencia_usd)?.nombre || 'Seleccionar...'}
-                  </Text>
-                  {!isReadOnly && (
-                    <Ionicons 
-                      name={showCuentaTransferenciaUsdDropdown ? "chevron-up" : "chevron-down"} 
-                      size={responsive.responsiveWidth(20)} 
-                      color={colors.outline} 
-                    />
-                  )}
-                </TouchableOpacity>
-                
-                {showCuentaTransferenciaUsdDropdown && !isReadOnly && (
-                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    {isLoadingCuentas ? (
-                      <View style={styles.dropdownLoadingContainer}>
-                        <ActivityIndicator size="small" color={colors.primary} />
-                        <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando cuentas...</Text>
-                      </View>
-                    ) : (
-                      <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                        {cuentas.filter(c => c.tipo_cuenta === 'Transferencia USD').map((cuenta, index) => (
-                          <TouchableOpacity
-                            key={cuenta.id_cuenta}
-                            style={[styles.dropdownItem, index === cuentas.filter(c => c.tipo_cuenta === 'Transferencia USD').length - 1 && styles.dropdownItemLast]}
-                            onPress={() => {
-                              setFormData(prev => ({ ...prev, id_cuenta_transferencia_usd: cuenta.id_cuenta }));
-                              setShowCuentaTransferenciaUsdDropdown(false);
-                            }}
-                          >
-                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    )}
-                  </View>
-                )}
-              </View>
-            </View>
-
-            {/* Ventas */}
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Ventas</Text>
-              {!isReadOnly && (
-                <TouchableOpacity
-                  style={[styles.addButtonSmall, { backgroundColor: colors.primary }]}
-                  onPress={handleAddVentaItem}
-                >
-                  <Ionicons name="add" size={responsive.responsiveWidth(18)} color="#fff" />
-                </TouchableOpacity>
               )}
             </View>
-
-            {ventaItems.map((item, index) => (
-              <Card key={item.id} style={[styles.ventaItemCard, { backgroundColor: colors.background }]}>
-                <View style={styles.ventaItemHeader}>
-                  <Text style={[styles.ventaItemTitle, { color: colors.onSurface }]}>Venta {index + 1}</Text>
-                  {!isReadOnly && (
-                    <TouchableOpacity
-                      onPress={() => handleRemoveVentaItem(item.id)}
-                    >
-                      <Ionicons name="close-circle" size={responsive.responsiveWidth(20)} color={colors.error} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Servicio *</Text>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    placeholderTextColor={colors.outline}
-                    placeholder="Buscar servicio..."
-                    value={item.servicio?.nombre || ''}
-                    onChangeText={(text) => {
-                      if (!isReadOnly) {
-                        handleUpdateVentaItem(item.id, 'servicio', { nombre: text });
-                        searchServicios(text);
-                      }
-                    }}
-                    editable={!isReadOnly}
-                  />
-                  {servicioSearchResults.length > 0 && !isReadOnly && (
-                    <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                      <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                        {servicioSearchResults.map((servicio, idx) => (
-                          <TouchableOpacity
-                            key={servicio.id_servicio}
-                            style={[styles.dropdownItem, idx === servicioSearchResults.length - 1 && styles.dropdownItemLast]}
-                            onPress={() => handleServicioSelect(item.id, servicio)}
-                          >
-                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{servicio.nombre}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.formRow}>
-                  <View style={[styles.formColumn, styles.formGroup]}>
-                    <Text style={[styles.label, { color: colors.outline }]}>Cantidad *</Text>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                      placeholderTextColor={colors.outline}
-                      placeholder="0"
-                      value={item.cantidad}
-                      onChangeText={(text) => handleUpdateVentaItem(item.id, 'cantidad', text)}
-                      keyboardType="numeric"
-                      editable={!isReadOnly}
-                    />
-                  </View>
-                  <View style={[styles.formColumn, styles.formGroup]}>
-                    <Text style={[styles.label, { color: colors.outline }]}>Precio CUP *</Text>
-                    <TextInput
-                      style={[styles.input, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                      placeholderTextColor={colors.outline}
-                      placeholder="0.00"
-                      value={item.precio_cobrado_cup}
-                      onChangeText={(text) => handleUpdateVentaItem(item.id, 'precio_cobrado_cup', text)}
-                      keyboardType="numeric"
-                      editable={!isReadOnly}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Precio USD *</Text>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    placeholderTextColor={colors.outline}
-                    placeholder="0.00"
-                    value={item.precio_cobrado_usd}
-                    onChangeText={(text) => handleUpdateVentaItem(item.id, 'precio_cobrado_usd', text)}
-                    keyboardType="numeric"
-                    editable={!isReadOnly}
-                  />
-                </View>
-              </Card>
-            ))}
-
-            {/* Resumen de Montos */}
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Resumen de Montos</Text>
-            </View>
-
-            <View style={[styles.totalSection, { backgroundColor: colors.primary }]}>
-              <Text style={[styles.totalLabel, { color: '#fff' }]}>Total a recibir:</Text>
-              <Text style={[styles.totalAmount, { color: '#fff' }]}>
-                ${calculateTotalToReceive().toFixed(2)} CUP
-              </Text>
-            </View>
-
-            <View style={[styles.receivedSection, { backgroundColor: colors.surfaceVariant }]}>
-              <Text style={[styles.receivedLabel, { color: colors.onSurface }]}>Total recibido:</Text>
-              <Text style={[styles.receivedAmount, { color: colors.onSurface }]}>
-                ${calculateTotalReceived().toFixed(2)} CUP
-              </Text>
-            </View>
-
-            <View style={[styles.remainingSection, { backgroundColor: getRemainingAmount() > 0.01 ? colors.errorContainer : getRemainingAmount() < -0.01 ? colors.successContainer : colors.primary }]}>
-              <Text style={[styles.remainingLabel, { color: getRemainingAmount() > 0.01 ? colors.error : getRemainingAmount() < -0.01 ? colors.onSurface : '#fff' }]}>
-                {getRemainingAmount() > 0.01 ? 'Falta por recibir:' : getRemainingAmount() < -0.01 ? 'Exceso recibido:' : 'Pago completo:'}
-              </Text>
-              <Text style={[styles.remainingAmount, { color: getRemainingAmount() > 0.01 ? colors.error : getRemainingAmount() < -0.01 ? colors.onSurface : '#fff' }]}>
-                ${Math.abs(getRemainingAmount()).toFixed(2)} CUP
-              </Text>
-            </View>
-
-            {/* Botones de acción */}
-            {!isReadOnly && (
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={[styles.button, styles.cancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
-                  onPress={() => navigation.goBack()}
-                >
-                  <Text style={[styles.buttonText, { color: colors.onSurface }]}>Cancelar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.button, styles.saveButton, { backgroundColor: colors.primary }]}
-                  onPress={handleSave}
-                  disabled={isSaving}
-                >
-                  {isSaving ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={[styles.buttonText, { color: '#fff' }]}>Guardar</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            )}
-            {isReadOnly && (
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={[styles.button, styles.cancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
-                  onPress={() => navigation.goBack()}
-                >
-                  <Text style={[styles.buttonText, { color: colors.onSurface }]}>Cerrar</Text>
-                </TouchableOpacity>
-              </View>
-            )}
           </Card>
-        </ScrollView>
+
+          {/* Submit Button */}
+          <TouchableOpacity
+            style={[styles.submitButton, { backgroundColor: colors.primary }]}
+            onPress={handleSave}
+            disabled={isSaving || saleItems.length === 0}
+          >
+            {isSaving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={responsive.responsiveWidth(20)} color="#fff" />
+                <Text style={[styles.submitButtonText, { color: '#fff' }]}>
+                  Actualizar Venta
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+      </ScrollView>
+
+      {/* Cuenta Selector Modal */}
+      <Modal
+        visible={showCuentaSelector}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowCuentaSelector(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Seleccionar Cuenta</Text>
+              <TouchableOpacity onPress={() => setShowCuentaSelector(false)}>
+                <Ionicons name="close" size={24} color={colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              {cuentaConfig[selectorTipoCuenta]?.map((cuenta) => (
+                <TouchableOpacity
+                  key={cuenta.id_cuenta}
+                  style={[styles.modalItem, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                  onPress={() => {
+                    setSelectedCuentas(prev => ({ ...prev, [selectorTipoCuenta]: cuenta }));
+                    setShowCuentaSelector(false);
+                  }}
+                >
+                  <Text style={[styles.modalItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -974,15 +1192,382 @@ export default function VentaEditScreen() {
 }
 
 const createStyles = (responsive) => StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
   container: {
     flex: 1,
   },
   flex1: {
     flex: 1,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: responsive.responsiveWidth(16),
+    paddingVertical: responsive.responsiveHeight(12),
+    borderBottomWidth: 1,
+  },
+  backButton: {
+    padding: responsive.responsiveWidth(8),
+  },
+  headerTitle: {
+    fontSize: responsive.responsiveWidth(20),
+    fontWeight: '700',
+  },
+  cameraToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: responsive.responsiveWidth(8),
+  },
+  cameraToggleText: {
+    fontSize: responsive.responsiveWidth(12),
+    marginLeft: responsive.responsiveWidth(4),
+  },
   content: {
     flex: 1,
-    padding: responsive.responsivePadding(16),
+    padding: responsive.responsiveWidth(16),
+  },
+  cameraContainer: {
+    height: responsive.responsiveHeight(250),
+    backgroundColor: '#000',
+    borderRadius: responsive.responsiveWidth(12),
+    marginBottom: responsive.responsiveHeight(16),
+    overflow: 'hidden',
+  },
+  camera: {
+    flex: 1,
+  },
+  cameraOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  corner: {
+    position: 'absolute',
+    width: responsive.responsiveWidth(60),
+    height: responsive.responsiveHeight(60),
+    borderColor: '#fff',
+    borderWidth: responsive.responsiveWidth(3),
+  },
+  topLeft: {
+    top: responsive.responsiveHeight(80),
+    left: responsive.responsiveWidth(40),
+    borderBottomWidth: 0,
+    borderRightWidth: 0,
+  },
+  topRight: {
+    top: responsive.responsiveHeight(80),
+    right: responsive.responsiveWidth(40),
+    borderBottomWidth: 0,
+    borderLeftWidth: 0,
+  },
+  bottomLeft: {
+    bottom: responsive.responsiveHeight(80),
+    left: responsive.responsiveWidth(40),
+    borderTopWidth: 0,
+    borderRightWidth: 0,
+  },
+  bottomRight: {
+    bottom: responsive.responsiveHeight(80),
+    right: responsive.responsiveWidth(40),
+    borderTopWidth: 0,
+    borderLeftWidth: 0,
+  },
+  cameraHint: {
+    fontSize: responsive.responsiveWidth(14),
+    marginTop: responsive.responsiveHeight(20),
+    textAlign: 'center',
+  },
+  sectionCard: {
+    marginBottom: responsive.responsiveHeight(16),
+    padding: responsive.responsiveWidth(16),
+    borderRadius: responsive.responsiveWidth(12),
+  },
+  sectionHeader: {
+    marginBottom: responsive.responsiveHeight(8),
+  },
+  sectionTitle: {
+    fontSize: responsive.responsiveWidth(18),
+    fontWeight: '600',
+  },
+  sectionHeaderWithSwitch: {
+    marginBottom: responsive.responsiveHeight(12),
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  decimalSwitchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  decimalLabel: {
+    fontSize: responsive.responsiveWidth(12),
+    marginRight: responsive.responsiveWidth(8),
+  },
+  decimalSwitch: {
+    width: responsive.responsiveWidth(44),
+    height: responsive.responsiveHeight(24),
+    borderRadius: responsive.responsiveWidth(12),
+    padding: responsive.responsiveWidth(2),
+    justifyContent: 'center',
+  },
+  decimalSwitchThumb: {
+    width: responsive.responsiveWidth(20),
+    height: responsive.responsiveHeight(20),
+    borderRadius: responsive.responsiveWidth(10),
+  },
+  dropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: responsive.responsiveWidth(12),
+    borderRadius: responsive.responsiveWidth(8),
+    borderWidth: 1,
+  },
+  dropdownText: {
+    fontSize: responsive.responsiveWidth(14),
+  },
+  tiendaInfoContainer: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  tiendaInfoText: {
+    fontSize: responsive.responsiveWidth(14),
+    fontWeight: '600',
+  },
+  dependienteInfoText: {
+    fontSize: responsive.responsiveWidth(12),
+    marginTop: responsive.responsiveHeight(2),
+  },
+  dropdownMenu: {
+    maxHeight: responsive.responsiveHeight(200),
+    marginTop: responsive.responsiveHeight(8),
+  },
+  dropdownItem: {
+    padding: responsive.responsiveWidth(12),
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  dropdownItemText: {
+    fontSize: responsive.responsiveWidth(14),
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  dropdownItemSubtext: {
+    fontSize: responsive.responsiveWidth(12),
+    marginTop: responsive.responsiveHeight(2),
+  },
+  dropdownEmptyText: {
+    fontSize: responsive.responsiveWidth(14),
+    textAlign: 'center',
+    paddingVertical: responsive.responsiveHeight(16),
+  },
+  emptyText: {
+    fontSize: responsive.responsiveWidth(14),
+    textAlign: 'center',
+    paddingVertical: responsive.responsiveHeight(20),
+  },
+  itemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: responsive.responsiveWidth(12),
+    borderRadius: responsive.responsiveWidth(8),
+    borderWidth: 1,
+    marginBottom: responsive.responsiveHeight(8),
+  },
+  itemImage: {
+    width: responsive.responsiveWidth(50),
+    height: responsive.responsiveHeight(50),
+    borderRadius: responsive.responsiveWidth(8),
+    marginRight: responsive.responsiveWidth(12),
+  },
+  itemContent: {
+    flex: 1,
+  },
+  itemName: {
+    fontSize: responsive.responsiveWidth(14),
+    fontWeight: '600',
+    marginBottom: responsive.responsiveHeight(4),
+  },
+  itemPrice: {
+    fontSize: responsive.responsiveWidth(12),
+  },
+  offerBadge: {
+    fontSize: responsive.responsiveWidth(10),
+    fontWeight: '600',
+    marginTop: responsive.responsiveHeight(4),
+  },
+  componentsContainer: {
+    marginTop: responsive.responsiveHeight(4),
+  },
+  componentText: {
+    fontSize: responsive.responsiveWidth(11),
+    marginTop: responsive.responsiveHeight(2),
+  },
+  itemActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: responsive.responsiveWidth(8),
+  },
+  quantityButton: {
+    width: responsive.responsiveWidth(28),
+    height: responsive.responsiveHeight(28),
+    borderRadius: responsive.responsiveWidth(14),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quantityInput: {
+    marginHorizontal: responsive.responsiveWidth(8),
+    fontSize: responsive.responsiveWidth(14),
+    fontWeight: '600',
+    minWidth: responsive.responsiveWidth(30),
+    maxWidth: responsive.responsiveWidth(40),
+    textAlign: 'center',
+    padding: 0,
+  },
+  deleteButton: {
+    width: responsive.responsiveWidth(28),
+    height: responsive.responsiveHeight(28),
+    borderRadius: responsive.responsiveWidth(14),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paymentRow: {
+    marginBottom: responsive.responsiveHeight(12),
+  },
+  paymentLabel: {
+    marginBottom: responsive.responsiveHeight(4),
+  },
+  paymentLabelText: {
+    fontSize: responsive.responsiveWidth(14),
+    fontWeight: '600',
+  },
+  cuentaSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: responsive.responsiveWidth(10),
+    borderRadius: responsive.responsiveWidth(8),
+    borderWidth: 1,
+  },
+  paymentInputRow: {
+    flexDirection: 'row',
+    gap: responsive.responsiveWidth(8),
+    alignItems: 'center',
+  },
+  cuentaSelectorText: {
+    fontSize: responsive.responsiveWidth(12),
+  },
+  paymentInput: {
+    padding: responsive.responsiveWidth(10),
+    borderRadius: responsive.responsiveWidth(8),
+    borderWidth: 1,
+    fontSize: responsive.responsiveWidth(14),
+    textAlign: 'right',
+    height: responsive.responsiveHeight(40),
+    marginTop: 0,
+  },
+  totalSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: responsive.responsiveWidth(16),
+    borderRadius: responsive.responsiveWidth(8),
+    marginBottom: responsive.responsiveHeight(8),
+  },
+  totalLabel: {
+    fontSize: responsive.responsiveWidth(16),
+    fontWeight: '600',
+  },
+  totalAmount: {
+    fontSize: responsive.responsiveWidth(18),
+    fontWeight: '700',
+  },
+  notaInput: {
+    padding: responsive.responsiveWidth(12),
+    borderRadius: responsive.responsiveWidth(8),
+    borderWidth: 1,
+    fontSize: responsive.responsiveWidth(14),
+    textAlignVertical: 'top',
+    minHeight: responsive.responsiveHeight(80),
+  },
+  submitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: responsive.responsiveHeight(16),
+    borderRadius: responsive.responsiveWidth(12),
+    marginBottom: responsive.responsiveHeight(24),
+  },
+  submitButtonText: {
+    fontSize: responsive.responsiveWidth(16),
+    fontWeight: '600',
+    marginLeft: responsive.responsiveWidth(8),
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    height: '80%',
+    borderRadius: responsive.responsiveWidth(16),
+    padding: responsive.responsiveWidth(20),
+    flexDirection: 'column',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveHeight(16),
+  },
+  modalTitle: {
+    fontSize: responsive.responsiveWidth(18),
+    fontWeight: '600',
+  },
+  modalScroll: {
+    flex: 1,
+  },
+  modalItem: {
+    padding: responsive.responsiveWidth(12),
+    borderRadius: responsive.responsiveWidth(8),
+    borderWidth: 1,
+    marginBottom: responsive.responsiveHeight(8),
+  },
+  modalItemText: {
+    fontSize: responsive.responsiveWidth(14),
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: responsive.responsiveWidth(8),
+    fontSize: responsive.responsiveWidth(14),
+    padding: 0,
+    height: responsive.responsiveHeight(20),
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
+  searchDropdown: {
+    marginTop: responsive.responsiveHeight(8),
+    borderRadius: responsive.responsiveWidth(8),
+    borderWidth: 1,
+    maxHeight: responsive.responsiveHeight(200),
+  },
+  dropdownLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: responsive.responsiveWidth(16),
+  },
+  dropdownLoadingText: {
+    marginLeft: responsive.responsiveWidth(8),
+    fontSize: responsive.responsiveWidth(14),
+  },
+  dropdownScroll: {
+    maxHeight: responsive.responsiveHeight(180),
   },
   scrollContent: {
     paddingBottom: responsive.responsivePadding(20),
@@ -1001,7 +1586,7 @@ const createStyles = (responsive) => StyleSheet.create({
   formCard: {
     borderRadius: 16,
     padding: responsive.responsivePadding(20),
-    marginTop: responsive.responsiveMargin(55),
+    marginTop: responsive.responsiveMargin(0),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,

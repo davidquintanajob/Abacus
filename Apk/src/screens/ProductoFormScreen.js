@@ -405,12 +405,18 @@ const ProductoFormContent = () => {
   }, [producto?.id_servicio, canViewCosts, user?.id_tienda, permissions, isOfflineMode]);
 
   // Refresh product data when screen regains focus (e.g., after returning from EntradaForm)
+  // Only refresh in view mode to avoid overwriting unsaved changes in edit/add mode
   useFocusEffect(
     React.useCallback(() => {
       const refreshProductoData = async () => {
         // Skip the first focus to avoid duplicate API call on initial load
         if (isFirstFocus.current) {
           isFirstFocus.current = false;
+          return;
+        }
+
+        // Don't refresh in edit or add mode to preserve unsaved changes
+        if (isEditMode || isAddMode) {
           return;
         }
 
@@ -454,7 +460,7 @@ const ProductoFormContent = () => {
               costo_usd_general: costoUsdGeneral,
             });
           } catch (err) {
-            showToast({ type: 'error', message: 'Error al actualizar datos del producto' });
+            console.error('Error refreshing producto data:', err);
           } finally {
             setIsFetchingProducto(false);
           }
@@ -462,7 +468,7 @@ const ProductoFormContent = () => {
       };
 
       refreshProductoData();
-    }, [producto?.id_servicio, canViewCosts, user?.id_tienda, permissions, isOfflineMode])
+    }, [producto?.id_servicio, canViewCosts, user?.id_tienda, permissions, isOfflineMode, isEditMode, isAddMode])
   );
 
   // Efecto para agregar tienda pre-seleccionada cuando viene de EntradaForm
@@ -627,8 +633,13 @@ const ProductoFormContent = () => {
       }
 
       if (isEditMode) {
-        await updateProducto(producto.id_servicio, dataToSend);
+        const updatedProduct = await updateProducto(producto.id_servicio, dataToSend);
         showToast({ type: 'success', message: 'Producto actualizado correctamente' });
+        
+        // Actualizar el caché en AsyncStorage con los datos actualizados
+        if (!isOfflineMode) {
+          await AsyncStorage.setItem(`producto_${producto.id_servicio}`, JSON.stringify(updatedProduct));
+        }
         
         if (returnToEntrada) {
           navigation.navigate('EntradaForm', {
