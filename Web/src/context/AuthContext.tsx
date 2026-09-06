@@ -1,11 +1,13 @@
 'use client';
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import api from '../lib/api';
 
 const AuthContext = createContext<any>(null);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string | null>(null);
   const [config, setConfig] = useState<any>(null);
@@ -16,13 +18,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     checkAuth();
   }, []);
 
+  useEffect(() => {
+    if (!isLoading && !user && typeof window !== 'undefined') {
+      const currentPath = window.location.pathname;
+      if (currentPath !== '/login') {
+        router.push('/login');
+      }
+    }
+  }, [isLoading, user, router]);
+
   const checkAuth = () => {
     try {
       if (typeof window !== 'undefined') {
         const storedToken = localStorage.getItem('token');
         const storedUser = localStorage.getItem('user');
         const storedConfig = localStorage.getItem('appConfig');
-        
+
         if (storedToken && storedUser) {
           setToken(storedToken);
           setUser(JSON.parse(storedUser));
