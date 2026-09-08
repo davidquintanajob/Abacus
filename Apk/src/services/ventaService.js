@@ -48,11 +48,13 @@ export const createVenta = async (ventaData) => {
     const response = await api.post('/lista-venta', ventaData);
     return response.data;
   } catch (error) {
-    console.error('Error creating venta:', error);
-    console.error('Error response data:', error.response?.data);
-    console.error('Error response status:', error.response?.status);
-    console.error('Error response headers:', error.response?.headers);
-    throw error;
+    const errorMessage = error.response?.data?.errors?.[0] ||
+                        error.response?.data?.message ||
+                        error.message ||
+                        'Error al crear venta';
+    const err = new Error(errorMessage);
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
   }
 };
 
@@ -61,8 +63,13 @@ export const updateVenta = async (id, ventaData) => {
     const response = await api.put(`/lista-venta/${id}`, ventaData);
     return response.data;
   } catch (error) {
-    console.error('Error updating venta:', error);
-    throw error;
+    const errorMessage = error.response?.data?.errors?.[0] ||
+                        error.response?.data?.message ||
+                        error.message ||
+                        'Error al actualizar venta';
+    const err = new Error(errorMessage);
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
   }
 };
 

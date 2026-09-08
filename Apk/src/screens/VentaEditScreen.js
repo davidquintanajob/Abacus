@@ -16,6 +16,7 @@ import { getApiBaseUrl } from '../services/api';
 import { getUsuarios } from '../services/usuarioService';
 import { getServicios } from '../services/servicioService';
 import { getCuentas } from '../services/cuentaService';
+import configService from '../services/configService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -79,6 +80,8 @@ const VentaEditContent = () => {
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
   const [selectorTipoCuenta, setSelectorTipoCuenta] = useState(null);
   const [availableCuentas, setAvailableCuentas] = useState([]);
+  // Track which payment field is focused to prevent formatting while typing
+  const [focusedPaymentField, setFocusedPaymentField] = useState(null);
 
   // Original VentaEditScreen state
   const [tiendas, setTiendas] = useState([]);
@@ -325,30 +328,6 @@ const VentaEditContent = () => {
       }) || []);
       setSaleItems(items);
 
-      // Set payment amounts from operaciones
-      const payments = {
-        efectivo_cup: '',
-        efectivo_usd: '',
-        transferencia_cup: '',
-        transferencia_usd: '',
-      };
-      ventaData.operaciones?.forEach(op => {
-        if (op.tipo_operacion === 'Efectivo CUP') {
-          payments.efectivo_cup = op.cantidad_cobrada?.toString() || '';
-          setSelectedCuentas(prev => ({ ...prev, efectivo_cup: op.cuenta }));
-        } else if (op.tipo_operacion === 'Efectivo USD') {
-          payments.efectivo_usd = op.cantidad_cobrada?.toString() || '';
-          setSelectedCuentas(prev => ({ ...prev, efectivo_usd: op.cuenta }));
-        } else if (op.tipo_operacion === 'Transferencia CUP') {
-          payments.transferencia_cup = op.cantidad_cobrada?.toString() || '';
-          setSelectedCuentas(prev => ({ ...prev, transferencia_cup: op.cuenta }));
-        } else if (op.tipo_operacion === 'Transferencia USD') {
-          payments.transferencia_usd = op.cantidad_cobrada?.toString() || '';
-          setSelectedCuentas(prev => ({ ...prev, transferencia_usd: op.cuenta }));
-        }
-      });
-      setPaymentAmounts(payments);
-
       // Set nota
       setVentaNota(ventaData.nota || '');
 
@@ -372,8 +351,34 @@ const VentaEditContent = () => {
       if (ventaTienda) {
         setTiendas([ventaTienda]);
         setHasLoadedTiendas(true);
+        await loadCuentaConfig(ventaTienda.id_tienda);
       }
-      
+
+      // Set payment amounts and selected cuentas from operaciones (after loading cuentaConfig)
+      const payments = {
+        efectivo_cup: '',
+        efectivo_usd: '',
+        transferencia_cup: '',
+        transferencia_usd: '',
+      };
+      ventaData.operaciones?.forEach(op => {
+        const tipoCuenta = op.cuenta?.tipo_cuenta;
+        if (tipoCuenta === 'Efectivo CUP') {
+          payments.efectivo_cup = op.cantidad_operacion?.toString() || '';
+          setSelectedCuentas(prev => ({ ...prev, efectivo_cup: op.cuenta }));
+        } else if (tipoCuenta === 'Efectivo USD') {
+          payments.efectivo_usd = op.cantidad_operacion?.toString() || '';
+          setSelectedCuentas(prev => ({ ...prev, efectivo_usd: op.cuenta }));
+        } else if (tipoCuenta === 'Transferencia CUP') {
+          payments.transferencia_cup = op.cantidad_operacion?.toString() || '';
+          setSelectedCuentas(prev => ({ ...prev, transferencia_cup: op.cuenta }));
+        } else if (tipoCuenta === 'Transferencia USD') {
+          payments.transferencia_usd = op.cantidad_operacion?.toString() || '';
+          setSelectedCuentas(prev => ({ ...prev, transferencia_usd: op.cuenta }));
+        }
+      });
+      setPaymentAmounts(payments);
+
       setFormData({
         fecha_hora: ventaData.fecha_hora,
         nota: ventaData.nota || '',
@@ -450,6 +455,16 @@ const VentaEditContent = () => {
     }
   };
 
+  const loadCuentaConfig = async (tiendaId) => {
+    try {
+      const data = await configService.getConfig();
+      if (data.tiendaCuentasConfig && data.tiendaCuentasConfig[tiendaId]) {
+        setCuentaConfig(data.tiendaCuentasConfig[tiendaId]);
+      }
+    } catch (error) {
+    }
+  };
+
   const searchServicios = async (searchTerm) => {
     try {
       if (isOfflineMode || !searchTerm || searchTerm.length < 2) {
@@ -501,22 +516,20 @@ const VentaEditContent = () => {
       showToast({ type: 'warning', message: 'La fecha y hora son obligatorias' });
       return;
     }
-    
-    if (!formData.id_usuario) {
-      showToast({ type: 'warning', message: 'El usuario es obligatorio' });
-      return;
-    }
-    
+
+    // Allow paying more or less than total (for change or partial payments)
+    // No validation on remaining amount needed
+
     if (!formData.cambio_moneda || parseFloat(formData.cambio_moneda) <= 0) {
       showToast({ type: 'warning', message: 'El cambio de moneda debe ser mayor que 0' });
       return;
     }
 
     const montos = [
-      parseFloat(formData.cantidad_cobrada_efectivo_cup) || 0,
-      parseFloat(formData.cantidad_cobrada_efectivo_usd) || 0,
-      parseFloat(formData.cantidad_cobrada_transferencia_cup) || 0,
-      parseFloat(formData.cantidad_cobrada_transferencia_usd) || 0,
+      parseFloat(paymentAmounts.efectivo_cup) || 0,
+      parseFloat(paymentAmounts.efectivo_usd) || 0,
+      parseFloat(paymentAmounts.transferencia_cup) || 0,
+      parseFloat(paymentAmounts.transferencia_usd) || 0,
     ];
 
     if (montos.some(m => m < 0)) {
@@ -525,19 +538,19 @@ const VentaEditContent = () => {
     }
 
     // Validar cuentas
-    if (montos[0] > 0 && !formData.id_cuenta_efectivo_cup) {
+    if (montos[0] > 0 && !selectedCuentas.efectivo_cup) {
       showToast({ type: 'warning', message: 'Se requiere cuenta para efectivo CUP' });
       return;
     }
-    if (montos[1] > 0 && !formData.id_cuenta_efectivo_usd) {
+    if (montos[1] > 0 && !selectedCuentas.efectivo_usd) {
       showToast({ type: 'warning', message: 'Se requiere cuenta para efectivo USD' });
       return;
     }
-    if (montos[2] > 0 && !formData.id_cuenta_transferencia_cup) {
+    if (montos[2] > 0 && !selectedCuentas.transferencia_cup) {
       showToast({ type: 'warning', message: 'Se requiere cuenta para transferencia CUP' });
       return;
     }
-    if (montos[3] > 0 && !formData.id_cuenta_transferencia_usd) {
+    if (montos[3] > 0 && !selectedCuentas.transferencia_usd) {
       showToast({ type: 'warning', message: 'Se requiere cuenta para transferencia USD' });
       return;
     }
@@ -570,19 +583,19 @@ const VentaEditContent = () => {
 
     try {
       setIsSaving(true);
-      
+
       const ventaData = {
         fecha_hora: formData.fecha_hora,
         nota: formData.nota || null,
-        cantidad_cobrada_efectivo_cup: parseFloat(formData.cantidad_cobrada_efectivo_cup) || 0,
-        cantidad_cobrada_efectivo_usd: parseFloat(formData.cantidad_cobrada_efectivo_usd) || 0,
-        cantidad_cobrada_transferencia_cup: parseFloat(formData.cantidad_cobrada_transferencia_cup) || 0,
-        cantidad_cobrada_transferencia_usd: parseFloat(formData.cantidad_cobrada_transferencia_usd) || 0,
-        id_cuenta_efectivo_cup: formData.id_cuenta_efectivo_cup,
-        id_cuenta_efectivo_usd: formData.id_cuenta_efectivo_usd,
-        id_cuenta_transferencia_cup: formData.id_cuenta_transferencia_cup,
-        id_cuenta_transferencia_usd: formData.id_cuenta_transferencia_usd,
-        id_usuario: formData.id_usuario,
+        cantidad_cobrada_efectivo_cup: parseFloat(paymentAmounts.efectivo_cup) || 0,
+        cantidad_cobrada_efectivo_usd: parseFloat(paymentAmounts.efectivo_usd) || 0,
+        cantidad_cobrada_transferencia_cup: parseFloat(paymentAmounts.transferencia_cup) || 0,
+        cantidad_cobrada_transferencia_usd: parseFloat(paymentAmounts.transferencia_usd) || 0,
+        id_cuenta_efectivo_cup: selectedCuentas.efectivo_cup?.id_cuenta,
+        id_cuenta_efectivo_usd: selectedCuentas.efectivo_usd?.id_cuenta,
+        id_cuenta_transferencia_cup: selectedCuentas.transferencia_cup?.id_cuenta,
+        id_cuenta_transferencia_usd: selectedCuentas.transferencia_usd?.id_cuenta,
+        id_usuario: user?.id_usuario || formData.id_usuario, // Use current user who is editing
         cambio_moneda: parseFloat(formData.cambio_moneda),
         ventas: ventaItems.map(item => ({
           id_servicio_tienda: item.id_servicio_tienda,
@@ -596,8 +609,7 @@ const VentaEditContent = () => {
       showToast({ type: 'success', message: 'Venta actualizada correctamente' });
       navigation.goBack();
     } catch (error) {
-      console.error('Error updating venta:', error);
-      const errorMessage = error.response?.data?.errors?.[0] || error.message || 'Error al actualizar venta';
+      const errorMessage = error.message || 'Error al actualizar venta';
       showToast({ type: 'error', message: errorMessage });
     } finally {
       setIsSaving(false);
@@ -621,20 +633,21 @@ const VentaEditContent = () => {
   };
 
   const calculateTotalToReceive = () => {
-    return ventaItems.reduce((total, item) => {
+    const total = saleItems.reduce((total, item) => {
       const cantidad = parseFloat(item.cantidad) || 0;
-      const precioCup = parseFloat(item.precio_cobrado_cup) || 0;
+      const precioCup = parseFloat(item.precio_cup) || 0;
       return total + (cantidad * precioCup);
     }, 0);
+    return total;
   };
 
   const calculateTotalReceived = () => {
-    const efectivoCup = parseFloat(formData.cantidad_cobrada_efectivo_cup) || 0;
-    const efectivoUsd = parseFloat(formData.cantidad_cobrada_efectivo_usd) || 0;
-    const transferenciaCup = parseFloat(formData.cantidad_cobrada_transferencia_cup) || 0;
-    const transferenciaUsd = parseFloat(formData.cantidad_cobrada_transferencia_usd) || 0;
+    const efectivoCup = parseFloat(paymentAmounts.efectivo_cup) || 0;
+    const efectivoUsd = parseFloat(paymentAmounts.efectivo_usd) || 0;
+    const transferenciaCup = parseFloat(paymentAmounts.transferencia_cup) || 0;
+    const transferenciaUsd = parseFloat(paymentAmounts.transferencia_usd) || 0;
     const cambio = parseFloat(formData.cambio_moneda) || 1;
-    
+
     return efectivoCup + transferenciaCup + (efectivoUsd * cambio) + (transferenciaUsd * cambio);
   };
 
@@ -686,8 +699,36 @@ const VentaEditContent = () => {
 
   const getPaymentDisplayValue = (tipo) => {
     const value = paymentAmounts[tipo];
+    // Don't format if this field is currently focused (allows user to type freely)
+    if (focusedPaymentField === tipo) {
+      return value;
+    }
     if (!value) return '';
     return show5Decimals ? formatNumber5Decimals(parseFloat(value) || 0) : formatNumber2Decimals(parseFloat(value) || 0);
+  };
+
+  const handleSelectCuenta = (cuenta, tipoCuenta) => {
+    const tipoCuentaEsperado = {
+      efectivo_cup: 'Efectivo CUP',
+      efectivo_usd: 'Efectivo USD',
+      transferencia_cup: 'Transferencia CUP',
+      transferencia_usd: 'Transferencia USD',
+    };
+
+    // Validar que la cuenta tenga el tipo correcto
+    if (cuenta.tipo_cuenta !== tipoCuentaEsperado[tipoCuenta]) {
+      showToast({
+        type: 'error',
+        message: `La cuenta "${cuenta.nombre}" es de tipo "${cuenta.tipo_cuenta}" pero se requiere "${tipoCuentaEsperado[tipoCuenta]}". Por favor selecciona una cuenta del tipo correcto.`
+      });
+      return;
+    }
+
+    setSelectedCuentas(prev => ({
+      ...prev,
+      [tipoCuenta]: cuenta,
+    }));
+    setShowCuentaSelector(false);
   };
 
   const styles = createStyles(responsive);
@@ -779,23 +820,24 @@ const VentaEditContent = () => {
           )}
 
           {/* Store Selector and Product Search */}
-          <Card style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
+          <Card style={[styles.sectionCardCompact, { backgroundColor: colors.surface }]}>
             <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Tienda</Text>
-              <TouchableOpacity
-                style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-                onPress={() => setShowTiendaSelector(!showTiendaSelector)}
-              >
-                <Text style={[styles.dropdownText, { color: selectedTienda ? colors.onSurface : colors.outline }]}>
-                  {selectedTienda?.nombre || 'Seleccionar tienda...'}
-                </Text>
-                <Ionicons
-                  name={showTiendaSelector ? "chevron-up" : "chevron-down"}
-                  size={responsive.responsiveWidth(20)}
-                  color={colors.outline}
-                />
-              </TouchableOpacity>
             </View>
+
+            <TouchableOpacity
+              style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+              onPress={() => setShowTiendaSelector(!showTiendaSelector)}
+            >
+              <Text style={[styles.dropdownText, { color: selectedTienda ? colors.onSurface : colors.outline }]}>
+                {selectedTienda?.nombre || 'Seleccionar tienda...'}
+              </Text>
+              <Ionicons
+                name={showTiendaSelector ? "chevron-up" : "chevron-down"}
+                size={responsive.responsiveWidth(20)}
+                color={colors.outline}
+              />
+            </TouchableOpacity>
 
             {showTiendaSelector && (
               <ScrollView style={styles.dropdownMenu} nestedScrollEnabled={true}>
@@ -806,6 +848,7 @@ const VentaEditContent = () => {
                     onPress={() => {
                       setSelectedTienda(tienda);
                       setShowTiendaSelector(false);
+                      loadCuentaConfig(tienda.id_tienda);
                     }}
                   >
                     <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
@@ -861,7 +904,7 @@ const VentaEditContent = () => {
           </Card>
 
           {/* Sale Items List */}
-          <Card style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
+          <Card style={[styles.sectionCardCompact, { backgroundColor: colors.surface }]}>
             <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
                 Productos ({saleItems.length})
@@ -1008,6 +1051,19 @@ const VentaEditContent = () => {
                         const sanitizedText = text.replace(/-/g, '');
                         setPaymentAmounts(prev => ({ ...prev, [tipo]: sanitizedText }));
                       }}
+                      onFocus={() => setFocusedPaymentField(tipo)}
+                      onBlur={() => {
+                        setFocusedPaymentField(null);
+                        // Format the value when field loses focus
+                        const value = paymentAmounts[tipo];
+                        if (value && value !== '') {
+                          const num = parseFloat(value);
+                          if (!isNaN(num)) {
+                            const formatted = show5Decimals ? num.toFixed(5) : num.toFixed(2);
+                            setPaymentAmounts(prev => ({ ...prev, [tipo]: formatted }));
+                          }
+                        }
+                      }}
                       keyboardType="decimal-pad"
                     />
                   </View>
@@ -1021,6 +1077,17 @@ const VentaEditContent = () => {
                 ${show5Decimals ? formatNumber5Decimals(calculateTotal()) : formatNumber2Decimals(calculateTotal())} CUP
               </Text>
             </View>
+
+            {Math.abs(getRemainingAmount()) > 0.01 && (
+              <View style={[styles.remainingSection, { backgroundColor: getRemainingAmount() > 0 ? colors.errorContainer : colors.secondaryContainer }]}>
+                <Text style={[styles.remainingLabel, { color: getRemainingAmount() > 0 ? colors.error : colors.onSecondaryContainer }]}>
+                  {getRemainingAmount() > 0 ? 'Falta por pagar:' : 'Cambio a devolver:'}
+                </Text>
+                <Text style={[styles.remainingAmount, { color: getRemainingAmount() > 0 ? colors.error : colors.onSecondaryContainer }]}>
+                  ${show5Decimals ? formatNumber5Decimals(Math.abs(getRemainingAmount())) : formatNumber2Decimals(Math.abs(getRemainingAmount()))} CUP
+                </Text>
+              </View>
+            )}
 
             <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Nota</Text>
@@ -1037,7 +1104,7 @@ const VentaEditContent = () => {
           </Card>
 
           {/* Additional Fields Card - Usuario, Cambio de Moneda, Fecha */}
-          <Card style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
+          <Card style={[styles.sectionCardCompact, { backgroundColor: colors.surface }]}>
             <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Información Adicional</Text>
             </View>
@@ -1045,89 +1112,50 @@ const VentaEditContent = () => {
             {/* Usuario */}
             <View style={styles.formGroup}>
               <Text style={[styles.label, { color: colors.outline }]}>Usuario *</Text>
-              <TouchableOpacity
-                style={[styles.dropdown, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, borderColor: colors.outlineVariant }]}
-                onPress={() => {
-                  if (!isReadOnly) {
-                    fetchUsuarios();
-                    setShowUsuarioDropdown(!showUsuarioDropdown);
-                  }
-                }}
-                disabled={isReadOnly}
+              <View
+                style={[styles.dropdown, { backgroundColor: colors.surfaceVariant, borderColor: colors.outlineVariant }]}
               >
                 <Text style={[styles.dropdownText, { color: formData.id_usuario ? colors.onSurface : colors.outline }]}>
-                  {usuarios.find(u => u.id_usuario === formData.id_usuario)?.nombre_natural || 'Seleccionar usuario...'}
+                  {usuarios.find(u => u.id_usuario === formData.id_usuario)?.nombre_natural || user?.nombre_natural || 'Usuario actual'}
                 </Text>
-                {!isReadOnly && (
-                  <Ionicons
-                    name={showUsuarioDropdown ? "chevron-up" : "chevron-down"}
-                    size={responsive.responsiveWidth(20)}
-                    color={colors.outline}
+              </View>
+            </View>
+
+            {/* Cambio de Moneda y Fecha */}
+            <View style={styles.formRow}>
+              <View style={[styles.formGroup, { flex: 1, marginRight: responsive.responsiveWidth(8) }]}>
+                <Text style={[styles.label, { color: colors.outline }]}>Cambio de Moneda *</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.surfaceVariant, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Tasa de cambio..."
+                  value={formData.cambio_moneda}
+                  onChangeText={(text) => setFormData(prev => ({ ...prev, cambio_moneda: text }))}
+                  keyboardType="numeric"
+                  editable={false}
+                />
+              </View>
+
+              <View style={[styles.formGroup, { flex: 1 }]}>
+                <Text style={[styles.label, { color: colors.outline }]}>Fecha *</Text>
+                <TouchableOpacity
+                  style={[styles.input, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                  onPress={() => !isReadOnly && setShowFechaPicker(true)}
+                  disabled={isReadOnly}
+                >
+                  <Text style={[styles.inputText, { color: colors.onSurface }]}>
+                    {new Date(formData.fecha_hora).toLocaleDateString('es-ES')}
+                  </Text>
+                </TouchableOpacity>
+                {showFechaPicker && !isReadOnly && (
+                  <DateTimePicker
+                    value={new Date(formData.fecha_hora)}
+                    mode="date"
+                    display="default"
+                    onChange={handleFechaChange}
                   />
                 )}
-              </TouchableOpacity>
-
-              {showUsuarioDropdown && !isReadOnly && (
-                <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                  {isLoadingUsuarios ? (
-                    <View style={styles.dropdownLoadingContainer}>
-                      <ActivityIndicator size="small" color={colors.primary} />
-                      <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando usuarios...</Text>
-                    </View>
-                  ) : (
-                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                      {usuarios.map((usuario, index) => (
-                        <TouchableOpacity
-                          key={usuario.id_usuario}
-                          style={[styles.dropdownItem, index === usuarios.length - 1 && styles.dropdownItemLast]}
-                          onPress={() => {
-                            setFormData(prev => ({ ...prev, id_usuario: usuario.id_usuario }));
-                            setShowUsuarioDropdown(false);
-                          }}
-                        >
-                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{usuario.nombre_natural}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  )}
-                </View>
-              )}
-            </View>
-
-            {/* Cambio de Moneda */}
-            <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.outline }]}>Cambio de Moneda *</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                placeholderTextColor={colors.outline}
-                placeholder="Tasa de cambio..."
-                value={formData.cambio_moneda}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, cambio_moneda: text }))}
-                keyboardType="numeric"
-                editable={!isReadOnly}
-              />
-            </View>
-
-            {/* Fecha */}
-            <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.outline }]}>Fecha *</Text>
-              <TouchableOpacity
-                style={[styles.input, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                onPress={() => !isReadOnly && setShowFechaPicker(true)}
-                disabled={isReadOnly}
-              >
-                <Text style={[styles.inputText, { color: colors.onSurface }]}>
-                  {new Date(formData.fecha_hora).toLocaleDateString('es-ES')}
-                </Text>
-              </TouchableOpacity>
-              {showFechaPicker && !isReadOnly && (
-                <DateTimePicker
-                  value={new Date(formData.fecha_hora)}
-                  mode="date"
-                  display="default"
-                  onChange={handleFechaChange}
-                />
-              )}
+              </View>
             </View>
           </Card>
 
@@ -1170,10 +1198,7 @@ const VentaEditContent = () => {
                 <TouchableOpacity
                   key={cuenta.id_cuenta}
                   style={[styles.modalItem, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={() => {
-                    setSelectedCuentas(prev => ({ ...prev, [selectorTipoCuenta]: cuenta }));
-                    setShowCuentaSelector(false);
-                  }}
+                  onPress={() => handleSelectCuenta(cuenta, selectorTipoCuenta)}
                 >
                   <Text style={[styles.modalItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
                 </TouchableOpacity>
@@ -1283,6 +1308,13 @@ const createStyles = (responsive) => StyleSheet.create({
   sectionCard: {
     marginBottom: responsive.responsiveHeight(16),
     padding: responsive.responsiveWidth(16),
+    borderRadius: responsive.responsiveWidth(12),
+  },
+  sectionCardCompact: {
+    marginBottom: responsive.responsiveHeight(16),
+    paddingHorizontal: responsive.responsiveWidth(16),
+    paddingBottom: responsive.responsiveWidth(16),
+    paddingTop: responsive.responsiveWidth(4),
     borderRadius: responsive.responsiveWidth(12),
   },
   sectionHeader: {

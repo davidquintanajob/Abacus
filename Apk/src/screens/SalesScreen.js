@@ -82,6 +82,8 @@ const SalesContent = () => {
   // Toggle for decimal precision in payment section (default: 2 decimals)
   const [show5Decimals, setShow5Decimals] = useState(false);
   const [ventaNota, setVentaNota] = useState('');
+  // Track which payment field is focused to prevent formatting while typing
+  const [focusedPaymentField, setFocusedPaymentField] = useState(null);
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
   // State for pending product without stock
   const [pendingProduct, setPendingProduct] = useState(null);
@@ -850,6 +852,10 @@ const SalesContent = () => {
   // Get the display value for a payment field based on toggle state
   const getPaymentDisplayValue = (tipo) => {
     const value = paymentAmounts[tipo];
+    // Don't format if this field is currently focused (allows user to type freely)
+    if (focusedPaymentField === tipo) {
+      return value;
+    }
     if (show5Decimals) {
       // When toggle is active, show 5 decimals
       return formatNumber5Decimals(value);
@@ -860,6 +866,22 @@ const SalesContent = () => {
   };
 
   const handleSelectCuenta = (cuenta, tipoCuenta) => {
+    const tipoCuentaEsperado = {
+      efectivo_cup: 'Efectivo CUP',
+      efectivo_usd: 'Efectivo USD',
+      transferencia_cup: 'Transferencia CUP',
+      transferencia_usd: 'Transferencia USD',
+    };
+
+    // Validar que la cuenta tenga el tipo correcto
+    if (cuenta.tipo_cuenta !== tipoCuentaEsperado[tipoCuenta]) {
+      showToast({
+        type: 'error',
+        message: `La cuenta "${cuenta.nombre}" es de tipo "${cuenta.tipo_cuenta}" pero se requiere "${tipoCuentaEsperado[tipoCuenta]}". Por favor selecciona una cuenta del tipo correcto.`
+      });
+      return;
+    }
+
     setSelectedCuentas(prev => ({
       ...prev,
       [tipoCuenta]: cuenta,
@@ -878,11 +900,8 @@ const SalesContent = () => {
       return;
     }
 
-    const remaining = getRemainingAmount();
-    if (remaining > 0.01) {
-      showToast({ type: 'error', message: `Falta por pagar: $${show5Decimals ? formatNumber5Decimals(remaining) : formatNumber2Decimals(remaining)} CUP` });
-      return;
-    }
+    // Allow paying more or less than total (for change or partial payments)
+    // No validation on remaining amount needed
 
     try {
       setIsSubmitting(true);
@@ -938,7 +957,7 @@ const SalesContent = () => {
         transferencia_usd: '',
       });
     } catch (error) {
-      const errorMessage = error.response?.data?.errors?.[0] || error.message || 'Error al realizar venta';
+      const errorMessage = error.message || 'Error al realizar venta';
       showToast({ type: 'error', message: errorMessage });
     } finally {
       setIsSubmitting(false);
@@ -1453,6 +1472,19 @@ const SalesContent = () => {
                       const sanitizedText = text.replace(/-/g, '');
                       setPaymentAmounts(prev => ({ ...prev, [tipo]: sanitizedText }));
                     }}
+                    onFocus={() => setFocusedPaymentField(tipo)}
+                    onBlur={() => {
+                      setFocusedPaymentField(null);
+                      // Format the value when field loses focus
+                      const value = paymentAmounts[tipo];
+                      if (value && value !== '') {
+                        const num = parseFloat(value);
+                        if (!isNaN(num)) {
+                          const formatted = show5Decimals ? num.toFixed(5) : num.toFixed(2);
+                          setPaymentAmounts(prev => ({ ...prev, [tipo]: formatted }));
+                        }
+                      }
+                    }}
                     keyboardType="decimal-pad"
                   />
                 </View>
@@ -1467,13 +1499,13 @@ const SalesContent = () => {
             </Text>
           </View>
 
-          {getRemainingAmount() > 0.01 && (
-            <View style={[styles.remainingSection, { backgroundColor: colors.errorContainer }]}>
-              <Text style={[styles.remainingLabel, { color: colors.error }]}>
-                Falta por pagar:
+          {Math.abs(getRemainingAmount()) > 0.01 && (
+            <View style={[styles.remainingSection, { backgroundColor: getRemainingAmount() > 0 ? colors.errorContainer : colors.secondaryContainer }]}>
+              <Text style={[styles.remainingLabel, { color: getRemainingAmount() > 0 ? colors.error : colors.onSecondaryContainer }]}>
+                {getRemainingAmount() > 0 ? 'Falta por pagar:' : 'Cambio a devolver:'}
               </Text>
-              <Text style={[styles.remainingAmount, { color: colors.error }]}>
-                ${show5Decimals ? formatNumber5Decimals(getRemainingAmount()) : formatNumber2Decimals(getRemainingAmount())} CUP
+              <Text style={[styles.remainingAmount, { color: getRemainingAmount() > 0 ? colors.error : colors.onSecondaryContainer }]}>
+                ${show5Decimals ? formatNumber5Decimals(Math.abs(getRemainingAmount())) : formatNumber2Decimals(Math.abs(getRemainingAmount()))} CUP
               </Text>
             </View>
           )}
@@ -1638,6 +1670,16 @@ const SalesContent = () => {
           </View>
         </View>
       </Modal>
+
+      <Toast
+        visible={toast.visible}
+        type={toast.type}
+        message={toast.message}
+        code={toast.code}
+        duration={toast.duration}
+        onHide={hideToast}
+        toastKey={toast.key}
+      />
     </SafeAreaView>
   );
 };

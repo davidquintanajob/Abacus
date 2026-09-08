@@ -131,6 +131,12 @@ api.interceptors.response.use(
 
     // Detectar error de versión incompatible
     const isVersionError = error.response?.status === 426 || 
+                          (error.response?.status === 400 && (
+                            error.response?.data?.message?.toLowerCase().includes('versión') ||
+                            error.response?.data?.message?.toLowerCase().includes('version') ||
+                            error.response?.data?.errors?.[0]?.toLowerCase().includes('versión') ||
+                            error.response?.data?.errors?.[0]?.toLowerCase().includes('version')
+                          )) ||
                           error.response?.data?.message?.toLowerCase().includes('versión') ||
                           error.response?.data?.errors?.[0]?.toLowerCase().includes('versión') ||
                           error.response?.data?.errors?.[0]?.toLowerCase().includes('version');
