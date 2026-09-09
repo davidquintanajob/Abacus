@@ -916,6 +916,49 @@ const SalesContent = () => {
       const transferenciaCup = parseAmount(paymentAmounts.transferencia_cup);
       const transferenciaUsd = parseAmount(paymentAmounts.transferencia_usd);
 
+      // Calculate total original prices
+      const totalOriginalCUP = saleItems.reduce((sum, item) => sum + (item.precio_cup * item.cantidad), 0);
+      const totalOriginalUSD = saleItems.reduce((sum, item) => sum + (item.precio_usd * item.cantidad), 0);
+
+      // Calculate total paid
+      const cambio = parseFloat(config.cupToUsdRate || 1);
+      const totalPaidCUP = efectivoCup + transferenciaCup + (efectivoUsd + transferenciaUsd) * cambio;
+      const totalPaidUSD = efectivoUsd + transferenciaUsd + (efectivoCup + transferenciaCup) / cambio;
+
+      // Calculate difference and distribute equitably
+      const diferenciaCUP = totalPaidCUP - totalOriginalCUP;
+      const diferenciaUSD = totalPaidUSD - totalOriginalUSD;
+
+      // Calculate adjustment per item (equitable distribution)
+      const cantidadProductos = saleItems.length;
+      const ajusteCUPPorItem = cantidadProductos > 0 ? diferenciaCUP / cantidadProductos : 0;
+      const ajusteUSDPorItem = cantidadProductos > 0 ? diferenciaUSD / cantidadProductos : 0;
+
+      // Create adjusted sale items for the API
+      const ventasConAjuste = saleItems.map(item => {
+        const ajusteCUP = ajusteCUPPorItem / item.cantidad;
+        const ajusteUSD = ajusteUSDPorItem / item.cantidad;
+        const precioCobradoCUP = Math.max(0, item.precio_cup + ajusteCUP);
+        const precioCobradoUSD = Math.max(0, item.precio_usd + ajusteUSD);
+        
+        return {
+          id_servicio_tienda: item.id_servicio_tienda,
+          cantidad: item.cantidad,
+          precio_cobrado_cup: precioCobradoCUP,
+          precio_cobrado_usd: precioCobradoUSD,
+        };
+      });
+
+      // Update sale items with adjusted prices for comprobante
+      const saleItemsConAjuste = saleItems.map((item, index) => {
+        const ventaAjustada = ventasConAjuste[index];
+        return {
+          ...item,
+          precio_cup: ventaAjustada.precio_cobrado_cup,
+          precio_usd: ventaAjustada.precio_cobrado_usd,
+        };
+      });
+
       const ventaData = {
         fecha_hora: new Date().toISOString(),
         nota: ventaNota,
@@ -929,12 +972,7 @@ const SalesContent = () => {
         id_cuenta_transferencia_usd: transferenciaUsd > 0 ? selectedCuentas.transferencia_usd?.id_cuenta : null,
         id_usuario: user.id_usuario,
         cambio_moneda: config.cupToUsdRate || 1,
-        ventas: saleItems.map(item => ({
-          id_servicio_tienda: item.id_servicio_tienda,
-          cantidad: item.cantidad,
-          precio_cobrado_cup: item.precio_cup,
-          precio_cobrado_usd: item.precio_usd,
-        })),
+        ventas: ventasConAjuste,
       };
 
 
@@ -942,8 +980,8 @@ const SalesContent = () => {
       
       showToast({ type: 'success', message: 'Venta realizada correctamente' });
       
-      // Save sale items for comprobante before resetting
-      setComprobanteSaleItems([...saleItems]);
+      // Save sale items with adjusted prices for comprobante before resetting
+      setComprobanteSaleItems([...saleItemsConAjuste]);
       
       // Show comprobante option
       setShowComprobanteModal(true);
