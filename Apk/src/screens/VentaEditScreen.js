@@ -584,25 +584,70 @@ const VentaEditContent = () => {
     try {
       setIsSaving(true);
 
+      const efectivoCup = parseFloat(paymentAmounts.efectivo_cup) || 0;
+      const efectivoUsd = parseFloat(paymentAmounts.efectivo_usd) || 0;
+      const transferenciaCup = parseFloat(paymentAmounts.transferencia_cup) || 0;
+      const transferenciaUsd = parseFloat(paymentAmounts.transferencia_usd) || 0;
+      const cambio = parseFloat(formData.cambio_moneda) || 1;
+
+      // Calculate total original prices from ventaItems
+      const totalOriginalCUP = ventaItems.reduce((sum, item) => {
+        const cantidad = parseFloat(item.cantidad) || 0;
+        const precioCup = parseFloat(item.precio_cobrado_cup) || 0;
+        return sum + (cantidad * precioCup);
+      }, 0);
+      const totalOriginalUSD = ventaItems.reduce((sum, item) => {
+        const cantidad = parseFloat(item.cantidad) || 0;
+        const precioUsd = parseFloat(item.precio_cobrado_usd) || 0;
+        return sum + (cantidad * precioUsd);
+      }, 0);
+
+      // Calculate total paid
+      const totalPaidCUP = efectivoCup + transferenciaCup + (efectivoUsd + transferenciaUsd) * cambio;
+      const totalPaidUSD = efectivoUsd + transferenciaUsd + (efectivoCup + transferenciaCup) / cambio;
+
+      // Calculate difference and distribute equitably
+      const diferenciaCUP = totalPaidCUP - totalOriginalCUP;
+      const diferenciaUSD = totalPaidUSD - totalOriginalUSD;
+
+      // Calculate adjustment per item (equitable distribution)
+      const cantidadProductos = ventaItems.length;
+      const ajusteCUPPorItem = cantidadProductos > 0 ? diferenciaCUP / cantidadProductos : 0;
+      const ajusteUSDPorItem = cantidadProductos > 0 ? diferenciaUSD / cantidadProductos : 0;
+
+      // Create adjusted sale items for the API
+      const ventasConAjuste = ventaItems.map(item => {
+        const cantidad = parseFloat(item.cantidad) || 1;
+        const precioOriginalCUP = parseFloat(item.precio_cobrado_cup) || 0;
+        const precioOriginalUSD = parseFloat(item.precio_cobrado_usd) || 0;
+        
+        const ajusteCUP = ajusteCUPPorItem / cantidad;
+        const ajusteUSD = ajusteUSDPorItem / cantidad;
+        const precioCobradoCUP = Math.max(0, precioOriginalCUP + ajusteCUP);
+        const precioCobradoUSD = Math.max(0, precioOriginalUSD + ajusteUSD);
+        
+        return {
+          id_servicio_tienda: item.id_servicio_tienda,
+          cantidad: cantidad,
+          precio_cobrado_cup: precioCobradoCUP,
+          precio_cobrado_usd: precioCobradoUSD,
+        };
+      });
+
       const ventaData = {
         fecha_hora: formData.fecha_hora,
         nota: formData.nota || null,
-        cantidad_cobrada_efectivo_cup: parseFloat(paymentAmounts.efectivo_cup) || 0,
-        cantidad_cobrada_efectivo_usd: parseFloat(paymentAmounts.efectivo_usd) || 0,
-        cantidad_cobrada_transferencia_cup: parseFloat(paymentAmounts.transferencia_cup) || 0,
-        cantidad_cobrada_transferencia_usd: parseFloat(paymentAmounts.transferencia_usd) || 0,
+        cantidad_cobrada_efectivo_cup: efectivoCup,
+        cantidad_cobrada_efectivo_usd: efectivoUsd,
+        cantidad_cobrada_transferencia_cup: transferenciaCup,
+        cantidad_cobrada_transferencia_usd: transferenciaUsd,
         id_cuenta_efectivo_cup: selectedCuentas.efectivo_cup?.id_cuenta,
         id_cuenta_efectivo_usd: selectedCuentas.efectivo_usd?.id_cuenta,
         id_cuenta_transferencia_cup: selectedCuentas.transferencia_cup?.id_cuenta,
         id_cuenta_transferencia_usd: selectedCuentas.transferencia_usd?.id_cuenta,
-        id_usuario: user?.id_usuario || formData.id_usuario, // Use current user who is editing
-        cambio_moneda: parseFloat(formData.cambio_moneda),
-        ventas: ventaItems.map(item => ({
-          id_servicio_tienda: item.id_servicio_tienda,
-          cantidad: parseFloat(item.cantidad),
-          precio_cobrado_cup: parseFloat(item.precio_cobrado_cup),
-          precio_cobrado_usd: parseFloat(item.precio_cobrado_usd),
-        })),
+        id_usuario: user?.id_usuario || formData.id_usuario,
+        cambio_moneda: cambio,
+        ventas: ventasConAjuste,
       };
 
       await updateVenta(venta.id_lista_venta, ventaData);
