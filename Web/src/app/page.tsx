@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { Header } from '../components/layout/Header';
-import { Sidebar } from '../components/layout/Sidebar';
+import { SidebarNavigation } from '../components/layout/SidebarNavigation';
 import { AlertTriangle, Clock, XCircle, CheckCircle, Phone, MessageCircle, ArrowRight, Lock, Box, ShoppingCart, DollarSign, Users } from 'lucide-react';
 import { getEntradas } from '../services/entradaService';
 import { SvgIcon } from '../components/common/SvgIcon';
@@ -20,7 +20,14 @@ export default function HomePage() {
   const { colors, isDark, toggleTheme } = useTheme();
   const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels } = useAuth();
   const { isMobile, isTablet, isDesktop } = useResponsive();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const sidebarNavRef = useRef<any>(null);
+
+  const handleMenuPress = () => {
+    if (sidebarNavRef.current) {
+      sidebarNavRef.current.openSidebar();
+    }
+  };
+
   const [greeting, setGreeting] = useState('Buenos días');
   const [currentDate, setCurrentDate] = useState('');
   const [expiringProducts, setExpiringProducts] = useState<any[]>([]);
@@ -286,7 +293,7 @@ export default function HomePage() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: colors.background }}>
       <Header 
-        onMenuPress={() => setSidebarOpen(true)}
+        onMenuPress={handleMenuPress}
         onThemePress={toggleTheme}
         onNotificationsPress={() => {}}
         onLogoPress={handleLogoPress}
@@ -295,16 +302,16 @@ export default function HomePage() {
         showLogo={true}
       />
       
-      <Sidebar 
-        isOpen={sidebarOpen} 
-        onClose={() => setSidebarOpen(false)}
+      <SidebarNavigation 
+        currentRoute="Home" 
+        ref={sidebarNavRef}
       />
 
       <div style={{ 
         marginTop: '80px',
         marginRight: 'auto',
         marginBottom: '0',
-        marginLeft: 'auto',
+        marginLeft: isDesktop ? '80px' : 'auto',
         paddingTop: isMobile ? '20px' : isTablet ? '32px' : '40px',
         paddingRight: isMobile ? '20px' : isTablet ? '32px' : '40px',
         paddingBottom: '120px',

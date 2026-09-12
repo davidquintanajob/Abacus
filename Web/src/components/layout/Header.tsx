@@ -74,7 +74,7 @@ export const Header = ({
         ) : (
           <button
             onClick={onMenuPress}
-            className="p-1 md:p-2 rounded-full hover:bg-black/5 transition-colors"
+            className="p-1 md:p-2 rounded-full hover:bg-black/5 transition-colors lg:hidden"
           >
             <Menu size={24} className="md:w-8 md:h-8 lg:w-9 lg:h-9" style={{ color: colors.primary }} />
           </button>

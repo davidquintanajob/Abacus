@@ -13,9 +13,12 @@ interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
   currentRoute?: string;
+  hoverTriggered?: boolean;
+  onSidebarEnter?: () => void;
+  onSidebarLeave?: () => void;
 }
 
-export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home' }: SidebarProps) => {
+export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverTriggered = false, onSidebarEnter, onSidebarLeave }: SidebarProps) => {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, logout } = useAuth();
@@ -106,18 +109,28 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home' }: Side
         toastKey={toast.key}
       />
       
-      {/* Overlay */}
-      <div
-        className="fixed inset-0 bg-black/50 z-40"
-        onClick={onClose}
-      />
+      {/* Overlay - only show when not hover-triggered */}
+      {!hoverTriggered && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 transition-opacity duration-300 ease-in-out"
+          style={{
+            opacity: isOpen ? 1 : 0,
+            pointerEvents: isOpen ? 'auto' : 'none',
+          }}
+          onClick={onClose}
+        />
+      )}
       
       {/* Sidebar */}
       <aside
-        className="fixed top-0 left-0 bottom-0 z-50 w-80 rounded-r-2xl shadow-2xl flex flex-col pt-6 px-4 pb-4"
+        className="fixed top-0 left-0 bottom-0 z-50 w-80 rounded-r-2xl shadow-2xl flex flex-col pt-6 px-4 pb-4 transition-all duration-300 ease-in-out"
         style={{
           backgroundColor: colors.surfaceContainer,
+          transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
+          opacity: isOpen ? 1 : 0,
         }}
+        onMouseEnter={onSidebarEnter}
+        onMouseLeave={onSidebarLeave}
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-6">

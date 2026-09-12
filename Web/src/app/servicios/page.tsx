@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useViewMode } from '../../context/ViewModeContext';
 import { useToast } from '../../hooks/useToast';
 import { Header } from '../../components/layout/Header';
-import { Sidebar } from '../../components/layout/Sidebar';
+import { SidebarNavigation } from '../../components/layout/SidebarNavigation';
 import { Toast } from '../../components/common/Toast';
 import { getServicios, deleteServicio } from '../../services/servicioService';
 import { getTiendas } from '../../services/tiendaService';
@@ -36,7 +36,13 @@ export default function ServiciosPage() {
   const { viewMode, toggleViewMode } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
   const { isMobile, isTablet, isDesktop } = useResponsive();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const sidebarNavRef = useRef<any>(null);
+
+  const handleMenuPress = () => {
+    if (sidebarNavRef.current) {
+      sidebarNavRef.current.openSidebar();
+    }
+  };
 
   const [isLoading, setIsLoading] = useState(true);
   const [servicios, setServicios] = useState<any[]>([]);
@@ -181,18 +187,17 @@ export default function ServiciosPage() {
         toastKey={toast.key}
       />
       
-      <Sidebar
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        currentRoute="Servicios"
+      <SidebarNavigation 
+        currentRoute="Servicios" 
+        ref={sidebarNavRef}
       />
 
       <div 
         className="min-h-screen"
         style={{ backgroundColor: colors.background }}
       >
-        <Header 
-          onMenuPress={() => setSidebarOpen(true)}
+        <Header
+          onMenuPress={handleMenuPress}
           onThemePress={toggleTheme}
           onNotificationsPress={handleNotificationsPress}
           onProfilePress={handleProfilePress}
@@ -211,11 +216,11 @@ export default function ServiciosPage() {
             marginRight: 'auto',
             marginBottom: '0',
             marginLeft: 'auto',
-            paddingTop: isMobile ? '20px' : '80px',
-            paddingRight: isMobile ? '20px' : '16px',
+            paddingTop: isMobile ? '20px' : isTablet ? '32px' : '40px',
+            paddingRight: isMobile ? '20px' : isTablet ? '32px' : '40px',
             paddingBottom: '120px',
-            paddingLeft: isMobile ? '20px' : '16px',
-            maxWidth: isMobile ? '100%' : '56rem',
+            paddingLeft: isMobile ? '20px' : isTablet ? '32px' : '40px',
+            maxWidth: isDesktop ? '1400px' : '100%',
           }}
         >
           {/* Page Title */}
@@ -228,7 +233,8 @@ export default function ServiciosPage() {
             </h1>
           </div>
 
-          {/* Filter Section */}
+          {/* Filter Section - Wrapped to maintain compact width */}
+          <div style={{ maxWidth: '56rem', margin: '0 auto' }}>
           <div 
             className="rounded-2xl p-5 mb-6 shadow-lg"
             style={{ 
@@ -513,6 +519,7 @@ export default function ServiciosPage() {
               </button>
             </div>
           )}
+          </div>
 
           {/* Servicios List */}
           {isLoading ? (

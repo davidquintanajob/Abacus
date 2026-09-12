@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useViewMode } from '../../context/ViewModeContext';
 import { useToast } from '../../hooks/useToast';
 import { Header } from '../../components/layout/Header';
-import { Sidebar } from '../../components/layout/Sidebar';
+import { SidebarNavigation } from '../../components/layout/SidebarNavigation';
 import { Toast } from '../../components/common/Toast';
 import { getTiendas, deleteTienda } from '../../services/tiendaService';
 import { 
@@ -25,6 +25,7 @@ import {
   Store,
   AlertCircle
 } from 'lucide-react';
+import { useResponsive } from '../../hooks/useResponsive';
 
 export default function TiendasPage() {
   const router = useRouter();
@@ -32,7 +33,14 @@ export default function TiendasPage() {
   const { token, user } = useAuth();
   const { viewMode, toggleViewMode } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { isMobile, isTablet, isDesktop } = useResponsive();
+  const sidebarNavRef = useRef<any>(null);
+
+  const handleMenuPress = () => {
+    if (sidebarNavRef.current) {
+      sidebarNavRef.current.openSidebar();
+    }
+  };
 
   const [isLoading, setIsLoading] = useState(true);
   const [tiendas, setTiendas] = useState<any[]>([]);
@@ -156,18 +164,17 @@ export default function TiendasPage() {
         toastKey={toast.key}
       />
       
-      <Sidebar
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        currentRoute="Tiendas"
+      <SidebarNavigation 
+        currentRoute="Tiendas" 
+        ref={sidebarNavRef}
       />
 
       <div 
         className="min-h-screen"
         style={{ backgroundColor: colors.background }}
       >
-        <Header 
-          onMenuPress={() => setSidebarOpen(true)}
+        <Header
+          onMenuPress={handleMenuPress}
           onThemePress={toggleTheme}
           onNotificationsPress={handleNotificationsPress}
           onProfilePress={handleProfilePress}
@@ -180,7 +187,17 @@ export default function TiendasPage() {
           currentRoute="Tiendas"
         />
 
-        <div className="pt-20 px-4 md:px-4 lg:px-4 pb-8 max-w-4xl mx-auto">
+        <div style={{ 
+          marginTop: '80px',
+          marginRight: 'auto',
+          marginBottom: '0',
+          marginLeft: 'auto',
+          paddingTop: isMobile ? '20px' : isTablet ? '32px' : '40px',
+          paddingRight: isMobile ? '20px' : isTablet ? '32px' : '40px',
+          paddingBottom: '120px',
+          paddingLeft: isMobile ? '20px' : isTablet ? '32px' : '40px',
+          maxWidth: isDesktop ? '1400px' : '100%',
+        }}>
           {/* Page Title */}
           <div className="text-center mb-6 mt-4">
             <h1 
@@ -191,7 +208,8 @@ export default function TiendasPage() {
             </h1>
           </div>
 
-          {/* Filter Section */}
+          {/* Filter Section - Wrapped to maintain compact width */}
+          <div style={{ maxWidth: '56rem', margin: '0 auto' }}>
           <div 
             className="rounded-2xl p-5 mb-6 shadow-lg"
             style={{ backgroundColor: colors.surface }}
@@ -350,6 +368,7 @@ export default function TiendasPage() {
               <span className="font-medium">Agregar Tienda</span>
             </button>
           )}
+          </div>
 
           {/* Tiendas List */}
           {isLoading ? (

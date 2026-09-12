@@ -1,15 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTheme } from '../../../context/ThemeContext';
 import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../hooks/useToast';
 import { Header } from '../../../components/layout/Header';
-import { Sidebar } from '../../../components/layout/Sidebar';
+import { SidebarNavigation } from '../../../components/layout/SidebarNavigation';
 import { Toast } from '../../../components/common/Toast';
 import { createProducto, updateProducto, getProductoById } from '../../../services/productoService';
 import { getTiendas } from '../../../services/tiendaService';
+import { configService } from '../../../services/configService';
 import { 
   ArrowLeft, 
   Save, 
@@ -18,7 +19,8 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
-  Image
+  Image,
+  XCircle
 } from 'lucide-react';
 
 export default function ProductoFormPage() {
@@ -27,7 +29,13 @@ export default function ProductoFormPage() {
   const { colors, isDark, toggleTheme } = useTheme();
   const { user } = useAuth();
   const { toast, showToast, hideToast } = useToast();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const sidebarNavRef = useRef<any>(null);
+
+  const handleMenuPress = () => {
+    if (sidebarNavRef.current) {
+      sidebarNavRef.current.openSidebar();
+    }
+  };
 
   const id = searchParams.get('id');
   const mode = searchParams.get('mode') || 'add';
@@ -41,6 +49,7 @@ export default function ProductoFormPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingProducto, setIsFetchingProducto] = useState(false);
   const [tiendas, setTiendas] = useState<any[]>([]);
+  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     nombre: '',
@@ -52,12 +61,43 @@ export default function ProductoFormPage() {
     unidad_medida: '',
     imagen: null as string | null,
     codigoList: [] as Array<{ codigo_barras_ean: string; nota: string | null }>,
-    productoTiendaList: [] as Array<{ id_tienda: number; precio_cup: number; precio_usd: number; costo_cup: number; costo_usd: number }>,
+    productoTiendaList: [] as Array<{ id_tienda: number; precio_cup: number | null; precio_usd: number | null; costo_cup: number | null; costo_usd: number | null }>,
     precio_cup_general: null as number | null,
     precio_usd_general: null as number | null,
     costo_cup_general: null as number | null,
     costo_usd_general: null as number | null,
   });
+
+  const [showImagePickerModal, setShowImagePickerModal] = useState(false);
+  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [priceInputTexts, setPriceInputTexts] = useState({});
+  const [generalPriceInputTexts, setGeneralPriceInputTexts] = useState({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImagePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({ ...prev, imagen: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+    setShowImagePickerModal(false);
+  };
+
+  const handlePickImage = () => {
+    fileInputRef.current?.click();
+  };
+
+  const userRole = user?.rol?.toLowerCase();
+  const isAdmin = userRole === 'administrador';
+  const isEconomico = userRole === 'económico';
+  const isDependiente = userRole === 'dependiente';
+  const isAlmacenero = userRole === 'almacenero';
+  const canEditProduct = isAdmin;
+  const canEditCodes = isAdmin;
+  const canViewCosts = !isDependiente && !isAlmacenero;
 
   const [showAddCodeModal, setShowAddCodeModal] = useState(false);
   const [newCodigo, setNewCodigo] = useState('');
@@ -66,14 +106,25 @@ export default function ProductoFormPage() {
   const [isPricesExpanded, setIsPricesExpanded] = useState(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
-  const isAdmin = user?.rol === 'Administrador';
 
   useEffect(() => {
     if (id && (isEditMode || isViewMode)) {
       fetchProducto();
     }
     fetchTiendas();
+    fetchExchangeRate();
   }, [id]);
+
+  const fetchExchangeRate = async () => {
+    try {
+      const config = await configService.getConfig();
+      if (config.cupToUsdRate) {
+        setExchangeRate(config.cupToUsdRate);
+      }
+    } catch (error) {
+      console.error('Error fetching exchange rate:', error);
+    }
+  };
 
   const fetchProducto = async () => {
     if (!id) return;
@@ -81,27 +132,33 @@ export default function ProductoFormPage() {
       setIsFetchingProducto(true);
       const producto = await getProductoById(id);
       
+      // Extract cost from first tienda if general cost is not available
+      const tiendaList = producto.tiendas_servicio || producto.tiendas_producto || [];
+      const firstTienda = tiendaList.length > 0 ? tiendaList[0] : null;
+      
+      const imagenValue = producto.producto?.imagen || producto.imagen || null;
+      
       setFormData({
         nombre: producto.nombre || '',
         categoria: producto.categoria || '',
         esvendible: producto.esvendible !== undefined ? producto.esvendible : true,
         nota: producto.nota || '',
-        sufijo: producto.sufijo || '',
-        isVencible: producto.isVencible || false,
-        unidad_medida: producto.unidad_medida || '',
-        imagen: producto.imagen || null,
+        sufijo: producto.producto?.sufijo || producto.sufijo || '',
+        isVencible: producto.producto?.isVencible !== undefined ? producto.producto.isVencible : (producto.isVencible || false),
+        unidad_medida: producto.producto?.unidad_medida || producto.unidad_medida || '',
+        imagen: imagenValue,
         codigoList: producto.codigos || [],
-        productoTiendaList: producto.tiendas_producto || [],
+        productoTiendaList: tiendaList,
         precio_cup_general: producto.precio_cup_general || null,
         precio_usd_general: producto.precio_usd_general || null,
-        costo_cup_general: producto.costo_cup_general || null,
-        costo_usd_general: producto.costo_usd_general || null,
+        costo_cup_general: producto.costo_cup_general ?? firstTienda?.costo_cup ?? null,
+        costo_usd_general: producto.costo_usd_general ?? firstTienda?.costo_usd ?? null,
       });
 
       if (producto.codigos && producto.codigos.length > 0) {
         setIsCodesExpanded(true);
       }
-      if (producto.tiendas_producto && producto.tiendas_producto.length > 0) {
+      if (tiendaList && tiendaList.length > 0) {
         setIsPricesExpanded(true);
       }
     } catch (err: any) {
@@ -145,6 +202,49 @@ export default function ProductoFormPage() {
     try {
       setIsSaving(true);
 
+      // Helper function to safely convert to number with 5 decimal places
+      const toFixed5 = (value: any) => {
+        if (value === null || value === undefined || value === '') return 0;
+        const num = typeof value === 'number' ? value : parseFloat(value);
+        return isNaN(num) ? 0 : parseFloat(num.toFixed(5));
+      };
+
+      // Construct productoTiendaList without cantidad field (like APK)
+      const productoTiendaList = (() => {
+        let baseList: any[] = [];
+        
+        // If user has configured specific stores in productoTiendaList, only include those stores
+        if (formData.productoTiendaList.length > 0) {
+          formData.productoTiendaList.forEach((specific: any) => {
+            if (specific.id_tienda === null) return;
+            
+            baseList.push({
+              id_tienda: specific.id_tienda,
+              precio_cup: specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general),
+              precio_usd: specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general),
+            });
+          });
+        } 
+        // If no specific stores configured but general prices exist, apply to all active stores
+        else if (formData.precio_cup_general !== null || formData.precio_usd_general !== null) {
+          baseList = tiendas.filter(tienda => tienda.activo === true).map(tienda => ({
+            id_tienda: tienda.id_tienda,
+            precio_cup: toFixed5(formData.precio_cup_general),
+            precio_usd: toFixed5(formData.precio_usd_general),
+          }));
+        }
+        
+        // Apply global cost fields to all stores
+        const costoCup = toFixed5(formData.costo_cup_general);
+        const costoUsd = toFixed5(formData.costo_usd_general);
+        
+        return baseList.map((item: any) => ({
+          ...item,
+          costo_cup: costoCup,
+          costo_usd: costoUsd,
+        }));
+      })();
+
       const dataToSend = {
         nombre: formData.nombre,
         categoria: formData.categoria,
@@ -153,13 +253,15 @@ export default function ProductoFormPage() {
         sufijo: formData.sufijo || null,
         isVencible: formData.isVencible,
         unidad_medida: formData.unidad_medida || null,
-        imagen: formData.imagen,
+        imagen: (() => {
+          // Only send image if it's base64 or full URL, not relative path
+          if (!formData.imagen) return undefined;
+          const isBase64 = formData.imagen.startsWith('data:');
+          const isFullUrl = formData.imagen.startsWith('http://') || formData.imagen.startsWith('https://');
+          return (isBase64 || isFullUrl) ? formData.imagen : undefined;
+        })(),
         codigoList: formData.codigoList,
-        productoTiendaList: formData.productoTiendaList,
-        precio_cup_general: formData.precio_cup_general,
-        precio_usd_general: formData.precio_usd_general,
-        costo_cup_general: formData.costo_cup_general,
-        costo_usd_general: formData.costo_usd_general,
+        productoTiendaList,
       };
 
       if (isEditMode) {
@@ -204,6 +306,7 @@ export default function ProductoFormPage() {
     setNewCodigo('');
     setNewNota('');
     setShowAddCodeModal(false);
+    setShowScannerModal(false);
     setIsCodesExpanded(true);
   };
 
@@ -252,12 +355,91 @@ export default function ProductoFormPage() {
     setFormData(prev => {
       const updatedList = prev.productoTiendaList.map((item, i) => {
         if (i === index) {
-          return { ...item, [field]: parseFloat(value) || 0 };
+          const updatedItem = { ...item, [field]: parseFloat(value) || 0 };
+          
+          // Automatic currency conversion for tienda prices
+          if (exchangeRate !== null && exchangeRate > 0) {
+            if (field === 'precio_cup' && value !== '') {
+              const usdValue = parseFloat(value) / exchangeRate;
+              updatedItem.precio_usd = parseFloat(usdValue.toFixed(5));
+            }
+            if (field === 'precio_usd' && value !== '') {
+              const cupValue = parseFloat(value) * exchangeRate;
+              updatedItem.precio_cup = parseFloat(cupValue.toFixed(5));
+            }
+            if (field === 'costo_cup' && value !== '') {
+              const usdValue = parseFloat(value) / exchangeRate;
+              updatedItem.costo_usd = parseFloat(usdValue.toFixed(5));
+            }
+            if (field === 'costo_usd' && value !== '') {
+              const cupValue = parseFloat(value) * exchangeRate;
+              updatedItem.costo_cup = parseFloat(cupValue.toFixed(5));
+            }
+          }
+          
+          return updatedItem;
         }
         return item;
       });
       return { ...prev, productoTiendaList: updatedList };
     });
+  };
+
+  const handleGeneralPriceChange = (field: string, value: number | null) => {
+    setFormData(prev => {
+      const updated = { ...prev, [field]: value };
+      
+      // Automatic currency conversion
+      if (exchangeRate !== null && exchangeRate > 0) {
+        if (field === 'precio_cup_general' && value !== null) {
+          const usdValue = value / exchangeRate;
+          updated.precio_usd_general = parseFloat(usdValue.toFixed(5));
+        }
+        if (field === 'precio_usd_general' && value !== null) {
+          const cupValue = value * exchangeRate;
+          updated.precio_cup_general = parseFloat(cupValue.toFixed(5));
+        }
+        if (field === 'costo_cup_general' && value !== null) {
+          const usdValue = value / exchangeRate;
+          updated.costo_usd_general = parseFloat(usdValue.toFixed(5));
+        }
+        if (field === 'costo_usd_general' && value !== null) {
+          const cupValue = value * exchangeRate;
+          updated.costo_cup_general = parseFloat(cupValue.toFixed(5));
+        }
+      }
+      
+      return updated;
+    });
+    
+    // Auto-apply to tiendas if all general prices are set and no tiendas exist yet
+    const hasAllGeneralPrices = formData.precio_cup_general !== null && formData.precio_usd_general !== null;
+    if (hasAllGeneralPrices && formData.productoTiendaList.length === 0) {
+      const newProductoTiendaList = tiendas.filter(tienda => tienda.activo === true).map(tienda => ({
+        id_tienda: tienda.id_tienda,
+        precio_cup: formData.precio_cup_general || 0,
+        precio_usd: formData.precio_usd_general || 0,
+        costo_cup: canViewCosts ? (formData.costo_cup_general || 0) : 0,
+        costo_usd: canViewCosts ? (formData.costo_usd_general || 0) : 0,
+      }));
+      
+      setFormData(prev => ({
+        ...prev,
+        productoTiendaList: newProductoTiendaList
+      }));
+      setIsPricesExpanded(true);
+    } else if (hasAllGeneralPrices && formData.productoTiendaList.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        productoTiendaList: prev.productoTiendaList.map(item => ({
+          ...item,
+          precio_cup: formData.precio_cup_general !== null ? formData.precio_cup_general : item.precio_cup,
+          precio_usd: formData.precio_usd_general !== null ? formData.precio_usd_general : item.precio_usd,
+          costo_cup: canViewCosts ? (formData.costo_cup_general !== null ? formData.costo_cup_general : item.costo_cup) : item.costo_cup,
+          costo_usd: canViewCosts ? (formData.costo_usd_general !== null ? formData.costo_usd_general : item.costo_usd) : item.costo_usd,
+        }))
+      }));
+    }
   };
 
   const handleApplyGeneralPrices = () => {
@@ -272,8 +454,8 @@ export default function ProductoFormPage() {
         ...item,
         precio_cup: formData.precio_cup_general !== null ? formData.precio_cup_general : item.precio_cup,
         precio_usd: formData.precio_usd_general !== null ? formData.precio_usd_general : item.precio_usd,
-        costo_cup: formData.costo_cup_general !== null ? formData.costo_cup_general : item.costo_cup,
-        costo_usd: formData.costo_usd_general !== null ? formData.costo_usd_general : item.costo_usd,
+        costo_cup: canViewCosts ? (formData.costo_cup_general !== null ? formData.costo_cup_general : item.costo_cup) : item.costo_cup,
+        costo_usd: canViewCosts ? (formData.costo_usd_general !== null ? formData.costo_usd_general : item.costo_usd) : item.costo_usd,
       }))
     }));
 
@@ -300,18 +482,17 @@ export default function ProductoFormPage() {
         toastKey={toast.key}
       />
       
-      <Sidebar
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        currentRoute="Productos"
+      <SidebarNavigation 
+        currentRoute="Productos" 
+        ref={sidebarNavRef}
       />
 
       <div 
         className="min-h-screen"
         style={{ backgroundColor: colors.background }}
       >
-        <Header 
-          onMenuPress={() => setSidebarOpen(true)}
+        <Header
+          onMenuPress={handleMenuPress}
           onThemePress={toggleTheme}
           onNotificationsPress={handleNotificationsPress}
           onProfilePress={handleProfilePress}
@@ -376,154 +557,275 @@ export default function ProductoFormPage() {
                   />
                 </div>
 
-                {/* Categoría */}
-                <div className="mb-4">
-                  <label 
-                    className="block text-sm font-medium mb-2"
-                    style={{ color: colors.outline }}
-                  >
-                    Categoría *
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2"
-                    style={{ 
-                      backgroundColor: colors.background, 
-                      color: colors.onSurface, 
-                      borderColor: colors.outlineVariant,
-                      fontFamily: 'Inter, sans-serif'
-                    }}
-                    placeholder="Categoría del producto"
-                    value={formData.categoria}
-                    onChange={(e) => setFormData(prev => ({ ...prev, categoria: e.target.value }))}
-                    disabled={isReadOnly}
-                  />
-                </div>
-
-                {/* Estado (esvendible) */}
-                <div className="mb-4">
-                  <label 
-                    className="block text-sm font-medium mb-2"
-                    style={{ color: colors.outline }}
-                  >
-                    Estado
-                  </label>
-                  <div className="flex items-center">
-                    <button
-                      className={`relative w-14 h-8 rounded-full transition-colors duration-200 ${formData.esvendible ? 'bg-green-500' : 'bg-gray-400'}`}
-                      onClick={() => !isReadOnly && setFormData(prev => ({ ...prev, esvendible: !prev.esvendible }))}
-                      disabled={isReadOnly}
+                {/* Categoría and Sufijo in same row */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div>
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
                     >
-                      <div 
-                        className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
-                        style={{
-                          transform: formData.esvendible ? 'translateX(24px)' : 'translateX(0)',
-                        }}
-                      />
-                    </button>
-                    <span className="ml-3 text-sm" style={{ color: colors.onSurface }}>
-                      {formData.esvendible ? 'Vendible' : 'No vendible'}
-                    </span>
+                      Categoría *
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Categoría"
+                      value={formData.categoria}
+                      onChange={(e) => setFormData(prev => ({ ...prev, categoria: e.target.value }))}
+                      disabled={isReadOnly}
+                    />
+                  </div>
+                  <div>
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Código interno (Sufijo) *
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Sufijo"
+                      value={formData.sufijo}
+                      onChange={(e) => setFormData(prev => ({ ...prev, sufijo: e.target.value }))}
+                      disabled={isReadOnly}
+                    />
                   </div>
                 </div>
 
-                {/* Sufijo */}
+                {/* Image Section */}
                 <div className="mb-4">
                   <label 
-                    className="block text-sm font-medium mb-2"
+                    className="block text-sm font-medium mb-2 text-center"
                     style={{ color: colors.outline }}
                   >
-                    Sufijo
+                    Imagen
                   </label>
-                  <input
-                    type="text"
-                    className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2"
-                    style={{ 
-                      backgroundColor: colors.background, 
-                      color: colors.onSurface, 
-                      borderColor: colors.outlineVariant,
-                      fontFamily: 'Inter, sans-serif'
-                    }}
-                    placeholder="Sufijo (opcional)"
-                    value={formData.sufijo}
-                    onChange={(e) => setFormData(prev => ({ ...prev, sufijo: e.target.value }))}
-                    disabled={isReadOnly}
-                  />
-                </div>
-
-                {/* Unidad de Medida */}
-                <div className="mb-4">
-                  <label 
-                    className="block text-sm font-medium mb-2"
-                    style={{ color: colors.outline }}
-                  >
-                    Unidad de Medida
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2"
-                    style={{ 
-                      backgroundColor: colors.background, 
-                      color: colors.onSurface, 
-                      borderColor: colors.outlineVariant,
-                      fontFamily: 'Inter, sans-serif'
-                    }}
-                    placeholder="Ej: kg, l, unidad"
-                    value={formData.unidad_medida}
-                    onChange={(e) => setFormData(prev => ({ ...prev, unidad_medida: e.target.value }))}
-                    disabled={isReadOnly}
-                  />
-                </div>
-
-                {/* Es Vencible */}
-                <div className="mb-4">
-                  <label 
-                    className="block text-sm font-medium mb-2"
-                    style={{ color: colors.outline }}
-                  >
-                    Es Vencible
-                  </label>
-                  <div className="flex items-center">
-                    <button
-                      className={`relative w-14 h-8 rounded-full transition-colors duration-200 ${formData.isVencible ? 'bg-orange-500' : 'bg-gray-400'}`}
-                      onClick={() => !isReadOnly && setFormData(prev => ({ ...prev, isVencible: !prev.isVencible }))}
-                      disabled={isReadOnly}
-                    >
-                      <div 
-                        className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
-                        style={{
-                          transform: formData.isVencible ? 'translateX(24px)' : 'translateX(0)',
+                  <div className="flex items-center justify-center gap-4">
+                    {(() => {
+                      if (!formData.imagen) return null;
+                      
+                      const isBase64 = formData.imagen.startsWith('data:');
+                      const isFullUrl = formData.imagen.startsWith('http://') || formData.imagen.startsWith('https://');
+                      const fullImageUrl = isBase64 || isFullUrl ? formData.imagen : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}${formData.imagen}`;
+                      
+                      return (
+                        <div className="relative">
+                          <img
+                            src={fullImageUrl}
+                            alt="Producto"
+                            className="w-24 h-24 object-cover rounded-lg"
+                          />
+                          {!isReadOnly && (
+                            <button
+                              className="absolute -top-2 -right-2 p-1 rounded-full bg-red-500 text-white"
+                              onClick={() => setFormData(prev => ({ ...prev, imagen: null }))}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })() || (
+                      <button
+                        className="w-24 h-24 rounded-lg border-2 border-dashed flex flex-col items-center justify-center transition-colors hover:opacity-80"
+                        style={{ 
+                          backgroundColor: colors.background, 
+                          borderColor: colors.outlineVariant 
                         }}
-                      />
-                    </button>
-                    <span className="ml-3 text-sm" style={{ color: colors.onSurface }}>
-                      {formData.isVencible ? 'Sí' : 'No'}
-                    </span>
+                        onClick={() => !isReadOnly && handlePickImage()}
+                        disabled={isReadOnly}
+                      >
+                        <Image size={32} style={{ color: colors.outline }} />
+                        <span className="text-xs mt-1" style={{ color: colors.outline }}>
+                          {isReadOnly ? 'Sin imagen' : 'Seleccionar'}
+                        </span>
+                      </button>
+                    )}
+                    {!isReadOnly && formData.imagen && (
+                      <button
+                        className="px-4 py-2 rounded-lg flex items-center gap-2 transition-colors hover:opacity-90"
+                        style={{ backgroundColor: colors.primary, color: '#fff' }}
+                        onClick={handlePickImage}
+                      >
+                        <Image size={16} />
+                        <span>Cambiar</span>
+                      </button>
+                    )}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImagePick}
+                      className="hidden"
+                    />
                   </div>
                 </div>
 
-                {/* Nota */}
-                <div className="mb-4">
-                  <label 
-                    className="block text-sm font-medium mb-2"
-                    style={{ color: colors.outline }}
-                  >
-                    Nota
-                  </label>
-                  <textarea
-                    className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2 resize-none"
-                    rows={3}
-                    style={{ 
-                      backgroundColor: colors.background, 
-                      color: colors.onSurface, 
-                      borderColor: colors.outlineVariant,
-                      fontFamily: 'Inter, sans-serif'
-                    }}
-                    placeholder="Nota opcional"
-                    value={formData.nota}
-                    onChange={(e) => setFormData(prev => ({ ...prev, nota: e.target.value }))}
-                    disabled={isReadOnly}
-                  />
+                {/* Cost fields (only for canViewCosts) */}
+                {canViewCosts && (
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div>
+                      <label 
+                        className="block text-sm font-medium mb-2"
+                        style={{ color: colors.outline }}
+                      >
+                        Costo CUP
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
+                        style={{ 
+                          backgroundColor: colors.background, 
+                          color: colors.onSurface, 
+                          borderColor: colors.outlineVariant,
+                          fontFamily: 'Inter, sans-serif'
+                        }}
+                        placeholder="Costo CUP"
+                        value={formData.costo_cup_general || ''}
+                        onChange={(e) => handleGeneralPriceChange('costo_cup_general', parseFloat(e.target.value) || null)}
+                        disabled={isReadOnly}
+                      />
+                    </div>
+                    <div>
+                      <label 
+                        className="block text-sm font-medium mb-2"
+                        style={{ color: colors.outline }}
+                      >
+                        Costo USD
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
+                        style={{ 
+                          backgroundColor: colors.background, 
+                          color: colors.onSurface, 
+                          borderColor: colors.outlineVariant,
+                          fontFamily: 'Inter, sans-serif'
+                        }}
+                        placeholder="Costo USD"
+                        value={formData.costo_usd_general || ''}
+                        onChange={(e) => handleGeneralPriceChange('costo_usd_general', parseFloat(e.target.value) || null)}
+                        disabled={isReadOnly}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Unidad de Medida and Nota in same row */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div>
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Unidad de Medida
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Unidad (opcional)"
+                      value={formData.unidad_medida}
+                      onChange={(e) => setFormData(prev => ({ ...prev, unidad_medida: e.target.value }))}
+                      disabled={isReadOnly}
+                    />
+                  </div>
+                  <div>
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Nota
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Nota (opcional)"
+                      value={formData.nota}
+                      onChange={(e) => setFormData(prev => ({ ...prev, nota: e.target.value }))}
+                      disabled={isReadOnly}
+                    />
+                  </div>
+                </div>
+
+                {/* Es Perecedero and Estado in same row */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div>
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Es Perecedero
+                    </label>
+                    <div className="flex items-center">
+                      <button
+                        className={`relative w-28 h-8 rounded-full transition-colors duration-200 ${formData.isVencible ? 'bg-green-500' : 'bg-red-500'}`}
+                        onClick={() => !isReadOnly && setFormData(prev => ({ ...prev, isVencible: !prev.isVencible }))}
+                        disabled={isReadOnly}
+                      >
+                        <div 
+                          className="absolute top-1 left-1 w-20 h-6 bg-white rounded-full shadow-md transition-transform duration-200 flex items-center justify-center text-xs font-bold"
+                          style={{
+                            transform: formData.isVencible ? 'translateX(0)' : 'translateX(28px)',
+                            color: formData.isVencible ? '#4CAF50' : '#F44336'
+                          }}
+                        >
+                          {formData.isVencible ? 'Sí' : 'No'}
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Estado
+                    </label>
+                    <div className="flex items-center">
+                      <button
+                        className={`relative w-32 h-8 rounded-full transition-colors duration-200 ${formData.esvendible ? 'bg-green-500' : 'bg-red-500'}`}
+                        onClick={() => !isReadOnly && setFormData(prev => ({ ...prev, esvendible: !prev.esvendible }))}
+                        disabled={isReadOnly}
+                      >
+                        <div 
+                          className="absolute top-1 left-1 w-24 h-6 bg-white rounded-full shadow-md transition-transform duration-200 flex items-center justify-center text-xs font-bold"
+                          style={{
+                            transform: formData.esvendible ? 'translateX(0)' : 'translateX(28px)',
+                            color: formData.esvendible ? '#4CAF50' : '#F44336'
+                          }}
+                        >
+                          {formData.esvendible ? 'Vendible' : 'No vendible'}
+                        </div>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -537,59 +839,60 @@ export default function ProductoFormPage() {
                     className="text-lg font-bold"
                     style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
                   >
-                    Códigos
+                    Códigos de los productos
                   </h2>
-                  <button
-                    className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:opacity-80"
-                    style={{ backgroundColor: colors.background, color: colors.onSurface }}
-                    onClick={() => setIsCodesExpanded(!isCodesExpanded)}
-                  >
-                    {isCodesExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                  </button>
+                  <div className="flex gap-2">
+                    {canEditCodes && (
+                      <button
+                        className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:opacity-80"
+                        style={{ backgroundColor: colors.primary, color: '#fff' }}
+                        onClick={() => setShowScannerModal(true)}
+                      >
+                        <Plus size={18} />
+                      </button>
+                    )}
+                    <button
+                      className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:opacity-80"
+                      style={{ backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary, border: '1px solid' }}
+                      onClick={() => setIsCodesExpanded(!isCodesExpanded)}
+                    >
+                      {isCodesExpanded ? <ChevronUp size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                    </button>
+                  </div>
                 </div>
 
                 {isCodesExpanded && (
                   <>
                     <div className="space-y-3 mb-4">
-                      {formData.codigoList.map((codigo, index) => (
-                        <div 
-                          key={index}
-                          className="flex items-center gap-3 p-3 rounded-lg"
-                          style={{ backgroundColor: colors.background }}
-                        >
-                          <div className="flex-1">
-                            <p className="font-medium text-sm" style={{ color: colors.onSurface }}>
-                              {codigo.codigo_barras_ean}
-                            </p>
-                            {codigo.nota && (
-                              <p className="text-xs" style={{ color: colors.outline }}>
-                                {codigo.nota}
+                      {formData.codigoList.length === 0 ? (
+                        <p className="text-sm text-center py-4" style={{ color: colors.outline }}>
+                          No hay códigos agregados
+                        </p>
+                      ) : (
+                        formData.codigoList.map((codigo, index) => (
+                          <div 
+                            key={index}
+                            className="flex items-center gap-3 p-3 rounded-lg"
+                            style={{ backgroundColor: colors.background }}
+                          >
+                            <div className="flex-1">
+                              <p className="font-medium text-sm" style={{ color: colors.onSurface }}>
+                                {codigo.nota ? `${codigo.nota}-${codigo.codigo_barras_ean}` : codigo.codigo_barras_ean}
                               </p>
+                            </div>
+                            {canEditCodes && (
+                              <button
+                                className="p-2 rounded-lg transition-colors hover:opacity-80"
+                                style={{ backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }}
+                                onClick={() => handleDeleteCode(index)}
+                              >
+                                <Trash2 size={16} style={{ color: colors.error }} />
+                              </button>
                             )}
                           </div>
-                          {!isReadOnly && (
-                            <button
-                              className="p-2 rounded-lg transition-colors hover:opacity-80"
-                              style={{ backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }}
-                              onClick={() => handleDeleteCode(index)}
-                            >
-                              <Trash2 size={18} style={{ color: colors.error }} />
-                            </button>
-                          )}
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
-
-                    {!isReadOnly && (
-                      <button
-                        className="w-full rounded-lg px-4 py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
-                        style={{ backgroundColor: colors.primary, color: '#fff' }}
-                        onClick={() => setShowAddCodeModal(true)}
-                      >
-                        <Plus size={18} />
-                        <span>Agregar Código</span>
-                      </button>
-                    )}
                   </>
                 )}
               </div>
@@ -623,7 +926,7 @@ export default function ProductoFormPage() {
                         borderColor: colors.outlineVariant
                       }}
                       value={formData.precio_cup_general || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, precio_cup_general: parseFloat(e.target.value) || null }))}
+                      onChange={(e) => handleGeneralPriceChange('precio_cup_general', parseFloat(e.target.value) || null)}
                       disabled={isReadOnly}
                     />
                   </div>
@@ -641,57 +944,11 @@ export default function ProductoFormPage() {
                         borderColor: colors.outlineVariant
                       }}
                       value={formData.precio_usd_general || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, precio_usd_general: parseFloat(e.target.value) || null }))}
-                      disabled={isReadOnly}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1" style={{ color: colors.outline }}>
-                      Costo CUP
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
-                      style={{ 
-                        backgroundColor: colors.background, 
-                        color: colors.onSurface, 
-                        borderColor: colors.outlineVariant
-                      }}
-                      value={formData.costo_cup_general || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, costo_cup_general: parseFloat(e.target.value) || null }))}
-                      disabled={isReadOnly}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1" style={{ color: colors.outline }}>
-                      Costo USD
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
-                      style={{ 
-                        backgroundColor: colors.background, 
-                        color: colors.onSurface, 
-                        borderColor: colors.outlineVariant
-                      }}
-                      value={formData.costo_usd_general || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, costo_usd_general: parseFloat(e.target.value) || null }))}
+                      onChange={(e) => handleGeneralPriceChange('precio_usd_general', parseFloat(e.target.value) || null)}
                       disabled={isReadOnly}
                     />
                   </div>
                 </div>
-
-                {!isReadOnly && (
-                  <button
-                    className="w-full rounded-lg px-4 py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
-                    style={{ backgroundColor: colors.primary, color: '#fff' }}
-                    onClick={handleApplyGeneralPrices}
-                  >
-                    <span>Aplicar a todas las tiendas</span>
-                  </button>
-                )}
               </div>
 
               {/* Precios por Tienda Section */}
@@ -706,13 +963,24 @@ export default function ProductoFormPage() {
                   >
                     Precios por Tienda
                   </h2>
-                  <button
-                    className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:opacity-80"
-                    style={{ backgroundColor: colors.background, color: colors.onSurface }}
-                    onClick={() => setIsPricesExpanded(!isPricesExpanded)}
-                  >
-                    {isPricesExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                  </button>
+                  <div className="flex gap-2">
+                    {canEditProduct && (
+                      <button
+                        className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:opacity-80"
+                        style={{ backgroundColor: colors.primary, color: '#fff' }}
+                        onClick={handleAddTiendaProducto}
+                      >
+                        <Plus size={18} />
+                      </button>
+                    )}
+                    <button
+                      className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:opacity-80"
+                      style={{ backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary, border: '1px solid' }}
+                      onClick={() => setIsPricesExpanded(!isPricesExpanded)}
+                    >
+                      {isPricesExpanded ? <ChevronUp size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                    </button>
+                  </div>
                 </div>
 
                 {isPricesExpanded && (
@@ -754,7 +1022,7 @@ export default function ProductoFormPage() {
                                     color: colors.onSurface, 
                                     borderColor: colors.outlineVariant
                                   }}
-                                  value={tiendaProducto.precio_cup}
+                                  value={tiendaProducto.precio_cup ?? ''}
                                   onChange={(e) => handleTiendaProductoChange(index, 'precio_cup', e.target.value)}
                                   disabled={isReadOnly}
                                 />
@@ -772,7 +1040,7 @@ export default function ProductoFormPage() {
                                     color: colors.onSurface, 
                                     borderColor: colors.outlineVariant
                                   }}
-                                  value={tiendaProducto.precio_usd}
+                                  value={tiendaProducto.precio_usd ?? ''}
                                   onChange={(e) => handleTiendaProductoChange(index, 'precio_usd', e.target.value)}
                                   disabled={isReadOnly}
                                 />
@@ -790,7 +1058,7 @@ export default function ProductoFormPage() {
                                     color: colors.onSurface, 
                                     borderColor: colors.outlineVariant
                                   }}
-                                  value={tiendaProducto.costo_cup}
+                                  value={tiendaProducto.costo_cup ?? ''}
                                   onChange={(e) => handleTiendaProductoChange(index, 'costo_cup', e.target.value)}
                                   disabled={isReadOnly}
                                 />
@@ -808,7 +1076,7 @@ export default function ProductoFormPage() {
                                     color: colors.onSurface, 
                                     borderColor: colors.outlineVariant
                                   }}
-                                  value={tiendaProducto.costo_usd}
+                                  value={tiendaProducto.costo_usd ?? ''}
                                   onChange={(e) => handleTiendaProductoChange(index, 'costo_usd', e.target.value)}
                                   disabled={isReadOnly}
                                 />
@@ -818,17 +1086,6 @@ export default function ProductoFormPage() {
                         );
                       })}
                     </div>
-
-                    {!isReadOnly && (
-                      <button
-                        className="w-full rounded-lg px-4 py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
-                        style={{ backgroundColor: colors.primary, color: '#fff' }}
-                        onClick={handleAddTiendaProducto}
-                      >
-                        <Plus size={18} />
-                        <span>Agregar Tienda</span>
-                      </button>
-                    )}
                   </>
                 )}
               </div>
@@ -836,6 +1093,14 @@ export default function ProductoFormPage() {
               {/* Action Buttons */}
               {!isReadOnly && (
                 <div className="flex gap-3">
+                  <button
+                    className="flex-1 rounded-lg px-4 py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
+                    style={{ backgroundColor: colors.surface, color: colors.onSurface, border: '1px solid', borderColor: colors.outlineVariant }}
+                    onClick={() => router.back()}
+                  >
+                    <XCircle size={18} />
+                    <span>Cancelar</span>
+                  </button>
                   <button
                     className="flex-1 rounded-lg px-4 py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
                     style={{ backgroundColor: colors.primary, color: '#fff' }}
@@ -916,6 +1181,84 @@ export default function ProductoFormPage() {
                   style={{ backgroundColor: colors.surface, color: colors.onSurface }}
                   onClick={() => {
                     setShowAddCodeModal(false);
+                    setNewCodigo('');
+                    setNewNota('');
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  className="flex-1 rounded-lg px-4 py-3 transition-colors hover:opacity-90"
+                  style={{ backgroundColor: colors.primary, color: '#fff' }}
+                  onClick={handleAddCode}
+                >
+                  Agregar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Scanner Modal */}
+        {showScannerModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div 
+              className="rounded-2xl p-6 w-full max-w-md"
+              style={{ backgroundColor: colors.surface }}
+            >
+              <h2 
+                className="text-xl font-bold mb-4"
+                style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+              >
+                Escanear Código
+              </h2>
+              <div className="mb-4">
+                <label 
+                  className="block text-sm font-medium mb-2"
+                  style={{ color: colors.outline }}
+                >
+                  Código de barras
+                </label>
+                <input
+                  type="text"
+                  className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
+                  style={{ 
+                    backgroundColor: colors.background, 
+                    color: colors.onSurface, 
+                    borderColor: colors.outlineVariant
+                  }}
+                  placeholder="Escanear o ingresar código"
+                  value={newCodigo}
+                  onChange={(e) => setNewCodigo(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="mb-4">
+                <label 
+                  className="block text-sm font-medium mb-2"
+                  style={{ color: colors.outline }}
+                >
+                  Nota (opcional)
+                </label>
+                <input
+                  type="text"
+                  className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
+                  style={{ 
+                    backgroundColor: colors.background, 
+                    color: colors.onSurface, 
+                    borderColor: colors.outlineVariant
+                  }}
+                  placeholder="Nota"
+                  value={newNota}
+                  onChange={(e) => setNewNota(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  className="flex-1 rounded-lg px-4 py-3 transition-colors hover:opacity-90"
+                  style={{ backgroundColor: colors.surface, color: colors.onSurface }}
+                  onClick={() => {
+                    setShowScannerModal(false);
                     setNewCodigo('');
                     setNewNota('');
                   }}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useTheme } from '../../context/ThemeContext';
@@ -8,7 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useViewMode } from '../../context/ViewModeContext';
 import { useToast } from '../../hooks/useToast';
 import { Header } from '../../components/layout/Header';
-import { Sidebar } from '../../components/layout/Sidebar';
+import { SidebarNavigation } from '../../components/layout/SidebarNavigation';
 import { Toast } from '../../components/common/Toast';
 import { getUsuarios, deleteUsuario } from '../../services/usuarioService';
 import { getTiendas } from '../../services/tiendaService';
@@ -28,6 +28,7 @@ import {
   AlertCircle,
   X
 } from 'lucide-react';
+import { useResponsive } from '../../hooks/useResponsive';
 
 export default function UsuariosPage() {
   const router = useRouter();
@@ -35,7 +36,14 @@ export default function UsuariosPage() {
   const { token, user, permissions } = useAuth();
   const { viewMode, toggleViewMode } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { isMobile, isTablet, isDesktop } = useResponsive();
+  const sidebarNavRef = useRef<any>(null);
+
+  const handleMenuPress = () => {
+    if (sidebarNavRef.current) {
+      sidebarNavRef.current.openSidebar();
+    }
+  };
 
   const [isLoading, setIsLoading] = useState(true);
   const [usuarios, setUsuarios] = useState<any[]>([]);
@@ -210,18 +218,17 @@ export default function UsuariosPage() {
         toastKey={toast.key}
       />
       
-      <Sidebar
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        currentRoute="Usuarios"
+      <SidebarNavigation 
+        currentRoute="Usuarios" 
+        ref={sidebarNavRef}
       />
 
       <div 
         className="min-h-screen"
         style={{ backgroundColor: colors.background }}
       >
-        <Header 
-          onMenuPress={() => setSidebarOpen(true)}
+        <Header
+          onMenuPress={handleMenuPress}
           onThemePress={toggleTheme}
           onNotificationsPress={handleNotificationsPress}
           onProfilePress={handleProfilePress}
@@ -234,7 +241,17 @@ export default function UsuariosPage() {
           currentRoute="Usuarios"
         />
 
-        <div className="pt-20 px-4 md:px-4 lg:px-4 pb-8 max-w-4xl mx-auto">
+        <div style={{ 
+          marginTop: '80px',
+          marginRight: 'auto',
+          marginBottom: '0',
+          marginLeft: 'auto',
+          paddingTop: isMobile ? '20px' : isTablet ? '32px' : '40px',
+          paddingRight: isMobile ? '20px' : isTablet ? '32px' : '40px',
+          paddingBottom: '120px',
+          paddingLeft: isMobile ? '20px' : isTablet ? '32px' : '40px',
+          maxWidth: isDesktop ? '1400px' : '100%',
+        }}>
           {/* Page Title */}
           <div className="text-center mb-6 mt-4">
             <h1 
@@ -245,7 +262,8 @@ export default function UsuariosPage() {
             </h1>
           </div>
 
-          {/* Filter Section */}
+          {/* Filter Section - Wrapped to maintain compact width */}
+          <div style={{ maxWidth: '56rem', margin: '0 auto' }}>
           <div 
             className="rounded-2xl p-5 mb-6 shadow-lg"
             style={{ backgroundColor: colors.surface }}
@@ -539,6 +557,7 @@ export default function UsuariosPage() {
               <span className="font-medium">Agregar Usuario</span>
             </button>
           )}
+          </div>
 
           {/* Usuarios List */}
           {isLoading ? (
