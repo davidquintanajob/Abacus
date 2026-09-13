@@ -2,7 +2,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-// Load .env file manually for PORT and HOSTNAME only
+// Load .env values needed before Next.js starts.
 const envPath = path.join(__dirname, '.env');
 if (fs.existsSync(envPath)) {
   const envContent = fs.readFileSync(envPath, 'utf8');
@@ -11,16 +11,16 @@ if (fs.existsSync(envPath)) {
     if (match) {
       const name = match[1].trim();
       const value = match[2].trim();
-      // Only load non-NEXT_PUBLIC variables to avoid conflicts
-      if (!name.startsWith('NEXT_PUBLIC_')) {
+      // Keep values explicitly provided by the shell/environment.
+      if (!process.env[name]) {
         process.env[name] = value;
       }
     }
   });
 }
 
-const port = process.env.PORT || 3000;
-const hostname = process.env.HOSTNAME || 'localhost';
+const port = process.env.NEXT_PUBLIC_WEB_PORT || process.env.PORT || 3000;
+const hostname = 'localhost';
 
 console.log(`Starting Next.js production server on ${hostname}:${port}`);
 
