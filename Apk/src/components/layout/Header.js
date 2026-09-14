@@ -73,7 +73,7 @@ export const Header = ({
         >
           {showLogo && title === 'Abacus' && (
             <Image
-              source={isDarkMode ? require('../../../Logos/Abacus_sinFondo v4.png') : require('../../../Logos/Abacus_sinFondo v1.png')}
+              source={isDarkMode ? require('../../../assets/Logos/Abacus_sinFondo v4.png') : require('../../../assets/Logos/Abacus_sinFondo v1.png')}
               style={styles.logo}
               resizeMode="contain"
             />

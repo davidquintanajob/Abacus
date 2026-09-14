@@ -1,0 +1,11 @@
+node_modules/
+.expo/
+dist/
+web-build/
+android/build/
+android/.gradle/
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+*.tsbuildinfo

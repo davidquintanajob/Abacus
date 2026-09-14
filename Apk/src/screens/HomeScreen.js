@@ -76,33 +76,33 @@ const HomeContent = () => {
   }, []);
 
   const logoSource = isDarkMode
-    ? require('../../Logos/Abacus v4.1.png')
-    : require('../../Logos/Abacus v1.1.png');
+    ? require('../../assets/Logos/Abacus v4.1.png')
+    : require('../../assets/Logos/Abacus v1.1.png');
 
   const storeImageSource = (() => {
     const userRole = user?.rol?.toLowerCase();
     
     if (userRole === 'dependiente') {
       return isDarkMode
-        ? require('../../assets/Dependiente_logo (2).png')
+        ? require('../../assets/Dependiente_logo_dark.png')
         : require('../../assets/Dependiente_logo.png');
     }
     
     if (userRole === 'almacenero') {
       return isDarkMode
-        ? require('../../assets/Almacenero_logo (2).png')
+        ? require('../../assets/Almacenero_logo_dark.png')
         : require('../../assets/Almacenero_logo.png');
     }
     
     if (userRole === 'económico') {
       return isDarkMode
-        ? require('../../assets/Económico_logo (2).png')
-        : require('../../assets/Económico_logo.png');
+        ? require('../../assets/Economico_logo_dark.png')
+        : require('../../assets/Economico_logo.png');
     }
     
     // Por defecto (administrador u otros roles)
     return isDarkMode
-      ? require('../../assets/Home_logo_darck (2).png')
+      ? require('../../assets/Home_logo_dark.png')
       : require('../../assets/Home_Logo.png');
   })();
 

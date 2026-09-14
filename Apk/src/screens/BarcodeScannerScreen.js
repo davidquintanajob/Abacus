@@ -101,15 +101,15 @@ const BarcodeScannerContent = () => {
   ];
 
   const step1Images = [
-    require('../../assets/WhatsApp Image 2026-07-21 at 9.33.18 PM (1).jpeg'),
-    require('../../assets/WhatsApp Image 2026-07-21 at 9.33.18 PM.jpeg'),
-    require('../../assets/WhatsApp Image 2026-07-21 at 9.33.19 PM.jpeg')
+    require('../../assets/whatsapp_3.jpeg'),
+    require('../../assets/whatsapp_2.jpeg'),
+    require('../../assets/whatsapp_5.jpeg')
   ];
 
   const step2Images = [
-    require('../../assets/WhatsApp Image 2026-07-21 at 9.33.17 PM.jpeg'),
-    require('../../assets/WhatsApp Image 2026-07-21 at 9.33.18 PM (2).jpeg'),
-    require('../../assets/WhatsApp Image 2026-07-21 at 9.33.20 PM.jpeg')
+    require('../../assets/whatsapp_1.jpeg'),
+    require('../../assets/whatsapp_4.jpeg'),
+    require('../../assets/whatsapp_6.jpeg')
   ];
 
   useEffect(() => {

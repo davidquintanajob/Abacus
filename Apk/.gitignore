@@ -43,6 +43,10 @@ src/config.local.js
 /ios
 # /android
 
+# Android build cache (autolinking paths must be regenerated per machine)
+android/build/
+android/.gradle/
+
 # backend
 # Abacus-backend/
 

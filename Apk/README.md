@@ -162,6 +162,7 @@ eas build --platform android --profile production
 - **Perfil recomendado:** Usa `preview` para pruebas rápidas. Usa `production` solo para la versión final de la app
 - **React Native Reanimated:** El proyecto incluye `react-native-reanimated` con el plugin de Babel configurado en `babel.config.js`
 - **Tiempo de build:** Los builds de EAS se ejecutan en la nube y pueden tardar entre 10-20 minutos
+- **Archivos necesarios para el build:** Los archivos `.gitignore` y `.easignore` en la raíz del proyecto son **ESSENCIALES** para poder realizar el build correctamente. Estos archivos controlan qué se incluye y qué se excluye del proceso de build de EAS. Sin estos archivos, el build puede fallar o incluir archivos innecesarios que causen problemas.
 
 ## �🔧 Solución de Problemas
 

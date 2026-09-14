@@ -84,8 +84,8 @@ const LoginContent = () => {
   };
 
   const logoSource = isDarkMode
-    ? require('../../Logos/Abacus v1.png')
-    : require('../../Logos/Abacus v4.png');
+    ? require('../../assets/Logos/Abacus v1.png')
+    : require('../../assets/Logos/Abacus v4.png');
 
   const styles = createStyles(responsive);
 
