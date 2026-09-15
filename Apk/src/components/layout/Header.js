@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { useOffline } from '../../context/OfflineContext';
 import { useAuth } from '../../context/AuthContext';
@@ -22,6 +22,7 @@ export const Header = ({
   onViewModeToggle,
   showViewToggle = false,
   viewMode = 'table',
+  isChangingView = false,
   onLogoPress,
   showVersion = true,
   version = '1.0.0'
@@ -106,12 +107,20 @@ export const Header = ({
             onPress={onViewModeToggle}
             style={styles.iconButton}
             activeOpacity={0.7}
+            disabled={isChangingView}
           >
-            <Ionicons 
-              name={viewMode === 'table' ? "grid-outline" : "list-outline"} 
-              size={responsive.responsiveWidth(24)} 
-              color={colors.primary} 
-            />
+            {isChangingView ? (
+              <ActivityIndicator 
+                size={responsive.responsiveWidth(24)} 
+                color={colors.primary} 
+              />
+            ) : (
+              <Ionicons 
+                name={viewMode === 'table' ? "grid-outline" : "list-outline"} 
+                size={responsive.responsiveWidth(24)} 
+                color={colors.primary} 
+              />
+            )}
           </TouchableOpacity>
         )}
         {onNotificationsPress && (

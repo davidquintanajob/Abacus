@@ -142,19 +142,19 @@ const BarcodeScannerContent = () => {
     }
   }, [showTutorial, currentStep]);
 
-  // Load sound - temporarily disabled
+  // Load sound
   useEffect(() => {
     const loadSound = async () => {
       try {
-        // Sound loading disabled temporarily to fix Audio import error
-        // const { Audio: ExpoAudio } = await import('expo-av');
-        // const asset = Asset.fromModule(require('../../assets/beep.mp3'));
-        // await asset.downloadAsync();
-        // const { sound } = await ExpoAudio.Sound.createAsync(
-        //   { uri: asset.localUri || asset.uri },
-        //   { shouldPlay: false }
-        // );
-        // setSound(sound);
+        const { Audio: ExpoAudio } = await import('expo-av');
+        const { Asset } = await import('expo-asset');
+        const asset = Asset.fromModule(require('../../assets/beep.mp3'));
+        await asset.downloadAsync();
+        const { sound } = await ExpoAudio.Sound.createAsync(
+          { uri: asset.localUri || asset.uri },
+          { shouldPlay: false }
+        );
+        setSound(sound);
       } catch (error) {
         console.log('Error loading sound:', error);
       }
@@ -202,6 +202,12 @@ const BarcodeScannerContent = () => {
       // Extract the raw code from scanning result
       const rawCode = scanningResult.data;
       
+      // Validate scanning result
+      if (!rawCode || typeof rawCode !== 'string') {
+        console.warn('Invalid scanning result:', scanningResult);
+        return;
+      }
+      
       // Add to scan buffer and get the updated buffer
       const updatedBuffer = [...scanBuffer, rawCode];
       setScanBuffer(updatedBuffer);
@@ -212,65 +218,77 @@ const BarcodeScannerContent = () => {
         // Disable scanning immediately to prevent duplicate detections
         setIsScanning(false);
         
-        // Find the most frequent code (majority vote)
-        const codeCounts = {};
-        updatedBuffer.forEach(code => {
-          const normalizedCode = code.trim();
-          codeCounts[normalizedCode] = (codeCounts[normalizedCode] || 0) + 1;
-        });
-
-        // Find the code with highest count
-        let winningCode = null;
-        let maxCount = 0;
-        for (const [code, count] of Object.entries(codeCounts)) {
-          if (count > maxCount) {
-            maxCount = count;
-            winningCode = code;
-          }
-        }
-
-        // Reset buffer and count
-        setScanBuffer([]);
-        setScanCount(0);
-
-        // Process the winning code with BarcodeEngine
-        if (winningCode) {
-          const result = await barcodeEngineRef.current.processScanningResult({ 
-            data: winningCode, 
-            type: scanningResult.type 
+        try {
+          // Find the most frequent code (majority vote)
+          const codeCounts = {};
+          updatedBuffer.forEach(code => {
+            const normalizedCode = code.trim();
+            codeCounts[normalizedCode] = (codeCounts[normalizedCode] || 0) + 1;
           });
-          
-          if (!result) {
-            // Re-enable scanning after error
-            setTimeout(() => {
-              setIsScanning(true);
-            }, 1500);
-            return;
-          }
 
-          if (result.success) {
-            const newCode = {
-              codigo_barras_ean: result.code,
-              nota: null
-            };
-
-            setScannedCodes(prev => [...prev, newCode]);
-            if (Platform.OS === 'android') {
-              Vibration.vibrate(100);
+          // Find the code with highest count
+          let winningCode = null;
+          let maxCount = 0;
+          for (const [code, count] of Object.entries(codeCounts)) {
+            if (count > maxCount) {
+              maxCount = count;
+              winningCode = code;
             }
-            playSound();
-            showToast({ type: 'success', message: 'Código escaneado correctamente' });
-
-            // Re-enable scanning after 1.5 seconds
-            setTimeout(() => {
-              setIsScanning(true);
-            }, 1500);
-          } else {
-            // Re-enable scanning after validation failure
-            setTimeout(() => {
-              setIsScanning(true);
-            }, 1500);
           }
+
+          // Reset buffer and count
+          setScanBuffer([]);
+          setScanCount(0);
+
+          // Process the winning code with BarcodeEngine
+          if (winningCode) {
+            const result = await barcodeEngineRef.current.processScanningResult({ 
+              data: winningCode, 
+              type: scanningResult.type 
+            });
+            
+            if (!result) {
+              // Re-enable scanning after error
+              setTimeout(() => {
+                setIsScanning(true);
+              }, 1500);
+              return;
+            }
+
+            if (result.success) {
+              const newCode = {
+                codigo_barras_ean: result.code,
+                nota: null
+              };
+
+              setScannedCodes(prev => [...prev, newCode]);
+              if (Platform.OS === 'android') {
+                Vibration.vibrate(100);
+              }
+              playSound();
+              showToast({ type: 'success', message: 'Código escaneado correctamente' });
+
+              // Re-enable scanning after 1.5 seconds
+              setTimeout(() => {
+                setIsScanning(true);
+              }, 1500);
+            } else {
+              // Re-enable scanning after validation failure
+              setTimeout(() => {
+                setIsScanning(true);
+              }, 1500);
+            }
+          }
+        } catch (innerError) {
+          console.error('Error in barcode processing logic:', innerError);
+          showToast({ type: 'error', message: 'Error al procesar código' });
+          // Reset buffer on error
+          setScanBuffer([]);
+          setScanCount(0);
+          // Re-enable scanning after error
+          setTimeout(() => {
+            setIsScanning(true);
+          }, 1500);
         }
       } else {
         // Show feedback that we're collecting scans
@@ -285,6 +303,10 @@ const BarcodeScannerContent = () => {
       // Reset buffer on error
       setScanBuffer([]);
       setScanCount(0);
+      // Re-enable scanning after error
+      setTimeout(() => {
+        setIsScanning(true);
+      }, 1500);
     }
   };
 

@@ -35,7 +35,7 @@ const SalidasContent = () => {
   const { token, user, permissions, salidaAccessLevels, salidaManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
-  const { viewMode, toggleViewMode } = useViewMode();
+  const { viewMode, toggleViewMode, isChangingView } = useViewMode();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -709,6 +709,7 @@ const SalidasContent = () => {
         onViewModeToggle={toggleViewMode}
         showViewToggle={true}
         viewMode={viewMode}
+        isChangingView={isChangingView}
         isDark={isDarkMode}
         title="Abacus"
         showLogo={true}
@@ -1328,13 +1329,17 @@ const SalidasContent = () => {
           animationType="fade"
           onRequestClose={() => setShowExportModal(false)}
         >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowExportModal(false)}
-          >
+          <View style={styles.modalOverlay}>
             <View style={[styles.exportModal, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.exportModalTitle, { color: colors.onSurface }]}>Exportar Datos</Text>
+              <View style={styles.exportModalHeader}>
+                <Text style={[styles.exportModalTitle, { color: colors.onSurface }]}>Exportar Datos</Text>
+                <TouchableOpacity
+                  style={styles.exportModalCloseButton}
+                  onPress={() => setShowExportModal(false)}
+                >
+                  <Ionicons name="close" size={responsive.responsiveWidth(24)} color={colors.onSurface} />
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity
                 style={[styles.exportOption, { backgroundColor: colors.surfaceVariant }]}
                 onPress={() => {
@@ -1360,7 +1365,7 @@ const SalidasContent = () => {
                 <Text style={[styles.exportOptionText, { color: colors.onSurface }]}>Salidas en PDF</Text>
               </TouchableOpacity>
             </View>
-          </TouchableOpacity>
+          </View>
         </Modal>
       )}
 
@@ -1372,13 +1377,17 @@ const SalidasContent = () => {
           animationType="fade"
           onRequestClose={() => setShowFieldSelectionModal(false)}
         >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowFieldSelectionModal(false)}
-          >
+          <View style={styles.modalOverlay}>
             <View style={[styles.fieldSelectionModal, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.exportModalTitle, { color: colors.onSurface }]}>Seleccionar Campos</Text>
+              <View style={styles.exportModalHeader}>
+                <Text style={[styles.exportModalTitle, { color: colors.onSurface }]}>Seleccionar Campos</Text>
+                <TouchableOpacity
+                  style={styles.exportModalCloseButton}
+                  onPress={() => setShowFieldSelectionModal(false)}
+                >
+                  <Ionicons name="close" size={responsive.responsiveWidth(24)} color={colors.onSurface} />
+                </TouchableOpacity>
+              </View>
               <ScrollView style={styles.fieldSelectionScroll}>
                 {Object.keys(selectedFields).map((field) => {
                   if (!canManageSalidas && (field === 'costo_cup' || field === 'costo_usd')) {
@@ -1410,7 +1419,7 @@ const SalidasContent = () => {
                 <Text style={[styles.exportConfirmButtonText, { color: '#fff' }]}>Generar Exportación</Text>
               </TouchableOpacity>
             </View>
-          </TouchableOpacity>
+          </View>
         </Modal>
       )}
 
@@ -1872,12 +1881,21 @@ const createStyles = (responsive) => StyleSheet.create({
     shadowRadius: 8,
     elevation: 10,
   },
+  exportModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(20),
+  },
   exportModalTitle: {
     fontSize: responsive.responsiveFontSize(20),
     fontWeight: '700',
     fontFamily: 'Hanken Grotesk',
-    marginBottom: responsive.responsiveMargin(20),
-    textAlign: 'center',
+    flex: 1,
+  },
+  exportModalCloseButton: {
+    padding: responsive.responsivePadding(8),
+    marginLeft: responsive.responsiveMargin(12),
   },
   exportOption: {
     flexDirection: 'row',

@@ -27,7 +27,7 @@ const ServiciosContent = () => {
   const { token, user, permissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
-  const { viewMode, toggleViewMode } = useViewMode();
+  const { viewMode, toggleViewMode, isChangingView } = useViewMode();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -535,6 +535,7 @@ const ServiciosContent = () => {
         onViewModeToggle={toggleViewMode}
         showViewToggle={true}
         viewMode={viewMode}
+        isChangingView={isChangingView}
         isDark={isDarkMode}
         title="Abacus"
         showLogo={true}

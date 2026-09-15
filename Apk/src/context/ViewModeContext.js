@@ -7,6 +7,7 @@ const VIEW_MODE_STORAGE_KEY = 'view_mode_preference';
 
 export const ViewModeProvider = ({ children }) => {
   const [viewMode, setViewMode] = useState('card'); // 'card' or 'table'
+  const [isChangingView, setIsChangingView] = useState(false);
 
   // Load view mode from AsyncStorage on mount
   useEffect(() => {
@@ -25,17 +26,23 @@ export const ViewModeProvider = ({ children }) => {
   };
 
   const toggleViewMode = async () => {
+    setIsChangingView(true);
     const newMode = viewMode === 'card' ? 'table' : 'card';
-    setViewMode(newMode);
-    try {
-      await AsyncStorage.setItem(VIEW_MODE_STORAGE_KEY, newMode);
-    } catch (error) {
-      console.error('Error saving view mode:', error);
-    }
+    
+    // Simulate a delay for the view change
+    setTimeout(async () => {
+      setViewMode(newMode);
+      try {
+        await AsyncStorage.setItem(VIEW_MODE_STORAGE_KEY, newMode);
+      } catch (error) {
+        console.error('Error saving view mode:', error);
+      }
+      setIsChangingView(false);
+    }, 500);
   };
 
   return (
-    <ViewModeContext.Provider value={{ viewMode, toggleViewMode }}>
+    <ViewModeContext.Provider value={{ viewMode, toggleViewMode, isChangingView }}>
       {children}
     </ViewModeContext.Provider>
   );

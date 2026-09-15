@@ -20,7 +20,7 @@ const TiendasContent = () => {
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
   const { token, user } = useAuth();
-  const { viewMode, toggleViewMode } = useViewMode();
+  const { viewMode, toggleViewMode, isChangingView } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -185,6 +185,7 @@ const TiendasContent = () => {
         onViewModeToggle={toggleViewMode}
         showViewToggle={true}
         viewMode={viewMode}
+        isChangingView={isChangingView}
         isDark={isDarkMode}
         title="Abacus"
         showLogo={true}

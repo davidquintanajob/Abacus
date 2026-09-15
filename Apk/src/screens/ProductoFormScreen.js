@@ -191,16 +191,15 @@ const ProductoFormContent = () => {
   }, [formData.productoTiendaList, tiendas, user, permissions]);
 
   const handleGeneralPriceBlur = () => {
-    const hasAllGeneralPrices = 
-      formData.precio_cup_general !== null && 
-      formData.precio_cup_general !== '' &&
-      formData.precio_usd_general !== null && 
-      formData.precio_usd_general !== '';
 
-    if (hasAllGeneralPrices && formData.productoTiendaList.length === 0) {
+    if (hasAnyGeneralPrice && formData.productoTiendaList.length === 0) {
       const newProductoTiendaList = tiendas.filter(tienda => tienda.activo === true).map(tienda => {
-        const precioCup = typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : parseFloat(formData.precio_cup_general);
-        const precioUsd = typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : parseFloat(formData.precio_usd_general);
+        const precioCup = formData.precio_cup_general !== null && formData.precio_cup_general !== '' 
+          ? (typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : parseFloat(formData.precio_cup_general))
+          : 0;
+        const precioUsd = formData.precio_usd_general !== null && formData.precio_usd_general !== ''
+          ? (typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : parseFloat(formData.precio_usd_general))
+          : 0;
         const costoCup = canViewCosts ? (typeof formData.costo_cup_general === 'number' ? formData.costo_cup_general : parseFloat(formData.costo_cup_general)) : 0;
         const costoUsd = canViewCosts ? (typeof formData.costo_usd_general === 'number' ? formData.costo_usd_general : parseFloat(formData.costo_usd_general)) : 0;
         
@@ -218,22 +217,50 @@ const ProductoFormContent = () => {
         productoTiendaList: newProductoTiendaList
       }));
       setIsPricesExpanded(true);
-    } else if (hasAllGeneralPrices && formData.productoTiendaList.length > 0) {
-      const precioCup = typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : parseFloat(formData.precio_cup_general);
-      const precioUsd = typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : parseFloat(formData.precio_usd_general);
+    } else if (hasAnyGeneralPrice && formData.productoTiendaList.length > 0) {
+      const precioCup = formData.precio_cup_general !== null && formData.precio_cup_general !== ''
+        ? (typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : parseFloat(formData.precio_cup_general))
+        : null;
+      const precioUsd = formData.precio_usd_general !== null && formData.precio_usd_general !== ''
+        ? (typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : parseFloat(formData.precio_usd_general))
+        : null;
       const costoCup = canViewCosts ? (typeof formData.costo_cup_general === 'number' ? formData.costo_cup_general : parseFloat(formData.costo_cup_general)) : 0;
       const costoUsd = canViewCosts ? (typeof formData.costo_usd_general === 'number' ? formData.costo_usd_general : parseFloat(formData.costo_usd_general)) : 0;
       
+      const activeTiendaIds = [];
+      if (tiendas && tiendas.length > 0) {
+        activeTiendaIds = tiendas.filter(tienda => tienda.activo === true).map(tienda => tienda.id_tienda);
+      } else {
+        activeTiendaIds = formData.productoTiendaList.map(item => item.id_tienda).filter(id => id !== null);
+      }
+      
+      const existingTiendaIds = formData.productoTiendaList.map(item => item.id_tienda).filter(id => id !== null);
+      
+      const missingTiendaIds = activeTiendaIds.filter(id => !existingTiendaIds.includes(id));
+      
+      const newTiendaEntries = missingTiendaIds.map(id_tienda => ({
+        id_tienda,
+        precio_cup: precioCup !== null ? precioCup : 0,
+        precio_usd: precioUsd !== null ? precioUsd : 0,
+        costo_cup: costoCup,
+        costo_usd: costoUsd,
+      }));
+      
       setFormData(prev => ({
         ...prev,
-        productoTiendaList: prev.productoTiendaList.map(item => ({
-          ...item,
-          precio_cup: precioCup,
-          precio_usd: precioUsd,
-          costo_cup: costoCup,
-          costo_usd: costoUsd,
-        }))
+        productoTiendaList: [
+          ...prev.productoTiendaList.map(item => ({
+            ...item,
+            ...(precioCup !== null && { precio_cup: precioCup }),
+            ...(precioUsd !== null && { precio_usd: precioUsd }),
+            costo_cup: costoCup,
+            costo_usd: costoUsd,
+          })),
+          ...newTiendaEntries
+        ]
       }));
+      
+      setIsPricesExpanded(true);
     }
   };
 
@@ -275,21 +302,55 @@ const ProductoFormContent = () => {
           await AsyncStorage.removeItem('expiration_alert_producto_id');
           await AsyncStorage.removeItem('expiration_alert_entrada_id');
           
-          // Mostrar alerta de que el producto tiene entradas próximas a vencer
-          setShowExpirationAlert(true);
-          setExpirationAlertData({
-            productoId: producto.id_servicio,
-            message: 'Este producto tiene entradas próximas a vencer'
-          });
+          // Verificar si realmente hay entradas próximas a vencer antes de mostrar la alerta
+          if (producto?.id_servicio && !isOfflineMode) {
+            const hoy = new Date();
+            const fechaMaxima = new Date(hoy);
+            fechaMaxima.setDate(fechaMaxima.getDate() + 30);
+            const fechaMaximaStr = fechaMaxima.toISOString().split('T')[0];
+            
+            const { getEntradas } = require('../services/entradaService');
+            const response = await getEntradas({ 
+              id_servicio: producto.id_servicio,
+              fecha_vencimiento_hasta: fechaMaximaStr 
+            }, 1, 100);
+            
+            if (response.data && response.data.length > 0) {
+              // Filtrar entradas para solo considerar las del producto actual
+              const filteredEntries = response.data.filter(entrada => {
+                const productoId = entrada.servicioTienda?.servicio?.id_servicio;
+                return productoId === producto.id_servicio;
+              });
+              
+              const hasExpiringEntries = filteredEntries.some(entrada => {
+                if (!entrada.fecha || !entrada.fecha_vencimiento || entrada.cantidad_restante <= 0) {
+                  return false;
+                }
+                const alerta = getExpirationAlert(entrada.fecha, entrada.fecha_vencimiento);
+                return alerta.level === 'critical' || alerta.level === 'warning' || alerta.level === 'expired';
+              });
+              
+              if (hasExpiringEntries) {
+                setShowExpirationAlert(true);
+                setExpirationAlertData({
+                  productoId: producto.id_servicio,
+                  message: 'Este producto tiene entradas próximas a vencer'
+                });
+              } else {
+                setShowExpirationAlert(false);
+                setExpirationAlertData(null);
+              }
+            } else {
+              setShowExpirationAlert(false);
+              setExpirationAlertData(null);
+            }
+          }
         } else if (producto?.id_servicio && !isOfflineMode) {
-          // Verificar automáticamente si el producto tiene entradas próximas a vencer
-          // Calcular fecha de vencimiento máximo (30 días desde hoy para el umbral amarillo)
           const hoy = new Date();
           const fechaMaxima = new Date(hoy);
           fechaMaxima.setDate(fechaMaxima.getDate() + 30);
           const fechaMaximaStr = fechaMaxima.toISOString().split('T')[0];
           
-          // Consultar entradas del producto
           const { getEntradas } = require('../services/entradaService');
           const response = await getEntradas({ 
             id_servicio: producto.id_servicio,
@@ -297,7 +358,13 @@ const ProductoFormContent = () => {
           }, 1, 100);
           
           if (response.data && response.data.length > 0) {
-            const hasExpiringEntries = response.data.some(entrada => {
+            // Filtrar entradas para solo considerar las del producto actual
+            const filteredEntries = response.data.filter(entrada => {
+              const productoId = entrada.servicioTienda?.servicio?.id_servicio;
+              return productoId === producto.id_servicio;
+            });
+            
+            const hasExpiringEntries = filteredEntries.some(entrada => {
               if (!entrada.fecha || !entrada.fecha_vencimiento || entrada.cantidad_restante <= 0) {
                 return false;
               }
@@ -311,11 +378,21 @@ const ProductoFormContent = () => {
                 productoId: producto.id_servicio,
                 message: 'Este producto tiene entradas próximas a vencer'
               });
+            } else {
+              setShowExpirationAlert(false);
+              setExpirationAlertData(null);
             }
+          } else {
+            setShowExpirationAlert(false);
+            setExpirationAlertData(null);
           }
+        } else {
+          setShowExpirationAlert(false);
+          setExpirationAlertData(null);
         }
       } catch (error) {
-        // Error al verificar alerta de vencimiento
+        setShowExpirationAlert(false);
+        setExpirationAlertData(null);
       }
     };
     
@@ -572,6 +649,55 @@ const ProductoFormContent = () => {
       return;
     }
 
+    // Check if general prices are defined and update tiendas accordingly
+    const hasAnyGeneralPrice = 
+      (formData.precio_cup_general !== null && formData.precio_cup_general !== '') ||
+      (formData.precio_usd_general !== null && formData.precio_usd_general !== '');
+
+    if (hasAnyGeneralPrice && formData.productoTiendaList.length > 0) {
+      const precioCup = formData.precio_cup_general !== null && formData.precio_cup_general !== ''
+        ? (typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : parseFloat(formData.precio_cup_general))
+        : null;
+      const precioUsd = formData.precio_usd_general !== null && formData.precio_usd_general !== ''
+        ? (typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : parseFloat(formData.precio_usd_general))
+        : null;
+      
+      // Get all active tienda IDs - use tiendas if available, otherwise use existing tienda IDs
+      let activeTiendaIds = [];
+      if (tiendas && tiendas.length > 0) {
+        activeTiendaIds = tiendas.filter(tienda => tienda.activo === true).map(tienda => tienda.id_tienda);
+      } else {
+        activeTiendaIds = formData.productoTiendaList.map(item => item.id_tienda).filter(id => id !== null);
+      }
+      
+      // Get existing tienda IDs from productoTiendaList
+      const existingTiendaIds = formData.productoTiendaList.map(item => item.id_tienda).filter(id => id !== null);
+      
+      // Find missing tienda IDs
+      const missingTiendaIds = activeTiendaIds.filter(id => !existingTiendaIds.includes(id));
+      
+      // Create new entries for missing tiendas
+      const newTiendaEntries = missingTiendaIds.map(id_tienda => ({
+        id_tienda,
+        precio_cup: precioCup !== null ? precioCup : 0,
+        precio_usd: precioUsd !== null ? precioUsd : 0,
+        costo_cup: formData.costo_cup_general || 0,
+        costo_usd: formData.costo_usd_general || 0,
+      }));
+      
+      // Update existing entries - only update prices that are defined
+      formData.productoTiendaList = [
+        ...formData.productoTiendaList.map(item => ({
+          ...item,
+          ...(precioCup !== null && { precio_cup: precioCup }),
+          ...(precioUsd !== null && { precio_usd: precioUsd }),
+          costo_cup: formData.costo_cup_general || 0,
+          costo_usd: formData.costo_usd_general || 0,
+        })),
+        ...newTiendaEntries
+      ];
+    }
+
     try {
       setIsSaving(true);
 
@@ -599,20 +725,37 @@ const ProductoFormContent = () => {
             formData.productoTiendaList.forEach(specific => {
               if (specific.id_tienda === null) return;
               
+              // Only include stores that have at least one price defined (not null and not 0)
+              const precioCup = specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general);
+              const precioUsd = specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general);
+              
+              // Skip if both prices are 0 or undefined
+              if ((precioCup === 0 || precioCup === null || precioCup === undefined) && 
+                  (precioUsd === 0 || precioUsd === null || precioUsd === undefined)) {
+                return;
+              }
+              
               baseList.push({
                 id_tienda: specific.id_tienda,
-                precio_cup: specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general),
-                precio_usd: specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general),
+                precio_cup: precioCup,
+                precio_usd: precioUsd,
               });
             });
           } 
           // If no specific stores configured but general prices exist, apply to all active stores
           else if (formData.precio_cup_general !== null || formData.precio_usd_general !== null) {
-            baseList = tiendas.filter(tienda => tienda.activo === true).map(tienda => ({
-              id_tienda: tienda.id_tienda,
-              precio_cup: toFixed5(formData.precio_cup_general),
-              precio_usd: toFixed5(formData.precio_usd_general),
-            }));
+            const precioCupGeneral = toFixed5(formData.precio_cup_general);
+            const precioUsdGeneral = toFixed5(formData.precio_usd_general);
+            
+            // Only apply general prices if at least one is defined and not 0
+            if ((precioCupGeneral !== 0 && precioCupGeneral !== null && precioCupGeneral !== undefined) ||
+                (precioUsdGeneral !== 0 && precioUsdGeneral !== null && precioUsdGeneral !== undefined)) {
+              baseList = tiendas.filter(tienda => tienda.activo === true).map(tienda => ({
+                id_tienda: tienda.id_tienda,
+                precio_cup: precioCupGeneral,
+                precio_usd: precioUsdGeneral,
+              }));
+            }
           }
           
           // Apply global cost fields to all stores
@@ -771,7 +914,6 @@ const ProductoFormContent = () => {
         barcodeEngineRef.current.startSession();
       }
     } catch (error) {
-      console.error('Error processing barcode:', error);
       showToast({ type: 'error', message: 'Error al procesar código' });
       barcodeEngineRef.current.resetSession();
       barcodeEngineRef.current.startSession();
@@ -798,10 +940,58 @@ const ProductoFormContent = () => {
     );
   };
 
+  const handleQuickSale = () => {
+    // Check if user has a tienda assigned
+    if (!user?.id_tienda) {
+      showToast({ 
+        type: 'error', 
+        message: 'No tienes una tienda asignada. Contacta al administrador.' 
+      });
+      return;
+    }
+
+    // Find the user's tienda
+    const userTienda = tiendas.find(t => t.id_tienda === user.id_tienda);
+    if (!userTienda) {
+      showToast({ 
+        type: 'error', 
+        message: 'No se encontró tu tienda asignada.' 
+      });
+      return;
+    }
+
+    // Check if product has stock in the user's tienda
+    const tiendaProducto = formData.productoTiendaList.find(
+      tp => tp.id_tienda === user.id_tienda
+    );
+
+    if (!tiendaProducto) {
+      showToast({ 
+        type: 'error', 
+        message: `El producto "${producto?.nombre || 'producto'}" no está disponible en la tienda "${userTienda.nombre}".` 
+      });
+      return;
+    }
+
+    const stock = tiendaProducto.cantidad || 0;
+    if (stock <= 0) {
+      showToast({ 
+        type: 'error', 
+        message: `El producto "${producto?.nombre || 'producto'}" no tiene unidades en la tienda "${userTienda.nombre}". Primero debes realizar una entrada.` 
+      });
+      return;
+    }
+
+    // Navigate to SalesScreen with the product
+    navigation.navigate('Sales', {
+      preselectedProduct: producto
+    });
+  };
+
   const handleAddTiendaProducto = () => {
     // Get all active tienda IDs that are not already in the list
     const existingTiendaIds = formData.productoTiendaList.map(item => item.id_tienda).filter(id => id !== null);
-    const availableTiendas = tiendas.filter(tienda => 
+    const availableTiendas = tiendas.filter(tienda =>
       tienda.activo === true && !existingTiendaIds.includes(tienda.id_tienda)
     );
 
@@ -813,8 +1003,12 @@ const ProductoFormContent = () => {
     // Add all available tiendas at once
     const newTiendaEntries = availableTiendas.map(tienda => ({
       id_tienda: tienda.id_tienda,
-      precio_cup: formData.precio_cup_general,
-      precio_usd: formData.precio_usd_general,
+      precio_cup: formData.precio_cup_general !== null && formData.precio_cup_general !== '' 
+        ? (typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : parseFloat(formData.precio_cup_general))
+        : 0,
+      precio_usd: formData.precio_usd_general !== null && formData.precio_usd_general !== ''
+        ? (typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : parseFloat(formData.precio_usd_general))
+        : 0,
     }));
 
     setFormData(prev => ({
@@ -1127,15 +1321,24 @@ const ProductoFormContent = () => {
                       navigation.navigate('EntradaForm', { mode: 'add', productoPreSeleccionado: producto });
                     }}
                   >
-                    <Ionicons name="arrow-down-circle-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? '#81C784' : '#2E7D32'} />
+                    <Image 
+                      source={require('../../assets/package-add.png')} 
+                      style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24) }}
+                      resizeMode="contain"
+                    />
                   </TouchableOpacity>
                 );
               })()}
               <TouchableOpacity
-                style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#0D47A1' : '#E3F2FD' }]}
+                style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#0D47A1' : '#E3F2FD', opacity: 0.5 }]}
                 onPress={() => {}}
+                disabled={true}
               >
-                <Ionicons name="swap-horizontal-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? '#64B5F6' : '#1976D2'} />
+                <Image 
+                  source={require('../../assets/moving.png')} 
+                  style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24) }}
+                  resizeMode="contain"
+                />
               </TouchableOpacity>
               {(() => {
                 const userRole = user?.rol?.toLowerCase();
@@ -1158,21 +1361,33 @@ const ProductoFormContent = () => {
                       navigation.navigate('SalidaForm', { mode: 'add', productoPreSeleccionado: producto });
                     }}
                   >
-                    <Ionicons name="arrow-up-circle-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? '#E57373' : '#C62828'} />
+                    <Image 
+                      source={require('../../assets/box.png')} 
+                      style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24) }}
+                      resizeMode="contain"
+                    />
                   </TouchableOpacity>
                 );
               })()}
               <TouchableOpacity
                 style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#F57C00' : '#FFF3E0' }]}
-                onPress={() => {}}
+                onPress={handleQuickSale}
               >
-                <Ionicons name="cart-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? '#FFB74D' : '#E65100'} />
+                <Image 
+                  source={require('../../assets/sales.png')} 
+                  style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24) }}
+                  resizeMode="contain"
+                />
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.iconActionButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
                 onPress={() => setShowInfoModal(true)}
               >
-                <Ionicons name="information-circle-outline" size={responsive.responsiveWidth(24)} color={isDarkMode ? colors.primary : '#1976D2'} />
+                <Image 
+                  source={require('../../assets/information.png')} 
+                  style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24) }}
+                  resizeMode="contain"
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -1243,126 +1458,45 @@ const ProductoFormContent = () => {
             </View>
           </View>
 
-
-          <View style={[styles.formGroup, styles.imageSection]}>
-            <Text style={[styles.label, { color: colors.outline }]}>Imagen</Text>
-            <View style={styles.imageContainer}>
-              {formData.imagen ? (() => {
-                const isBase64 = formData.imagen.startsWith('data:');
-                const fullImageUrl = isBase64 ? formData.imagen : (apiBaseUrl ? `${apiBaseUrl}${formData.imagen}` : formData.imagen);
-                return (
+          <View style={[styles.formRow, styles.imageFormRow]}>
+            <View style={[styles.formGroup, styles.imageFormGroup]}>
+              <Text style={[styles.label, { color: colors.outline }]}>Imagen del Producto</Text>
+              <View style={styles.imageContainer}>
+                {formData.imagen ? (
                   <View style={styles.imagePreviewContainer}>
-                    <Image
-                      source={{ uri: fullImageUrl }}
-                      style={styles.imagePreview}
-                      resizeMode="cover"
+                    <Image 
+                      source={{ 
+                        uri: formData.imagen.startsWith('data:') 
+                          ? formData.imagen 
+                          : (apiBaseUrl && formData.imagen.startsWith('/') 
+                              ? `${apiBaseUrl}${formData.imagen}` 
+                              : formData.imagen)
+                      }} 
+                      style={styles.imagePreview} 
                     />
-                    {!isReadOnly && (
-                      <TouchableOpacity
-                        style={[styles.imageRemoveButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                        onPress={handleRemoveImage}
-                      >
-                        <Ionicons name="close" size={responsive.responsiveWidth(20)} color={colors.error} />
-                      </TouchableOpacity>
-                    )}
+                    <TouchableOpacity
+                      style={styles.removeImageButton}
+                      onPress={handleRemoveImage}
+                      disabled={isReadOnly}
+                    >
+                      <Ionicons name="close-circle" size={24} color={colors.error} />
+                    </TouchableOpacity>
                   </View>
-                );
-              })() : (
-                <TouchableOpacity
-                  style={[styles.imagePlaceholder, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={handlePickImage}
-                  disabled={isReadOnly}
-                >
-                  <Ionicons name="image-outline" size={responsive.responsiveWidth(40)} color={colors.outline} />
-                  <Text style={[styles.imagePlaceholderText, { color: colors.outline }]}>
-                    {isReadOnly ? 'Sin imagen' : 'Seleccionar imagen'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              {!isReadOnly && formData.imagen && (
-                <TouchableOpacity
-                  style={[styles.imageChangeButton, { backgroundColor: colors.primary }]}
-                  onPress={handlePickImage}
-                >
-                  <Ionicons name="camera-outline" size={responsive.responsiveWidth(18)} color="#fff" />
-                  <Text style={[styles.imageChangeButtonText, { color: '#fff' }]}>Cambiar</Text>
-                </TouchableOpacity>
-              )}
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.imagePlaceholder, { borderColor: colors.outlineVariant }]}
+                    onPress={handlePickImage}
+                    disabled={isReadOnly}
+                  >
+                    <Ionicons name="image-outline" size={40} color={colors.outline} />
+                    <Text style={[styles.imagePlaceholderText, { color: colors.outline }]}>
+                      {isReadOnly ? 'Sin imagen' : 'Agregar imagen'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           </View>
-
-          {canViewCosts && (
-            <View style={styles.formRow}>
-              <View style={[styles.formColumn, styles.formGroup]}>
-                <Text style={[styles.label, { color: colors.outline }]}>Costo CUP</Text>
-                <TextInput
-                  style={[
-                    styles.input, 
-                    { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                    isReadOnly && styles.inputDisabled
-                  ]}
-                  placeholderTextColor={colors.outline}
-                  placeholder="Costo CUP"
-                  value={
-                    generalPriceInputTexts.costo_cup !== undefined
-                      ? generalPriceInputTexts.costo_cup
-                      : (formData.costo_cup_general !== null && formData.costo_cup_general !== '' ? parseFloat(formData.costo_cup_general).toFixed(2) : '')
-                  }
-                  onFocus={() => setGeneralPriceInputTexts(prev => ({
-                    ...prev,
-                    costo_cup: formData.costo_cup_general !== null && formData.costo_cup_general !== '' ? String(parseFloat(formData.costo_cup_general)) : ''
-                  }))}
-                  onChangeText={(text) => {
-                    setGeneralPriceInputTexts(prev => ({ ...prev, costo_cup: text }));
-                    handleGeneralPriceChange('costo_cup_general', text === '' ? null : parseFloat(text));
-                  }}
-                  onBlur={() => {
-                    setGeneralPriceInputTexts(prev => {
-                      const updated = { ...prev };
-                      delete updated.costo_cup;
-                      return updated;
-                    });
-                  }}
-                  keyboardType="decimal-pad"
-                  editable={!isViewMode || canEditProduct}
-                />
-              </View>
-              <View style={[styles.formColumn, styles.formGroup]}>
-                <Text style={[styles.label, { color: colors.outline }]}>Costo USD</Text>
-                <TextInput
-                  style={[
-                    styles.input, 
-                    { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                    isReadOnly && styles.inputDisabled
-                  ]}
-                  placeholderTextColor={colors.outline}
-                  placeholder="Costo USD"
-                  value={
-                    generalPriceInputTexts.costo_usd !== undefined
-                      ? generalPriceInputTexts.costo_usd
-                      : (formData.costo_usd_general !== null && formData.costo_usd_general !== '' ? parseFloat(formData.costo_usd_general).toFixed(2) : '')
-                  }
-                  onFocus={() => setGeneralPriceInputTexts(prev => ({
-                    ...prev,
-                    costo_usd: formData.costo_usd_general !== null && formData.costo_usd_general !== '' ? String(parseFloat(formData.costo_usd_general)) : ''
-                  }))}
-                  onChangeText={(text) => {
-                    setGeneralPriceInputTexts(prev => ({ ...prev, costo_usd: text }));
-                    handleGeneralPriceChange('costo_usd_general', text === '' ? null : parseFloat(text));
-                  }}
-                  onBlur={() => {
-                    setGeneralPriceInputTexts(prev => {
-                      const updated = { ...prev };
-                      delete updated.costo_usd;
-                      return updated;
-                    });
-                  }}
-                  keyboardType="decimal-pad"
-                  editable={!isViewMode || canEditProduct}
-                />
-              </View>
-            </View>
-          )}
 
           <View style={styles.formRow}>
             <View style={[styles.formColumn, styles.formGroup]}>
@@ -2105,7 +2239,13 @@ const ProductoFormContent = () => {
                   <>
                     {canManageEntradas && (
                       <View style={styles.infoItem}>
-                        <Ionicons name="arrow-down-circle-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#81C784' : '#2E7D32'} />
+                        <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#1B5E20' : '#E8F5E9' }]}>
+                          <Image 
+                            source={require('../../assets/package-add.png')} 
+                            style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20) }}
+                            resizeMode="contain"
+                          />
+                        </View>
                         <View style={styles.infoItemText}>
                           <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Agregar Entrada</Text>
                           <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra la entrada de stock al inventario del producto.</Text>
@@ -2114,7 +2254,13 @@ const ProductoFormContent = () => {
                     )}
 
                     <View style={styles.infoItem}>
-                      <Ionicons name="swap-horizontal-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#64B5F6' : '#1976D2'} />
+                      <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#0D47A1' : '#E3F2FD' }]}>
+                        <Image 
+                          source={require('../../assets/moving.png')} 
+                          style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20) }}
+                          resizeMode="contain"
+                        />
+                      </View>
                       <View style={styles.infoItemText}>
                         <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Movimiento</Text>
                         <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Realiza transferencias de stock entre tiendas o almacenes.</Text>
@@ -2123,7 +2269,13 @@ const ProductoFormContent = () => {
 
                     {canManageSalidas && (
                       <View style={styles.infoItem}>
-                        <Ionicons name="arrow-up-circle-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#E57373' : '#C62828'} />
+                        <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#B71C1C' : '#FFEBEE' }]}>
+                          <Image 
+                            source={require('../../assets/box.png')} 
+                            style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20) }}
+                            resizeMode="contain"
+                          />
+                        </View>
                         <View style={styles.infoItemText}>
                           <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Hacer Salida</Text>
                           <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra la salida de stock del inventario del producto.</Text>
@@ -2132,7 +2284,13 @@ const ProductoFormContent = () => {
                     )}
 
                     <View style={styles.infoItem}>
-                      <Ionicons name="cart-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? '#FFB74D' : '#E65100'} />
+                      <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#F57C00' : '#FFF3E0' }]}>
+                        <Image 
+                          source={require('../../assets/sales.png')} 
+                          style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20) }}
+                          resizeMode="contain"
+                        />
+                      </View>
                       <View style={styles.infoItemText}>
                         <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Vender</Text>
                         <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra una venta del producto reduciendo el stock disponible.</Text>
@@ -2264,6 +2422,13 @@ const createStyles = (responsive) => StyleSheet.create({
   formRow: {
     flexDirection: 'row',
     gap: responsive.responsiveMargin(12),
+  },
+  imageFormRow: {
+    justifyContent: 'center',
+  },
+  imageFormGroup: {
+    flex: 0,
+    alignSelf: 'center',
   },
   formColumn: {
     flex: 1,
@@ -2762,6 +2927,13 @@ const createStyles = (responsive) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: responsive.responsiveMargin(16),
+  },
+  infoItemIcon: {
+    width: responsive.responsiveWidth(40),
+    height: responsive.responsiveWidth(40),
+    borderRadius: responsive.responsiveWidth(20),
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   infoItemText: {
     flex: 1,

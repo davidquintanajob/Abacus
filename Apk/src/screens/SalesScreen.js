@@ -4,7 +4,7 @@ import { WebView } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { Header } from '../components/layout/Header';
 import { Sidebar } from '../components/layout/Sidebar';
@@ -31,11 +31,15 @@ import { ALLOWED_BARCODE_TYPES } from '../barcode/config/BarcodeTypes';
 
 const SalesContent = () => {
   const navigation = useNavigation();
+  const route = useRoute();
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
   const { toast, showToast, hideToast } = useToast();
   const { user, ventaAccessLevels, cuentaChangePermissions, entradaAccessLevels, entradaManagePermissions } = useAuth();
   const [permission, setPermission] = useState(null);
+
+  // Get pre-selected product from route params
+  const { preselectedProduct } = route.params || {};
 
   const [isScanning, setIsScanning] = useState(true);
   const [sound, setSound] = useState();
@@ -49,6 +53,9 @@ const SalesContent = () => {
   const [saleItems, setSaleItems] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showConfirmSaleModal, setShowConfirmSaleModal] = useState(false);
+  const [confirmSaleCountdown, setConfirmSaleCountdown] = useState(3);
+  const [pendingSaleData, setPendingSaleData] = useState(null);
 
   const [selectedTienda, setSelectedTienda] = useState(null);
   const [availableTiendas, setAvailableTiendas] = useState([]);
@@ -210,6 +217,120 @@ const SalesContent = () => {
       unsubscribe();
     };
   }, []);
+
+  // Handle pre-selected product from ProductoFormScreen
+  useEffect(() => {
+    if (preselectedProduct) {
+      const handlePreselectedProduct = async () => {
+        try {
+          // Ensure tienda is selected
+          if (!selectedTienda) {
+            showToast({ type: 'warning', message: 'Selecciona una tienda primero' });
+            return;
+          }
+
+          // Find the servicio_tienda for the selected store
+          const servicioTienda = preselectedProduct.tiendas_servicio?.find(t => t.id_tienda === selectedTienda.id_tienda);
+
+          if (!servicioTienda) {
+            showToast({ type: 'error', message: 'Producto no disponible en esta tienda' });
+            return;
+          }
+
+          // Build full image URL
+          let fullImageUrl = null;
+          if (preselectedProduct.producto?.imagen) {
+            const isBase64 = preselectedProduct.producto.imagen.startsWith('data:');
+            if (isBase64) {
+              fullImageUrl = preselectedProduct.producto.imagen;
+            } else {
+              const imagePath = preselectedProduct.producto.imagen.startsWith('/') ? preselectedProduct.producto.imagen : `/${preselectedProduct.producto.imagen}`;
+              const currentBaseUrl = await getApiBaseUrl();
+              fullImageUrl = currentBaseUrl ? `${currentBaseUrl}${imagePath}` : preselectedProduct.producto.imagen;
+            }
+          }
+
+          // Get barcode code
+          const barcodeCode = preselectedProduct.codigos?.[0]?.codigo_barras_ean || '';
+
+          const newItem = {
+            id_servicio_tienda: servicioTienda.id_servicio_tienda,
+            id_servicio: preselectedProduct.id_servicio,
+            codigo_barras_ean: barcodeCode,
+            nombre: preselectedProduct.nombre || 'Sin nombre',
+            imagen: fullImageUrl,
+            cantidad: 1,
+            precio_cup: parseFloat(servicioTienda.precio_cup || 0),
+            precio_usd: parseFloat(servicioTienda.precio_usd || 0),
+            esOferta: preselectedProduct.componentes?.length > 0,
+            componentes: [],
+          };
+
+          // If it's an offer, load components
+          if (newItem.esOferta && preselectedProduct.componentes?.length > 0) {
+            newItem.componentes = preselectedProduct.componentes.map(comp => ({
+              nombre: comp.nombre || 'Componente',
+              cantidad: comp.Oferta?.cantidad || 1
+            }));
+          }
+
+          setSaleItems(prev => [...prev, newItem]);
+          if (Platform.OS === 'android') {
+            Vibration.vibrate(100);
+          }
+          playSound();
+          showToast({ type: 'success', message: 'Producto agregado correctamente' });
+        } catch (error) {
+          console.error('Error adding preselected product:', error);
+          showToast({ type: 'error', message: 'Error al agregar producto' });
+        }
+      };
+
+      handlePreselectedProduct();
+    }
+  }, [preselectedProduct, selectedTienda]);
+
+  // Handle countdown for confirm sale modal
+  useEffect(() => {
+    let interval;
+    if (showConfirmSaleModal && confirmSaleCountdown > 0) {
+      interval = setInterval(() => {
+        setConfirmSaleCountdown(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [showConfirmSaleModal, confirmSaleCountdown]);
+
+  const handleConfirmSale = async () => {
+    if (!pendingSaleData) return;
+
+    const {
+      cantidad_cobrada_efectivo_cup,
+      cantidad_cobrada_efectivo_usd,
+      cantidad_cobrada_transferencia_cup,
+      cantidad_cobrada_transferencia_usd,
+      totalOriginalCUP,
+      totalOriginalUSD,
+    } = pendingSaleData;
+
+    setShowConfirmSaleModal(false);
+    setPendingSaleData(null);
+
+    await processSale(
+      cantidad_cobrada_efectivo_cup,
+      cantidad_cobrada_efectivo_usd,
+      cantidad_cobrada_transferencia_cup,
+      cantidad_cobrada_transferencia_usd,
+      totalOriginalCUP,
+      totalOriginalUSD
+    );
+  };
+
+  const handleCancelSale = () => {
+    setShowConfirmSaleModal(false);
+    setPendingSaleData(null);
+    setConfirmSaleCountdown(3);
+  };
 
   const loadApiBaseUrl = async () => {
     try {
@@ -450,6 +571,13 @@ const SalesContent = () => {
 
     try {
       const rawCode = scanningResult.data;
+      
+      // Validate scanning result
+      if (!rawCode || typeof rawCode !== 'string') {
+        console.warn('Invalid scanning result:', scanningResult);
+        return;
+      }
+      
       const currentTime = Date.now();
 
       // Check if same code was scanned and MORE than 2 seconds have passed
@@ -493,24 +621,35 @@ const SalesContent = () => {
       // Disable scanning immediately to prevent duplicate detections
       setIsScanning(false);
 
-      const result = await barcodeEngineRef.current.processScanningResult({
-        data: rawCode,
-        type: scanningResult.type
-      });
+      try {
+        const result = await barcodeEngineRef.current.processScanningResult({
+          data: rawCode,
+          type: scanningResult.type
+        });
 
-      if (result && result.success) {
-        await addProductByCode(rawCode);
+        if (result && result.success) {
+          await addProductByCode(rawCode);
+        }
+
+        // Update last scanned code and timestamp
+        setLastScannedCode(rawCode);
+        setLastScannedTimestamp(currentTime);
+
+        // Re-enable scanning after 1.5 seconds
+        setTimeout(() => {
+          setIsScanning(true);
+        }, 1500);
+      } catch (innerError) {
+        console.error('Error in barcode processing logic:', innerError);
+        showToast({ type: 'error', message: 'Error al procesar código' });
+
+        // Re-enable scanning on error
+        setTimeout(() => {
+          setIsScanning(true);
+        }, 1500);
       }
-
-      // Update last scanned code and timestamp
-      setLastScannedCode(rawCode);
-      setLastScannedTimestamp(currentTime);
-
-      // Re-enable scanning after 1.5 seconds
-      setTimeout(() => {
-        setIsScanning(true);
-      }, 1500);
     } catch (error) {
+      console.error('Error processing barcode:', error);
       showToast({ type: 'error', message: 'Error al procesar código' });
 
       // Re-enable scanning on error
@@ -900,12 +1039,7 @@ const SalesContent = () => {
       return;
     }
 
-    // Allow paying more or less than total (for change or partial payments)
-    // No validation on remaining amount needed
-
     try {
-      setIsSubmitting(true);
-
       const parseAmount = (value) => {
         const parsed = parseFloat(value);
         return isNaN(parsed) ? 0 : parsed;
@@ -925,7 +1059,51 @@ const SalesContent = () => {
       const totalPaidCUP = efectivoCup + transferenciaCup + (efectivoUsd + transferenciaUsd) * cambio;
       const totalPaidUSD = efectivoUsd + transferenciaUsd + (efectivoCup + transferenciaCup) / cambio;
 
+      // Check if paid amount is less than total
+      if (totalPaidCUP < totalOriginalCUP) {
+        // Prepare sale data for later use
+        const ventaData = {
+          fecha_hora: new Date().toISOString(),
+          nota: ventaNota,
+          cantidad_cobrada_efectivo_cup: efectivoCup,
+          cantidad_cobrada_efectivo_usd: efectivoUsd,
+          cantidad_cobrada_transferencia_cup: transferenciaCup,
+          cantidad_cobrada_transferencia_usd: transferenciaUsd,
+          id_cuenta_efectivo_cup: efectivoCup > 0 ? selectedCuentas.efectivo_cup?.id_cuenta : null,
+          id_cuenta_efectivo_usd: efectivoUsd > 0 ? selectedCuentas.efectivo_usd?.id_cuenta : null,
+          id_cuenta_transferencia_cup: transferenciaCup > 0 ? selectedCuentas.transferencia_cup?.id_cuenta : null,
+          id_cuenta_transferencia_usd: transferenciaUsd > 0 ? selectedCuentas.transferencia_usd?.id_cuenta : null,
+          id_usuario: user.id_usuario,
+          cambio_moneda: config.cupToUsdRate || 1,
+          totalOriginalCUP,
+          totalOriginalUSD,
+          totalPaidCUP,
+          totalPaidUSD,
+        };
+
+        setPendingSaleData(ventaData);
+        setConfirmSaleCountdown(3);
+        setShowConfirmSaleModal(true);
+        return;
+      }
+
+      // Process sale normally if amount is sufficient
+      await processSale(efectivoCup, efectivoUsd, transferenciaCup, transferenciaUsd, totalOriginalCUP, totalOriginalUSD);
+    } catch (error) {
+      console.error('Error preparing sale:', error);
+      showToast({ type: 'error', message: 'Error al procesar la venta' });
+    }
+  };
+
+  const processSale = async (efectivoCup, efectivoUsd, transferenciaCup, transferenciaUsd, totalOriginalCUP, totalOriginalUSD) => {
+    try {
+      setIsSubmitting(true);
+
       // Calculate difference and distribute equitably
+      const cambio = parseFloat(config.cupToUsdRate || 1);
+      const totalPaidCUP = efectivoCup + transferenciaCup + (efectivoUsd + transferenciaUsd) * cambio;
+      const totalPaidUSD = efectivoUsd + transferenciaUsd + (efectivoCup + transferenciaCup) / cambio;
+
       const diferenciaCUP = totalPaidCUP - totalOriginalCUP;
       const diferenciaUSD = totalPaidUSD - totalOriginalUSD;
 
@@ -1336,18 +1514,42 @@ const SalesContent = () => {
                 </View>
               ) : searchResults.length > 0 ? (
                 <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                  {searchResults.map((servicio, index) => (
-                    <TouchableOpacity
-                      key={servicio.id_servicio}
-                      style={[styles.dropdownItem, index === searchResults.length - 1 && styles.dropdownItemLast]}
-                      onPress={() => addProductBySearch(servicio)}
-                    >
-                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{servicio.nombre}</Text>
-                      {servicio.producto && (
-                        <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>Producto</Text>
-                      )}
-                    </TouchableOpacity>
-                  ))}
+                  {searchResults.map((servicio, index) => {
+                    // Obtener el precio de la tienda seleccionada o el primero disponible
+                    let precioCup = 0;
+                    if (servicio.tiendas_servicio && servicio.tiendas_servicio.length > 0) {
+                      if (selectedTienda) {
+                        const tiendaPrecio = servicio.tiendas_servicio.find(st => st.id_tienda === selectedTienda.id_tienda);
+                        if (tiendaPrecio) {
+                          precioCup = tiendaPrecio.precio_cup;
+                        } else {
+                          // Si no hay precio para la tienda seleccionada, usar el primero
+                          precioCup = servicio.tiendas_servicio[0].precio_cup;
+                        }
+                      } else {
+                        // Si no hay tienda seleccionada, usar el primer precio
+                        precioCup = servicio.tiendas_servicio[0].precio_cup;
+                      }
+                    }
+
+                    return (
+                      <TouchableOpacity
+                        key={servicio.id_servicio}
+                        style={[styles.dropdownItem, index === searchResults.length - 1 && styles.dropdownItemLast]}
+                        onPress={() => addProductBySearch(servicio)}
+                      >
+                        <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{servicio.nombre}</Text>
+                        <View style={styles.dropdownItemSubtextContainer}>
+                          <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>
+                            {servicio.producto ? 'Producto' : 'Servicio'}
+                          </Text>
+                          <Text style={[styles.dropdownItemPrice, { color: colors.primary }]}>
+                            ${precioCup ? formatNumber2Decimals(precioCup) : '0.00'} CUP
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </ScrollView>
               ) : (
                 <Text style={[styles.dropdownEmptyText, { color: colors.outline }]}>
@@ -1610,6 +1812,59 @@ const SalesContent = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Confirm Sale Modal */}
+      {showConfirmSaleModal && pendingSaleData && (
+        <Modal
+          visible={showConfirmSaleModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={handleCancelSale}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.confirmSaleModal, { backgroundColor: colors.surface }]}>
+              <View style={styles.confirmSaleHeader}>
+                <Ionicons name="alert-circle" size={responsive.responsiveWidth(32)} color={colors.error} />
+                <Text style={[styles.confirmSaleTitle, { color: colors.onSurface }]}>Confirmar Venta</Text>
+              </View>
+              
+              <Text style={[styles.confirmSaleMessage, { color: colors.onSurface }]}>
+                ¿Estás seguro que deseas vender por el precio de{' '}
+                <Text style={[styles.confirmSaleAmount, { color: colors.primary }]}>
+                  ${pendingSaleData.totalPaidCUP.toFixed(2)} CUP
+                </Text>
+                {' '}cuando el precio real de la suma de los artículos suma{' '}
+                <Text style={[styles.confirmSaleAmount, { color: colors.primary }]}>
+                  ${pendingSaleData.totalOriginalCUP.toFixed(2)} CUP
+                </Text>
+                ?
+              </Text>
+
+              <View style={styles.confirmSaleButtons}>
+                <TouchableOpacity
+                  style={[styles.confirmSaleCancelButton, { backgroundColor: colors.surfaceVariant, borderColor: colors.outline }]}
+                  onPress={handleCancelSale}
+                >
+                  <Text style={[styles.confirmSaleCancelText, { color: colors.onSurface }]}>No</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.confirmSaleConfirmButton, 
+                    { backgroundColor: colors.primary, opacity: confirmSaleCountdown > 0 ? 0.5 : 1 }
+                  ]}
+                  onPress={handleConfirmSale}
+                  disabled={confirmSaleCountdown > 0}
+                >
+                  <Text style={[styles.confirmSaleConfirmText, { color: '#fff' }]}>
+                    {confirmSaleCountdown > 0 ? confirmSaleCountdown : 'Sí'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {/* Comprobante Modal */}
       <Modal
@@ -1985,6 +2240,16 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveWidth(12),
     marginTop: responsive.responsiveHeight(2),
   },
+  dropdownItemSubtextContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: responsive.responsiveHeight(4),
+  },
+  dropdownItemPrice: {
+    fontSize: responsive.responsiveWidth(12),
+    fontWeight: '600',
+  },
   dropdownEmptyText: {
     fontSize: responsive.responsiveWidth(14),
     textAlign: 'center',
@@ -2161,6 +2426,69 @@ const createStyles = (responsive) => StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  confirmSaleModal: {
+    width: '85%',
+    maxWidth: responsive.responsiveWidth(400),
+    borderRadius: responsive.responsiveWidth(16),
+    padding: responsive.responsivePadding(24),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  confirmSaleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  confirmSaleTitle: {
+    fontSize: responsive.responsiveFontSize(20),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+    marginLeft: responsive.responsiveMargin(12),
+  },
+  confirmSaleMessage: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontFamily: 'Inter',
+    lineHeight: 24,
+    marginBottom: responsive.responsiveMargin(24),
+  },
+  confirmSaleAmount: {
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+  },
+  confirmSaleButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: responsive.responsiveMargin(12),
+  },
+  confirmSaleCancelButton: {
+    flex: 1,
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(16),
+    borderRadius: responsive.responsiveWidth(8),
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  confirmSaleCancelText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  confirmSaleConfirmButton: {
+    flex: 1,
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(16),
+    borderRadius: responsive.responsiveWidth(8),
+    alignItems: 'center',
+  },
+  confirmSaleConfirmText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
   },
   modalContent: {
     width: '90%',

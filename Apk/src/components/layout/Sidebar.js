@@ -59,6 +59,11 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
     ...(canAccessSalidas ? [{ icon: require('../../../assets/box.png'), label: 'Salidas', route: 'Salidas' }] : []),
     ...(canAccessVentas ? [{ icon: require('../../../assets/sales.png'), label: 'Ventas', route: 'Ventas' }] : []),
     ...(canAccessOperaciones ? [{ icon: require('../../../assets/report.png'), label: 'Operaciones', route: 'Operaciones' }] : []),
+    // Disabled items (coming soon)
+    { icon: require('../../../assets/moving.png'), label: 'Movimientos', disabled: true },
+    { icon: require('../../../assets/customer-search.png'), label: 'Clientes', disabled: true },
+    { icon: require('../../../assets/debt-recovery.png'), label: 'Deudas', disabled: true },
+    { icon: require('../../../assets/report (1).png'), label: 'Informes', disabled: true },
     ...(isAdmin ? [{ icon: require('../../../assets/tienda.png'), label: 'Tiendas', route: 'Tiendas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/usuarios.png'), label: 'Usuarios', route: 'Usuarios' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/Servicios.png'), label: 'Configuraciones del Administrador', route: 'CurrencyExchange' }] : []),
@@ -184,6 +189,43 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
         <ScrollView style={styles.navContainer} showsVerticalScrollIndicator={false}>
           {menuItems.map((item, index) => {
             const isActive = item.route === currentRoute;
+            const isDisabled = item.disabled === true;
+            
+            if (isDisabled) {
+              return (
+                <View
+                  key={index}
+                  style={[
+                    styles.navItem,
+                    styles.disabledNavItem
+                  ]}
+                >
+                  <Image
+                    source={item.icon}
+                    style={[
+                      styles.navIcon,
+                      styles.disabledNavIcon,
+                      { tintColor: colors.outline }
+                    ]}
+                    resizeMode="contain"
+                  />
+                  <Text style={[
+                    styles.navLabel,
+                    styles.disabledNavLabel,
+                    { color: colors.outline }
+                  ]}>
+                    {item.label}
+                  </Text>
+                  <Text style={[
+                    styles.comingSoonLabel,
+                    { color: colors.outline }
+                  ]}>
+                    Próximamente
+                  </Text>
+                </View>
+              );
+            }
+            
             return (
               <TouchableOpacity
                 key={index}
@@ -342,6 +384,23 @@ const createStyles = (responsive, insets) => StyleSheet.create({
     fontWeight: '500',
     fontFamily: 'JetBrains Mono',
     letterSpacing: 0.05,
+  },
+  disabledNavItem: {
+    opacity: 0.5,
+  },
+  disabledNavIcon: {
+    opacity: 0.5,
+  },
+  disabledNavLabel: {
+    opacity: 0.5,
+  },
+  comingSoonLabel: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    fontStyle: 'italic',
+    letterSpacing: 0.5,
+    marginLeft: 'auto',
   },
   footer: {
     borderTopWidth: 1,

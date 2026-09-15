@@ -1266,7 +1266,7 @@ const CurrencyExchangeContent = () => {
         <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
           <View style={styles.permissionsHeader}>
             <View style={styles.permissionsHeaderLeft}>
-              <Image source={require('../../assets/package-add.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
+              <Image source={require('../../assets/package-add - copia.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
               <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
                 Configuración de Entradas
               </Text>
@@ -2081,7 +2081,7 @@ const CurrencyExchangeContent = () => {
         <Card style={[styles.permissionsCard, { backgroundColor: colors.surface }]}>
           <View style={styles.permissionsHeader}>
             <View style={styles.permissionsHeaderLeft}>
-              <Image source={require('../../assets/sales.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
+              <Image source={require('../../assets/sales (1).png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
               <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
                 Configuraciones de Ventas
               </Text>
