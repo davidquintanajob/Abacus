@@ -867,7 +867,7 @@ const ServicioFormContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex1}
         keyboardVerticalOffset={responsive.headerHeight + 20}
       >

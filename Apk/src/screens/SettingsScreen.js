@@ -182,11 +182,16 @@ const SettingsContent = () => {
         currentRoute="Settings"
       />
 
-      <ScrollView 
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.content}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+        keyboardVerticalOffset={responsive.headerHeight + 20}
       >
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
         {/* Page Title */}
         <View style={styles.pageTitleContainer}>
           <Text style={[styles.pageTitle, { color: colors.onSurface }]}>Configuraciones</Text>
@@ -293,6 +298,7 @@ const SettingsContent = () => {
           </Text>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

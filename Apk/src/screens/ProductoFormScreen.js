@@ -1270,7 +1270,7 @@ const ProductoFormContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex1}
         keyboardVerticalOffset={responsive.headerHeight + 20}
       >
@@ -1497,6 +1497,80 @@ const ProductoFormContent = () => {
               </View>
             </View>
           </View>
+
+          {canViewCosts && (
+            <View style={styles.formRow}>
+              <View style={[styles.formColumn, styles.formGroup]}>
+                <Text style={[styles.label, { color: colors.outline }]}>Costo CUP *</Text>
+                <TextInput
+                  style={[
+                    styles.input, 
+                    { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                    isReadOnly && styles.inputDisabled
+                  ]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Costo CUP"
+                  value={
+                    generalPriceInputTexts.costo_cup !== undefined
+                      ? generalPriceInputTexts.costo_cup
+                      : (formData.costo_cup_general !== null && formData.costo_cup_general !== '' ? parseFloat(formData.costo_cup_general).toFixed(2) : '')
+                  }
+                  onFocus={() => setGeneralPriceInputTexts(prev => ({
+                    ...prev,
+                    costo_cup: formData.costo_cup_general !== null && formData.costo_cup_general !== '' ? String(parseFloat(formData.costo_cup_general)) : ''
+                  }))}
+                  onChangeText={(text) => {
+                    setGeneralPriceInputTexts(prev => ({ ...prev, costo_cup: text }));
+                    handleGeneralPriceChange('costo_cup_general', text === '' ? null : parseFloat(text));
+                  }}
+                  onBlur={() => {
+                    setGeneralPriceInputTexts(prev => {
+                      const updated = { ...prev };
+                      delete updated.costo_cup;
+                      return updated;
+                    });
+                  }}
+                  keyboardType="decimal-pad"
+                  editable={!isReadOnly}
+                />
+              </View>
+
+              <View style={[styles.formColumn, styles.formGroup]}>
+                <Text style={[styles.label, { color: colors.outline }]}>Costo USD *</Text>
+                <TextInput
+                  style={[
+                    styles.input, 
+                    { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                    isReadOnly && styles.inputDisabled
+                  ]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Costo USD"
+                  value={
+                    generalPriceInputTexts.costo_usd !== undefined
+                      ? generalPriceInputTexts.costo_usd
+                      : (formData.costo_usd_general !== null && formData.costo_usd_general !== '' ? parseFloat(formData.costo_usd_general).toFixed(2) : '')
+                  }
+                  onFocus={() => setGeneralPriceInputTexts(prev => ({
+                    ...prev,
+                    costo_usd: formData.costo_usd_general !== null && formData.costo_usd_general !== '' ? String(parseFloat(formData.costo_usd_general)) : ''
+                  }))}
+                  onChangeText={(text) => {
+                    setGeneralPriceInputTexts(prev => ({ ...prev, costo_usd: text }));
+                    handleGeneralPriceChange('costo_usd_general', text === '' ? null : parseFloat(text));
+                  }}
+                  onBlur={() => {
+                    setGeneralPriceInputTexts(prev => {
+                      const updated = { ...prev };
+                      delete updated.costo_usd;
+                      return updated;
+                    });
+                  }}
+                  keyboardType="decimal-pad"
+                  editable={!isReadOnly}
+                />
+              </View>
+            </View>
+          )}
 
           <View style={styles.formRow}>
             <View style={[styles.formColumn, styles.formGroup]}>

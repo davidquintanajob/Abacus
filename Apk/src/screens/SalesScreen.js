@@ -1418,7 +1418,12 @@ const SalesContent = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.content}
+        keyboardVerticalOffset={responsive.headerHeight + 20}
+      >
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Camera Section */}
         {showCamera && !isKeyboardVisible && (
           <View style={styles.cameraContainer}>
@@ -1782,6 +1787,7 @@ const SalesContent = () => {
           )}
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Cuenta Selector Modal */}
       <Modal

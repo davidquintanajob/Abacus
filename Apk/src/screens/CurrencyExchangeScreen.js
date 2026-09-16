@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Switch, Modal, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Switch, Modal, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -999,11 +999,16 @@ const CurrencyExchangeContent = () => {
         currentRoute="CurrencyExchange"
       />
 
-      <ScrollView 
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.content}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+        keyboardVerticalOffset={responsive.headerHeight + 20}
       >
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
         <Card style={[styles.formCard, { backgroundColor: colors.surface }]}>
           {isLoading ? (
             <View style={styles.loadingContainer}>
@@ -2488,6 +2493,7 @@ const CurrencyExchangeContent = () => {
         </Card>
 
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <Modal
         visible={infoModal.visible}

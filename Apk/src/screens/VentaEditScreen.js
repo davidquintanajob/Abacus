@@ -834,13 +834,14 @@ const VentaEditContent = () => {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex1}
-        keyboardVerticalOffset={20}
+        keyboardVerticalOffset={responsive.headerHeight + 20}
       >
         <ScrollView
           style={styles.content}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           {/* Camera Section */}
           {showCamera && !isKeyboardVisible && (

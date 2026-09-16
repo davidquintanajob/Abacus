@@ -723,12 +723,14 @@ const SalidasContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.content}
+        keyboardVerticalOffset={responsive.headerHeight + 20}
       >
         <ScrollView 
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
         {/* Page Title */}
         <View style={styles.pageTitleContainer}>

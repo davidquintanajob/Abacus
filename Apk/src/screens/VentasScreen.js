@@ -145,6 +145,37 @@ const VentasContent = () => {
     return `${integerPart}.${parts[1]}`;
   };
 
+  // Get payment types with their colors for a venta
+  const getPaymentTypes = (venta) => {
+    const paymentTypes = [];
+    
+    // Check for CUP payments
+    const hasEfectivoCUP = parseFloat(venta.cantidad_cobrada_efectivo_cup || 0) > 0;
+    const hasTransferenciaCUP = parseFloat(venta.cantidad_cobrada_transferencia_cup || 0) > 0;
+    
+    // Check for USD payments
+    const hasEfectivoUSD = parseFloat(venta.cantidad_cobrada_efectivo_usd || 0) > 0;
+    const hasTransferenciaUSD = parseFloat(venta.cantidad_cobrada_transferencia_usd || 0) > 0;
+    
+    // Add CUP payments together
+    if (hasEfectivoCUP) {
+      paymentTypes.push({ label: 'Efectivo CUP', color: '#4CAF50' });
+    }
+    if (hasTransferenciaCUP) {
+      paymentTypes.push({ label: 'Transferencia CUP', color: '#FF9800' });
+    }
+    
+    // Add USD payments together
+    if (hasEfectivoUSD) {
+      paymentTypes.push({ label: 'Efectivo USD', color: '#2196F3' });
+    }
+    if (hasTransferenciaUSD) {
+      paymentTypes.push({ label: 'Transferencia USD', color: '#9C27B0' });
+    }
+    
+    return paymentTypes;
+  };
+
   // Filter states
   const [filters, setFilters] = useState({ 
     nota: '', 
@@ -674,8 +705,8 @@ const VentasContent = () => {
 
       <KeyboardAvoidingView 
         style={styles.content} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={responsive.headerHeight + 20}
       >
         <ScrollView 
           showsVerticalScrollIndicator={false} 
@@ -1308,6 +1339,18 @@ const VentasContent = () => {
                           Total USD: ${(parseFloat(venta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(venta.cantidad_cobrada_transferencia_usd || 0)).toFixed(2)}
                         </Text>
                       </View>
+                      <View style={styles.cardPaymentTypesContainer}>
+                        {getPaymentTypes(venta).map((paymentType, idx) => (
+                          <View 
+                            key={idx} 
+                            style={[styles.cardPaymentTypeBadge, { backgroundColor: isDarkMode ? `${paymentType.color}33` : `${paymentType.color}22`, borderColor: paymentType.color }]}
+                          >
+                            <Text style={[styles.cardPaymentTypeText, { color: paymentType.color }]}>
+                              {paymentType.label}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
                       <Text style={[styles.ventaFecha, { color: colors.outline }]}>
                         Fecha: {formatCubaDate(venta.fecha_hora)}
                       </Text>
@@ -1354,6 +1397,7 @@ const VentasContent = () => {
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Usuario</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100), textAlign: 'center' }]}>Total CUP</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100), textAlign: 'center' }]}>Total USD</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(200) }]}>Tipo de Pago</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Fecha</Text>
                     {canManageVentas && (
                       <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Acciones</Text>
@@ -1390,6 +1434,20 @@ const VentasContent = () => {
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
                           ${venta.cantidad_cobrada_efectivo_usd || 0}
                         </Text>
+                        <View style={[styles.tableCellWithFlags, { width: responsive.responsiveWidth(200) }]}>
+                          <View style={styles.paymentTypesContainer}>
+                            {getPaymentTypes(venta).map((paymentType, idx) => (
+                              <View 
+                                key={idx} 
+                                style={[styles.paymentTypeBadge, { backgroundColor: isDarkMode ? `${paymentType.color}33` : `${paymentType.color}22`, borderColor: paymentType.color }]}
+                              >
+                                <Text style={[styles.paymentTypeText, { color: paymentType.color }]}>
+                                  {paymentType.label}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(120) }]}>
                           {formatCubaDate(venta.fecha_hora)}
                         </Text>
@@ -1933,5 +1991,38 @@ const createStyles = (responsive) => StyleSheet.create({
     borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  paymentTypesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: responsive.responsiveMargin(4),
+  },
+  paymentTypeBadge: {
+    paddingHorizontal: responsive.responsivePadding(6),
+    paddingVertical: responsive.responsivePadding(2),
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  paymentTypeText: {
+    fontSize: responsive.responsiveFontSize(10),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  cardPaymentTypesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: responsive.responsiveMargin(4),
+    marginTop: responsive.responsiveMargin(4),
+  },
+  cardPaymentTypeBadge: {
+    paddingHorizontal: responsive.responsivePadding(8),
+    paddingVertical: responsive.responsivePadding(3),
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  cardPaymentTypeText: {
+    fontSize: responsive.responsiveFontSize(11),
+    fontWeight: '600',
+    fontFamily: 'Inter',
   },
 });
