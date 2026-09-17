@@ -6,6 +6,8 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useViewMode } from '../../context/ViewModeContext';
 import { useToast } from '../../hooks/useToast';
+import { useConfirmDialog } from '../../context/ConfirmDialogContext';
+import { useNavigationLoading } from '../../context/NavigationLoadingContext';
 import { Header } from '../../components/layout/Header';
 import { SidebarNavigation } from '../../components/layout/SidebarNavigation';
 import { Toast } from '../../components/common/Toast';
@@ -35,8 +37,15 @@ export default function ServiciosPage() {
   const { token, user } = useAuth();
   const { viewMode, toggleViewMode } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
+  const { showConfirmDialog } = useConfirmDialog();
+  const { setLoading: setNavigating } = useNavigationLoading();
   const { isMobile, isTablet, isDesktop } = useResponsive();
   const sidebarNavRef = useRef<any>(null);
+
+  // Reset navigation loading state when page loads
+  useEffect(() => {
+    setNavigating(false);
+  }, [setNavigating]);
 
   const handleMenuPress = () => {
     if (sidebarNavRef.current) {
@@ -125,16 +134,21 @@ export default function ServiciosPage() {
   };
 
   const handleDelete = (servicio: any) => {
-    if (confirm(`¿Estás seguro de que quieres eliminar el servicio "${servicio.nombre}"?`)) {
-      deleteServicio(servicio.id_servicio)
-        .then(() => {
-          showToast({ type: 'success', message: 'Servicio eliminado correctamente' });
-          fetchServicios();
-        })
-        .catch((err: any) => {
-          showToast({ type: 'error', message: err.message, code: err.code });
-        });
-    }
+    showConfirmDialog({
+      title: 'Eliminar Servicio',
+      message: `¿Estás seguro de que quieres eliminar el servicio "${servicio.nombre}"?`,
+      onConfirm: () => {
+        deleteServicio(servicio.id_servicio)
+          .then(() => {
+            showToast({ type: 'success', message: 'Servicio eliminado correctamente' });
+            fetchServicios();
+          })
+          .catch((err: any) => {
+            showToast({ type: 'error', message: err.message, code: err.code });
+          });
+      },
+      type: 'danger'
+    });
   };
 
   const handleServicioPress = (servicio: any) => {
@@ -187,6 +201,7 @@ export default function ServiciosPage() {
         toastKey={toast.key}
       />
       
+      {/* ConfirmDialog is now global via GlobalConfirmDialog in layout */}
       <SidebarNavigation 
         currentRoute="Servicios" 
         ref={sidebarNavRef}

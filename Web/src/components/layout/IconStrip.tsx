@@ -2,8 +2,11 @@
 
 import React from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useNavigationLoading } from '../../context/NavigationLoadingContext';
+import { Loader2 } from 'lucide-react';
 
 interface IconStripProps {
   onHover: () => void;
@@ -14,8 +17,32 @@ interface IconStripProps {
 export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStripProps) => {
   const { colors, isDark } = useTheme();
   const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels } = useAuth();
+  const { isLoading: isNavigating, setLoading: setNavigating } = useNavigationLoading();
+  const router = useRouter();
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
+
+  const handleNavigation = (route: string) => {
+    if (isNavigating) return;
+    
+    setNavigating(true);
+    // Mapeo de rutas a URLs de Next.js
+    const routeMap: Record<string, string> = {
+      'Home': '/',
+      'Servicios': '/servicios',
+      'Productos': '/productos',
+      'Entradas': '/entradas',
+      'Salidas': '/salidas',
+      'Operaciones': '/operaciones',
+      'Tiendas': '/tiendas',
+      'Usuarios': '/usuarios',
+      'CurrencyExchange': '/configuracion',
+    };
+    
+    if (routeMap[route]) {
+      router.push(routeMap[route]);
+    }
+  };
 
   const isAdmin = user?.rol === 'Administrador';
   const userRole = user?.rol?.toLowerCase();
@@ -75,17 +102,35 @@ export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStrip
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
     >
+      {isNavigating && (
+        <div className="flex flex-col items-center justify-center py-4">
+          <Loader2 className="animate-spin" size={20} style={{ color: colors.primary }} />
+        </div>
+      )}
       {menuItems.map((item, index) => {
         const isActive = item.route === currentRoute;
         return (
           <div
             key={index}
-            className="w-12 h-12 flex items-center justify-center rounded-xl transition-all duration-200 hover:scale-110"
+            className="w-12 h-12 flex items-center justify-center rounded-xl transition-all duration-200 cursor-pointer"
             style={{
               backgroundColor: isActive ? colors.primary : 'transparent',
-              opacity: isActive ? 1 : 0.7,
+              opacity: isActive ? 1 : isNavigating ? 0.5 : 0.7,
+              pointerEvents: isNavigating ? 'none' : 'auto',
+              transition: 'transform 0.2s ease, box-shadow 0.2s ease',
             }}
             title={item.label}
+            onClick={() => handleNavigation(item.route)}
+            onMouseEnter={(e) => {
+              if (!isNavigating && !isActive) {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
           >
             <Image
               src={item.icon as string}
@@ -94,7 +139,7 @@ export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStrip
               height={24}
               className="w-6 h-6 object-contain"
               style={{
-                filter: isActive && !isDarkMode ? 'brightness(0) invert(1)' : 'none',
+                filter: isActive && !isDarkMode ? 'brightness(0) invert(1)' : isDarkMode ? 'brightness(0) invert(1)' : 'none',
               }}
             />
           </div>

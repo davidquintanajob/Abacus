@@ -57,7 +57,7 @@ export const Header = ({
 
   return (
     <header
-      className="fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 md:px-6 pt-4 pb-2 border-b"
+      className="fixed top-0 left-0 right-0 z-30 flex items-center justify-between px-4 md:px-6 pt-3 pb-1 lg:pt-2 lg:pb-1 border-b"
       style={{
         backgroundColor: colors.surface,
         borderColor: colors.outlineVariant,

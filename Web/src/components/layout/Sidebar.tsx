@@ -6,7 +6,9 @@ import { useRouter } from 'next/navigation';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../hooks/useToast';
-import { X, LogOut } from 'lucide-react';
+import { useConfirmDialog } from '../../context/ConfirmDialogContext';
+import { useNavigationLoading } from '../../context/NavigationLoadingContext';
+import { X, LogOut, Loader2 } from 'lucide-react';
 import { Toast } from '../common/Toast';
 
 interface SidebarProps {
@@ -23,6 +25,8 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverT
   const { colors, isDark } = useTheme();
   const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, logout } = useAuth();
   const { toast, showToast, hideToast } = useToast();
+  const { showConfirmDialog } = useConfirmDialog();
+  const { isLoading: isNavigating, setLoading: setNavigating } = useNavigationLoading();
   const [isSyncing, setIsSyncing] = useState(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
@@ -61,20 +65,28 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverT
   ];
 
   const handleLogout = async () => {
-    if (confirm('¿Estás seguro de que quieres cerrar sesión?')) {
-      try {
-        setIsSyncing(true);
-        await logout();
-        onClose?.();
-        router.push('/login');
-      } catch (error: any) {
-        setIsSyncing(false);
-        showToast({ type: 'error', message: 'No se pudo cerrar sesión', code: error.code ?? null });
-      }
-    }
+    showConfirmDialog({
+      title: 'Cerrar Sesión',
+      message: '¿Estás seguro de que quieres cerrar sesión?',
+      onConfirm: async () => {
+        try {
+          setIsSyncing(true);
+          await logout();
+          onClose?.();
+          router.push('/login');
+        } catch (error: any) {
+          setIsSyncing(false);
+          showToast({ type: 'error', message: 'No se pudo cerrar sesión', code: error.code ?? null });
+        }
+      },
+      type: 'warning'
+    });
   };
 
   const handleNavigation = (route: string) => {
+    if (isNavigating) return;
+    
+    setNavigating(true);
     onClose?.();
     // Mapeo de rutas a URLs de Next.js
     const routeMap: Record<string, string> = {
@@ -150,18 +162,38 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverT
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto">
+          {isNavigating && (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="animate-spin" size={24} style={{ color: colors.primary }} />
+              <span className="ml-2 text-sm" style={{ color: colors.onSurfaceVariant }}>Cargando...</span>
+            </div>
+          )}
           {menuItems.map((item, index) => {
             const isActive = item.route === currentRoute;
             return (
               <button
                 key={index}
                 onClick={() => handleNavigation(item.route)}
+                disabled={isNavigating}
                 className={`
                   w-full flex items-center gap-4 px-4 py-3 rounded-full mb-1 transition-colors
                   ${isActive ? '' : 'hover:bg-black/5'}
                 `}
                 style={{
                   backgroundColor: isActive ? colors.primary : 'transparent',
+                  opacity: isNavigating ? 0.5 : 1,
+                  cursor: isNavigating ? 'not-allowed' : 'pointer',
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isNavigating && !isActive) {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
                 }}
               >
                 <div className="w-8 h-8 flex items-center justify-center">
@@ -172,7 +204,7 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverT
                     height={32}
                     className="w-full h-full object-contain"
                     style={{
-                      filter: isActive && !isDarkMode ? 'brightness(0) invert(1)' : 'none',
+                      filter: isActive && !isDarkMode ? 'brightness(0) invert(1)' : isDarkMode ? 'brightness(0) invert(1)' : 'none',
                     }}
                   />
                 </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 
 const TOAST_CONFIG = {
@@ -70,10 +71,12 @@ export const Toast = ({
 
   if (!isVisible) return null;
 
-  return (
+  if (typeof window === 'undefined') return null;
+
+  return createPortal(
     <div
       className={`
-        fixed top-4 left-4 right-4 md:left-auto md:right-4 md:w-96 z-50
+        fixed top-4 left-4 right-4 md:left-auto md:right-4 md:w-96 z-[10000]
         rounded-xl shadow-lg
         flex items-center gap-3 p-3
         transition-all duration-300 ease-out
@@ -111,6 +114,7 @@ export const Toast = ({
       >
         <X size={18} className="text-white/85" />
       </button>
-    </div>
+    </div>,
+    document.body
   );
 };

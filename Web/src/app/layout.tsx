@@ -4,6 +4,10 @@ import "./globals.css";
 import { ThemeProvider } from "../context/ThemeContext";
 import { AuthProvider } from "../context/AuthContext";
 import { ViewModeProvider } from "../context/ViewModeContext";
+import { ModalProvider } from "../context/ModalContext";
+import { ConfirmDialogProvider } from "../context/ConfirmDialogContext";
+import { NavigationLoadingProvider } from "../context/NavigationLoadingContext";
+import { GlobalConfirmDialog } from "../components/common/GlobalConfirmDialog";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,9 +40,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
           <AuthProvider>
-            <ViewModeProvider>
-              {children}
-            </ViewModeProvider>
+            <ModalProvider>
+              <ConfirmDialogProvider>
+                <NavigationLoadingProvider>
+                  <ViewModeProvider>
+                    {children}
+                  </ViewModeProvider>
+                  <GlobalConfirmDialog />
+                </NavigationLoadingProvider>
+              </ConfirmDialogProvider>
+            </ModalProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

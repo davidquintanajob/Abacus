@@ -5,9 +5,11 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useViewMode } from '../context/ViewModeContext';
+import { useNavigationLoading } from '../context/NavigationLoadingContext';
 import { Header } from '../components/layout/Header';
 import { SidebarNavigation } from '../components/layout/SidebarNavigation';
-import { AlertTriangle, Clock, XCircle, CheckCircle, Phone, MessageCircle, ArrowRight, Lock, Box, ShoppingCart, DollarSign, Users } from 'lucide-react';
+import { AlertTriangle, Clock, XCircle, CheckCircle, Phone, MessageCircle, ArrowRight, Lock, Box, FileText, ShoppingCart, DollarSign, Users, X } from 'lucide-react';
 import { getEntradas } from '../services/entradaService';
 import { SvgIcon } from '../components/common/SvgIcon';
 import { darkColors } from '../lib/colors';
@@ -20,7 +22,13 @@ export default function HomePage() {
   const { colors, isDark, toggleTheme } = useTheme();
   const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels } = useAuth();
   const { isMobile, isTablet, isDesktop } = useResponsive();
+  const { setLoading: setNavigating } = useNavigationLoading();
   const sidebarNavRef = useRef<any>(null);
+
+  // Reset navigation loading state when page loads
+  useEffect(() => {
+    setNavigating(false);
+  }, [setNavigating]);
 
   const handleMenuPress = () => {
     if (sidebarNavRef.current) {
@@ -31,6 +39,8 @@ export default function HomePage() {
   const [greeting, setGreeting] = useState('Buenos días');
   const [currentDate, setCurrentDate] = useState('');
   const [expiringProducts, setExpiringProducts] = useState<any[]>([]);
+  const [allExpiringProducts, setAllExpiringProducts] = useState<any[]>([]);
+  const [alertModalVisible, setAlertModalVisible] = useState(false);
   const [loadingExpiring, setLoadingExpiring] = useState(false);
   const [stats, setStats] = useState({
     cantidad_productos: 0,
@@ -259,10 +269,10 @@ export default function HomePage() {
             };
           })
           .filter((item: any) => item.alerta.level === 'critical' || item.alerta.level === 'warning' || item.alerta.level === 'expired')
-          .sort((a: any, b: any) => a.alerta.days - b.alerta.days)
-          .slice(0, 5);
+          .sort((a: any, b: any) => a.alerta.days - b.alerta.days);
         
-        setExpiringProducts(productosConAlerta);
+        setAllExpiringProducts(productosConAlerta);
+        setExpiringProducts(productosConAlerta.slice(0, 3));
       } catch (error) {
         // Error al cargar productos próximos a vencer — servidor no disponible
       } finally {
@@ -311,7 +321,7 @@ export default function HomePage() {
         marginTop: '80px',
         marginRight: 'auto',
         marginBottom: '0',
-        marginLeft: isDesktop ? '80px' : 'auto',
+        marginLeft: isDesktop ? '120px' : 'auto',
         paddingTop: isMobile ? '20px' : isTablet ? '32px' : '40px',
         paddingRight: isMobile ? '20px' : isTablet ? '32px' : '40px',
         paddingBottom: '120px',
@@ -375,7 +385,7 @@ export default function HomePage() {
                   key={producto.id || index}
                   style={{
                     borderRadius: '12px',
-                    padding: '16px',
+                    padding: '12px 16px',
                     display: 'flex',
                     alignItems: 'center',
                     backgroundColor: colors.surface,
@@ -387,9 +397,9 @@ export default function HomePage() {
                 >
                   <div
                     style={{ 
-                      width: '40px', 
-                      height: '40px', 
-                      borderRadius: '8px', 
+                      width: '32px', 
+                      height: '32px', 
+                      borderRadius: '6px', 
                       display: 'flex', 
                       alignItems: 'center', 
                       justifyContent: 'center',
@@ -399,18 +409,18 @@ export default function HomePage() {
                   >
                     {getExpirationAlertIcon(producto.alerta.level)}
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontWeight: '600', color: colors.onSurface, margin: 0 }}>
-                      {producto.nombreProducto}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontWeight: '600', color: colors.onSurface, margin: 0, fontSize: '14px' }}>
+                      {producto.codigoLote}
                     </p>
-                    <p style={{ fontSize: '14px', color: colors.outline, margin: '4px 0 0 0' }}>
-                      Lote: {producto.codigoLote}
+                    <p style={{ fontSize: '12px', color: colors.outline, margin: '2px 0 0 0' }}>
+                      Cant.Res: {producto.cantidad_restante || 0}
                     </p>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
+                  <div style={{ textAlign: 'right', marginLeft: '12px' }}>
                     <p
                       style={{ 
-                        fontSize: '14px', 
+                        fontSize: '13px', 
                         fontWeight: '600',
                         color: getExpirationAlertColor(producto.alerta.level),
                         margin: 0
@@ -418,7 +428,7 @@ export default function HomePage() {
                     >
                       {producto.alerta.label}
                     </p>
-                    <p style={{ fontSize: '12px', color: colors.outline, margin: '4px 0 0 0' }}>
+                    <p style={{ fontSize: '11px', color: colors.outline, margin: '2px 0 0 0' }}>
                       {producto.alerta.days === 0 ? 'Hoy' :
                        producto.alerta.days === 1 ? 'Mañana' :
                        producto.alerta.days === -1 ? 'Ayer' :
@@ -426,9 +436,74 @@ export default function HomePage() {
                        `${producto.alerta.days} días`}
                     </p>
                   </div>
+                  <div style={{ display: 'flex', gap: '6px', marginLeft: '12px' }}>
+                    <button
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '6px',
+                        backgroundColor: colors.primary,
+                        border: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        transition: 'opacity 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+                      onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                      title="Ver producto"
+                    >
+                      <Box size={14} color="#fff" />
+                    </button>
+                    <button
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '6px',
+                        backgroundColor: colors.secondary,
+                        border: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        transition: 'opacity 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+                      onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                      title="Ver entrada"
+                    >
+                      <FileText size={14} color="#fff" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
+            {allExpiringProducts.length > 3 && (
+              <button
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  backgroundColor: `${colors.primary}15`,
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: 'pointer',
+                  marginTop: '8px',
+                  transition: 'opacity 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                onClick={() => setAlertModalVisible(true)}
+              >
+                <span style={{ fontSize: '14px', fontWeight: '600', color: colors.primary, margin: 0 }}>
+                  Ver más ({allExpiringProducts.length - 3} más)
+                </span>
+              </button>
+            )}
           </div>
         )}
 
@@ -748,6 +823,180 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* Modal de todas las alertas */}
+      {alertModalVisible && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '20px'
+          }}
+          onClick={() => setAlertModalVisible(false)}
+        >
+          <div
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: '16px',
+              maxWidth: '600px',
+              width: '100%',
+              maxHeight: '80vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                padding: '20px',
+                borderBottom: `1px solid ${colors.outlineVariant}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}
+            >
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: colors.onSurface }}>
+                Todas las Alertas de Vencimiento
+              </h3>
+              <button
+                onClick={() => setAlertModalVisible(false)}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  padding: '8px',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'backgroundColor 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = `${colors.outlineVariant}50`}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                <X size={24} color={colors.outline} />
+              </button>
+            </div>
+            <div
+              style={{
+                padding: '16px',
+                overflowY: 'auto',
+                flex: 1
+              }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {allExpiringProducts.map((producto, index) => (
+                  <div
+                    key={producto.id || index}
+                    style={{
+                      borderRadius: '12px',
+                      padding: '12px 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      backgroundColor: colors.surface,
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                      borderLeftWidth: '4px',
+                      borderLeftStyle: 'solid',
+                      borderLeftColor: getExpirationAlertColor(producto.alerta.level)
+                    }}
+                  >
+                    <div
+                      style={{ 
+                        width: '32px', 
+                        height: '32px', 
+                        borderRadius: '6px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                        marginRight: '12px'
+                      }}
+                    >
+                      {getExpirationAlertIcon(producto.alerta.level)}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontWeight: '600', color: colors.onSurface, margin: 0, fontSize: '14px' }}>
+                        {producto.codigoLote}
+                      </p>
+                      <p style={{ fontSize: '12px', color: colors.outline, margin: '2px 0 0 0' }}>
+                        Cant.Res: {producto.cantidad_restante || 0}
+                      </p>
+                    </div>
+                    <div style={{ textAlign: 'right', marginLeft: '12px' }}>
+                      <p
+                        style={{ 
+                          fontSize: '13px', 
+                          fontWeight: '600',
+                          color: getExpirationAlertColor(producto.alerta.level),
+                          margin: 0
+                        }}
+                      >
+                        {producto.alerta.label}
+                      </p>
+                      <p style={{ fontSize: '11px', color: colors.outline, margin: '2px 0 0 0' }}>
+                        {producto.alerta.days === 0 ? 'Hoy' :
+                         producto.alerta.days === 1 ? 'Mañana' :
+                         producto.alerta.days === -1 ? 'Ayer' :
+                         producto.alerta.days < 0 ? `${Math.abs(producto.alerta.days)} días` :
+                         `${producto.alerta.days} días`}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', marginLeft: '12px' }}>
+                      <button
+                        style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '6px',
+                          backgroundColor: colors.primary,
+                          border: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          transition: 'opacity 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                        title="Ver producto"
+                      >
+                        <Box size={14} color="#fff" />
+                      </button>
+                      <button
+                        style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '6px',
+                          backgroundColor: colors.secondary,
+                          border: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          transition: 'opacity 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                        title="Ver entrada"
+                      >
+                        <FileText size={14} color="#fff" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

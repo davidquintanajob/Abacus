@@ -26,11 +26,12 @@ Antes de iniciar el proyecto, es necesario configurar las variables de entorno:
 
    # Web Server Port
    # Puerto donde correrá la aplicación web
-   PORT=3000
+   NEXT_PUBLIC_WEB_PORT=8000
    ```
 
 **Importante:**
 - La variable `NEXT_PUBLIC_API_URL` define dónde está tu backend API
+- La variable `NEXT_PUBLIC_WEB_PORT` define el puerto donde se inicia la web
 - Para desarrollo local usa `http://localhost:8787` (el puerto del backend Abacus)
 - Para producción en la nube, cambia esta URL a la de tu backend en la nube
 - No incluyas el archivo `.env` en el control de versiones (ya está en `.gitignore`)
@@ -50,7 +51,7 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:8000](http://localhost:8000) with your browser to see the result.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

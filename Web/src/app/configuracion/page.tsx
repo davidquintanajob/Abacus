@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../hooks/useToast';
@@ -8,6 +9,7 @@ import { Header } from '../../components/layout/Header';
 import { SidebarNavigation } from '../../components/layout/SidebarNavigation';
 import { Toast } from '../../components/common/Toast';
 import { configService } from '../../services/configService';
+import { exchangeRateService } from '../../services/exchangeRateService';
 import { RefreshCw, Info, ChevronUp, ChevronDown, Package } from 'lucide-react';
 
 export default function ConfiguracionPage() {
@@ -67,19 +69,8 @@ export default function ConfiguracionPage() {
   const fetchExchangeRates = async () => {
     try {
       setIsLoadingRates(true);
-      // Simular tasas de cambio (en producción esto vendría de una API real)
-      const mockRates = {
-        tasas: {
-          USD: 630,
-          ECU: 680,
-          MLC: 640,
-          USDT_TRC20: 635,
-        },
-        date: new Date().toLocaleDateString('es-ES'),
-        hour: new Date().getHours(),
-        minutes: new Date().getMinutes(),
-      };
-      setExchangeRates(mockRates);
+      const data = await exchangeRateService.getExchangeRates();
+      setExchangeRates(data);
     } catch (error) {
       console.error('Error fetching exchange rates:', error);
       setExchangeRates(null);
@@ -236,7 +227,15 @@ export default function ConfiguracionPage() {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.background }}>
                       <div className="flex items-center gap-3">
-                        <span className="text-2xl" style={{ fontSize: '24px' }}>🇺🇸</span>
+                        <div style={{ width: '32px', height: '32px', filter: isDarkMode ? 'invert(1)' : 'none' }}>
+                          <Image
+                            src="/dollar.png"
+                            alt="USD"
+                            width={32}
+                            height={32}
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
                         <div>
                           <p className="font-semibold" style={{ color: colors.onSurface }}>USD</p>
                           <p className="text-xs" style={{ color: colors.outline }}>Dólar Americano</p>
@@ -249,9 +248,17 @@ export default function ConfiguracionPage() {
 
                     <div className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.background }}>
                       <div className="flex items-center gap-3">
-                        <span className="text-2xl" style={{ fontSize: '24px' }}>🇪🇺</span>
+                        <div style={{ width: '32px', height: '32px', filter: isDarkMode ? 'invert(1)' : 'none' }}>
+                          <Image
+                            src="/euro.png"
+                            alt="EUR"
+                            width={32}
+                            height={32}
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
                         <div>
-                          <p className="font-semibold" style={{ color: colors.onSurface }}>ECU</p>
+                          <p className="font-semibold" style={{ color: colors.onSurface }}>EUR</p>
                           <p className="text-xs" style={{ color: colors.outline }}>Euro</p>
                         </div>
                       </div>
@@ -262,7 +269,15 @@ export default function ConfiguracionPage() {
 
                     <div className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.background }}>
                       <div className="flex items-center gap-3">
-                        <span className="text-2xl">🏦</span>
+                        <div style={{ width: '32px', height: '32px', filter: isDarkMode ? 'invert(1)' : 'none' }}>
+                          <Image
+                            src="/coin.png"
+                            alt="MLC"
+                            width={32}
+                            height={32}
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
                         <div>
                           <p className="font-semibold" style={{ color: colors.onSurface }}>MLC</p>
                           <p className="text-xs" style={{ color: colors.outline }}>Divisa Cubana</p>
@@ -275,7 +290,15 @@ export default function ConfiguracionPage() {
 
                     <div className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.background }}>
                       <div className="flex items-center gap-3">
-                        <span className="text-2xl">💵</span>
+                        <div style={{ width: '32px', height: '32px', filter: isDarkMode ? 'invert(1)' : 'none' }}>
+                          <Image
+                            src="/russian-ruble.png"
+                            alt="USDT"
+                            width={32}
+                            height={32}
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
                         <div>
                           <p className="font-semibold" style={{ color: colors.onSurface }}>USDT</p>
                           <p className="text-xs" style={{ color: colors.outline }}>Tether TRC20</p>

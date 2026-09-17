@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useTheme } from '../../../context/ThemeContext';
 import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '../../../context/ConfirmDialogContext';
 import { Header } from '../../../components/layout/Header';
 import { SidebarNavigation } from '../../../components/layout/SidebarNavigation';
 import { Toast } from '../../../components/common/Toast';
@@ -29,6 +30,7 @@ export default function ProductoFormPage() {
   const { colors, isDark, toggleTheme } = useTheme();
   const { user } = useAuth();
   const { toast, showToast, hideToast } = useToast();
+  const { showConfirmDialog } = useConfirmDialog();
   const sidebarNavRef = useRef<any>(null);
 
   const handleMenuPress = () => {
@@ -311,12 +313,17 @@ export default function ProductoFormPage() {
   };
 
   const handleDeleteCode = (index: number) => {
-    if (confirm('¿Estás seguro de que quieres eliminar este código?')) {
-      setFormData(prev => ({
-        ...prev,
-        codigoList: prev.codigoList.filter((_, i) => i !== index)
-      }));
-    }
+    showConfirmDialog({
+      title: 'Eliminar Código',
+      message: '¿Estás seguro de que quieres eliminar este código?',
+      onConfirm: () => {
+        setFormData(prev => ({
+          ...prev,
+          codigoList: prev.codigoList.filter((_, i) => i !== index)
+        }));
+      },
+      type: 'danger'
+    });
   };
 
   const handleAddTiendaProducto = () => {
@@ -482,6 +489,7 @@ export default function ProductoFormPage() {
         toastKey={toast.key}
       />
       
+      {/* ConfirmDialog is now global via GlobalConfirmDialog in layout */}
       <SidebarNavigation 
         currentRoute="Productos" 
         ref={sidebarNavRef}

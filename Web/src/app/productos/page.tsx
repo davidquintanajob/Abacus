@@ -6,6 +6,8 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useViewMode } from '../../context/ViewModeContext';
 import { useToast } from '../../hooks/useToast';
+import { useConfirmDialog } from '../../context/ConfirmDialogContext';
+import { useNavigationLoading } from '../../context/NavigationLoadingContext';
 import { Header } from '../../components/layout/Header';
 import { SidebarNavigation } from '../../components/layout/SidebarNavigation';
 import { Toast } from '../../components/common/Toast';
@@ -39,8 +41,15 @@ export default function ProductosPage() {
   const { token, user } = useAuth();
   const { viewMode, toggleViewMode } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
+  const { showConfirmDialog } = useConfirmDialog();
+  const { setLoading: setNavigating } = useNavigationLoading();
   const { isMobile, isTablet, isDesktop } = useResponsive();
   const sidebarNavRef = useRef<any>(null);
+
+  // Reset navigation loading state when page loads
+  useEffect(() => {
+    setNavigating(false);
+  }, [setNavigating]);
 
   const handleMenuPress = () => {
     if (sidebarNavRef.current) {
@@ -208,16 +217,21 @@ export default function ProductosPage() {
   };
 
   const handleDelete = (producto: any) => {
-    if (confirm(`¿Estás seguro de que quieres eliminar el producto "${producto.nombre}"?`)) {
-      deleteProducto(producto.id_producto)
-        .then(() => {
-          showToast({ type: 'success', message: 'Producto eliminado correctamente' });
-          fetchProductos();
-        })
-        .catch((err: any) => {
-          showToast({ type: 'error', message: err.message, code: err.code });
-        });
-    }
+    showConfirmDialog({
+      title: 'Eliminar Producto',
+      message: `¿Estás seguro de que quieres eliminar el producto "${producto.nombre}"?`,
+      onConfirm: () => {
+        deleteProducto(producto.id_producto)
+          .then(() => {
+            showToast({ type: 'success', message: 'Producto eliminado correctamente' });
+            fetchProductos();
+          })
+          .catch((err: any) => {
+            showToast({ type: 'error', message: err.message, code: err.code });
+          });
+      },
+      type: 'danger'
+    });
   };
 
   const handleProductoPress = (producto: any) => {
@@ -1063,6 +1077,7 @@ export default function ProductosPage() {
         toastKey={toast.key}
       />
       
+      {/* ConfirmDialog is now global via GlobalConfirmDialog in layout */}
       <SidebarNavigation 
         currentRoute="Productos" 
         ref={sidebarNavRef}

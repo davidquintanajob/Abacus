@@ -4,6 +4,7 @@ import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'rea
 import { IconStrip } from './IconStrip';
 import { Sidebar } from './Sidebar';
 import { useResponsive } from '../../hooks/useResponsive';
+import { useModal } from '../../context/ModalContext';
 
 interface SidebarNavigationProps {
   currentRoute?: string;
@@ -16,6 +17,7 @@ export interface SidebarNavigationRef {
 
 export const SidebarNavigation = forwardRef<SidebarNavigationRef, SidebarNavigationProps>(({ currentRoute = 'Home', onMenuPress }, ref) => {
   const { isDesktop } = useResponsive();
+  const { isModalOpen } = useModal();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [iconStripHovered, setIconStripHovered] = useState(false);
   const [sidebarHovered, setSidebarHovered] = useState(false);
@@ -23,6 +25,7 @@ export const SidebarNavigation = forwardRef<SidebarNavigationRef, SidebarNavigat
 
   const handleIconStripHover = () => {
     if (!isDesktop) return; // Only enable hover on desktop
+    if (isModalOpen) return; // Don't open sidebar if modal is open
     if (closeTimeout) {
       clearTimeout(closeTimeout);
       setCloseTimeout(null);
@@ -32,6 +35,7 @@ export const SidebarNavigation = forwardRef<SidebarNavigationRef, SidebarNavigat
 
   const handleIconStripLeave = () => {
     if (!isDesktop) return; // Only enable hover on desktop
+    if (isModalOpen) return; // Don't close sidebar if modal is open
     if (!sidebarHovered) {
       const timeout = setTimeout(() => {
         setIconStripHovered(false);
@@ -51,6 +55,7 @@ export const SidebarNavigation = forwardRef<SidebarNavigationRef, SidebarNavigat
 
   const handleSidebarLeave = () => {
     if (!isDesktop) return; // Only enable hover on desktop
+    if (isModalOpen) return; // Don't close sidebar if modal is open
     setSidebarHovered(false);
     const timeout = setTimeout(() => {
       setIconStripHovered(false);

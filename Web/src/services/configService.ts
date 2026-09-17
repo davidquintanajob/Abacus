@@ -7,6 +7,71 @@ export interface Config {
     almacenero?: boolean;
     economico?: boolean;
   };
+  entradaAccessLevels?: {
+    dependiente?: string;
+    almacenero?: string;
+    economico?: string;
+  };
+  entradaManagePermissions?: {
+    dependiente?: boolean;
+    almacenero?: boolean;
+    economico?: boolean;
+  };
+  salidaAccessLevels?: {
+    dependiente?: string;
+    almacenero?: string;
+    economico?: string;
+  };
+  salidaManagePermissions?: {
+    dependiente?: boolean;
+    almacenero?: boolean;
+    economico?: boolean;
+  };
+  operacionAccessLevels?: {
+    dependiente?: string;
+    almacenero?: string;
+    economico?: string;
+  };
+  operacionManagePermissions?: {
+    dependiente?: boolean;
+    almacenero?: boolean;
+    economico?: boolean;
+  };
+  ventaAccessLevels?: {
+    dependiente?: string;
+    almacenero?: string;
+    economico?: string;
+  };
+  ventaManagePermissions?: {
+    dependiente?: boolean;
+    almacenero?: boolean;
+    economico?: boolean;
+  };
+  applyWeightedAverageCost?: boolean;
+  autoApplySuggestedCost?: {
+    dependiente?: boolean;
+    almacenero?: boolean;
+    economico?: boolean;
+  };
+  showEntradaModalAfterProductCreation?: boolean;
+  customSalidaTypes?: any[];
+  tiendaCuentasConfig?: any;
+  cuentaChangePermissions?: {
+    dependiente?: boolean;
+    almacenero?: boolean;
+    economico?: boolean;
+  };
+  comprobanteConfig?: {
+    logo?: string | null;
+    nombreNegocio?: string;
+  };
+  prioritizeWifiConnection?: boolean;
+  monedaConfig?: {
+    modificarSoloServicios?: boolean;
+    datosModificar?: string;
+    tipoDatoModificar?: string;
+    monedaValor?: number;
+  };
 }
 
 export const configService = {

@@ -6,6 +6,8 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { useViewMode } from '../../context/ViewModeContext';
 import { useToast } from '../../hooks/useToast';
+import { useConfirmDialog } from '../../context/ConfirmDialogContext';
+import { useNavigationLoading } from '../../context/NavigationLoadingContext';
 import { Header } from '../../components/layout/Header';
 import { SidebarNavigation } from '../../components/layout/SidebarNavigation';
 import { Toast } from '../../components/common/Toast';
@@ -33,8 +35,15 @@ export default function TiendasPage() {
   const { token, user } = useAuth();
   const { viewMode, toggleViewMode } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
+  const { showConfirmDialog } = useConfirmDialog();
+  const { setLoading: setNavigating } = useNavigationLoading();
   const { isMobile, isTablet, isDesktop } = useResponsive();
   const sidebarNavRef = useRef<any>(null);
+
+  // Reset navigation loading state when page loads
+  useEffect(() => {
+    setNavigating(false);
+  }, [setNavigating]);
 
   const handleMenuPress = () => {
     if (sidebarNavRef.current) {
@@ -106,16 +115,21 @@ export default function TiendasPage() {
   };
 
   const handleDelete = (tienda: any) => {
-    if (confirm(`¿Estás seguro de que quieres eliminar la tienda "${tienda.nombre}"?`)) {
-      deleteTienda(tienda.id_tienda)
-        .then(() => {
-          showToast({ type: 'success', message: 'Tienda eliminada correctamente' });
-          fetchTiendas();
-        })
-        .catch((err: any) => {
-          showToast({ type: 'error', message: err.message, code: err.code });
-        });
-    }
+    showConfirmDialog({
+      title: 'Eliminar Tienda',
+      message: `¿Estás seguro de que quieres eliminar la tienda "${tienda.nombre}"?`,
+      onConfirm: () => {
+        deleteTienda(tienda.id_tienda)
+          .then(() => {
+            showToast({ type: 'success', message: 'Tienda eliminada correctamente' });
+            fetchTiendas();
+          })
+          .catch((err: any) => {
+            showToast({ type: 'error', message: err.message, code: err.code });
+          });
+      },
+      type: 'danger'
+    });
   };
 
   const handleTiendaPress = (tienda: any) => {
@@ -164,6 +178,7 @@ export default function TiendasPage() {
         toastKey={toast.key}
       />
       
+      {/* ConfirmDialog is now global via GlobalConfirmDialog in layout */}
       <SidebarNavigation 
         currentRoute="Tiendas" 
         ref={sidebarNavRef}
@@ -192,81 +207,210 @@ export default function TiendasPage() {
           marginRight: 'auto',
           marginBottom: '0',
           marginLeft: 'auto',
-          paddingTop: isMobile ? '20px' : isTablet ? '32px' : '40px',
+          paddingTop: isMobile ? '20px' : isTablet ? '32px' : '20px',
           paddingRight: isMobile ? '20px' : isTablet ? '32px' : '40px',
           paddingBottom: '120px',
           paddingLeft: isMobile ? '20px' : isTablet ? '32px' : '40px',
           maxWidth: isDesktop ? '1400px' : '100%',
         }}>
-          {/* Page Title */}
-          <div className="text-center mb-6 mt-4">
-            <h1 
-              className="text-2xl md:text-3xl font-bold"
-              style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
-            >
-              Gestión de Tiendas
-            </h1>
-          </div>
+          {/* Desktop Layout */}
+          {isDesktop ? (
+            <>
+              {/* Page Title - Top Left */}
+              <div className="mb-4">
+                <h1 
+                  className="text-2xl font-bold"
+                  style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                >
+                  Gestión de Tiendas
+                </h1>
+              </div>
 
-          {/* Filter Section - Wrapped to maintain compact width */}
-          <div style={{ maxWidth: '56rem', margin: '0 auto' }}>
-          <div 
-            className="rounded-2xl p-5 mb-6 shadow-lg"
-            style={{ backgroundColor: colors.surface }}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h2 
-                className="text-lg font-bold"
-                style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+              {/* Filter Section - Horizontal */}
+              <div 
+                className="rounded-2xl p-4 mb-4 shadow-lg"
+                style={{ backgroundColor: colors.surface }}
               >
-                Filtros
-              </h2>
-              <button
-                className="w-10 h-10 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
-                style={{ 
-                  backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
-                  borderColor: colors.primary 
-                }}
-                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              >
-                {showAdvancedFilters ? (
-                  <ChevronUp size={24} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />
-                ) : (
-                  <ChevronDown size={24} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />
+                <div className="flex items-center gap-3">
+                  {/* Nombre */}
+                  <div className="flex-1">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Nombre
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Buscar por nombre..."
+                      value={filters.nombre}
+                      onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Tipo */}
+                  <div className="flex-1">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Tipo
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Tipo de tienda..."
+                      value={filters.tipo}
+                      onChange={(e) => setFilters(prev => ({ ...prev, tipo: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Estado */}
+                  <div className="flex-1">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Estado
+                    </label>
+                    <div className="flex gap-1">
+                      <button
+                        className="flex-1 rounded-lg px-2 py-2 transition-colors font-medium text-sm"
+                        style={{ 
+                          backgroundColor: filters.activo === '' ? '#9E9E9E' : '#E0E0E0',
+                          color: filters.activo === '' ? '#fff' : '#9E9E9E'
+                        }}
+                        onClick={() => setFilters(prev => ({ ...prev, activo: '' }))}
+                      >
+                        Todos
+                      </button>
+                      <button
+                        className="flex-1 rounded-lg px-2 py-2 transition-colors font-medium text-sm"
+                        style={{ 
+                          backgroundColor: filters.activo === 'true' ? '#4CAF50' : '#E0E0E0',
+                          color: filters.activo === 'true' ? '#fff' : '#9E9E9E'
+                        }}
+                        onClick={() => setFilters(prev => ({ ...prev, activo: 'true' }))}
+                      >
+                        Activa
+                      </button>
+                      <button
+                        className="flex-1 rounded-lg px-2 py-2 transition-colors font-medium text-sm"
+                        style={{ 
+                          backgroundColor: filters.activo === 'false' ? '#F44336' : '#E0E0E0',
+                          color: filters.activo === 'false' ? '#fff' : '#9E9E9E'
+                        }}
+                        onClick={() => setFilters(prev => ({ ...prev, activo: 'false' }))}
+                      >
+                        Inactiva
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons - Outside filter card, smaller, side by side */}
+              <div className="flex gap-3 mb-4">
+                <button
+                  className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 border-2 transition-colors hover:opacity-80"
+                  style={{ 
+                    backgroundColor: colors.surface, 
+                    borderColor: colors.outlineVariant,
+                    color: colors.onSurface
+                  }}
+                  onClick={handleClearFilters}
+                >
+                  <RefreshCw size={16} />
+                  <span>Limpiar</span>
+                </button>
+                <button
+                  className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 transition-colors hover:opacity-80 disabled:opacity-50"
+                  style={{ backgroundColor: colors.primary, color: '#fff' }}
+                  onClick={handleSearch}
+                  disabled={isSearching}
+                >
+                  {isSearching ? (
+                    <div className="w-4 h-4 border-2 border-t-2 rounded-full animate-spin" style={{ borderColor: '#fff', borderTopColor: 'transparent' }} />
+                  ) : (
+                    <>
+                      <Search size={16} />
+                      <span>Buscar</span>
+                    </>
+                  )}
+                </button>
+                {isAdmin && (
+                  <button
+                    className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
+                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                    onClick={handleAdd}
+                  >
+                    <Plus size={16} />
+                    <span>Agregar Tienda</span>
+                  </button>
                 )}
-              </button>
-            </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Mobile/Tablet Layout - Original */}
+              {/* Page Title */}
+              <div className="text-center mb-6 mt-4">
+                <h1 
+                  className="text-2xl md:text-3xl font-bold"
+                  style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                >
+                  Gestión de Tiendas
+                </h1>
+              </div>
 
-            <div className="mb-4">
-              <label 
-                className="block text-sm font-medium mb-2"
-                style={{ color: colors.outline }}
+              {/* Filter Section - Wrapped to maintain compact width */}
+              <div style={{ maxWidth: '56rem', margin: '0 auto' }}>
+              <div 
+                className="rounded-2xl p-5 mb-6 shadow-lg"
+                style={{ backgroundColor: colors.surface }}
               >
-                Nombre
-              </label>
-              <input
-                type="text"
-                className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2"
-                style={{ 
-                  backgroundColor: colors.background, 
-                  color: colors.onSurface, 
-                  borderColor: colors.outlineVariant,
-                  fontFamily: 'Inter, sans-serif'
-                }}
-                placeholder="Buscar por nombre..."
-                value={filters.nombre}
-                onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
-              />
-            </div>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 
+                    className="text-lg font-bold"
+                    style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                  >
+                    Filtros
+                  </h2>
+                  <button
+                    className="w-10 h-10 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                    style={{ 
+                      backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                      borderColor: colors.primary 
+                    }}
+                    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  >
+                    {showAdvancedFilters ? (
+                      <ChevronUp size={24} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />
+                    ) : (
+                      <ChevronDown size={24} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />
+                    )}
+                  </button>
+                </div>
 
-            {showAdvancedFilters && (
-              <>
                 <div className="mb-4">
                   <label 
                     className="block text-sm font-medium mb-2"
                     style={{ color: colors.outline }}
                   >
-                    Tipo
+                    Nombre
                   </label>
                   <input
                     type="text"
@@ -277,98 +421,124 @@ export default function TiendasPage() {
                       borderColor: colors.outlineVariant,
                       fontFamily: 'Inter, sans-serif'
                     }}
-                    placeholder="Tipo de tienda..."
-                    value={filters.tipo}
-                    onChange={(e) => setFilters(prev => ({ ...prev, tipo: e.target.value }))}
+                    placeholder="Buscar por nombre..."
+                    value={filters.nombre}
+                    onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
                   />
                 </div>
 
-                <div className="mb-4">
-                  <label 
-                    className="block text-sm font-medium mb-2"
-                    style={{ color: colors.outline }}
-                  >
-                    Estado
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
-                      style={{ 
-                        backgroundColor: filters.activo === '' ? '#9E9E9E' : '#E0E0E0',
-                        color: filters.activo === '' ? '#fff' : '#9E9E9E'
-                      }}
-                      onClick={() => setFilters(prev => ({ ...prev, activo: '' }))}
-                    >
-                      Todos
-                    </button>
-                    <button
-                      className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
-                      style={{ 
-                        backgroundColor: filters.activo === 'true' ? '#4CAF50' : '#E0E0E0',
-                        color: filters.activo === 'true' ? '#fff' : '#9E9E9E'
-                      }}
-                      onClick={() => setFilters(prev => ({ ...prev, activo: 'true' }))}
-                    >
-                      Activa
-                    </button>
-                    <button
-                      className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
-                      style={{ 
-                        backgroundColor: filters.activo === 'false' ? '#F44336' : '#E0E0E0',
-                        color: filters.activo === 'false' ? '#fff' : '#9E9E9E'
-                      }}
-                      onClick={() => setFilters(prev => ({ ...prev, activo: 'false' }))}
-                    >
-                      Inactiva
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                className="flex-1 rounded-lg px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 border-2 transition-colors hover:opacity-80"
-                style={{ 
-                  backgroundColor: colors.surface, 
-                  borderColor: colors.outlineVariant,
-                  color: colors.onSurface
-                }}
-                onClick={handleClearFilters}
-              >
-                <RefreshCw size={18} />
-                <span>Limpiar</span>
-              </button>
-              <button
-                className="flex-1 rounded-lg px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-80 disabled:opacity-50"
-                style={{ backgroundColor: colors.primary, color: '#fff' }}
-                onClick={handleSearch}
-                disabled={isSearching}
-              >
-                {isSearching ? (
-                  <div className="w-5 h-5 border-2 border-t-2 rounded-full animate-spin" style={{ borderColor: '#fff', borderTopColor: 'transparent' }} />
-                ) : (
+                {showAdvancedFilters && (
                   <>
-                    <Search size={18} />
-                    <span>Buscar</span>
+                    <div className="mb-4">
+                      <label 
+                        className="block text-sm font-medium mb-2"
+                        style={{ color: colors.outline }}
+                      >
+                        Tipo
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2"
+                        style={{ 
+                          backgroundColor: colors.background, 
+                          color: colors.onSurface, 
+                          borderColor: colors.outlineVariant,
+                          fontFamily: 'Inter, sans-serif'
+                        }}
+                        placeholder="Tipo de tienda..."
+                        value={filters.tipo}
+                        onChange={(e) => setFilters(prev => ({ ...prev, tipo: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="mb-4">
+                      <label 
+                        className="block text-sm font-medium mb-2"
+                        style={{ color: colors.outline }}
+                      >
+                        Estado
+                      </label>
+                      <div className="flex gap-2">
+                        <button
+                          className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
+                          style={{ 
+                            backgroundColor: filters.activo === '' ? '#9E9E9E' : '#E0E0E0',
+                            color: filters.activo === '' ? '#fff' : '#9E9E9E'
+                          }}
+                          onClick={() => setFilters(prev => ({ ...prev, activo: '' }))}
+                        >
+                          Todos
+                        </button>
+                        <button
+                          className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
+                          style={{ 
+                            backgroundColor: filters.activo === 'true' ? '#4CAF50' : '#E0E0E0',
+                            color: filters.activo === 'true' ? '#fff' : '#9E9E9E'
+                          }}
+                          onClick={() => setFilters(prev => ({ ...prev, activo: 'true' }))}
+                        >
+                          Activa
+                        </button>
+                        <button
+                          className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
+                          style={{ 
+                            backgroundColor: filters.activo === 'false' ? '#F44336' : '#E0E0E0',
+                            color: filters.activo === 'false' ? '#fff' : '#9E9E9E'
+                          }}
+                          onClick={() => setFilters(prev => ({ ...prev, activo: 'false' }))}
+                        >
+                          Inactiva
+                        </button>
+                      </div>
+                    </div>
                   </>
                 )}
-              </button>
-            </div>
-          </div>
 
-          {/* Add Button - Only for Admin */}
-          {isAdmin && (
-            <button
-              className="w-full rounded-xl px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 mb-6 transition-colors hover:opacity-90"
-              style={{ backgroundColor: colors.primary, color: '#fff' }}
-              onClick={handleAdd}
-            >
-              <Plus size={20} />
-              <span className="font-medium">Agregar Tienda</span>
-            </button>
+                <div className="flex gap-3">
+                  <button
+                    className="flex-1 rounded-lg px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 border-2 transition-colors hover:opacity-80"
+                    style={{ 
+                      backgroundColor: colors.surface, 
+                      borderColor: colors.outlineVariant,
+                      color: colors.onSurface
+                    }}
+                    onClick={handleClearFilters}
+                  >
+                    <RefreshCw size={18} />
+                    <span>Limpiar</span>
+                  </button>
+                  <button
+                    className="flex-1 rounded-lg px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-80 disabled:opacity-50"
+                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                    onClick={handleSearch}
+                    disabled={isSearching}
+                  >
+                    {isSearching ? (
+                      <div className="w-5 h-5 border-2 border-t-2 rounded-full animate-spin" style={{ borderColor: '#fff', borderTopColor: 'transparent' }} />
+                    ) : (
+                      <>
+                        <Search size={18} />
+                        <span>Buscar</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Add Button - Only for Admin */}
+              {isAdmin && (
+                <button
+                  className="w-full rounded-xl px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 mb-6 transition-colors hover:opacity-90"
+                  style={{ backgroundColor: colors.primary, color: '#fff' }}
+                  onClick={handleAdd}
+                >
+                  <Plus size={20} />
+                  <span className="font-medium">Agregar Tienda</span>
+                </button>
+              )}
+              </div>
+            </>
           )}
-          </div>
 
           {/* Tiendas List */}
           {isLoading ? (

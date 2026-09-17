@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useTheme } from '../../../context/ThemeContext';
 import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../hooks/useToast';
+import { useConfirmDialog } from '../../../context/ConfirmDialogContext';
 import { Header } from '../../../components/layout/Header';
 import { SidebarNavigation } from '../../../components/layout/SidebarNavigation';
 import { Toast } from '../../../components/common/Toast';
@@ -30,6 +31,7 @@ export default function ServicioFormPage() {
   const { colors, isDark, toggleTheme } = useTheme();
   const { user } = useAuth();
   const { toast, showToast, hideToast } = useToast();
+  const { showConfirmDialog } = useConfirmDialog();
   const sidebarNavRef = useRef<any>(null);
 
   const handleMenuPress = () => {
@@ -504,12 +506,17 @@ export default function ServicioFormPage() {
   };
 
   const handleDeleteCode = (index: number) => {
-    if (confirm('¿Estás seguro de que quieres eliminar este código?')) {
-      setFormData(prev => ({
-        ...prev,
-        codigoList: prev.codigoList.filter((_, i) => i !== index)
-      }));
-    }
+    showConfirmDialog({
+      title: 'Eliminar Código',
+      message: '¿Estás seguro de que quieres eliminar este código?',
+      onConfirm: () => {
+        setFormData(prev => ({
+          ...prev,
+          codigoList: prev.codigoList.filter((_, i) => i !== index)
+        }));
+      },
+      type: 'danger'
+    });
   };
 
   const handleAddTiendaServicio = () => {
@@ -596,6 +603,7 @@ export default function ServicioFormPage() {
         toastKey={toast.key}
       />
       
+      {/* ConfirmDialog is now global via GlobalConfirmDialog in layout */}
       <SidebarNavigation 
         currentRoute="Servicios" 
         ref={sidebarNavRef}
@@ -962,9 +970,14 @@ export default function ServicioFormPage() {
                                     className="p-2 rounded-lg transition-colors hover:opacity-80"
                                     style={{ backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }}
                                     onClick={() => {
-                                      if (confirm('¿Estás seguro de que quieres eliminar este componente?')) {
-                                        handleRemoveServicioComponente(index);
-                                      }
+                                      showConfirmDialog({
+                                        title: 'Eliminar Componente',
+                                        message: '¿Estás seguro de que quieres eliminar este componente?',
+                                        onConfirm: () => {
+                                          handleRemoveServicioComponente(index);
+                                        },
+                                        type: 'danger'
+                                      });
                                     }}
                                   >
                                     <Trash2 size={16} style={{ color: colors.error }} />
