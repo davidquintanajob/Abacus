@@ -544,7 +544,8 @@ const ServiciosContent = () => {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.content}
-        keyboardVerticalOffset={responsive.headerHeight + 20}
+        keyboardVerticalOffset={responsive.headerHeight}
+        enabled={true}
       >
         <ScrollView 
           contentContainerStyle={styles.scrollContent}

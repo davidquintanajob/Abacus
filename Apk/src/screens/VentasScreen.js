@@ -866,15 +866,19 @@ const VentasContent = () => {
         currentRoute="Ventas"
       />
 
-      <KeyboardAvoidingView 
-        style={styles.content} 
+      <KeyboardAvoidingView
+        style={styles.content}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={responsive.headerHeight + 20}
+        keyboardVerticalOffset={responsive.headerHeight}
+        enabled={true}
       >
-        <ScrollView 
-          showsVerticalScrollIndicator={false} 
+        <ScrollView
+          showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.scrollContent}
+          keyboardDismissMode="interactive"
+          contentInsetAdjustmentBehavior="automatic"
+          automaticallyAdjustContentInsets={false}
         >
         {/* Page Title */}
         <View style={styles.pageTitleContainer}>
