@@ -120,6 +120,7 @@ const UsuarioFormContent = () => {
 
       const dataToSend = {
         ...formData,
+        nombre_usuario: formData.nombre_usuario.trimEnd(),
         salario_diario: parseFloat(formData.salario_diario) || 0,
       };
 

@@ -191,17 +191,20 @@ const ProductoFormContent = () => {
   }, [formData.productoTiendaList, tiendas, user, permissions]);
 
   const handleGeneralPriceBlur = () => {
+    const hasAnyGeneralPrice = 
+      (formData.precio_cup_general !== null && formData.precio_cup_general !== '') ||
+      (formData.precio_usd_general !== null && formData.precio_usd_general !== '');
 
     if (hasAnyGeneralPrice && formData.productoTiendaList.length === 0) {
       const newProductoTiendaList = tiendas.filter(tienda => tienda.activo === true).map(tienda => {
         const precioCup = formData.precio_cup_general !== null && formData.precio_cup_general !== '' 
-          ? (typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : parseFloat(formData.precio_cup_general))
+          ? (typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : (isNaN(parseFloat(formData.precio_cup_general)) ? 0 : parseFloat(formData.precio_cup_general)))
           : 0;
-        const precioUsd = formData.precio_usd_general !== null && formData.precio_usd_general !== ''
-          ? (typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : parseFloat(formData.precio_usd_general))
+        const precioUsd = formData.precio_usd_general !== null && formData.precio_usd_general !== '' 
+          ? (typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : (isNaN(parseFloat(formData.precio_usd_general)) ? 0 : parseFloat(formData.precio_usd_general)))
           : 0;
-        const costoCup = canViewCosts ? (typeof formData.costo_cup_general === 'number' ? formData.costo_cup_general : parseFloat(formData.costo_cup_general)) : 0;
-        const costoUsd = canViewCosts ? (typeof formData.costo_usd_general === 'number' ? formData.costo_usd_general : parseFloat(formData.costo_usd_general)) : 0;
+        const costoCup = canViewCosts ? (typeof formData.costo_cup_general === 'number' ? formData.costo_cup_general : (isNaN(parseFloat(formData.costo_cup_general)) ? 0 : parseFloat(formData.costo_cup_general))) : 0;
+        const costoUsd = canViewCosts ? (typeof formData.costo_usd_general === 'number' ? formData.costo_usd_general : (isNaN(parseFloat(formData.costo_usd_general)) ? 0 : parseFloat(formData.costo_usd_general))) : 0;
         
         return {
           id_tienda: tienda.id_tienda,
@@ -219,13 +222,13 @@ const ProductoFormContent = () => {
       setIsPricesExpanded(true);
     } else if (hasAnyGeneralPrice && formData.productoTiendaList.length > 0) {
       const precioCup = formData.precio_cup_general !== null && formData.precio_cup_general !== ''
-        ? (typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : parseFloat(formData.precio_cup_general))
+        ? (typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : (isNaN(parseFloat(formData.precio_cup_general)) ? 0 : parseFloat(formData.precio_cup_general)))
         : null;
       const precioUsd = formData.precio_usd_general !== null && formData.precio_usd_general !== ''
-        ? (typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : parseFloat(formData.precio_usd_general))
+        ? (typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : (isNaN(parseFloat(formData.precio_usd_general)) ? 0 : parseFloat(formData.precio_usd_general)))
         : null;
-      const costoCup = canViewCosts ? (typeof formData.costo_cup_general === 'number' ? formData.costo_cup_general : parseFloat(formData.costo_cup_general)) : 0;
-      const costoUsd = canViewCosts ? (typeof formData.costo_usd_general === 'number' ? formData.costo_usd_general : parseFloat(formData.costo_usd_general)) : 0;
+      const costoCup = canViewCosts ? (typeof formData.costo_cup_general === 'number' ? formData.costo_cup_general : (isNaN(parseFloat(formData.costo_cup_general)) ? 0 : parseFloat(formData.costo_cup_general))) : 0;
+      const costoUsd = canViewCosts ? (typeof formData.costo_usd_general === 'number' ? formData.costo_usd_general : (isNaN(parseFloat(formData.costo_usd_general)) ? 0 : parseFloat(formData.costo_usd_general))) : 0;
       
       const activeTiendaIds = [];
       if (tiendas && tiendas.length > 0) {
@@ -656,10 +659,10 @@ const ProductoFormContent = () => {
 
     if (hasAnyGeneralPrice && formData.productoTiendaList.length > 0) {
       const precioCup = formData.precio_cup_general !== null && formData.precio_cup_general !== ''
-        ? (typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : parseFloat(formData.precio_cup_general))
+        ? (typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : (isNaN(parseFloat(formData.precio_cup_general)) ? 0 : parseFloat(formData.precio_cup_general)))
         : null;
       const precioUsd = formData.precio_usd_general !== null && formData.precio_usd_general !== ''
-        ? (typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : parseFloat(formData.precio_usd_general))
+        ? (typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : (isNaN(parseFloat(formData.precio_usd_general)) ? 0 : parseFloat(formData.precio_usd_general)))
         : null;
       
       // Get all active tienda IDs - use tiendas if available, otherwise use existing tienda IDs
@@ -899,7 +902,7 @@ const ProductoFormContent = () => {
         setShowScannerModal(false);
         showToast({ 
           type: 'success', 
-          message: `Código escaneado (${result.type}) - Confianza: ${(result.confidenceScore * 100).toFixed(0)}%` 
+          message: `Código escaneado (${result.type}) - Confianza: ${result.confidenceScore && !isNaN(result.confidenceScore) ? (result.confidenceScore * 100).toFixed(0) : 'N/A'}%` 
         });
         
         // Reset session for next use
@@ -1004,10 +1007,10 @@ const ProductoFormContent = () => {
     const newTiendaEntries = availableTiendas.map(tienda => ({
       id_tienda: tienda.id_tienda,
       precio_cup: formData.precio_cup_general !== null && formData.precio_cup_general !== '' 
-        ? (typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : parseFloat(formData.precio_cup_general))
+        ? (typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : (isNaN(parseFloat(formData.precio_cup_general)) ? 0 : parseFloat(formData.precio_cup_general)))
         : 0,
-      precio_usd: formData.precio_usd_general !== null && formData.precio_usd_general !== ''
-        ? (typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : parseFloat(formData.precio_usd_general))
+      precio_usd: formData.precio_usd_general !== null && formData.precio_usd_general !== '' 
+        ? (typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : (isNaN(parseFloat(formData.precio_usd_general)) ? 0 : parseFloat(formData.precio_usd_general)))
         : 0,
     }));
 
@@ -1050,14 +1053,17 @@ const ProductoFormContent = () => {
         if (i === index) {
           const updatedItem = { ...item, [field]: value };
           
-          if (exchangeRate && field === 'precio_cup' && value !== null) {
+          // Validate exchangeRate is a valid number greater than 0 before using it
+          const validExchangeRate = exchangeRate && typeof exchangeRate === 'number' && exchangeRate > 0 ? exchangeRate : null;
+          
+          if (validExchangeRate && field === 'precio_cup' && value !== null) {
             const cupValue = parseFloat(value) || 0;
-            updatedItem.precio_usd = parseFloat((cupValue / exchangeRate).toFixed(5));
+            updatedItem.precio_usd = parseFloat((cupValue / validExchangeRate).toFixed(5));
           }
           
-          if (exchangeRate && field === 'precio_usd' && value !== null) {
+          if (validExchangeRate && field === 'precio_usd' && value !== null) {
             const usdValue = parseFloat(value) || 0;
-            updatedItem.precio_cup = parseFloat((usdValue * exchangeRate).toFixed(5));
+            updatedItem.precio_cup = parseFloat((usdValue * validExchangeRate).toFixed(5));
           }
           
           return updatedItem;
@@ -1073,24 +1079,27 @@ const ProductoFormContent = () => {
     setFormData(prev => {
       const updated = { ...prev, [field]: value };
       
-      if (exchangeRate && field === 'precio_cup_general' && value !== null) {
+      // Validate exchangeRate is a valid number greater than 0 before using it
+      const validExchangeRate = exchangeRate && typeof exchangeRate === 'number' && exchangeRate > 0 ? exchangeRate : null;
+      
+      if (validExchangeRate && field === 'precio_cup_general' && value !== null) {
         const cupValue = parseFloat(value) || 0;
-        updated.precio_usd_general = parseFloat((cupValue / exchangeRate).toFixed(5));
+        updated.precio_usd_general = parseFloat((cupValue / validExchangeRate).toFixed(5));
       }
       
-      if (exchangeRate && field === 'costo_cup_general' && value !== null) {
+      if (validExchangeRate && field === 'costo_cup_general' && value !== null) {
         const cupValue = parseFloat(value) || 0;
-        updated.costo_usd_general = parseFloat((cupValue / exchangeRate).toFixed(5));
+        updated.costo_usd_general = parseFloat((cupValue / validExchangeRate).toFixed(5));
       }
       
-      if (exchangeRate && field === 'precio_usd_general' && value !== null) {
+      if (validExchangeRate && field === 'precio_usd_general' && value !== null) {
         const usdValue = parseFloat(value) || 0;
-        updated.precio_cup_general = parseFloat((usdValue * exchangeRate).toFixed(5));
+        updated.precio_cup_general = parseFloat((usdValue * validExchangeRate).toFixed(5));
       }
       
-      if (exchangeRate && field === 'costo_usd_general' && value !== null) {
+      if (validExchangeRate && field === 'costo_usd_general' && value !== null) {
         const usdValue = parseFloat(value) || 0;
-        updated.costo_cup_general = parseFloat((usdValue * exchangeRate).toFixed(5));
+        updated.costo_cup_general = parseFloat((usdValue * validExchangeRate).toFixed(5));
       }
       
       return updated;
@@ -1513,11 +1522,11 @@ const ProductoFormContent = () => {
                   value={
                     generalPriceInputTexts.costo_cup !== undefined
                       ? generalPriceInputTexts.costo_cup
-                      : (formData.costo_cup_general !== null && formData.costo_cup_general !== '' ? parseFloat(formData.costo_cup_general).toFixed(2) : '')
+                      : (formData.costo_cup_general !== null && formData.costo_cup_general !== '' && !isNaN(parseFloat(formData.costo_cup_general)) ? parseFloat(formData.costo_cup_general).toFixed(2) : '')
                   }
                   onFocus={() => setGeneralPriceInputTexts(prev => ({
                     ...prev,
-                    costo_cup: formData.costo_cup_general !== null && formData.costo_cup_general !== '' ? String(parseFloat(formData.costo_cup_general)) : ''
+                    costo_cup: formData.costo_cup_general !== null && formData.costo_cup_general !== '' && !isNaN(parseFloat(formData.costo_cup_general)) ? String(parseFloat(formData.costo_cup_general)) : ''
                   }))}
                   onChangeText={(text) => {
                     setGeneralPriceInputTexts(prev => ({ ...prev, costo_cup: text }));
@@ -1548,11 +1557,11 @@ const ProductoFormContent = () => {
                   value={
                     generalPriceInputTexts.costo_usd !== undefined
                       ? generalPriceInputTexts.costo_usd
-                      : (formData.costo_usd_general !== null && formData.costo_usd_general !== '' ? parseFloat(formData.costo_usd_general).toFixed(2) : '')
+                      : (formData.costo_usd_general !== null && formData.costo_usd_general !== '' && !isNaN(parseFloat(formData.costo_usd_general)) ? parseFloat(formData.costo_usd_general).toFixed(2) : '')
                   }
                   onFocus={() => setGeneralPriceInputTexts(prev => ({
                     ...prev,
-                    costo_usd: formData.costo_usd_general !== null && formData.costo_usd_general !== '' ? String(parseFloat(formData.costo_usd_general)) : ''
+                    costo_usd: formData.costo_usd_general !== null && formData.costo_usd_general !== '' && !isNaN(parseFloat(formData.costo_usd_general)) ? String(parseFloat(formData.costo_usd_general)) : ''
                   }))}
                   onChangeText={(text) => {
                     setGeneralPriceInputTexts(prev => ({ ...prev, costo_usd: text }));
@@ -1732,11 +1741,11 @@ const ProductoFormContent = () => {
                     value={
                       generalPriceInputTexts.precio_cup !== undefined
                         ? generalPriceInputTexts.precio_cup
-                        : (formData.precio_cup_general !== null && formData.precio_cup_general !== '' ? parseFloat(formData.precio_cup_general).toFixed(2) : '')
+                        : (formData.precio_cup_general !== null && formData.precio_cup_general !== '' && !isNaN(parseFloat(formData.precio_cup_general)) ? parseFloat(formData.precio_cup_general).toFixed(2) : '')
                     }
                     onFocus={() => setGeneralPriceInputTexts(prev => ({
                       ...prev,
-                      precio_cup: formData.precio_cup_general !== null && formData.precio_cup_general !== '' ? String(parseFloat(formData.precio_cup_general)) : ''
+                      precio_cup: formData.precio_cup_general !== null && formData.precio_cup_general !== '' && !isNaN(parseFloat(formData.precio_cup_general)) ? String(parseFloat(formData.precio_cup_general)) : ''
                     }))}
                     onChangeText={(text) => {
                       setGeneralPriceInputTexts(prev => ({ ...prev, precio_cup: text }));
@@ -1767,11 +1776,11 @@ const ProductoFormContent = () => {
                     value={
                       generalPriceInputTexts.precio_usd !== undefined
                         ? generalPriceInputTexts.precio_usd
-                        : (formData.precio_usd_general !== null && formData.precio_usd_general !== '' ? parseFloat(formData.precio_usd_general).toFixed(2) : '')
+                        : (formData.precio_usd_general !== null && formData.precio_usd_general !== '' && !isNaN(parseFloat(formData.precio_usd_general)) ? parseFloat(formData.precio_usd_general).toFixed(2) : '')
                     }
                     onFocus={() => setGeneralPriceInputTexts(prev => ({
                       ...prev,
-                      precio_usd: formData.precio_usd_general !== null && formData.precio_usd_general !== '' ? String(parseFloat(formData.precio_usd_general)) : ''
+                      precio_usd: formData.precio_usd_general !== null && formData.precio_usd_general !== '' && !isNaN(parseFloat(formData.precio_usd_general)) ? String(parseFloat(formData.precio_usd_general)) : ''
                     }))}
                     onChangeText={(text) => {
                       setGeneralPriceInputTexts(prev => ({ ...prev, precio_usd: text }));
@@ -1874,11 +1883,11 @@ const ProductoFormContent = () => {
                             value={
                               priceInputTexts[index]?.precio_cup !== undefined
                                 ? priceInputTexts[index].precio_cup
-                                : (tiendaProducto.precio_cup !== null && tiendaProducto.precio_cup !== '' ? parseFloat(tiendaProducto.precio_cup).toFixed(2) : '')
+                                : (tiendaProducto.precio_cup !== null && tiendaProducto.precio_cup !== '' && !isNaN(parseFloat(tiendaProducto.precio_cup)) ? parseFloat(tiendaProducto.precio_cup).toFixed(2) : '')
                             }
                             onFocus={() => setPriceInputTexts(prev => ({
                               ...prev,
-                              [index]: { ...prev[index], precio_cup: tiendaProducto.precio_cup !== null && tiendaProducto.precio_cup !== '' ? String(parseFloat(tiendaProducto.precio_cup)) : '' }
+                              [index]: { ...prev[index], precio_cup: tiendaProducto.precio_cup !== null && tiendaProducto.precio_cup !== '' && !isNaN(parseFloat(tiendaProducto.precio_cup)) ? String(parseFloat(tiendaProducto.precio_cup)) : '' }
                             }))}
                             onChangeText={(text) => {
                               setPriceInputTexts(prev => ({ ...prev, [index]: { ...prev[index], precio_cup: text } }));
@@ -1904,11 +1913,11 @@ const ProductoFormContent = () => {
                             value={
                               priceInputTexts[index]?.precio_usd !== undefined
                                 ? priceInputTexts[index].precio_usd
-                                : (tiendaProducto.precio_usd !== null && tiendaProducto.precio_usd !== '' ? parseFloat(tiendaProducto.precio_usd).toFixed(2) : '')
+                                : (tiendaProducto.precio_usd !== null && tiendaProducto.precio_usd !== '' && !isNaN(parseFloat(tiendaProducto.precio_usd)) ? parseFloat(tiendaProducto.precio_usd).toFixed(2) : '')
                             }
                             onFocus={() => setPriceInputTexts(prev => ({
                               ...prev,
-                              [index]: { ...prev[index], precio_usd: tiendaProducto.precio_usd !== null && tiendaProducto.precio_usd !== '' ? String(parseFloat(tiendaProducto.precio_usd)) : '' }
+                              [index]: { ...prev[index], precio_usd: tiendaProducto.precio_usd !== null && tiendaProducto.precio_usd !== '' && !isNaN(parseFloat(tiendaProducto.precio_usd)) ? String(parseFloat(tiendaProducto.precio_usd)) : '' }
                             }))}
                             onChangeText={(text) => {
                               setPriceInputTexts(prev => ({ ...prev, [index]: { ...prev[index], precio_usd: text } }));
@@ -1988,7 +1997,7 @@ const ProductoFormContent = () => {
                             </Text>
                             <View style={[styles.stockBadge, { backgroundColor: tiendaProducto.cantidad > 0 ? colors.primaryContainer : colors.errorContainer }]}>
                               <Text style={[styles.stockBadgeText, { color: tiendaProducto.cantidad > 0 && !isDarkMode ? '#FFFFFF' : (tiendaProducto.cantidad > 0 ? colors.primary : colors.error) }]}>
-                                {tiendaProducto.cantidad !== null && tiendaProducto.cantidad !== undefined 
+                                {tiendaProducto.cantidad !== null && tiendaProducto.cantidad !== undefined && !isNaN(parseFloat(tiendaProducto.cantidad))
                                   ? parseFloat(tiendaProducto.cantidad).toFixed(2) 
                                   : '0.00'}
                               </Text>
@@ -1996,7 +2005,7 @@ const ProductoFormContent = () => {
                           </View>
                           {tiendaProducto.cantidad_alerta !== null && tiendaProducto.cantidad_alerta !== undefined && (
                             <Text style={[styles.stockAlertText, { color: colors.outline }]}>
-                              Alerta: {parseFloat(tiendaProducto.cantidad_alerta).toFixed(2)}
+                              Alerta: {tiendaProducto.cantidad_alerta !== null && tiendaProducto.cantidad_alerta !== undefined && !isNaN(parseFloat(tiendaProducto.cantidad_alerta)) ? parseFloat(tiendaProducto.cantidad_alerta).toFixed(2) : '0.00'}
                             </Text>
                           )}
                         </View>

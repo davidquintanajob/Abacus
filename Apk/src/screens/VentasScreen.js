@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import QRCode from 'react-native-qrcode-svg';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { Header } from '../components/layout/Header';
@@ -16,6 +17,8 @@ import { getVentas, deleteVenta } from '../services/ventaService';
 import { getTiendas } from '../services/tiendaService';
 import { getUsuarios } from '../services/usuarioService';
 import { getServicios } from '../services/servicioService';
+import { getCuentas } from '../services/cuentaService';
+import { getUsuarioById } from '../services/usuarioService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import { storageService } from '../services/storageService';
@@ -37,6 +40,10 @@ const VentasContent = () => {
   const [summary, setSummary] = useState(null);
   const [pagination, setPagination] = useState({ currentPage: 1, limit: 10, totalPages: 1, totalItems: 0 });
   const [error, setError] = useState(null);
+  const [cuentas, setCuentas] = useState([]);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [selectedCuenta, setSelectedCuenta] = useState(null);
+  const [completeUserData, setCompleteUserData] = useState(null);
 
   const [isInitialized, setIsInitialized] = useState(false);
   const [userTiendaReady, setUserTiendaReady] = useState(false);
@@ -49,6 +56,10 @@ const VentasContent = () => {
   const autoScrollIntervalRef = useRef(null);
   const scrollXRef = useRef(0);
   const isAutoScrollPausedRef = useRef(false);
+  const cuentasScrollViewRef = useRef(null);
+  const cuentasAutoScrollIntervalRef = useRef(null);
+  const cuentasScrollXRef = useRef(0);
+  const cuentasIsAutoScrollPausedRef = useRef(false);
 
   useEffect(() => {
     isInitializedRef.current = isInitialized;
@@ -113,6 +124,53 @@ const VentasContent = () => {
     }
   };
 
+  // Auto-scroll for cuentas section (infinite carousel)
+  const startCuentasAutoScroll = () => {
+    if (!cuentasScrollViewRef.current || cuentasIsAutoScrollPausedRef.current) return;
+    
+    // Stop any existing interval
+    if (cuentasAutoScrollIntervalRef.current) {
+      clearInterval(cuentasAutoScrollIntervalRef.current);
+    }
+
+    const scrollAmount = 1; // pixels per interval
+    const intervalDuration = 30; // ms
+
+    const scroll = () => {
+      if (!cuentasScrollViewRef.current || cuentasIsAutoScrollPausedRef.current) return;
+
+      cuentasScrollXRef.current += scrollAmount;
+
+      // Simple infinite scroll: when reaching 10000px, reset to 0
+      if (cuentasScrollXRef.current >= 10000) {
+        cuentasScrollXRef.current = 0;
+        cuentasScrollViewRef.current.scrollTo({ x: 0, animated: false });
+      } else {
+        cuentasScrollViewRef.current.scrollTo({ x: cuentasScrollXRef.current, animated: true });
+      }
+    };
+
+    cuentasAutoScrollIntervalRef.current = setInterval(scroll, intervalDuration);
+  };
+
+  const stopCuentasAutoScroll = () => {
+    if (cuentasAutoScrollIntervalRef.current) {
+      clearInterval(cuentasAutoScrollIntervalRef.current);
+      cuentasAutoScrollIntervalRef.current = null;
+    }
+  };
+
+  const toggleCuentasAutoScroll = () => {
+    cuentasIsAutoScrollPausedRef.current = !cuentasIsAutoScrollPausedRef.current;
+    if (!cuentasIsAutoScrollPausedRef.current) {
+      cuentasScrollViewRef.current?.measure((x, y, width, height, pageX, pageY) => {
+        startCuentasAutoScroll();
+      });
+    } else {
+      stopCuentasAutoScroll();
+    }
+  };
+
   useFocusEffect(
     React.useCallback(() => {
       if (summary) {
@@ -121,11 +179,19 @@ const VentasContent = () => {
         startAutoScroll();
       }
 
+      if (cuentas.length > 0) {
+        cuentasIsAutoScrollPausedRef.current = false;
+        cuentasScrollXRef.current = 0;
+        startCuentasAutoScroll();
+      }
+
       return () => {
         stopAutoScroll();
         isAutoScrollPausedRef.current = false;
+        stopCuentasAutoScroll();
+        cuentasIsAutoScrollPausedRef.current = false;
       };
-    }, [summary])
+    }, [summary, cuentas.length])
   );
 
   // Get current date in YYYY-MM-DD format for default filters (local timezone)
@@ -174,6 +240,69 @@ const VentasContent = () => {
     }
     
     return paymentTypes;
+  };
+
+  // Get color for cuenta based on account number (similar to summary carousel colors)
+  const getCuentaColor = (numCuenta) => {
+    if (!numCuenta) return '#757575';
+    const hash = numCuenta.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const colors = ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336', '#00BCD4', '#FFC107', '#8BC34A'];
+    return colors[hash % colors.length];
+  };
+
+  // Get cuenta style based on tipo_cuenta (matching summary carousel styles)
+  const getCuentaStyle = (tipoCuenta) => {
+    const tipoLower = tipoCuenta?.toLowerCase() || '';
+    
+    if (tipoLower.includes('efectivo') && tipoLower.includes('cup')) {
+      return 'summaryItemGreen';
+    }
+    if (tipoLower.includes('efectivo') && tipoLower.includes('usd')) {
+      return 'summaryItemBlue';
+    }
+    if (tipoLower.includes('transferencia') && tipoLower.includes('cup')) {
+      return 'summaryItemOrange';
+    }
+    if (tipoLower.includes('transferencia') && tipoLower.includes('usd')) {
+      return 'summaryItemPurple';
+    }
+    
+    // Default style
+    return null;
+  };
+
+  // Get cuenta color value based on tipo_cuenta
+  const getCuentaTypeColor = (tipoCuenta) => {
+    const tipoLower = tipoCuenta?.toLowerCase() || '';
+    
+    if (tipoLower.includes('efectivo') && tipoLower.includes('cup')) {
+      return '#4CAF50';
+    }
+    if (tipoLower.includes('efectivo') && tipoLower.includes('usd')) {
+      return '#2196F3';
+    }
+    if (tipoLower.includes('transferencia') && tipoLower.includes('cup')) {
+      return '#FF9800';
+    }
+    if (tipoLower.includes('transferencia') && tipoLower.includes('usd')) {
+      return '#9C27B0';
+    }
+    
+    return '#757575';
+  };
+
+  // Handle cuenta press to show QR modal
+  const handleCuentaPress = (cuenta) => {
+    if (cuenta.num_cuenta) {
+      setSelectedCuenta(cuenta);
+      setShowQRModal(true);
+    }
+  };
+
+  // Get Transfermovil QR content
+  const getTransfermovilQRContent = (cuenta) => {
+    const telefono = completeUserData?.telefono || user?.telefono || '';
+    return `TRANSFERMOVIL_ETECSA, TRANSFERENCIA,${cuenta.num_cuenta},${telefono},`;
   };
 
   // Filter states
@@ -246,6 +375,16 @@ const VentasContent = () => {
       setIsInitialized(true);
     }
   }, [user?.id_tienda]);
+
+  // Fetch cuentas on mount
+  useEffect(() => {
+    fetchCuentas();
+  }, []);
+
+  // Fetch complete user data on mount
+  useEffect(() => {
+    fetchCompleteUserData();
+  }, [user?.id_usuario]);
 
   // Initialize current user from session data immediately
   useEffect(() => {
@@ -406,6 +545,30 @@ const VentasContent = () => {
       showToast({ type: 'error', message: 'Error al cargar servicios' });
     } finally {
       setIsLoadingServicios(false);
+    }
+  };
+
+  const fetchCuentas = async () => {
+    try {
+      if (isOfflineMode) {
+        return;
+      }
+      const data = await getCuentas({}, 1, 10000);
+      setCuentas(data.data || []);
+    } catch (error) {
+      console.error('Error fetching cuentas:', error);
+    }
+  };
+
+  const fetchCompleteUserData = async () => {
+    try {
+      if (!user?.id_usuario || isOfflineMode) {
+        return;
+      }
+      const data = await getUsuarioById(user.id_usuario);
+      setCompleteUserData(data);
+    } catch (error) {
+      console.error('Error fetching complete user data:', error);
     }
   };
 
@@ -1207,6 +1370,67 @@ const VentasContent = () => {
           </View>
         </Card>
 
+        {/* Cuentas Carousel */}
+        {cuentas.length > 0 && (
+          <Card style={[styles.summaryCard, { backgroundColor: colors.surface }]}>
+            <View style={styles.summaryHeader}>
+              <Text style={[styles.summaryTitle, { color: colors.onSurface }]}>Cuentas</Text>
+            </View>
+            <ScrollView
+              ref={cuentasScrollViewRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.summaryGridContainer}
+              scrollEventThrottle={16}
+              onScrollBeginDrag={() => {
+                stopCuentasAutoScroll();
+              }}
+              onScrollEndDrag={(event) => {
+                cuentasScrollXRef.current = event.nativeEvent.contentOffset.x;
+                if (cuentas.length > 0 && !cuentasIsAutoScrollPausedRef.current) {
+                  startCuentasAutoScroll();
+                }
+              }}
+              onTouchStart={() => {
+                toggleCuentasAutoScroll();
+              }}
+            >
+              {[...Array(10)].map((_, setIndex) => (
+                <React.Fragment key={setIndex}>
+                  {cuentas.map((cuenta, index) => {
+                    const cuentaStyle = getCuentaStyle(cuenta.tipo_cuenta);
+                    const cuentaColor = getCuentaTypeColor(cuenta.tipo_cuenta);
+                    return (
+                      <TouchableOpacity
+                        key={`${setIndex}-${cuenta.id_cuenta || index}`}
+                        style={[
+                          styles.summaryItem,
+                          cuentaStyle ? styles[cuentaStyle] : null,
+                          { backgroundColor: colors.background }
+                        ]}
+                        onPress={() => handleCuentaPress(cuenta)}
+                        disabled={!cuenta.num_cuenta}
+                      >
+                        <Text style={[styles.summaryItemLabel, { color: colors.outline }]}>
+                          {cuenta.nombre}
+                        </Text>
+                        {cuenta.num_cuenta && (
+                          <Text style={[styles.summaryItemValue, { color: colors.outline, fontWeight: '700' }]}>
+                            {cuenta.num_cuenta}
+                          </Text>
+                        )}
+                        <Text style={[styles.summaryItemLabel, { color: cuentaColor, fontSize: responsive.fontSizes.caption }]}>
+                          {formatNumberWithSpaces(cuenta.fondo || 0)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </ScrollView>
+          </Card>
+        )}
+
         {/* Summary Card */}
         {summary && (
           <Card style={[styles.summaryCard, { backgroundColor: colors.surface }]}>
@@ -1505,9 +1729,57 @@ const VentasContent = () => {
               </View>
             )}
           </>
-        )}
+        )} 
       </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* QR Modal for Transfermovil */}
+      <Modal
+        visible={showQRModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowQRModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]} >
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                Realizar transferencia por Transfermovil
+              </Text>
+              <TouchableOpacity onPress={() => setShowQRModal(false)}>
+                <Ionicons name="close" size={responsive.responsiveWidth(24)} color={colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+            {selectedCuenta && (
+              <View style={styles.qrContainer}>
+                <View style={styles.qrCodeWrapper}>
+                  <QRCode
+                    value={getTransfermovilQRContent(selectedCuenta)}
+                    size={responsive.responsiveWidth(200)}
+                    color="black"
+                    backgroundColor="white"
+                    logo={require('../../assets/Logos/Abacus_sinFondo v1.png')}
+                    logoSize={responsive.responsiveWidth(40)}
+                    logoBackgroundColor="white"
+                    logoMargin={responsive.responsiveWidth(5)}
+                  />
+                </View>
+                <Text style={[styles.cuentaInfoText, { color: colors.outline }]}>
+                  {selectedCuenta.nombre}
+                </Text>
+                {selectedCuenta.num_cuenta && (
+                  <Text style={[styles.cuentaNumberText, { color: colors.outline, fontWeight: '700' }]}>
+                    {selectedCuenta.num_cuenta}
+                  </Text>
+                )}
+                <Text style={[styles.cuentaFondoText, { color: getCuentaTypeColor(selectedCuenta.tipo_cuenta) }]}>
+                  Fondo: {formatNumberWithSpaces(selectedCuenta.fondo || 0)}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -2024,5 +2296,62 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(11),
     fontWeight: '600',
     fontFamily: 'Inter',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: responsive.responsivePadding(20),
+  },
+  modalContent: {
+    borderRadius: 16,
+    padding: responsive.responsivePadding(24),
+    width: '100%',
+    maxWidth: responsive.responsiveWidth(350),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(20),
+  },
+  modalTitle: {
+    fontSize: responsive.responsiveFontSize(18),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+    flex: 1,
+  },
+  qrContainer: {
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(12),
+  },
+  qrCodeWrapper: {
+    padding: responsive.responsivePadding(16),
+    backgroundColor: '#fff',
+    borderRadius: 12,
+  },
+  cuentaInfoText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    textAlign: 'center',
+  },
+  cuentaNumberText: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '700',
+    fontFamily: 'Inter',
+    textAlign: 'center',
+  },
+  cuentaFondoText: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '500',
+    fontFamily: 'Inter',
+    textAlign: 'center',
   },
 });
