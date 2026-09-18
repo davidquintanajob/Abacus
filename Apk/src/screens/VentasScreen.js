@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Modal, Keyboard } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
@@ -44,6 +44,7 @@ const VentasContent = () => {
   const [showQRModal, setShowQRModal] = useState(false);
   const [selectedCuenta, setSelectedCuenta] = useState(null);
   const [completeUserData, setCompleteUserData] = useState(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const [isInitialized, setIsInitialized] = useState(false);
   const [userTiendaReady, setUserTiendaReady] = useState(false);
@@ -72,6 +73,26 @@ const VentasContent = () => {
   useEffect(() => {
     userTiendaRef.current = user?.id_tienda;
   }, [user?.id_tienda]);
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
 
   // Auto-scroll for summary section (infinite carousel)
   const startAutoScroll = () => {
@@ -869,7 +890,7 @@ const VentasContent = () => {
       <KeyboardAvoidingView
         style={styles.content}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={responsive.headerHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
         enabled={true}
       >
         <ScrollView

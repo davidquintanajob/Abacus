@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Switch, Modal, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Keyboard, Image, Modal } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -184,6 +184,7 @@ const CurrencyExchangeContent = () => {
   const [selectorIndex, setSelectorIndex] = useState(0);
   const [prioritizeWifiConnection, setPrioritizeWifiConnection] = useState(false);
   const [showWifiConfig, setShowWifiConfig] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
 
@@ -204,6 +205,26 @@ const CurrencyExchangeContent = () => {
 
     return () => unsubscribe();
   }, []); // Solo se ejecuta al montar el componente
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
 
   const togglePrioritizeWifiConnection = async () => {
     const newValue = !prioritizeWifiConnection;
@@ -1002,7 +1023,7 @@ const CurrencyExchangeContent = () => {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.content}
-        keyboardVerticalOffset={responsive.headerHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
         enabled={true}
       >
         <ScrollView 

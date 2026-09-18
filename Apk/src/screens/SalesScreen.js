@@ -67,6 +67,7 @@ const SalesContent = () => {
   const [isSearching, setIsSearching] = useState(false);
   const searchDebounceRef = useRef(null);
   const [apiBaseUrl, setApiBaseUrl] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const [cuentaConfig, setCuentaConfig] = useState({
     efectivo_cup: [],
@@ -111,56 +112,6 @@ const SalesContent = () => {
 
   useEffect(() => {
     barcodeEngineRef.current = new BarcodeEngine('SALES');
-    return () => {
-      if (barcodeEngineRef.current && typeof barcodeEngineRef.current.cleanup === 'function') {
-        barcodeEngineRef.current.cleanup();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      const result = await Camera.requestCameraPermissionsAsync();
-      setPermission(result);
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (searchDebounceRef.current) {
-      clearTimeout(searchDebounceRef.current);
-    }
-
-    searchDebounceRef.current = setTimeout(async () => {
-      if (searchText.length > 0) {
-        try {
-          setIsSearching(true);
-          const filters = { nombre: searchText, fetchProducto: true, conStock: true };
-          if (selectedTienda) {
-            filters.id_tienda = selectedTienda.id_tienda;
-          }
-          const data = await getServicios(filters, 1, 10);
-          
-          setSearchResults(data.data || []);
-          setShowSearchDropdown(true);
-        } catch (error) {
-          setSearchResults([]);
-        } finally {
-          setIsSearching(false);
-        }
-      } else {
-        setSearchResults([]);
-        setShowSearchDropdown(false);
-      }
-    }, 500);
-
-    return () => {
-      if (searchDebounceRef.current) {
-        clearTimeout(searchDebounceRef.current);
-      }
-    };
-  }, [searchText]);
-
-  useEffect(() => {
     barcodeEngineRef.current.startSession();
 
     loadConfig();
@@ -217,6 +168,68 @@ const SalesContent = () => {
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      const result = await Camera.requestCameraPermissionsAsync();
+      setPermission(result);
+    })();
+  }, []);
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+
+    searchDebounceRef.current = setTimeout(async () => {
+      if (searchText.length > 0) {
+        try {
+          setIsSearching(true);
+          const filters = { nombre: searchText, fetchProducto: true, conStock: true };
+          if (selectedTienda) {
+            filters.id_tienda = selectedTienda.id_tienda;
+          }
+          const data = await getServicios(filters, 1, 10);
+          
+          setSearchResults(data.data || []);
+          setShowSearchDropdown(true);
+        } catch (error) {
+          setSearchResults([]);
+        } finally {
+          setIsSearching(false);
+        }
+      } else {
+        setSearchResults([]);
+        setShowSearchDropdown(false);
+      }
+    }, 500);
+
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, [searchText]);
 
   // Handle pre-selected product from ProductoFormScreen
   useEffect(() => {
@@ -622,6 +635,10 @@ const SalesContent = () => {
       setIsScanning(false);
 
       try {
+        if (!barcodeEngineRef.current) {
+          setIsScanning(true);
+          return;
+        }
         const result = await barcodeEngineRef.current.processScanningResult({
           data: rawCode,
           type: scanningResult.type
@@ -1421,7 +1438,7 @@ const SalesContent = () => {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.content}
-        keyboardVerticalOffset={responsive.headerHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
         enabled={true}
       >
         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Keyboard, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -76,6 +76,7 @@ const EntradaFormContent = () => {
   const [isMultipleCostSuggestion, setIsMultipleCostSuggestion] = useState(false);
   const [multipleSuggestedCosts, setMultipleSuggestedCosts] = useState([]);
   const [multipleCurrentCosts, setMultipleCurrentCosts] = useState([]);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   
   const [formData, setFormData] = useState({
     id_servicio_tienda: null,
@@ -168,6 +169,26 @@ const EntradaFormContent = () => {
   useEffect(() => {
     fetchTiendas();
     fetchConfig();
+  }, []);
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
   }, []);
 
   // Verificar si se abrió desde alerta de vencimiento o si la entrada tiene vencimiento próximo
@@ -1766,7 +1787,7 @@ const EntradaFormContent = () => {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex1}
-        keyboardVerticalOffset={responsive.headerHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
         enabled={true}
       >
         <ScrollView 

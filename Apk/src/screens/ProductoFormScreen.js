@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, Modal, KeyboardAvoidingView, Platform, FlatList, ToastAndroid } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Keyboard, FlatList, ToastAndroid, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -68,6 +68,7 @@ const ProductoFormContent = () => {
   const [exchangeRate, setExchangeRate] = useState(null);
   const [priceInputTexts, setPriceInputTexts] = useState({});
   const [generalPriceInputTexts, setGeneralPriceInputTexts] = useState({});
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   
   const [formData, setFormData] = useState({
     nombre: producto?.nombre || '',
@@ -138,6 +139,26 @@ const ProductoFormContent = () => {
       setIsPricesExpanded(true);
     }
   }, [formData.codigoList.length, formData.productoTiendaList.length]);
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
 
   // Initialize Barcode Engine
   useEffect(() => {
@@ -1281,7 +1302,7 @@ const ProductoFormContent = () => {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex1}
-        keyboardVerticalOffset={responsive.headerHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
         enabled={true}
       >
         <ScrollView 

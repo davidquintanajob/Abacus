@@ -82,6 +82,7 @@ const VentaEditContent = () => {
   const [availableCuentas, setAvailableCuentas] = useState([]);
   // Track which payment field is focused to prevent formatting while typing
   const [focusedPaymentField, setFocusedPaymentField] = useState(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   // Original VentaEditScreen state
   const [tiendas, setTiendas] = useState([]);
@@ -137,11 +138,13 @@ const VentaEditContent = () => {
       setPermission(status);
     })();
 
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
       setIsKeyboardVisible(true);
+      setKeyboardHeight(e.endCoordinates.height);
     });
     const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
       setIsKeyboardVisible(false);
+      setKeyboardHeight(0);
     });
 
     return () => {
@@ -836,7 +839,7 @@ const VentaEditContent = () => {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex1}
-        keyboardVerticalOffset={responsive.headerHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
         enabled={true}
       >
         <ScrollView

@@ -723,7 +723,7 @@ const SalidasContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'position'}
         style={styles.content}
         keyboardVerticalOffset={responsive.headerHeight}
         enabled={true}

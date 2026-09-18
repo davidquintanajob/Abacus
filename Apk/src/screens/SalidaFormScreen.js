@@ -566,7 +566,7 @@ const SalidaFormContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'position'}
         style={styles.flex1}
         keyboardVerticalOffset={responsive.headerHeight}
         enabled={true}
