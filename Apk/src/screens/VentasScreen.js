@@ -22,6 +22,7 @@ import { getUsuarioById } from '../services/usuarioService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import { storageService } from '../services/storageService';
+import configService from '../services/configService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
@@ -45,6 +46,7 @@ const VentasContent = () => {
   const [selectedCuenta, setSelectedCuenta] = useState(null);
   const [completeUserData, setCompleteUserData] = useState(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [tiendaCuentasConfig, setTiendaCuentasConfig] = useState({});
 
   const [isInitialized, setIsInitialized] = useState(false);
   const [userTiendaReady, setUserTiendaReady] = useState(false);
@@ -397,15 +399,20 @@ const VentasContent = () => {
     }
   }, [user?.id_tienda]);
 
-  // Fetch cuentas on mount
+  // Fetch cuentas on mount and when tienda filter or tiendaCuentasConfig changes
   useEffect(() => {
     fetchCuentas();
-  }, []);
+  }, [filters.id_tienda, tiendaCuentasConfig]);
 
   // Fetch complete user data on mount
   useEffect(() => {
     fetchCompleteUserData();
   }, [user?.id_usuario]);
+
+  // Fetch tienda cuentas config on mount
+  useEffect(() => {
+    fetchTiendaCuentasConfig();
+  }, []);
 
   // Initialize current user from session data immediately
   useEffect(() => {
@@ -574,8 +581,36 @@ const VentasContent = () => {
       if (isOfflineMode) {
         return;
       }
+      // Fetch all accounts first
       const data = await getCuentas({}, 1, 10000);
-      setCuentas(data.data || []);
+      let allCuentas = data.data || [];
+
+      // Filter by tiendaCuentasConfig if tienda is selected and config exists
+      if (filters.id_tienda && filters.id_tienda !== '' && filters.id_tienda !== 'all') {
+        const tiendaConfig = tiendaCuentasConfig[filters.id_tienda];
+
+        if (tiendaConfig) {
+          // Get all configured account IDs for this tienda
+          const configuredCuentaIds = new Set();
+          Object.values(tiendaConfig).forEach(cuentasArray => {
+            if (cuentasArray && Array.isArray(cuentasArray)) {
+              cuentasArray.forEach(cuenta => {
+                if (cuenta && cuenta.id_cuenta) {
+                  configuredCuentaIds.add(cuenta.id_cuenta);
+                }
+              });
+            }
+          });
+
+          // Filter accounts to only show configured ones
+          allCuentas = allCuentas.filter(cuenta => configuredCuentaIds.has(cuenta.id_cuenta));
+        } else {
+          // No config found for this tienda, hide carousel
+          allCuentas = [];
+        }
+      }
+
+      setCuentas(allCuentas);
     } catch (error) {
       console.error('Error fetching cuentas:', error);
     }
@@ -590,6 +625,20 @@ const VentasContent = () => {
       setCompleteUserData(data);
     } catch (error) {
       console.error('Error fetching complete user data:', error);
+    }
+  };
+
+  const fetchTiendaCuentasConfig = async () => {
+    try {
+      if (isOfflineMode) {
+        return;
+      }
+      const config = await configService.getConfig();
+      if (config && config.tiendaCuentasConfig) {
+        setTiendaCuentasConfig(config.tiendaCuentasConfig);
+      }
+    } catch (error) {
+      console.error('Error fetching tienda cuentas config:', error);
     }
   };
 

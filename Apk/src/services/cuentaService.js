@@ -11,6 +11,7 @@ export const getCuentas = async (filters = {}, page = 1, limit = 10) => {
     if (filters.nombre) queryParams.append('nombre', filters.nombre);
     if (filters.tipo_cuenta) queryParams.append('tipo_cuenta', filters.tipo_cuenta);
     if (filters.num_cuenta) queryParams.append('num_cuenta', filters.num_cuenta);
+    if (filters.id_tienda) queryParams.append('id_tienda', filters.id_tienda);
 
     const response = await api.get(`/cuenta/filter?${queryParams}`);
     return response.data;
