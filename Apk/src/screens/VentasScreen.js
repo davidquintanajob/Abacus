@@ -477,9 +477,12 @@ const VentasContent = () => {
                 fetchVentas();
               }
             }
+            // Refresh cuentas when returning from edit/create
+            fetchCuentas();
           } catch (error) {
             console.error('Error restoring filters:', error);
             fetchVentas();
+            fetchCuentas();
           }
         };
         restoreFilters();
@@ -773,10 +776,12 @@ const VentasContent = () => {
                 await storageService.deleteVenta(venta.id_lista_venta);
                 showToast({ type: 'success', message: 'Venta eliminada correctamente' });
                 fetchVentas();
+                fetchCuentas();
               } else {
                 await deleteVenta(venta.id_lista_venta);
                 showToast({ type: 'success', message: 'Venta eliminada correctamente' });
                 fetchVentas();
+                fetchCuentas();
               }
             } catch (error) {
               showToast({ type: 'error', message: 'Error al eliminar venta' });

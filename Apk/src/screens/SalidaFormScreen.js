@@ -79,6 +79,7 @@ const SalidaFormContent = () => {
   const [originalCantidad, setOriginalCantidad] = useState(0);
 
   const [showFechaPicker, setShowFechaPicker] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   // Helper function to format date correctly without timezone issues
   const formatDateToLocal = (dateString) => {
@@ -103,6 +104,26 @@ const SalidaFormContent = () => {
   useEffect(() => {
     fetchTiendas();
     loadCustomSalidaTypes();
+  }, []);
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
   }, []);
 
   const loadCustomSalidaTypes = async () => {
@@ -211,18 +232,19 @@ const SalidaFormContent = () => {
         ...prev,
         producto: productoPreSeleccionado,
       }));
-      
+
       setProductoSearchText((productoPreSeleccionado.nombre || '').trimEnd());
-      
+      setDisplayProductoName((productoPreSeleccionado.nombre || '').trimEnd());
+
       // If user only has access to one store, automatically select it
       const userRole = user?.rol?.toLowerCase();
-      const canViewAllSalidas = 
+      const canViewAllSalidas =
         canViewAllSalidasParam !== undefined ? canViewAllSalidasParam :
         (userRole === 'administrador' ||
         (userRole === 'dependiente' && salidaAccessLevels?.dependiente === 'all_stores') ||
         (userRole === 'almacenero' && salidaAccessLevels?.almacenero === 'all_stores') ||
         (userRole === 'económico' && salidaAccessLevels?.economico === 'all_stores'));
-      
+
       if (!canViewAllSalidas && user?.id_tienda && tiendas.length === 1) {
         const userTienda = tiendas.find(t => t.id_tienda === user.id_tienda);
         if (userTienda) {
@@ -566,9 +588,9 @@ const SalidaFormContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'position'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex1}
-        keyboardVerticalOffset={responsive.headerHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
         enabled={true}
       >
         <ScrollView 

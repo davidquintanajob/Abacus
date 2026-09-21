@@ -1505,6 +1505,7 @@ const SalesContent = () => {
                     setSelectedTienda(tienda);
                     setShowTiendaSelector(false);
                     loadCuentaConfig(tienda.id_tienda);
+                    loadConfig();
                   }}
                 >
                   <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>

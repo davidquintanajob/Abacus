@@ -80,6 +80,7 @@ const VentaEditContent = () => {
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
   const [selectorTipoCuenta, setSelectorTipoCuenta] = useState(null);
   const [availableCuentas, setAvailableCuentas] = useState([]);
+  const [cupToUsdRate, setCupToUsdRate] = useState(1);
   // Track which payment field is focused to prevent formatting while typing
   const [focusedPaymentField, setFocusedPaymentField] = useState(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -337,7 +338,7 @@ const VentaEditContent = () => {
       // Set original form data for additional fields
       setFormData({
         id_usuario: ventaUsuario?.id_usuario || null,
-        cambio_moneda: ventaData.cambio_moneda?.toString() || '1',
+        cambio_moneda: ventaData.cambio_moneda?.toString() || cupToUsdRate.toString(),
         fecha_hora: ventaData.fecha_hora || new Date().toISOString(),
         nota: ventaData.nota || '',
       });
@@ -394,7 +395,7 @@ const VentaEditContent = () => {
         id_cuenta_transferencia_cup: ventaData.operaciones?.find(op => op.cuenta?.tipo_cuenta === 'Transferencia CUP')?.id_cuenta || null,
         id_cuenta_transferencia_usd: ventaData.operaciones?.find(op => op.cuenta?.tipo_cuenta === 'Transferencia USD')?.id_cuenta || null,
         id_usuario: ventaData.operaciones?.[0]?.id_usuario || user?.id_usuario,
-        cambio_moneda: ventaData.operaciones?.[0]?.cambio_moneda?.toString() || '',
+        cambio_moneda: ventaData.operaciones?.[0]?.cambio_moneda?.toString() || cupToUsdRate.toString(),
       });
 
       const ventaItemsData = ventaData.ventas?.map(v => ({
@@ -463,6 +464,9 @@ const VentaEditContent = () => {
       const data = await configService.getConfig();
       if (data.tiendaCuentasConfig && data.tiendaCuentasConfig[tiendaId]) {
         setCuentaConfig(data.tiendaCuentasConfig[tiendaId]);
+      }
+      if (data.cupToUsdRate) {
+        setCupToUsdRate(data.cupToUsdRate);
       }
     } catch (error) {
     }
