@@ -541,256 +541,250 @@ export default function EntradasPage() {
           marginRight: 'auto',
           marginBottom: '0',
           marginLeft: 'auto',
-          paddingTop: isMobile ? '20px' : isTablet ? '32px' : '40px',
+          paddingTop: isMobile ? '20px' : isTablet ? '32px' : '20px',
           paddingRight: isMobile ? '20px' : isTablet ? '32px' : '40px',
           paddingBottom: '120px',
           paddingLeft: isMobile ? '20px' : isTablet ? '32px' : '40px',
           maxWidth: isDesktop ? '1400px' : '100%',
         }}>
-        {/* Page Title */}
-        <div className="text-center mb-6 mt-4">
-          <h1 
-            className="text-2xl md:text-3xl font-bold"
-            style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
-          >
-            Gestión de Entradas
-          </h1>
-        </div>
-
-        {/* Filter Section - Wrapped to maintain compact width */}
-        <div style={{ maxWidth: '56rem', margin: '0 auto' }}>
-        <div 
-          className="rounded-2xl p-5 mb-6 shadow-lg"
-          style={{ backgroundColor: colors.surface }}
-        >
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold" style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}>
-              Filtros
-            </h2>
-            <button
-              className="w-10 h-10 rounded-lg flex items-center justify-center border-2"
-              style={{ 
-                backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
-                borderColor: colors.primary
-              }}
-              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-            >
-              {showAdvancedFilters ? (
-                <ChevronUp size={24} color={isDarkMode ? colors.primary : '#1976D2'} />
-              ) : (
-                <ChevronDown size={24} color={isDarkMode ? colors.primary : '#1976D2'} />
-              )}
-            </button>
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
-              Nombre del Producto
-            </label>
-            <input
-              type="text"
-              className="w-full border rounded-lg p-3 text-sm"
-              style={{ 
-                backgroundColor: colors.background, 
-                color: colors.onSurface, 
-                borderColor: colors.outlineVariant 
-              }}
-              placeholder="Buscar por nombre..."
-              value={filters.nombre_servicio}
-              onChange={(e) => setFilters(prev => ({ ...prev, nombre_servicio: e.target.value }))}
-            />
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
-              Tienda
-            </label>
-            <div className="relative">
-              <button
-                className="w-full border rounded-lg p-3 flex justify-between items-center"
-                style={{ 
-                  backgroundColor: colors.background, 
-                  borderColor: colors.outlineVariant 
-                }}
-                onClick={() => {
-                  if (canViewAllEntradas) {
-                    setShowTiendaDropdown(!showTiendaDropdown);
-                    if (!hasLoadedAllTiendas && !isLoadingTiendas) {
-                      fetchAllTiendas();
-                    }
-                  }
-                }}
-              >
-                <span className="text-sm" style={{ color: filters.id_tienda ? colors.onSurface : colors.outline }}>
-                  {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda))?.nombre || 'Todas las tiendas'}
-                </span>
-                {showTiendaDropdown ? (
-                  <ChevronUp size={20} color={colors.outline} />
-                ) : (
-                  <ChevronDown size={20} color={colors.outline} />
-                )}
-              </button>
-              
-              {showTiendaDropdown && (
-                <div 
-                  className="absolute z-10 w-full border rounded-lg mt-1 max-h-48 overflow-auto"
-                  style={{ 
-                    backgroundColor: colors.surface, 
-                    borderColor: colors.outlineVariant 
-                  }}
-                >
-                  {isLoadingTiendas ? (
-                    <div className="flex items-center justify-center py-4 gap-2">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2" style={{ borderColor: colors.primary }}></div>
-                      <span className="text-sm" style={{ color: colors.outline }}>Cargando tiendas...</span>
-                    </div>
-                  ) : (
-                    <>
-                      <div 
-                        className="flex items-center border rounded-lg px-3 py-2 mb-1"
-                        style={{ 
-                          backgroundColor: colors.background, 
-                          borderColor: colors.outlineVariant 
-                        }}
-                      >
-                        <Search size={18} color={colors.outline} className="mr-2" />
-                        <input
-                          type="text"
-                          className="flex-1 text-sm bg-transparent outline-none"
-                          style={{ color: colors.onSurface }}
-                          placeholder="Buscar tienda..."
-                          value={tiendaSearchText}
-                          onChange={(e) => setTiendaSearchText(e.target.value)}
-                        />
-                      </div>
-                      {canViewAllEntradas && (
-                        <button
-                          className="w-full text-left px-3 py-3 border-b"
-                          style={{ borderColor: 'rgba(0, 0, 0, 0.05)' }}
-                          onClick={() => {
-                            setFilters(prev => ({ ...prev, id_tienda: '' }));
-                            setShowTiendaDropdown(false);
-                            setTiendaSearchText('');
-                            setPagination(prev => ({ ...prev, currentPage: 1 }));
-                            fetchEntradas('');
-                          }}
-                        >
-                          <span className="text-sm" style={{ color: colors.onSurface }}>Todas las tiendas</span>
-                        </button>
-                      )}
-                      {filteredTiendas.length > 0 ? (
-                        filteredTiendas.map((tienda, index) => (
-                          <button
-                            key={tienda.id_tienda}
-                            className="w-full text-left px-3 py-3 border-b last:border-b-0"
-                            style={{ borderColor: 'rgba(0, 0, 0, 0.05)' }}
-                            onClick={() => {
-                              const newIdTienda = tienda.id_tienda.toString();
-                              setFilters(prev => ({ ...prev, id_tienda: newIdTienda }));
-                              setShowTiendaDropdown(false);
-                              setTiendaSearchText('');
-                              setPagination(prev => ({ ...prev, currentPage: 1 }));
-                              fetchEntradas(newIdTienda);
-                            }}
-                          >
-                            <span className="text-sm" style={{ color: colors.onSurface }}>{tienda.nombre}</span>
-                          </button>
-                        ))
-                      ) : (
-                        <div className="px-3 py-3">
-                          <span className="text-sm" style={{ color: colors.outline }}>No se encontraron tiendas</span>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {showAdvancedFilters && (
+          {/* Desktop Layout */}
+          {isDesktop ? (
             <>
+              {/* Page Title - Top Left */}
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
-                  Usuario
-                </label>
-                <div className="relative">
-                  <button
-                    className="w-full border rounded-lg p-3 flex justify-between items-center"
-                    style={{ 
-                      backgroundColor: colors.background, 
-                      borderColor: colors.outlineVariant 
-                    }}
-                    onClick={() => {
-                      if (canViewAllEntradas) {
-                        setShowUserDropdown(!showUserDropdown);
-                        if (!hasLoadedAllUsers && !isLoadingUsers) {
-                          fetchAllUsers();
-                        }
-                      }
-                    }}
-                  >
-                    <span className="text-sm" style={{ color: filters.id_usuario ? colors.onSurface : colors.outline }}>
-                      {users.find(u => u.id_usuario === parseInt(filters.id_usuario))?.nombre_natural || 'Todos los usuarios'}
-                    </span>
-                    {showUserDropdown ? (
-                      <ChevronUp size={20} color={colors.outline} />
-                    ) : (
-                      <ChevronDown size={20} color={colors.outline} />
-                    )}
-                  </button>
-                  
-                  {showUserDropdown && (
-                    <div 
-                      className="absolute z-10 w-full border rounded-lg mt-1 max-h-48 overflow-auto"
+                <h1 
+                  className="text-2xl font-bold"
+                  style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                >
+                  Gestión de Entradas
+                </h1>
+              </div>
+
+              {/* Filter Section - Horizontal */}
+              <div 
+                className="rounded-2xl p-4 mb-4 shadow-lg"
+                style={{ backgroundColor: colors.surface }}
+              >
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Nombre del Producto */}
+                  <div className="flex-1 min-w-[200px]">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Nombre del Producto
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
                       style={{ 
-                        backgroundColor: colors.surface, 
-                        borderColor: colors.outlineVariant 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Buscar por nombre..."
+                      value={filters.nombre_servicio}
+                      onChange={(e) => setFilters(prev => ({ ...prev, nombre_servicio: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Tienda */}
+                  <div className="flex-1 min-w-[200px] relative">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Tienda
+                    </label>
+                    <button
+                      className="w-full rounded-lg px-3 py-2 border flex justify-between items-center"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: filters.id_tienda ? colors.onSurface : colors.outline,
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      onClick={() => {
+                        if (canViewAllEntradas) {
+                          setShowTiendaDropdown(!showTiendaDropdown);
+                          if (!hasLoadedAllTiendas && !isLoadingTiendas) {
+                            fetchAllTiendas();
+                          }
+                        }
                       }}
                     >
-                      {isLoadingUsers ? (
-                        <div className="flex items-center justify-center py-4 gap-2">
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2" style={{ borderColor: colors.primary }}></div>
-                          <span className="text-sm" style={{ color: colors.outline }}>Cargando usuarios...</span>
-                        </div>
+                      <span className="truncate">
+                        {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda))?.nombre || 'Todas'}
+                      </span>
+                      {showTiendaDropdown ? (
+                        <ChevronUp size={16} style={{ color: colors.outline }} />
                       ) : (
-                        <>
-                          <div 
-                            className="flex items-center border rounded-lg px-3 py-2 mb-1"
-                            style={{ 
-                              backgroundColor: colors.background, 
-                              borderColor: colors.outlineVariant 
-                            }}
-                          >
-                            <Search size={18} color={colors.outline} className="mr-2" />
+                        <ChevronDown size={16} style={{ color: colors.outline }} />
+                      )}
+                    </button>
+                    
+                    {showTiendaDropdown && (
+                      <div 
+                        className="absolute z-10 w-full mt-1 rounded-lg border overflow-hidden max-h-60 overflow-y-auto"
+                        style={{ 
+                          backgroundColor: colors.surface, 
+                          borderColor: colors.outlineVariant
+                        }}
+                      >
+                        {isLoadingTiendas ? (
+                          <div className="flex items-center justify-center py-4 gap-2">
+                            <div className="w-5 h-5 border-2 border-t-2 rounded-full animate-spin" style={{ borderColor: colors.primary, borderTopColor: 'transparent' }} />
+                            <span style={{ color: colors.outline, fontSize: '14px' }}>Cargando...</span>
+                          </div>
+                        ) : (
+                          <>
                             <input
                               type="text"
-                              className="flex-1 text-sm bg-transparent outline-none"
-                              style={{ color: colors.onSurface }}
+                              className="w-full px-3 py-2 border-b"
+                              style={{ 
+                                backgroundColor: colors.background, 
+                                color: colors.onSurface, 
+                                borderColor: colors.outlineVariant,
+                                fontFamily: 'Inter, sans-serif'
+                              }}
+                              placeholder="Buscar tienda..."
+                              value={tiendaSearchText}
+                              onChange={(e) => setTiendaSearchText(e.target.value)}
+                            />
+                            {canViewAllEntradas && (
+                              <button
+                                className="w-full px-3 py-2 text-left border-b hover:bg-black/5 transition-colors"
+                                style={{ 
+                                  color: colors.onSurface,
+                                  borderColor: 'rgba(0,0,0,0.05)',
+                                  fontFamily: 'Inter, sans-serif'
+                                }}
+                                onClick={() => {
+                                  setFilters(prev => ({ ...prev, id_tienda: '' }));
+                                  setShowTiendaDropdown(false);
+                                  setTiendaSearchText('');
+                                  setPagination(prev => ({ ...prev, currentPage: 1 }));
+                                  fetchEntradas('');
+                                }}
+                              >
+                                Todas
+                              </button>
+                            )}
+                            {filteredTiendas.map((tienda) => (
+                              <button
+                                key={tienda.id_tienda}
+                                className="w-full px-3 py-2 text-left hover:bg-black/5 transition-colors"
+                                style={{ 
+                                  color: colors.onSurface,
+                                  fontFamily: 'Inter, sans-serif'
+                                }}
+                                onClick={() => {
+                                  const newIdTienda = tienda.id_tienda.toString();
+                                  setFilters(prev => ({ ...prev, id_tienda: newIdTienda }));
+                                  setShowTiendaDropdown(false);
+                                  setTiendaSearchText('');
+                                  setPagination(prev => ({ ...prev, currentPage: 1 }));
+                                  fetchEntradas(newIdTienda);
+                                }}
+                              >
+                                {tienda.nombre}
+                              </button>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Usuario */}
+                  <div className="flex-1 min-w-[200px] relative">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Usuario
+                    </label>
+                    <button
+                      className="w-full rounded-lg px-3 py-2 border flex justify-between items-center"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: filters.id_usuario ? colors.onSurface : colors.outline,
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      onClick={() => {
+                        if (canViewAllEntradas) {
+                          setShowUserDropdown(!showUserDropdown);
+                          if (!hasLoadedAllUsers && !isLoadingUsers) {
+                            fetchAllUsers();
+                          }
+                        }
+                      }}
+                    >
+                      <span className="truncate">
+                        {users.find(u => u.id_usuario === parseInt(filters.id_usuario))?.nombre_natural || 'Todos'}
+                      </span>
+                      {showUserDropdown ? (
+                        <ChevronUp size={16} style={{ color: colors.outline }} />
+                      ) : (
+                        <ChevronDown size={16} style={{ color: colors.outline }} />
+                      )}
+                    </button>
+                    
+                    {showUserDropdown && (
+                      <div 
+                        className="absolute z-10 w-full mt-1 rounded-lg border overflow-hidden max-h-60 overflow-y-auto"
+                        style={{ 
+                          backgroundColor: colors.surface, 
+                          borderColor: colors.outlineVariant
+                        }}
+                      >
+                        {isLoadingUsers ? (
+                          <div className="flex items-center justify-center py-4 gap-2">
+                            <div className="w-5 h-5 border-2 border-t-2 rounded-full animate-spin" style={{ borderColor: colors.primary, borderTopColor: 'transparent' }} />
+                            <span style={{ color: colors.outline, fontSize: '14px' }}>Cargando...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <input
+                              type="text"
+                              className="w-full px-3 py-2 border-b"
+                              style={{ 
+                                backgroundColor: colors.background, 
+                                color: colors.onSurface, 
+                                borderColor: colors.outlineVariant,
+                                fontFamily: 'Inter, sans-serif'
+                              }}
                               placeholder="Buscar usuario..."
                               value={userSearchText}
                               onChange={(e) => setUserSearchText(e.target.value)}
                             />
-                          </div>
-                          <button
-                            className="w-full text-left px-3 py-3 border-b"
-                            style={{ borderColor: 'rgba(0, 0, 0, 0.05)' }}
-                            onClick={() => {
-                              setFilters(prev => ({ ...prev, id_usuario: '' }));
-                              setShowUserDropdown(false);
-                              setUserSearchText('');
-                              setPagination(prev => ({ ...prev, currentPage: 1 }));
-                              fetchEntradas();
-                            }}
-                          >
-                            <span className="text-sm" style={{ color: colors.onSurface }}>Todos los usuarios</span>
-                          </button>
-                          {filteredUsers.length > 0 ? (
-                            filteredUsers.map((userItem, index) => (
+                            <button
+                              className="w-full px-3 py-2 text-left border-b hover:bg-black/5 transition-colors"
+                              style={{ 
+                                color: colors.onSurface,
+                                borderColor: 'rgba(0,0,0,0.05)',
+                                fontFamily: 'Inter, sans-serif'
+                              }}
+                              onClick={() => {
+                                setFilters(prev => ({ ...prev, id_usuario: '' }));
+                                setShowUserDropdown(false);
+                                setUserSearchText('');
+                                setPagination(prev => ({ ...prev, currentPage: 1 }));
+                                fetchEntradas();
+                              }}
+                            >
+                              Todos
+                            </button>
+                            {filteredUsers.map((userItem) => (
                               <button
                                 key={userItem.id_usuario}
-                                className="w-full text-left px-3 py-3 border-b last:border-b-0"
-                                style={{ borderColor: 'rgba(0, 0, 0, 0.05)' }}
+                                className="w-full px-3 py-2 text-left hover:bg-black/5 transition-colors"
+                                style={{ 
+                                  color: colors.onSurface,
+                                  fontFamily: 'Inter, sans-serif'
+                                }}
                                 onClick={() => {
                                   setFilters(prev => ({ ...prev, id_usuario: userItem.id_usuario.toString() }));
                                   setShowUserDropdown(false);
@@ -799,176 +793,516 @@ export default function EntradasPage() {
                                   fetchEntradas();
                                 }}
                               >
-                                <span className="text-sm" style={{ color: colors.onSurface }}>{userItem.nombre_natural}</span>
+                                {userItem.nombre_natural}
                               </button>
-                            ))
-                          ) : (
-                            <div className="px-3 py-3">
-                              <span className="text-sm" style={{ color: colors.outline }}>No se encontraron usuarios</span>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Código de Lote */}
+                  <div className="flex-1 min-w-[150px]">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Código de Lote
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Código..."
+                      value={filters.codigo_lote}
+                      onChange={(e) => setFilters(prev => ({ ...prev, codigo_lote: e.target.value }))}
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
-                  Código de Lote
-                </label>
-                <input
-                  type="text"
-                  className="w-full border rounded-lg p-3 text-sm"
+              {/* Action Buttons - Outside filter card, smaller, side by side */}
+              <div className="flex gap-3 mb-4">
+                <button
+                  className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 border-2 transition-colors hover:opacity-80"
                   style={{ 
-                    backgroundColor: colors.background, 
-                    color: colors.onSurface, 
-                    borderColor: colors.outlineVariant 
+                    backgroundColor: colors.surface, 
+                    borderColor: colors.outlineVariant,
+                    color: colors.onSurface
                   }}
-                  placeholder="Buscar por código de lote..."
-                  value={filters.codigo_lote}
-                  onChange={(e) => setFilters(prev => ({ ...prev, codigo_lote: e.target.value }))}
-                />
+                  onClick={handleClearFilters}
+                >
+                  <RefreshCw size={16} />
+                  <span>Limpiar</span>
+                </button>
+                <button
+                  className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 transition-colors hover:opacity-80 disabled:opacity-50"
+                  style={{ backgroundColor: colors.primary, color: '#fff' }}
+                  onClick={handleSearch}
+                  disabled={isSearching}
+                >
+                  {isSearching ? (
+                    <div className="w-4 h-4 border-2 border-t-2 rounded-full animate-spin" style={{ borderColor: '#fff', borderTopColor: 'transparent' }} />
+                  ) : (
+                    <>
+                      <Search size={16} />
+                      <span>Buscar</span>
+                    </>
+                  )}
+                </button>
+                {canManageEntradas && (
+                  <button
+                    className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
+                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                    onClick={handleAdd}
+                  >
+                    <Plus size={16} />
+                    <span>Agregar Entrada</span>
+                  </button>
+                )}
+                <button
+                  className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
+                  style={{ backgroundColor: colors.primary, color: '#fff' }}
+                  onClick={() => setShowExportModal(true)}
+                >
+                  <Download size={16} />
+                  <span>Exportar Datos</span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Mobile/Tablet Layout - Original */}
+              {/* Page Title */}
+              <div className="text-center mb-6 mt-4">
+                <h1 
+                  className="text-2xl md:text-3xl font-bold"
+                  style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                >
+                  Gestión de Entradas
+                </h1>
               </div>
 
-              <div className="flex gap-2 mb-4">
-                <div className="flex-1">
+              {/* Filter Section - Wrapped to maintain compact width */}
+              <div style={{ maxWidth: '56rem', margin: '0 auto' }}>
+              <div 
+                className="rounded-2xl p-5 mb-6 shadow-lg"
+                style={{ backgroundColor: colors.surface }}
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-lg font-bold" style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}>
+                    Filtros
+                  </h2>
+                  <button
+                    className="w-10 h-10 rounded-lg flex items-center justify-center border-2"
+                    style={{ 
+                      backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                      borderColor: colors.primary
+                    }}
+                    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  >
+                    {showAdvancedFilters ? (
+                      <ChevronUp size={24} color={isDarkMode ? colors.primary : '#1976D2'} />
+                    ) : (
+                      <ChevronDown size={24} color={isDarkMode ? colors.primary : '#1976D2'} />
+                    )}
+                  </button>
+                </div>
+
+                <div className="mb-4">
                   <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
-                    Cant.Restante Mínima
+                    Nombre del Producto
                   </label>
                   <input
-                    type="number"
+                    type="text"
                     className="w-full border rounded-lg p-3 text-sm"
                     style={{ 
                       backgroundColor: colors.background, 
                       color: colors.onSurface, 
                       borderColor: colors.outlineVariant 
                     }}
-                    placeholder="Cantidad mínima..."
-                    value={filters.cantidad_restante_min}
-                    onChange={(e) => setFilters(prev => ({ ...prev, cantidad_restante_min: e.target.value }))}
+                    placeholder="Buscar por nombre..."
+                    value={filters.nombre_servicio}
+                    onChange={(e) => setFilters(prev => ({ ...prev, nombre_servicio: e.target.value }))}
                   />
                 </div>
 
-                <div className="flex-1">
+                <div className="mb-4">
                   <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
-                    Cant.Restante Máxima
+                    Tienda
                   </label>
-                  <input
-                    type="number"
-                    className="w-full border rounded-lg p-3 text-sm"
+                  <div className="relative">
+                    <button
+                      className="w-full border rounded-lg p-3 flex justify-between items-center"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        borderColor: colors.outlineVariant 
+                      }}
+                      onClick={() => {
+                        if (canViewAllEntradas) {
+                          setShowTiendaDropdown(!showTiendaDropdown);
+                          if (!hasLoadedAllTiendas && !isLoadingTiendas) {
+                            fetchAllTiendas();
+                          }
+                        }
+                      }}
+                    >
+                      <span className="text-sm" style={{ color: filters.id_tienda ? colors.onSurface : colors.outline }}>
+                        {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda))?.nombre || 'Todas las tiendas'}
+                      </span>
+                      {showTiendaDropdown ? (
+                        <ChevronUp size={20} color={colors.outline} />
+                      ) : (
+                        <ChevronDown size={20} color={colors.outline} />
+                      )}
+                    </button>
+                    
+                    {showTiendaDropdown && (
+                      <div 
+                        className="absolute z-10 w-full border rounded-lg mt-1 max-h-48 overflow-auto"
+                        style={{ 
+                          backgroundColor: colors.surface, 
+                          borderColor: colors.outlineVariant 
+                        }}
+                      >
+                        {isLoadingTiendas ? (
+                          <div className="flex items-center justify-center py-4 gap-2">
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2" style={{ borderColor: colors.primary }}></div>
+                            <span className="text-sm" style={{ color: colors.outline }}>Cargando tiendas...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div 
+                              className="flex items-center border rounded-lg px-3 py-2 mb-1"
+                              style={{ 
+                                backgroundColor: colors.background, 
+                                borderColor: colors.outlineVariant 
+                              }}
+                            >
+                              <Search size={18} color={colors.outline} className="mr-2" />
+                              <input
+                                type="text"
+                                className="flex-1 text-sm bg-transparent outline-none"
+                                style={{ color: colors.onSurface }}
+                                placeholder="Buscar tienda..."
+                                value={tiendaSearchText}
+                                onChange={(e) => setTiendaSearchText(e.target.value)}
+                              />
+                            </div>
+                            {canViewAllEntradas && (
+                              <button
+                                className="w-full text-left px-3 py-3 border-b"
+                                style={{ borderColor: 'rgba(0, 0, 0, 0.05)' }}
+                                onClick={() => {
+                                  setFilters(prev => ({ ...prev, id_tienda: '' }));
+                                  setShowTiendaDropdown(false);
+                                  setTiendaSearchText('');
+                                  setPagination(prev => ({ ...prev, currentPage: 1 }));
+                                  fetchEntradas('');
+                                }}
+                              >
+                                <span className="text-sm" style={{ color: colors.onSurface }}>Todas las tiendas</span>
+                              </button>
+                            )}
+                            {filteredTiendas.length > 0 ? (
+                              filteredTiendas.map((tienda, index) => (
+                                <button
+                                  key={tienda.id_tienda}
+                                  className="w-full text-left px-3 py-3 border-b last:border-b-0"
+                                  style={{ borderColor: 'rgba(0, 0, 0, 0.05)' }}
+                                  onClick={() => {
+                                    const newIdTienda = tienda.id_tienda.toString();
+                                    setFilters(prev => ({ ...prev, id_tienda: newIdTienda }));
+                                    setShowTiendaDropdown(false);
+                                    setTiendaSearchText('');
+                                    setPagination(prev => ({ ...prev, currentPage: 1 }));
+                                    fetchEntradas(newIdTienda);
+                                  }}
+                                >
+                                  <span className="text-sm" style={{ color: colors.onSurface }}>{tienda.nombre}</span>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="px-3 py-3">
+                                <span className="text-sm" style={{ color: colors.outline }}>No se encontraron tiendas</span>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {showAdvancedFilters && (
+                  <>
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
+                        Usuario
+                      </label>
+                      <div className="relative">
+                        <button
+                          className="w-full border rounded-lg p-3 flex justify-between items-center"
+                          style={{ 
+                            backgroundColor: colors.background, 
+                            borderColor: colors.outlineVariant 
+                          }}
+                          onClick={() => {
+                            if (canViewAllEntradas) {
+                              setShowUserDropdown(!showUserDropdown);
+                              if (!hasLoadedAllUsers && !isLoadingUsers) {
+                                fetchAllUsers();
+                              }
+                            }
+                          }}
+                        >
+                          <span className="text-sm" style={{ color: filters.id_usuario ? colors.onSurface : colors.outline }}>
+                            {users.find(u => u.id_usuario === parseInt(filters.id_usuario))?.nombre_natural || 'Todos los usuarios'}
+                          </span>
+                          {showUserDropdown ? (
+                            <ChevronUp size={20} color={colors.outline} />
+                          ) : (
+                            <ChevronDown size={20} color={colors.outline} />
+                          )}
+                        </button>
+                        
+                        {showUserDropdown && (
+                          <div 
+                            className="absolute z-10 w-full border rounded-lg mt-1 max-h-48 overflow-auto"
+                            style={{ 
+                              backgroundColor: colors.surface, 
+                              borderColor: colors.outlineVariant 
+                            }}
+                          >
+                            {isLoadingUsers ? (
+                              <div className="flex items-center justify-center py-4 gap-2">
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2" style={{ borderColor: colors.primary }}></div>
+                                <span className="text-sm" style={{ color: colors.outline }}>Cargando usuarios...</span>
+                              </div>
+                            ) : (
+                              <>
+                                <div 
+                                  className="flex items-center border rounded-lg px-3 py-2 mb-1"
+                                  style={{ 
+                                    backgroundColor: colors.background, 
+                                    borderColor: colors.outlineVariant 
+                                  }}
+                                >
+                                  <Search size={18} color={colors.outline} className="mr-2" />
+                                  <input
+                                    type="text"
+                                    className="flex-1 text-sm bg-transparent outline-none"
+                                    style={{ color: colors.onSurface }}
+                                    placeholder="Buscar usuario..."
+                                    value={userSearchText}
+                                    onChange={(e) => setUserSearchText(e.target.value)}
+                                  />
+                                </div>
+                                <button
+                                  className="w-full text-left px-3 py-3 border-b"
+                                  style={{ borderColor: 'rgba(0, 0, 0, 0.05)' }}
+                                  onClick={() => {
+                                    setFilters(prev => ({ ...prev, id_usuario: '' }));
+                                    setShowUserDropdown(false);
+                                    setUserSearchText('');
+                                    setPagination(prev => ({ ...prev, currentPage: 1 }));
+                                    fetchEntradas();
+                                  }}
+                                >
+                                  <span className="text-sm" style={{ color: colors.onSurface }}>Todos los usuarios</span>
+                                </button>
+                                {filteredUsers.length > 0 ? (
+                                  filteredUsers.map((userItem, index) => (
+                                    <button
+                                      key={userItem.id_usuario}
+                                      className="w-full text-left px-3 py-3 border-b last:border-b-0"
+                                      style={{ borderColor: 'rgba(0, 0, 0, 0.05)' }}
+                                      onClick={() => {
+                                        setFilters(prev => ({ ...prev, id_usuario: userItem.id_usuario.toString() }));
+                                        setShowUserDropdown(false);
+                                        setUserSearchText('');
+                                        setPagination(prev => ({ ...prev, currentPage: 1 }));
+                                        fetchEntradas();
+                                      }}
+                                    >
+                                      <span className="text-sm" style={{ color: colors.onSurface }}>{userItem.nombre_natural}</span>
+                                    </button>
+                                  ))
+                                ) : (
+                                  <div className="px-3 py-3">
+                                    <span className="text-sm" style={{ color: colors.outline }}>No se encontraron usuarios</span>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
+                        Código de Lote
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full border rounded-lg p-3 text-sm"
+                        style={{ 
+                          backgroundColor: colors.background, 
+                          color: colors.onSurface, 
+                          borderColor: colors.outlineVariant 
+                        }}
+                        placeholder="Buscar por código de lote..."
+                        value={filters.codigo_lote}
+                        onChange={(e) => setFilters(prev => ({ ...prev, codigo_lote: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="flex gap-2 mb-4">
+                      <div className="flex-1">
+                        <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
+                          Cant.Restante Mínima
+                        </label>
+                        <input
+                          type="number"
+                          className="w-full border rounded-lg p-3 text-sm"
+                          style={{ 
+                            backgroundColor: colors.background, 
+                            color: colors.onSurface, 
+                            borderColor: colors.outlineVariant 
+                          }}
+                          placeholder="Cantidad mínima..."
+                          value={filters.cantidad_restante_min}
+                          onChange={(e) => setFilters(prev => ({ ...prev, cantidad_restante_min: e.target.value }))}
+                        />
+                      </div>
+
+                      <div className="flex-1">
+                        <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
+                          Cant.Restante Máxima
+                        </label>
+                        <input
+                          type="number"
+                          className="w-full border rounded-lg p-3 text-sm"
+                          style={{ 
+                            backgroundColor: colors.background, 
+                            color: colors.onSurface, 
+                            borderColor: colors.outlineVariant 
+                          }}
+                          placeholder="Cantidad máxima..."
+                          value={filters.cantidad_restante_max}
+                          onChange={(e) => setFilters(prev => ({ ...prev, cantidad_restante_max: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 mb-4">
+                      <div className="flex-1">
+                        <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
+                          Fecha Desde
+                        </label>
+                        <input
+                          type="date"
+                          className="w-full border rounded-lg p-3 text-sm"
+                          style={{ 
+                            backgroundColor: colors.background, 
+                            color: colors.onSurface, 
+                            borderColor: colors.outlineVariant 
+                          }}
+                          value={filters.fecha_desde}
+                          onChange={(e) => setFilters(prev => ({ ...prev, fecha_desde: e.target.value }))}
+                        />
+                      </div>
+
+                      <div className="flex-1">
+                        <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
+                          Fecha Hasta
+                        </label>
+                        <input
+                          type="date"
+                          className="w-full border rounded-lg p-3 text-sm"
+                          style={{ 
+                            backgroundColor: colors.background, 
+                            color: colors.onSurface, 
+                            borderColor: colors.outlineVariant 
+                          }}
+                          value={filters.fecha_hasta}
+                          onChange={(e) => setFilters(prev => ({ ...prev, fecha_hasta: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <div className="flex gap-3 mt-2">
+                  <button
+                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border"
                     style={{ 
-                      backgroundColor: colors.background, 
-                      color: colors.onSurface, 
+                      backgroundColor: colors.surface, 
                       borderColor: colors.outlineVariant 
                     }}
-                    placeholder="Cantidad máxima..."
-                    value={filters.cantidad_restante_max}
-                    onChange={(e) => setFilters(prev => ({ ...prev, cantidad_restante_max: e.target.value }))}
-                  />
+                    onClick={handleClearFilters}
+                  >
+                    <RefreshCw size={18} color={colors.onSurface} />
+                    <span className="text-sm font-medium" style={{ color: colors.onSurface }}>Limpiar</span>
+                  </button>
+                  <button
+                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg"
+                    style={{ 
+                      backgroundColor: colors.primary,
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    }}
+                    onClick={handleSearch}
+                    disabled={isSearching}
+                  >
+                    {isSearching ? (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    ) : (
+                      <>
+                        <Search size={18} color="#fff" />
+                        <span className="text-sm font-medium" style={{ color: '#fff' }}>Buscar</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
 
-              <div className="flex gap-2 mb-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
-                    Fecha Desde
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full border rounded-lg p-3 text-sm"
+              {/* Action Buttons */}
+              <div className="flex gap-3 mb-6">
+                {canManageEntradas && (
+                  <button
+                    className="flex-1 flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl"
                     style={{ 
-                      backgroundColor: colors.background, 
-                      color: colors.onSurface, 
-                      borderColor: colors.outlineVariant 
+                      backgroundColor: colors.primary,
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                     }}
-                    value={filters.fecha_desde}
-                    onChange={(e) => setFilters(prev => ({ ...prev, fecha_desde: e.target.value }))}
-                  />
-                </div>
-
-                <div className="flex-1">
-                  <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
-                    Fecha Hasta
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full border rounded-lg p-3 text-sm"
-                    style={{ 
-                      backgroundColor: colors.background, 
-                      color: colors.onSurface, 
-                      borderColor: colors.outlineVariant 
-                    }}
-                    value={filters.fecha_hasta}
-                    onChange={(e) => setFilters(prev => ({ ...prev, fecha_hasta: e.target.value }))}
-                  />
-                </div>
+                    onClick={handleAdd}
+                  >
+                    <Plus size={20} color="#fff" />
+                    <span className="text-sm font-medium" style={{ color: '#fff' }}>Agregar Entrada</span>
+                  </button>
+                )}
+                <button
+                  className="flex-1 flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl"
+                  style={{ 
+                    backgroundColor: colors.primary,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                  }}
+                  onClick={() => setShowExportModal(true)}
+                >
+                  <Download size={20} color="#fff" />
+                  <span className="text-sm font-medium" style={{ color: '#fff' }}>Exportar Datos</span>
+                </button>
+              </div>
               </div>
             </>
           )}
-
-          <div className="flex gap-3 mt-2">
-            <button
-              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border"
-              style={{ 
-                backgroundColor: colors.surface, 
-                borderColor: colors.outlineVariant 
-              }}
-              onClick={handleClearFilters}
-            >
-              <RefreshCw size={18} color={colors.onSurface} />
-              <span className="text-sm font-medium" style={{ color: colors.onSurface }}>Limpiar</span>
-            </button>
-            <button
-              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg"
-              style={{ 
-                backgroundColor: colors.primary,
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }}
-              onClick={handleSearch}
-              disabled={isSearching}
-            >
-              {isSearching ? (
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-              ) : (
-                <>
-                  <Search size={18} color="#fff" />
-                  <span className="text-sm font-medium" style={{ color: '#fff' }}>Buscar</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-3 mb-6">
-          {canManageEntradas && (
-            <button
-              className="flex-1 flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl"
-              style={{ 
-                backgroundColor: colors.primary,
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }}
-              onClick={handleAdd}
-            >
-              <Plus size={20} color="#fff" />
-              <span className="text-sm font-medium" style={{ color: '#fff' }}>Agregar Entrada</span>
-            </button>
-          )}
-          <button
-            className="flex-1 flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl"
-            style={{ 
-              backgroundColor: colors.primary,
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}
-            onClick={() => setShowExportModal(true)}
-          >
-            <Download size={20} color="#fff" />
-            <span className="text-sm font-medium" style={{ color: '#fff' }}>Exportar Datos</span>
-          </button>
-        </div>
-        </div>
 
         {/* Entradas List */}
         {isLoading ? (
@@ -1017,56 +1351,50 @@ export default function EntradasPage() {
                     onClick={() => handleEntradaPress(entrada)}
                   >
                     <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center" style={{ backgroundColor: colors.surfaceVariant }}>
-                          <Box size={24} style={{ color: colors.outline }} />
-                        </div>
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center mb-1">
-                            <h3 
-                              className="font-semibold text-base truncate mr-2"
-                              style={{ 
-                                color: colors.onSurface,
-                                fontFamily: 'Hanken Grotesk, sans-serif'
-                              }}
-                            >
-                              {entrada.servicioTienda?.servicio?.nombre || 'N/A'}
-                            </h3>
-                            <div 
-                              className="px-3 py-1 rounded-full text-xs font-semibold flex-shrink-0"
-                              style={{ 
-                                backgroundColor: getCantidadStatus(entrada).bgColor,
-                                color: getCantidadStatus(entrada).color,
-                                fontFamily: 'Inter, sans-serif'
-                              }}
-                            >
-                              {getCantidadStatus(entrada).label}
-                            </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center mb-1">
+                          <h3 
+                            className="font-semibold text-base truncate mr-2"
+                            style={{ 
+                              color: colors.onSurface,
+                              fontFamily: 'Hanken Grotesk, sans-serif'
+                            }}
+                          >
+                            {entrada.servicioTienda?.servicio?.nombre || 'N/A'}
+                          </h3>
+                          <div 
+                            className="px-3 py-1 rounded-full text-xs font-semibold flex-shrink-0"
+                            style={{ 
+                              backgroundColor: getCantidadStatus(entrada).bgColor,
+                              color: getCantidadStatus(entrada).color,
+                              fontFamily: 'Inter, sans-serif'
+                            }}
+                          >
+                            {getCantidadStatus(entrada).label}
                           </div>
-                          <p className="text-sm" style={{ color: colors.outline, fontFamily: 'Inter, sans-serif' }}>
-                            Código Lote: {entrada.codigo_lote}
-                          </p>
-                          <p className="text-sm" style={{ color: colors.outline, fontFamily: 'Inter, sans-serif' }}>
-                            Tienda: {entrada.servicioTienda?.tienda?.nombre || 'N/A'}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-sm font-semibold" style={{ color: colors.primary, fontFamily: 'Inter, sans-serif' }}>
-                              Inicial: {entrada.cantidad_entrada}
-                            </span>
-                            <span className="text-sm font-semibold" style={{ color: colors.primary, fontFamily: 'Inter, sans-serif' }}>
-                              | Actual: {entrada.cantidad_restante || 0}
-                            </span>
-                          </div>
-                          {canManageEntradas && (
-                            <p className="text-sm font-semibold" style={{ color: colors.primary, fontFamily: 'Inter, sans-serif' }}>
-                              Total CUP: ${(parseFloat(entrada.costo_cup) * parseFloat(entrada.cantidad_entrada)).toFixed(2)} | Total USD: ${(parseFloat(entrada.costo_usd) * parseFloat(entrada.cantidad_entrada)).toFixed(2)}
-                            </p>
-                          )}
-                          <p className="text-sm" style={{ color: colors.outline, fontFamily: 'Inter, sans-serif' }}>
-                            Fecha: {new Date(entrada.fecha).toLocaleDateString()}
-                          </p>
                         </div>
+                        <p className="text-sm" style={{ color: colors.outline, fontFamily: 'Inter, sans-serif' }}>
+                          Código Lote: {entrada.codigo_lote}
+                        </p>
+                        <p className="text-sm" style={{ color: colors.outline, fontFamily: 'Inter, sans-serif' }}>
+                          Tienda: {entrada.servicioTienda?.tienda?.nombre || 'N/A'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-sm font-semibold" style={{ color: colors.primary, fontFamily: 'Inter, sans-serif' }}>
+                            Inicial: {entrada.cantidad_entrada}
+                          </span>
+                          <span className="text-sm font-semibold" style={{ color: colors.primary, fontFamily: 'Inter, sans-serif' }}>
+                            | Actual: {entrada.cantidad_restante || 0}
+                          </span>
+                        </div>
+                        {canManageEntradas && (
+                          <p className="text-sm font-semibold" style={{ color: colors.primary, fontFamily: 'Inter, sans-serif' }}>
+                            Total CUP: ${(parseFloat(entrada.costo_cup) * parseFloat(entrada.cantidad_entrada)).toFixed(2)} | Total USD: ${(parseFloat(entrada.costo_usd) * parseFloat(entrada.cantidad_entrada)).toFixed(2)}
+                          </p>
+                        )}
+                        <p className="text-sm" style={{ color: colors.outline, fontFamily: 'Inter, sans-serif' }}>
+                          Fecha: {new Date(entrada.fecha).toLocaleDateString()}
+                        </p>
                       </div>
                       {canManageEntradas && (
                         <div className="flex gap-2 ml-3">
@@ -1293,65 +1621,126 @@ export default function EntradasPage() {
 
       {/* Field Selection Modal */}
       {showFieldSelectionModal && (
-        <div 
-          className="fixed inset-0 flex items-center justify-center z-50"
-          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
-          onClick={() => setShowFieldSelectionModal(false)}
-        >
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div 
-            className="rounded-2xl p-6 w-5/6 max-w-md shadow-lg max-h-[500px] flex flex-col"
-            style={{ 
-              backgroundColor: colors.surface,
-              boxShadow: '0 4px 16px rgba(0,0,0,0.25)'
-            }}
-            onClick={(e) => e.stopPropagation()}
+            className="rounded-2xl p-6 max-w-md w-full shadow-2xl max-h-[80vh] overflow-y-auto relative"
+            style={{ backgroundColor: colors.surface }}
           >
+            <button
+              className="absolute top-4 right-4 p-2 rounded-full hover:bg-black/5 transition-colors"
+              style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+              onClick={() => setShowFieldSelectionModal(false)}
+            >
+              <X size={24} style={{ color: colors.outline }} />
+            </button>
             <h2 
-              className="text-xl font-bold mb-5 text-center"
-              style={{ 
-                color: colors.onSurface,
-                fontFamily: 'Hanken Grotesk, sans-serif'
-              }}
+              className="text-xl font-bold mb-4"
+              style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
             >
               Seleccionar Campos
             </h2>
-            <div className="overflow-auto mb-4 max-h-[300px]">
-              {Object.keys(selectedFields).map((field) => {
-                if (!canManageEntradas && (field === 'costo_cup' || field === 'costo_usd')) {
-                  return null;
-                }
-                const fieldLabel = field === 'producto' ? 'Nombre' : field.charAt(0).toUpperCase() + field.slice(1).replace('_', ' ');
-                return (
-                  <button
-                    key={field}
-                    className="flex items-center gap-3 p-3 rounded-lg mb-2 w-full"
-                    style={{ backgroundColor: colors.surfaceVariant }}
-                    onClick={() => setSelectedFields(prev => ({ ...prev, [field]: !prev[field] }))}
-                  >
-                    <div 
-                      className="w-6 h-6 rounded border-2 flex items-center justify-center"
-                      style={{ 
-                        borderColor: colors.outlineVariant, 
-                        backgroundColor: selectedFields[field] ? colors.primary : 'transparent' 
-                      }}
-                    >
-                      {selectedFields[field] && (
-                        <div className="w-3 h-3 bg-white rounded-sm" style={{ width: 12, height: 12 }}></div>
-                      )}
-                    </div>
-                    <span className="text-base font-medium flex-1 text-left" style={{ color: colors.onSurface }}>
-                      {fieldLabel}
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="space-y-3 mb-4">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedFields.producto}
+                  onChange={(e) => setSelectedFields(prev => ({ ...prev, producto: e.target.checked }))}
+                  className="w-5 h-5"
+                />
+                <span style={{ color: colors.onSurface }}>Nombre</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedFields.tienda}
+                  onChange={(e) => setSelectedFields(prev => ({ ...prev, tienda: e.target.checked }))}
+                  className="w-5 h-5"
+                />
+                <span style={{ color: colors.onSurface }}>Tienda</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedFields.cantidad}
+                  onChange={(e) => setSelectedFields(prev => ({ ...prev, cantidad: e.target.checked }))}
+                  className="w-5 h-5"
+                />
+                <span style={{ color: colors.onSurface }}>Cantidad</span>
+              </label>
+              {canManageEntradas && (
+                <>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedFields.costo_cup}
+                      onChange={(e) => setSelectedFields(prev => ({ ...prev, costo_cup: e.target.checked }))}
+                      className="w-5 h-5"
+                    />
+                    <span style={{ color: colors.onSurface }}>Costo CUP</span>
+                  </label>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedFields.costo_usd}
+                      onChange={(e) => setSelectedFields(prev => ({ ...prev, costo_usd: e.target.checked }))}
+                      className="w-5 h-5"
+                    />
+                    <span style={{ color: colors.onSurface }}>Costo USD</span>
+                  </label>
+                </>
+              )}
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedFields.fecha}
+                  onChange={(e) => setSelectedFields(prev => ({ ...prev, fecha: e.target.checked }))}
+                  className="w-5 h-5"
+                />
+                <span style={{ color: colors.onSurface }}>Fecha</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedFields.codigo_lote}
+                  onChange={(e) => setSelectedFields(prev => ({ ...prev, codigo_lote: e.target.checked }))}
+                  className="w-5 h-5"
+                />
+                <span style={{ color: colors.onSurface }}>Código Lote</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedFields.fecha_vencimiento}
+                  onChange={(e) => setSelectedFields(prev => ({ ...prev, fecha_vencimiento: e.target.checked }))}
+                  className="w-5 h-5"
+                />
+                <span style={{ color: colors.onSurface }}>Fecha Vencimiento</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedFields.proveedor}
+                  onChange={(e) => setSelectedFields(prev => ({ ...prev, proveedor: e.target.checked }))}
+                  className="w-5 h-5"
+                />
+                <span style={{ color: colors.onSurface }}>Proveedor</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedFields.usuario}
+                  onChange={(e) => setSelectedFields(prev => ({ ...prev, usuario: e.target.checked }))}
+                  className="w-5 h-5"
+                />
+                <span style={{ color: colors.onSurface }}>Usuario</span>
+              </label>
             </div>
             <button
-              className="py-3.5 px-6 rounded-lg w-full"
-              style={{ backgroundColor: colors.primary }}
+              className="w-full rounded-lg px-4 py-3 transition-colors hover:opacity-90"
+              style={{ backgroundColor: colors.primary, color: '#fff' }}
               onClick={handleExport}
             >
-              <span className="text-base font-medium" style={{ color: '#fff' }}>Generar Exportación</span>
+              Generar Exportación
             </button>
           </div>
         </div>

@@ -25,7 +25,7 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const trimmedUsername = nombre_usuario.trim();
+    const trimmedUsername = nombre_usuario.trimEnd();
     const trimmedPassword = password.trim();
 
     if (!trimmedUsername || !trimmedPassword) {
@@ -116,6 +116,7 @@ export default function LoginPage() {
                 placeholder="tu_usuario"
                 value={nombre_usuario}
                 onChange={(e) => setNombreUsuario(e.target.value)}
+                onBlur={() => setNombreUsuario(prev => prev.trimEnd())}
                 className="flex-1 bg-transparent outline-none text-base md:text-lg"
                 style={{ color: colors.onSurface }}
               />

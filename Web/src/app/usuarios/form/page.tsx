@@ -139,7 +139,7 @@ export default function UsuarioFormPage() {
         nombre_natural: formData.nombre_natural,
         telefono: formData.telefono,
         direccion: formData.direccion,
-        nombre_usuario: formData.nombre_usuario,
+        nombre_usuario: formData.nombre_usuario.trimEnd(),
         salario_diario: parseFloat(formData.salario_diario) || 0,
         rol: formData.rol,
         activo: formData.activo,

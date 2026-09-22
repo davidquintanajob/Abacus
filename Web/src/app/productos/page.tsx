@@ -1106,229 +1106,365 @@ export default function ProductosPage() {
           marginRight: 'auto',
           marginBottom: '0',
           marginLeft: 'auto',
-          paddingTop: isMobile ? '20px' : isTablet ? '32px' : '40px',
+          paddingTop: isMobile ? '20px' : isTablet ? '32px' : '20px',
           paddingRight: isMobile ? '20px' : isTablet ? '32px' : '40px',
           paddingBottom: '120px',
           paddingLeft: isMobile ? '20px' : isTablet ? '32px' : '40px',
           maxWidth: isDesktop ? '1400px' : '100%',
         }}>
-          {/* Page Title */}
-          <div className="text-center mb-6 mt-4">
-            <h1 
-              className="text-2xl md:text-3xl font-bold"
-              style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
-            >
-              Gestión de Productos
-            </h1>
-          </div>
-
-          {/* Filter Section - Wrapped to maintain compact width */}
-          <div style={{ maxWidth: '56rem', margin: '0 auto' }}>
-          <div 
-            className="rounded-2xl p-5 mb-6 shadow-lg"
-            style={{ backgroundColor: colors.surface }}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h2 
-                className="text-lg font-bold"
-                style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
-              >
-                Filtros
-              </h2>
-              <button
-                className="w-10 h-10 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
-                style={{ 
-                  backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
-                  borderColor: colors.primary 
-                }}
-                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              >
-                {showAdvancedFilters ? (
-                  <ChevronUp size={24} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />
-                ) : (
-                  <ChevronDown size={24} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />
-                )}
-              </button>
-            </div>
-
-            <div className="mb-4">
-              <label 
-                className="block text-sm font-medium mb-2"
-                style={{ color: colors.outline }}
-              >
-                Nombre
-              </label>
-              <input
-                type="text"
-                className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2"
-                style={{ 
-                  backgroundColor: colors.background, 
-                  color: colors.onSurface, 
-                  borderColor: colors.outlineVariant,
-                  fontFamily: 'Inter, sans-serif'
-                }}
-                placeholder="Buscar por nombre..."
-                value={filters.nombre}
-                onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
-              />
-            </div>
-
-            <div className="mb-4">
-              <div className="flex justify-between items-center mb-2">
-                <label 
-                  className="block text-sm font-medium"
-                  style={{ color: colors.outline }}
+          {/* Desktop Layout */}
+          {isDesktop ? (
+            <>
+              {/* Page Title - Top Left */}
+              <div className="mb-4">
+                <h1 
+                  className="text-2xl font-bold"
+                  style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
                 >
-                  Tienda
-                </label>
-                <button
-                  onClick={() => setShowTiendaInfoModal(true)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                >
-                  <AlertCircle size={18} style={{ color: colors.primary }} />
-                </button>
+                  Gestión de Productos
+                </h1>
               </div>
-              <button
-                className="w-full rounded-lg px-4 py-3 border flex justify-between items-center"
-                style={{ 
-                  backgroundColor: colors.background, 
-                  color: filters.id_tienda ? colors.onSurface : colors.outline,
-                  borderColor: colors.outlineVariant,
-                  fontFamily: 'Inter, sans-serif'
-                }}
-                onClick={() => {
-                  if (canViewAllStores) {
-                    setShowTiendaDropdown(!showTiendaDropdown);
-                    if (!hasLoadedAllTiendas && !isLoadingTiendas) {
-                      fetchTiendas();
-                    }
-                  }
-                }}
-              >
-                <span>
-                  {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda))?.nombre || 'Todas las tiendas'}
-                </span>
-                {showTiendaDropdown ? (
-                  <ChevronUp size={20} style={{ color: colors.outline }} />
-                ) : (
-                  <ChevronDown size={20} style={{ color: colors.outline }} />
-                )}
-              </button>
-              
-              {showTiendaDropdown && (
-                <div 
-                  className="mt-2 rounded-lg border overflow-hidden"
-                  style={{ 
-                    backgroundColor: colors.surface, 
-                    borderColor: colors.outlineVariant,
-                    maxHeight: '200px',
-                    overflowY: 'auto'
-                  }}
-                >
-                  {isLoadingTiendas ? (
-                    <div className="flex items-center justify-center py-4 gap-2">
-                      <div className="w-5 h-5 border-2 border-t-2 rounded-full animate-spin" style={{ borderColor: colors.primary, borderTopColor: 'transparent' }} />
-                      <span style={{ color: colors.outline, fontSize: '14px' }}>Cargando tiendas...</span>
-                    </div>
-                  ) : (
-                    <>
-                      <input
-                        type="text"
-                        className="w-full px-4 py-2 border-b"
-                        style={{ 
-                          backgroundColor: colors.background, 
-                          color: colors.onSurface, 
-                          borderColor: colors.outlineVariant,
-                          fontFamily: 'Inter, sans-serif'
-                        }}
-                        placeholder="Buscar tienda..."
-                        value={tiendaSearchText}
-                        onChange={(e) => setTiendaSearchText(e.target.value)}
-                      />
-                      {canViewAllStores && (
-                        <button
-                          className="w-full px-4 py-3 text-left border-b hover:bg-black/5 transition-colors"
-                          style={{ 
-                            color: colors.onSurface,
-                            borderColor: 'rgba(0,0,0,0.05)',
-                            fontFamily: 'Inter, sans-serif'
-                          }}
-                          onClick={() => {
-                            setFilters(prev => ({ ...prev, id_tienda: '' }));
-                            setShowTiendaDropdown(false);
-                            setTiendaSearchText('');
-                            setPagination(prev => ({ ...prev, currentPage: 1 }));
-                            fetchProductos(null);
-                          }}
-                        >
-                          Todas las tiendas
-                        </button>
-                      )}
-                      {tiendas
-                        .filter(t => t.nombre.toLowerCase().includes(tiendaSearchText.toLowerCase()))
-                        .map((tienda) => (
-                          <button
-                            key={tienda.id_tienda}
-                            className="w-full px-4 py-3 text-left hover:bg-black/5 transition-colors"
-                            style={{ 
-                              color: colors.onSurface,
-                              fontFamily: 'Inter, sans-serif'
-                            }}
-                            onClick={() => {
-                              const newIdTienda = tienda.id_tienda.toString();
-                              setFilters(prev => ({ ...prev, id_tienda: newIdTienda }));
-                              setShowTiendaDropdown(false);
-                              setTiendaSearchText('');
-                              setPagination(prev => ({ ...prev, currentPage: 1 }));
-                              fetchProductos(newIdTienda);
-                            }}
-                          >
-                            {tienda.nombre}
-                          </button>
-                        ))}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
 
-            {showAdvancedFilters && (
-              <>
-                <div className="mb-4">
-                  <label 
-                    className="block text-sm font-medium mb-2"
-                    style={{ color: colors.outline }}
-                  >
-                    Código
-                  </label>
-                  <div className="flex gap-2">
+              {/* Filter Section - Horizontal */}
+              <div 
+                className="rounded-2xl p-4 mb-4 shadow-lg"
+                style={{ backgroundColor: colors.surface }}
+              >
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Nombre */}
+                  <div className="flex-1 min-w-[150px]">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Nombre
+                    </label>
                     <input
                       type="text"
-                      className="flex-1 rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
                       style={{ 
                         backgroundColor: colors.background, 
                         color: colors.onSurface, 
                         borderColor: colors.outlineVariant,
                         fontFamily: 'Inter, sans-serif'
                       }}
-                      placeholder="Buscar por código de barras..."
-                      value={filters.codigo}
-                      onChange={(e) => setFilters(prev => ({ ...prev, codigo: e.target.value }))}
+                      placeholder="Buscar por nombre..."
+                      value={filters.nombre}
+                      onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
                     />
-                    <button
-                      className="w-12 h-12 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                  </div>
+
+                  {/* Código */}
+                  <div className="flex-1 min-w-[150px]">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Código
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className="flex-1 rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                        style={{ 
+                          backgroundColor: colors.background, 
+                          color: colors.onSurface, 
+                          borderColor: colors.outlineVariant,
+                          fontFamily: 'Inter, sans-serif'
+                        }}
+                        placeholder="Código..."
+                        value={filters.codigo}
+                        onChange={(e) => setFilters(prev => ({ ...prev, codigo: e.target.value }))}
+                      />
+                      <button
+                        className="w-10 h-10 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                        style={{ 
+                          backgroundColor: colors.surface,
+                          borderColor: colors.primary
+                        }}
+                        onClick={() => {
+                          showToast({ type: 'warning', message: 'Escáner de código de barras próximamente disponible en web' });
+                        }}
+                      >
+                        <Search size={18} style={{ color: colors.primary }} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Categoría */}
+                  <div className="flex-1 min-w-[150px]">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Categoría
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
                       style={{ 
-                        backgroundColor: colors.surface,
-                        borderColor: colors.primary
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Categoría..."
+                      value={filters.categoria}
+                      onChange={(e) => setFilters(prev => ({ ...prev, categoria: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Tienda */}
+                  <div className="flex-1 min-w-[150px] relative">
+                    <div className="flex justify-between items-center mb-2">
+                      <label 
+                        className="block text-sm font-medium"
+                        style={{ color: colors.outline }}
+                      >
+                        Tienda
+                      </label>
+                      <button
+                        onClick={() => setShowTiendaInfoModal(true)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                      >
+                        <AlertCircle size={16} style={{ color: colors.primary }} />
+                      </button>
+                    </div>
+                    <button
+                      className="w-full rounded-lg px-3 py-2 border flex justify-between items-center"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: filters.id_tienda ? colors.onSurface : colors.outline,
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
                       }}
                       onClick={() => {
-                        // Barcode scanner - for web we'll use a placeholder
-                        showToast({ type: 'warning', message: 'Escáner de código de barras próximamente disponible en web' });
+                        if (canViewAllStores) {
+                          setShowTiendaDropdown(!showTiendaDropdown);
+                          if (!hasLoadedAllTiendas && !isLoadingTiendas) {
+                            fetchTiendas();
+                          }
+                        }
                       }}
                     >
-                      <Search size={20} style={{ color: colors.primary }} />
+                      <span className="truncate">
+                        {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda))?.nombre || 'Todas'}
+                      </span>
+                      {showTiendaDropdown ? (
+                        <ChevronUp size={16} style={{ color: colors.outline }} />
+                      ) : (
+                        <ChevronDown size={16} style={{ color: colors.outline }} />
+                      )}
                     </button>
+                    
+                    {showTiendaDropdown && (
+                      <div 
+                        className="absolute z-10 w-full mt-1 rounded-lg border overflow-hidden max-h-60 overflow-y-auto"
+                        style={{ 
+                          backgroundColor: colors.surface, 
+                          borderColor: colors.outlineVariant
+                        }}
+                      >
+                        {isLoadingTiendas ? (
+                          <div className="flex items-center justify-center py-4 gap-2">
+                            <div className="w-5 h-5 border-2 border-t-2 rounded-full animate-spin" style={{ borderColor: colors.primary, borderTopColor: 'transparent' }} />
+                            <span style={{ color: colors.outline, fontSize: '14px' }}>Cargando...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <input
+                              type="text"
+                              className="w-full px-3 py-2 border-b"
+                              style={{ 
+                                backgroundColor: colors.background, 
+                                color: colors.onSurface, 
+                                borderColor: colors.outlineVariant,
+                                fontFamily: 'Inter, sans-serif'
+                              }}
+                              placeholder="Buscar tienda..."
+                              value={tiendaSearchText}
+                              onChange={(e) => setTiendaSearchText(e.target.value)}
+                            />
+                            {canViewAllStores && (
+                              <button
+                                className="w-full px-3 py-2 text-left border-b hover:bg-black/5 transition-colors"
+                                style={{ 
+                                  color: colors.onSurface,
+                                  borderColor: 'rgba(0,0,0,0.05)',
+                                  fontFamily: 'Inter, sans-serif'
+                                }}
+                                onClick={() => {
+                                  setFilters(prev => ({ ...prev, id_tienda: '' }));
+                                  setShowTiendaDropdown(false);
+                                  setTiendaSearchText('');
+                                  setPagination(prev => ({ ...prev, currentPage: 1 }));
+                                  fetchProductos(null);
+                                }}
+                              >
+                                Todas
+                              </button>
+                            )}
+                            {tiendas
+                              .filter(t => t.nombre.toLowerCase().includes(tiendaSearchText.toLowerCase()))
+                              .map((tienda) => (
+                                <button
+                                  key={tienda.id_tienda}
+                                  className="w-full px-3 py-2 text-left hover:bg-black/5 transition-colors"
+                                  style={{ 
+                                    color: colors.onSurface,
+                                    fontFamily: 'Inter, sans-serif'
+                                  }}
+                                  onClick={() => {
+                                    const newIdTienda = tienda.id_tienda.toString();
+                                    setFilters(prev => ({ ...prev, id_tienda: newIdTienda }));
+                                    setShowTiendaDropdown(false);
+                                    setTiendaSearchText('');
+                                    setPagination(prev => ({ ...prev, currentPage: 1 }));
+                                    fetchProductos(newIdTienda);
+                                  }}
+                                >
+                                  {tienda.nombre}
+                                </button>
+                              ))}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Estado */}
+                  <div className="flex-1 min-w-[150px]">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Estado
+                    </label>
+                    <div className="flex gap-1">
+                      <button
+                        className="flex-1 rounded-lg px-2 py-2 transition-colors font-medium text-sm"
+                        style={{ 
+                          backgroundColor: filters.esvendible === '' ? '#9E9E9E' : '#E0E0E0',
+                          color: filters.esvendible === '' ? '#fff' : '#9E9E9E'
+                        }}
+                        onClick={() => setFilters(prev => ({ ...prev, esvendible: '' }))}
+                      >
+                        Todos
+                      </button>
+                      <button
+                        className="flex-1 rounded-lg px-2 py-2 transition-colors font-medium text-sm"
+                        style={{ 
+                          backgroundColor: filters.esvendible === 'true' ? '#4CAF50' : '#E0E0E0',
+                          color: filters.esvendible === 'true' ? '#fff' : '#9E9E9E'
+                        }}
+                        onClick={() => setFilters(prev => ({ ...prev, esvendible: 'true' }))}
+                      >
+                        Vendible
+                      </button>
+                      <button
+                        className="flex-1 rounded-lg px-2 py-2 transition-colors font-medium text-sm"
+                        style={{ 
+                          backgroundColor: filters.esvendible === 'false' ? '#F44336' : '#E0E0E0',
+                          color: filters.esvendible === 'false' ? '#fff' : '#9E9E9E'
+                        }}
+                        onClick={() => setFilters(prev => ({ ...prev, esvendible: 'false' }))}
+                      >
+                        No vendible
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons - Outside filter card, smaller, side by side */}
+              <div className="flex gap-3 mb-4">
+                <button
+                  className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 border-2 transition-colors hover:opacity-80"
+                  style={{ 
+                    backgroundColor: colors.surface, 
+                    borderColor: colors.outlineVariant,
+                    color: colors.onSurface
+                  }}
+                  onClick={handleClearFilters}
+                >
+                  <RefreshCw size={16} />
+                  <span>Limpiar</span>
+                </button>
+                <button
+                  className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 transition-colors hover:opacity-80 disabled:opacity-50"
+                  style={{ backgroundColor: colors.primary, color: '#fff' }}
+                  onClick={handleSearch}
+                  disabled={isSearching}
+                >
+                  {isSearching ? (
+                    <div className="w-4 h-4 border-2 border-t-2 rounded-full animate-spin" style={{ borderColor: '#fff', borderTopColor: 'transparent' }} />
+                  ) : (
+                    <>
+                      <Search size={16} />
+                      <span>Buscar</span>
+                    </>
+                  )}
+                </button>
+                {isAdmin && (
+                  <button
+                    className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
+                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                    onClick={handleAdd}
+                  >
+                    <Plus size={16} />
+                    <span>Agregar Producto</span>
+                  </button>
+                )}
+                <button
+                  className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
+                  style={{ backgroundColor: colors.primary, color: '#fff' }}
+                  onClick={() => setShowExportModal(true)}
+                >
+                  <Download size={16} />
+                  <span>Exportar Datos</span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Mobile/Tablet Layout - Original */}
+              {/* Page Title */}
+              <div className="text-center mb-6 mt-4">
+                <h1 
+                  className="text-2xl md:text-3xl font-bold"
+                  style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                >
+                  Gestión de Productos
+                </h1>
+              </div>
+
+              {/* Filter Section - Wrapped to maintain compact width */}
+              <div style={{ maxWidth: '56rem', margin: '0 auto' }}>
+              <div 
+                className="rounded-2xl p-5 mb-6 shadow-lg"
+                style={{ backgroundColor: colors.surface }}
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <h2 
+                    className="text-lg font-bold"
+                    style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                  >
+                    Filtros
+                  </h2>
+                  <button
+                    className="w-10 h-10 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                    style={{ 
+                      backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                      borderColor: colors.primary 
+                    }}
+                    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  >
+                    {showAdvancedFilters ? (
+                      <ChevronUp size={24} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />
+                    ) : (
+                      <ChevronDown size={24} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />
+                    )}
+                  </button>
                 </div>
 
                 <div className="mb-4">
@@ -1336,7 +1472,7 @@ export default function ProductosPage() {
                     className="block text-sm font-medium mb-2"
                     style={{ color: colors.outline }}
                   >
-                    Categoría
+                    Nombre
                   </label>
                   <input
                     type="text"
@@ -1347,151 +1483,333 @@ export default function ProductosPage() {
                       borderColor: colors.outlineVariant,
                       fontFamily: 'Inter, sans-serif'
                     }}
-                    placeholder="Buscar por categoría..."
-                    value={filters.categoria}
-                    onChange={(e) => setFilters(prev => ({ ...prev, categoria: e.target.value }))}
+                    placeholder="Buscar por nombre..."
+                    value={filters.nombre}
+                    onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
                   />
                 </div>
 
                 <div className="mb-4">
-                  <label 
-                    className="block text-sm font-medium mb-2"
-                    style={{ color: colors.outline }}
+                  <div className="flex justify-between items-center mb-2">
+                    <label 
+                      className="block text-sm font-medium"
+                      style={{ color: colors.outline }}
+                    >
+                      Tienda
+                    </label>
+                    <button
+                      onClick={() => setShowTiendaInfoModal(true)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                    >
+                      <AlertCircle size={18} style={{ color: colors.primary }} />
+                    </button>
+                  </div>
+                  <button
+                    className="w-full rounded-lg px-4 py-3 border flex justify-between items-center"
+                    style={{ 
+                      backgroundColor: colors.background, 
+                      color: filters.id_tienda ? colors.onSurface : colors.outline,
+                      borderColor: colors.outlineVariant,
+                      fontFamily: 'Inter, sans-serif'
+                    }}
+                    onClick={() => {
+                      if (canViewAllStores) {
+                        setShowTiendaDropdown(!showTiendaDropdown);
+                        if (!hasLoadedAllTiendas && !isLoadingTiendas) {
+                          fetchTiendas();
+                        }
+                      }
+                    }}
                   >
-                    Estado
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
+                    <span>
+                      {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda))?.nombre || 'Todas las tiendas'}
+                    </span>
+                    {showTiendaDropdown ? (
+                      <ChevronUp size={20} style={{ color: colors.outline }} />
+                    ) : (
+                      <ChevronDown size={20} style={{ color: colors.outline }} />
+                    )}
+                  </button>
+                  
+                  {showTiendaDropdown && (
+                    <div 
+                      className="mt-2 rounded-lg border overflow-hidden"
                       style={{ 
-                        backgroundColor: filters.esvendible === '' ? '#9E9E9E' : '#E0E0E0',
-                        color: filters.esvendible === '' ? '#fff' : '#9E9E9E'
+                        backgroundColor: colors.surface, 
+                        borderColor: colors.outlineVariant,
+                        maxHeight: '200px',
+                        overflowY: 'auto'
                       }}
-                      onClick={() => setFilters(prev => ({ ...prev, esvendible: '' }))}
                     >
-                      Todos
-                    </button>
-                    <button
-                      className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
-                      style={{ 
-                        backgroundColor: filters.esvendible === 'true' ? '#4CAF50' : '#E0E0E0',
-                        color: filters.esvendible === 'true' ? '#fff' : '#9E9E9E'
-                      }}
-                      onClick={() => setFilters(prev => ({ ...prev, esvendible: 'true' }))}
-                    >
-                      Vendible
-                    </button>
-                    <button
-                      className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
-                      style={{ 
-                        backgroundColor: filters.esvendible === 'false' ? '#F44336' : '#E0E0E0',
-                        color: filters.esvendible === 'false' ? '#fff' : '#9E9E9E'
-                      }}
-                      onClick={() => setFilters(prev => ({ ...prev, esvendible: 'false' }))}
-                    >
-                      No vendible
-                    </button>
-                  </div>
+                      {isLoadingTiendas ? (
+                        <div className="flex items-center justify-center py-4 gap-2">
+                          <div className="w-5 h-5 border-2 border-t-2 rounded-full animate-spin" style={{ borderColor: colors.primary, borderTopColor: 'transparent' }} />
+                          <span style={{ color: colors.outline, fontSize: '14px' }}>Cargando tiendas...</span>
+                        </div>
+                      ) : (
+                        <>
+                          <input
+                            type="text"
+                            className="w-full px-4 py-2 border-b"
+                            style={{ 
+                              backgroundColor: colors.background, 
+                              color: colors.onSurface, 
+                              borderColor: colors.outlineVariant,
+                              fontFamily: 'Inter, sans-serif'
+                            }}
+                            placeholder="Buscar tienda..."
+                            value={tiendaSearchText}
+                            onChange={(e) => setTiendaSearchText(e.target.value)}
+                          />
+                          {canViewAllStores && (
+                            <button
+                              className="w-full px-4 py-3 text-left border-b hover:bg-black/5 transition-colors"
+                              style={{ 
+                                color: colors.onSurface,
+                                borderColor: 'rgba(0,0,0,0.05)',
+                                fontFamily: 'Inter, sans-serif'
+                              }}
+                              onClick={() => {
+                                setFilters(prev => ({ ...prev, id_tienda: '' }));
+                                setShowTiendaDropdown(false);
+                                setTiendaSearchText('');
+                                setPagination(prev => ({ ...prev, currentPage: 1 }));
+                                fetchProductos(null);
+                              }}
+                            >
+                              Todas las tiendas
+                            </button>
+                          )}
+                          {tiendas
+                            .filter(t => t.nombre.toLowerCase().includes(tiendaSearchText.toLowerCase()))
+                            .map((tienda) => (
+                              <button
+                                key={tienda.id_tienda}
+                                className="w-full px-4 py-3 text-left hover:bg-black/5 transition-colors"
+                                style={{ 
+                                  color: colors.onSurface,
+                                  fontFamily: 'Inter, sans-serif'
+                                }}
+                                onClick={() => {
+                                  const newIdTienda = tienda.id_tienda.toString();
+                                  setFilters(prev => ({ ...prev, id_tienda: newIdTienda }));
+                                  setShowTiendaDropdown(false);
+                                  setTiendaSearchText('');
+                                  setPagination(prev => ({ ...prev, currentPage: 1 }));
+                                  fetchProductos(newIdTienda);
+                                }}
+                              >
+                                {tienda.nombre}
+                              </button>
+                            ))}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div>
-                    <label 
-                      className="block text-sm font-medium mb-2"
-                      style={{ color: colors.outline }}
-                    >
-                      Cantidad Mín
-                    </label>
-                    <input
-                      type="number"
-                      className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
-                      style={{ 
-                        backgroundColor: colors.background, 
-                        color: colors.onSurface, 
-                        borderColor: colors.outlineVariant
-                      }}
-                      placeholder="0"
-                      value={filters.cantidad_min}
-                      onChange={(e) => setFilters(prev => ({ ...prev, cantidad_min: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label 
-                      className="block text-sm font-medium mb-2"
-                      style={{ color: colors.outline }}
-                    >
-                      Cantidad Máx
-                    </label>
-                    <input
-                      type="number"
-                      className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
-                      style={{ 
-                        backgroundColor: colors.background, 
-                        color: colors.onSurface, 
-                        borderColor: colors.outlineVariant
-                      }}
-                      placeholder="0"
-                      value={filters.cantidad_max}
-                      onChange={(e) => setFilters(prev => ({ ...prev, cantidad_max: e.target.value }))}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                className="flex-1 rounded-lg px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 border-2 transition-colors hover:opacity-80"
-                style={{ 
-                  backgroundColor: colors.surface, 
-                  borderColor: colors.outlineVariant,
-                  color: colors.onSurface
-                }}
-                onClick={handleClearFilters}
-              >
-                <RefreshCw size={18} />
-                <span>Limpiar</span>
-              </button>
-              <button
-                className="flex-1 rounded-lg px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-80 disabled:opacity-50"
-                style={{ backgroundColor: colors.primary, color: '#fff' }}
-                onClick={handleSearch}
-                disabled={isSearching}
-              >
-                {isSearching ? (
-                  <div className="w-5 h-5 border-2 border-t-2 rounded-full animate-spin" style={{ borderColor: '#fff', borderTopColor: 'transparent' }} />
-                ) : (
+                {showAdvancedFilters && (
                   <>
-                    <Search size={18} />
-                    <span>Buscar</span>
+                    <div className="mb-4">
+                      <label 
+                        className="block text-sm font-medium mb-2"
+                        style={{ color: colors.outline }}
+                      >
+                        Código
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          className="flex-1 rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
+                          style={{ 
+                            backgroundColor: colors.background, 
+                            color: colors.onSurface, 
+                            borderColor: colors.outlineVariant,
+                            fontFamily: 'Inter, sans-serif'
+                          }}
+                          placeholder="Buscar por código de barras..."
+                          value={filters.codigo}
+                          onChange={(e) => setFilters(prev => ({ ...prev, codigo: e.target.value }))}
+                        />
+                        <button
+                          className="w-12 h-12 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                          style={{ 
+                            backgroundColor: colors.surface,
+                            borderColor: colors.primary
+                          }}
+                          onClick={() => {
+                            // Barcode scanner - for web we'll use a placeholder
+                            showToast({ type: 'warning', message: 'Escáner de código de barras próximamente disponible en web' });
+                          }}
+                        >
+                          <Search size={20} style={{ color: colors.primary }} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mb-4">
+                      <label 
+                        className="block text-sm font-medium mb-2"
+                        style={{ color: colors.outline }}
+                      >
+                        Categoría
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2"
+                        style={{ 
+                          backgroundColor: colors.background, 
+                          color: colors.onSurface, 
+                          borderColor: colors.outlineVariant,
+                          fontFamily: 'Inter, sans-serif'
+                        }}
+                        placeholder="Buscar por categoría..."
+                        value={filters.categoria}
+                        onChange={(e) => setFilters(prev => ({ ...prev, categoria: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="mb-4">
+                      <label 
+                        className="block text-sm font-medium mb-2"
+                        style={{ color: colors.outline }}
+                      >
+                        Estado
+                      </label>
+                      <div className="flex gap-2">
+                        <button
+                          className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
+                          style={{ 
+                            backgroundColor: filters.esvendible === '' ? '#9E9E9E' : '#E0E0E0',
+                            color: filters.esvendible === '' ? '#fff' : '#9E9E9E'
+                          }}
+                          onClick={() => setFilters(prev => ({ ...prev, esvendible: '' }))}
+                        >
+                          Todos
+                        </button>
+                        <button
+                          className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
+                          style={{ 
+                            backgroundColor: filters.esvendible === 'true' ? '#4CAF50' : '#E0E0E0',
+                            color: filters.esvendible === 'true' ? '#fff' : '#9E9E9E'
+                          }}
+                          onClick={() => setFilters(prev => ({ ...prev, esvendible: 'true' }))}
+                        >
+                          Vendible
+                        </button>
+                        <button
+                          className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
+                          style={{ 
+                            backgroundColor: filters.esvendible === 'false' ? '#F44336' : '#E0E0E0',
+                            color: filters.esvendible === 'false' ? '#fff' : '#9E9E9E'
+                          }}
+                          onClick={() => setFilters(prev => ({ ...prev, esvendible: 'false' }))}
+                        >
+                          No vendible
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                      <div>
+                        <label 
+                          className="block text-sm font-medium mb-2"
+                          style={{ color: colors.outline }}
+                        >
+                          Cantidad Mín
+                        </label>
+                        <input
+                          type="number"
+                          className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
+                          style={{ 
+                            backgroundColor: colors.background, 
+                            color: colors.onSurface, 
+                            borderColor: colors.outlineVariant
+                          }}
+                          placeholder="0"
+                          value={filters.cantidad_min}
+                          onChange={(e) => setFilters(prev => ({ ...prev, cantidad_min: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label 
+                          className="block text-sm font-medium mb-2"
+                          style={{ color: colors.outline }}
+                        >
+                          Cantidad Máx
+                        </label>
+                        <input
+                          type="number"
+                          className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
+                          style={{ 
+                            backgroundColor: colors.background, 
+                            color: colors.onSurface, 
+                            borderColor: colors.outlineVariant
+                          }}
+                          placeholder="0"
+                          value={filters.cantidad_max}
+                          onChange={(e) => setFilters(prev => ({ ...prev, cantidad_max: e.target.value }))}
+                        />
+                      </div>
+                    </div>
                   </>
                 )}
-              </button>
-            </div>
-          </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-3 mb-6">
-            {isAdmin && (
-              <button
-                className="flex-1 rounded-xl px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
-                style={{ backgroundColor: colors.primary, color: '#fff' }}
-                onClick={handleAdd}
-              >
-                <Plus size={20} />
-                <span className="font-medium">Agregar Producto</span>
-              </button>
-            )}
-            <button
-              className="flex-1 rounded-xl px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
-              style={{ backgroundColor: colors.primary, color: '#fff' }}
-              onClick={() => setShowExportModal(true)}
-            >
-              <Download size={20} />
-              <span className="font-medium">Exportar Datos</span>
-            </button>
-          </div>
-          </div>
+                <div className="flex gap-3">
+                  <button
+                    className="flex-1 rounded-lg px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 border-2 transition-colors hover:opacity-80"
+                    style={{ 
+                      backgroundColor: colors.surface, 
+                      borderColor: colors.outlineVariant,
+                      color: colors.onSurface
+                    }}
+                    onClick={handleClearFilters}
+                  >
+                    <RefreshCw size={18} />
+                    <span>Limpiar</span>
+                  </button>
+                  <button
+                    className="flex-1 rounded-lg px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-80 disabled:opacity-50"
+                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                    onClick={handleSearch}
+                    disabled={isSearching}
+                  >
+                    {isSearching ? (
+                      <div className="w-5 h-5 border-2 border-t-2 rounded-full animate-spin" style={{ borderColor: '#fff', borderTopColor: 'transparent' }} />
+                    ) : (
+                      <>
+                        <Search size={18} />
+                        <span>Buscar</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 mb-6">
+                {isAdmin && (
+                  <button
+                    className="flex-1 rounded-xl px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
+                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                    onClick={handleAdd}
+                  >
+                    <Plus size={20} />
+                    <span className="font-medium">Agregar Producto</span>
+                  </button>
+                )}
+                <button
+                  className="flex-1 rounded-xl px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
+                  style={{ backgroundColor: colors.primary, color: '#fff' }}
+                  onClick={() => setShowExportModal(true)}
+                >
+                  <Download size={20} />
+                  <span className="font-medium">Exportar Datos</span>
+                </button>
+              </div>
+              </div>
+            </>
+          )}
 
           {/* Productos List */}
           {isLoading ? (

@@ -231,310 +231,556 @@ export default function ServiciosPage() {
             marginRight: 'auto',
             marginBottom: '0',
             marginLeft: 'auto',
-            paddingTop: isMobile ? '20px' : isTablet ? '32px' : '40px',
+            paddingTop: isMobile ? '20px' : isTablet ? '32px' : '20px',
             paddingRight: isMobile ? '20px' : isTablet ? '32px' : '40px',
             paddingBottom: '120px',
             paddingLeft: isMobile ? '20px' : isTablet ? '32px' : '40px',
             maxWidth: isDesktop ? '1400px' : '100%',
           }}
         >
-          {/* Page Title */}
-          <div className="text-center mb-6 mt-4">
-            <h1 
-              className="text-2xl md:text-3xl font-bold"
-              style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
-            >
-              Gestión de Servicios
-            </h1>
-          </div>
-
-          {/* Filter Section - Wrapped to maintain compact width */}
-          <div style={{ maxWidth: '56rem', margin: '0 auto' }}>
-          <div 
-            className="rounded-2xl p-5 mb-6 shadow-lg"
-            style={{ 
-              backgroundColor: colors.surface,
-              padding: isMobile ? '16px' : '20px'
-            }}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h2 
-                className="text-lg font-bold"
-                style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
-              >
-                Filtros
-              </h2>
-              <button
-                className="w-10 h-10 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
-                style={{ 
-                  backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
-                  borderColor: colors.primary 
-                }}
-                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              >
-                {showAdvancedFilters ? (
-                  <ChevronUp size={24} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />
-                ) : (
-                  <ChevronDown size={24} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />
-                )}
-              </button>
-            </div>
-
-            <div className="mb-4">
-              <label 
-                className="block text-sm font-medium mb-2"
-                style={{ color: colors.outline }}
-              >
-                Nombre
-              </label>
-              <input
-                type="text"
-                className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2"
-                style={{ 
-                  backgroundColor: colors.background, 
-                  color: colors.onSurface, 
-                  borderColor: colors.outlineVariant,
-                  fontFamily: 'Inter, sans-serif',
-                  fontSize: isMobile ? '14px' : '16px',
-                  padding: isMobile ? '12px' : '16px'
-                }}
-                placeholder="Buscar por nombre..."
-                value={filters.nombre}
-                onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
-              />
-            </div>
-
-            <div className="mb-4">
-              <label 
-                className="block text-sm font-medium mb-2"
-                style={{ color: colors.outline }}
-              >
-                Tienda
-              </label>
-              <div className="relative">
-                <button
-                  className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2 flex justify-between items-center"
-                  style={{ 
-                    backgroundColor: colors.background, 
-                    color: colors.onSurface, 
-                    borderColor: colors.outlineVariant,
-                    fontFamily: 'Inter, sans-serif',
-                    fontSize: isMobile ? '14px' : '16px',
-                    padding: isMobile ? '12px' : '16px'
-                  }}
-                  onClick={() => setShowTiendaDropdown(!showTiendaDropdown)}
+          {/* Desktop Layout */}
+          {isDesktop ? (
+            <>
+              {/* Page Title - Top Left */}
+              <div className="mb-4">
+                <h1 
+                  className="text-2xl font-bold"
+                  style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
                 >
-                  <span>
-                    {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda))?.nombre || 'Todas las tiendas'}
-                  </span>
-                  {showTiendaDropdown ? (
-                    <ChevronUp size={20} style={{ color: colors.outline }} />
+                  Gestión de Servicios
+                </h1>
+              </div>
+
+              {/* Filter Section - Horizontal */}
+              <div 
+                className="rounded-2xl p-4 mb-4 shadow-lg"
+                style={{ backgroundColor: colors.surface }}
+              >
+                <div className="flex items-center gap-3">
+                  {/* Nombre */}
+                  <div className="flex-1">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Nombre
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Buscar por nombre..."
+                      value={filters.nombre}
+                      onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Código */}
+                  <div className="flex-1">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Código
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Buscar por código..."
+                      value={filters.codigo}
+                      onChange={(e) => setFilters(prev => ({ ...prev, codigo: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Categoría */}
+                  <div className="flex-1">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Categoría
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Buscar por categoría..."
+                      value={filters.categoria}
+                      onChange={(e) => setFilters(prev => ({ ...prev, categoria: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Tienda */}
+                  <div className="flex-1 relative">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Tienda
+                    </label>
+                    <button
+                      className="w-full rounded-lg px-3 py-2 border flex justify-between items-center"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        borderColor: colors.outlineVariant 
+                      }}
+                      onClick={() => setShowTiendaDropdown(!showTiendaDropdown)}
+                    >
+                      <span style={{ color: filters.id_tienda ? colors.onSurface : colors.outline }}>
+                        {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda))?.nombre || 'Todas'}
+                      </span>
+                      {showTiendaDropdown ? (
+                        <ChevronUp size={18} style={{ color: colors.outline }} />
+                      ) : (
+                        <ChevronDown size={18} style={{ color: colors.outline }} />
+                      )}
+                    </button>
+                    
+                    {showTiendaDropdown && (
+                      <div 
+                        className="absolute z-10 w-full mt-1 rounded-lg border overflow-hidden max-h-60 overflow-y-auto"
+                        style={{ backgroundColor: colors.surface, borderColor: colors.outlineVariant }}
+                      >
+                        <button
+                          className="w-full px-3 py-2 text-left hover:bg-black/5"
+                          style={{ color: colors.onSurface }}
+                          onClick={() => {
+                            setFilters(prev => ({ ...prev, id_tienda: '' }));
+                            setShowTiendaDropdown(false);
+                          }}
+                        >
+                          Todas
+                        </button>
+                        {tiendas.map((tienda) => (
+                          <button
+                            key={tienda.id_tienda}
+                            className="w-full px-3 py-2 text-left hover:bg-black/5"
+                            style={{ color: colors.onSurface }}
+                            onClick={() => {
+                              setFilters(prev => ({ ...prev, id_tienda: tienda.id_tienda.toString() }));
+                              setShowTiendaDropdown(false);
+                            }}
+                          >
+                            {tienda.nombre}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Estado */}
+                  <div className="flex-1">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Estado
+                    </label>
+                    <div className="flex gap-1">
+                      <button
+                        className="flex-1 rounded-lg px-2 py-2 transition-colors font-medium text-sm"
+                        style={{ 
+                          backgroundColor: filters.esvendible === '' ? '#9E9E9E' : '#E0E0E0',
+                          color: filters.esvendible === '' ? '#fff' : '#9E9E9E'
+                        }}
+                        onClick={() => setFilters(prev => ({ ...prev, esvendible: '' }))}
+                      >
+                        Todos
+                      </button>
+                      <button
+                        className="flex-1 rounded-lg px-2 py-2 transition-colors font-medium text-sm"
+                        style={{ 
+                          backgroundColor: filters.esvendible === 'true' ? '#4CAF50' : '#E0E0E0',
+                          color: filters.esvendible === 'true' ? '#fff' : '#9E9E9E'
+                        }}
+                        onClick={() => setFilters(prev => ({ ...prev, esvendible: 'true' }))}
+                      >
+                        Vendible
+                      </button>
+                      <button
+                        className="flex-1 rounded-lg px-2 py-2 transition-colors font-medium text-sm"
+                        style={{ 
+                          backgroundColor: filters.esvendible === 'false' ? '#F44336' : '#E0E0E0',
+                          color: filters.esvendible === 'false' ? '#fff' : '#9E9E9E'
+                        }}
+                        onClick={() => setFilters(prev => ({ ...prev, esvendible: 'false' }))}
+                      >
+                        No vendible
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons - Outside filter card, smaller, side by side */}
+              <div className="flex gap-3 mb-4">
+                <button
+                  className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 border-2 transition-colors hover:opacity-80"
+                  style={{ 
+                    backgroundColor: colors.surface, 
+                    borderColor: colors.outlineVariant,
+                    color: colors.onSurface
+                  }}
+                  onClick={handleClearFilters}
+                >
+                  <RefreshCw size={16} />
+                  <span>Limpiar</span>
+                </button>
+                <button
+                  className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 transition-colors hover:opacity-80 disabled:opacity-50"
+                  style={{ backgroundColor: colors.primary, color: '#fff' }}
+                  onClick={handleSearch}
+                  disabled={isSearching}
+                >
+                  {isSearching ? (
+                    <div className="w-4 h-4 border-2 border-t-2 rounded-full animate-spin" style={{ borderColor: '#fff', borderTopColor: 'transparent' }} />
                   ) : (
-                    <ChevronDown size={20} style={{ color: colors.outline }} />
+                    <>
+                      <Search size={16} />
+                      <span>Buscar</span>
+                    </>
                   )}
                 </button>
-                
-                {showTiendaDropdown && (
-                  <div 
-                    className="absolute z-10 w-full mt-1 rounded-lg shadow-lg max-h-60 overflow-y-auto"
-                    style={{ backgroundColor: colors.surface, borderColor: colors.outlineVariant, borderWidth: '1px' }}
-                  >
-                    <button
-                      className="w-full px-4 py-3 text-left hover:opacity-80 transition-opacity"
-                      style={{ color: colors.onSurface, fontSize: isMobile ? '14px' : '16px' }}
-                      onClick={() => {
-                        setFilters(prev => ({ ...prev, id_tienda: '' }));
-                        setShowTiendaDropdown(false);
-                      }}
-                    >
-                      Todas las tiendas
-                    </button>
-                    {tiendas.map((tienda) => (
-                      <button
-                        key={tienda.id_tienda}
-                        className="w-full px-4 py-3 text-left hover:opacity-80 transition-opacity"
-                        style={{ color: colors.onSurface, fontSize: isMobile ? '14px' : '16px' }}
-                        onClick={() => {
-                          setFilters(prev => ({ ...prev, id_tienda: tienda.id_tienda.toString() }));
-                          setShowTiendaDropdown(false);
-                        }}
-                      >
-                        {tienda.nombre}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {showAdvancedFilters && (
-              <>
-                <div className="mb-4">
-                  <label 
-                    className="block text-sm font-medium mb-2"
-                    style={{ color: colors.outline }}
-                  >
-                    Código
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2"
-                    style={{ 
-                      backgroundColor: colors.background, 
-                      color: colors.onSurface, 
-                      borderColor: colors.outlineVariant,
-                      fontFamily: 'Inter, sans-serif',
-                      fontSize: isMobile ? '14px' : '16px',
-                      padding: isMobile ? '12px' : '16px'
-                    }}
-                    placeholder="Buscar por código..."
-                    value={filters.codigo}
-                    onChange={(e) => setFilters(prev => ({ ...prev, codigo: e.target.value }))}
-                  />
-                </div>
-
-                <div className="mb-4">
-                  <label 
-                    className="block text-sm font-medium mb-2"
-                    style={{ color: colors.outline }}
-                  >
-                    Categoría
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2"
-                    style={{ 
-                      backgroundColor: colors.background, 
-                      color: colors.onSurface, 
-                      borderColor: colors.outlineVariant,
-                      fontFamily: 'Inter, sans-serif',
-                      fontSize: isMobile ? '14px' : '16px',
-                      padding: isMobile ? '12px' : '16px'
-                    }}
-                    placeholder="Buscar por categoría..."
-                    value={filters.categoria}
-                    onChange={(e) => setFilters(prev => ({ ...prev, categoria: e.target.value }))}
-                  />
-                </div>
-
-                <div className="mb-4">
-                  <label 
-                    className="block text-sm font-medium mb-2"
-                    style={{ color: colors.outline }}
-                  >
-                    Estado
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
-                      style={{ 
-                        backgroundColor: filters.esvendible === '' ? '#9E9E9E' : '#E0E0E0',
-                        color: filters.esvendible === '' ? '#fff' : '#9E9E9E'
-                      }}
-                      onClick={() => setFilters(prev => ({ ...prev, esvendible: '' }))}
-                    >
-                      Todos
-                    </button>
-                    <button
-                      className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
-                      style={{ 
-                        backgroundColor: filters.esvendible === 'true' ? '#4CAF50' : '#E0E0E0',
-                        color: filters.esvendible === 'true' ? '#fff' : '#9E9E9E'
-                      }}
-                      onClick={() => setFilters(prev => ({ ...prev, esvendible: 'true' }))}
-                    >
-                      Vendible
-                    </button>
-                    <button
-                      className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
-                      style={{ 
-                        backgroundColor: filters.esvendible === 'false' ? '#F44336' : '#E0E0E0',
-                        color: filters.esvendible === 'false' ? '#fff' : '#9E9E9E'
-                      }}
-                      onClick={() => setFilters(prev => ({ ...prev, esvendible: 'false' }))}
-                    >
-                      No vendible
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                className="flex-1 rounded-lg px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 border-2 transition-colors hover:opacity-80"
-                style={{ 
-                  backgroundColor: colors.surface, 
-                  borderColor: colors.outlineVariant,
-                  color: colors.onSurface
-                }}
-                onClick={handleClearFilters}
-              >
-                <RefreshCw size={18} />
-                <span>Limpiar</span>
-              </button>
-              <button
-                className="flex-1 rounded-lg px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-80 disabled:opacity-50"
-                style={{ backgroundColor: colors.primary, color: '#fff' }}
-                onClick={handleSearch}
-                disabled={isSearching}
-              >
-                {isSearching ? (
-                  <div className="w-5 h-5 border-2 border-t-2 rounded-full animate-spin" style={{ borderColor: '#fff', borderTopColor: 'transparent' }} />
-                ) : (
+                {isAdmin && (
                   <>
-                    <Search size={18} />
-                    <span>Buscar</span>
+                    <button
+                      className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
+                      style={{ backgroundColor: colors.primary, color: '#fff' }}
+                      onClick={handleAdd}
+                    >
+                      <Plus size={16} />
+                      <span>Agregar Servicio</span>
+                    </button>
+                    <button
+                      className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 transition-colors hover:opacity-90"
+                      style={{ backgroundColor: colors.primary, color: '#fff' }}
+                      onClick={handleAddOferta}
+                    >
+                      <Plus size={16} />
+                      <span>Agregar Servicio (Oferta)</span>
+                    </button>
                   </>
                 )}
-              </button>
-            </div>
-          </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Mobile/Tablet Layout - Original */}
+              {/* Page Title */}
+              <div className="text-center mb-6 mt-4">
+                <h1 
+                  className="text-2xl md:text-3xl font-bold"
+                  style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                >
+                  Gestión de Servicios
+                </h1>
+              </div>
 
-          {/* Add Buttons - Only for Admin */}
-          {isAdmin && (
-            <div className="flex gap-3 mb-6">
-              <button
-                className="flex-1 rounded-xl px-4 py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90 shadow-lg"
+              {/* Filter Section - Wrapped to maintain compact width */}
+              <div style={{ maxWidth: '56rem', margin: '0 auto' }}>
+              <div 
+                className="rounded-2xl p-5 mb-6 shadow-lg"
                 style={{ 
-                  backgroundColor: colors.primary, 
-                  color: '#fff',
-                  padding: isMobile ? '12px 16px' : '16px 20px',
-                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                  backgroundColor: colors.surface,
+                  padding: isMobile ? '16px' : '20px'
                 }}
-                onClick={handleAdd}
               >
-                <Plus size={isMobile ? 20 : 24} color="#fff" />
-                <span className="font-medium" style={{ 
-                  fontSize: isMobile ? '14px' : '16px',
-                  fontWeight: '600',
-                  fontFamily: 'Inter, sans-serif'
-                }}>
-                  Agregar Servicio
-                </span>
-              </button>
-              <button
-                className="flex-1 rounded-xl px-4 py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90 shadow-lg"
-                style={{ 
-                  backgroundColor: colors.primary, 
-                  color: '#fff',
-                  padding: isMobile ? '12px 16px' : '16px 20px',
-                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                }}
-                onClick={handleAddOferta}
-              >
-                <Plus size={isMobile ? 20 : 24} color="#fff" />
-                <span className="font-medium" style={{ 
-                  fontSize: isMobile ? '14px' : '16px',
-                  fontWeight: '600',
-                  fontFamily: 'Inter, sans-serif'
-                }}>
-                  Agregar Servicio (Oferta)
-                </span>
-              </button>
-            </div>
+                <div className="flex justify-between items-center mb-4">
+                  <h2 
+                    className="text-lg font-bold"
+                    style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                  >
+                    Filtros
+                  </h2>
+                  <button
+                    className="w-10 h-10 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                    style={{ 
+                      backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                      borderColor: colors.primary 
+                    }}
+                    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  >
+                    {showAdvancedFilters ? (
+                      <ChevronUp size={24} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />
+                    ) : (
+                      <ChevronDown size={24} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />
+                    )}
+                  </button>
+                </div>
+
+                <div className="mb-4">
+                  <label 
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: colors.outline }}
+                  >
+                    Nombre
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2"
+                    style={{ 
+                      backgroundColor: colors.background, 
+                      color: colors.onSurface, 
+                      borderColor: colors.outlineVariant,
+                      fontFamily: 'Inter, sans-serif',
+                      fontSize: isMobile ? '14px' : '16px',
+                      padding: isMobile ? '12px' : '16px'
+                    }}
+                    placeholder="Buscar por nombre..."
+                    value={filters.nombre}
+                    onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label 
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: colors.outline }}
+                  >
+                    Tienda
+                  </label>
+                  <div className="relative">
+                    <button
+                      className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2 flex justify-between items-center"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif',
+                        fontSize: isMobile ? '14px' : '16px',
+                        padding: isMobile ? '12px' : '16px'
+                      }}
+                      onClick={() => setShowTiendaDropdown(!showTiendaDropdown)}
+                    >
+                      <span>
+                        {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda))?.nombre || 'Todas las tiendas'}
+                      </span>
+                      {showTiendaDropdown ? (
+                        <ChevronUp size={20} style={{ color: colors.outline }} />
+                      ) : (
+                        <ChevronDown size={20} style={{ color: colors.outline }} />
+                      )}
+                    </button>
+                    
+                    {showTiendaDropdown && (
+                      <div 
+                        className="absolute z-10 w-full mt-1 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                        style={{ backgroundColor: colors.surface, borderColor: colors.outlineVariant, borderWidth: '1px' }}
+                      >
+                        <button
+                          className="w-full px-4 py-3 text-left hover:opacity-80 transition-opacity"
+                          style={{ color: colors.onSurface, fontSize: isMobile ? '14px' : '16px' }}
+                          onClick={() => {
+                            setFilters(prev => ({ ...prev, id_tienda: '' }));
+                            setShowTiendaDropdown(false);
+                          }}
+                        >
+                          Todas las tiendas
+                        </button>
+                        {tiendas.map((tienda) => (
+                          <button
+                            key={tienda.id_tienda}
+                            className="w-full px-4 py-3 text-left hover:opacity-80 transition-opacity"
+                            style={{ color: colors.onSurface, fontSize: isMobile ? '14px' : '16px' }}
+                            onClick={() => {
+                              setFilters(prev => ({ ...prev, id_tienda: tienda.id_tienda.toString() }));
+                              setShowTiendaDropdown(false);
+                            }}
+                          >
+                            {tienda.nombre}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {showAdvancedFilters && (
+                  <>
+                    <div className="mb-4">
+                      <label 
+                        className="block text-sm font-medium mb-2"
+                        style={{ color: colors.outline }}
+                      >
+                        Código
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2"
+                        style={{ 
+                          backgroundColor: colors.background, 
+                          color: colors.onSurface, 
+                          borderColor: colors.outlineVariant,
+                          fontFamily: 'Inter, sans-serif',
+                          fontSize: isMobile ? '14px' : '16px',
+                          padding: isMobile ? '12px' : '16px'
+                        }}
+                        placeholder="Buscar por código..."
+                        value={filters.codigo}
+                        onChange={(e) => setFilters(prev => ({ ...prev, codigo: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="mb-4">
+                      <label 
+                        className="block text-sm font-medium mb-2"
+                        style={{ color: colors.outline }}
+                      >
+                        Categoría
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full rounded-lg px-4 py-3 md:px-4 md:py-3 border focus:outline-none focus:ring-2"
+                        style={{ 
+                          backgroundColor: colors.background, 
+                          color: colors.onSurface, 
+                          borderColor: colors.outlineVariant,
+                          fontFamily: 'Inter, sans-serif',
+                          fontSize: isMobile ? '14px' : '16px',
+                          padding: isMobile ? '12px' : '16px'
+                        }}
+                        placeholder="Buscar por categoría..."
+                        value={filters.categoria}
+                        onChange={(e) => setFilters(prev => ({ ...prev, categoria: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="mb-4">
+                      <label 
+                        className="block text-sm font-medium mb-2"
+                        style={{ color: colors.outline }}
+                      >
+                        Estado
+                      </label>
+                      <div className="flex gap-2">
+                        <button
+                          className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
+                          style={{ 
+                            backgroundColor: filters.esvendible === '' ? '#9E9E9E' : '#E0E0E0',
+                            color: filters.esvendible === '' ? '#fff' : '#9E9E9E'
+                          }}
+                          onClick={() => setFilters(prev => ({ ...prev, esvendible: '' }))}
+                        >
+                          Todos
+                        </button>
+                        <button
+                          className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
+                          style={{ 
+                            backgroundColor: filters.esvendible === 'true' ? '#4CAF50' : '#E0E0E0',
+                            color: filters.esvendible === 'true' ? '#fff' : '#9E9E9E'
+                          }}
+                          onClick={() => setFilters(prev => ({ ...prev, esvendible: 'true' }))}
+                        >
+                          Vendible
+                        </button>
+                        <button
+                          className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
+                          style={{ 
+                            backgroundColor: filters.esvendible === 'false' ? '#F44336' : '#E0E0E0',
+                            color: filters.esvendible === 'false' ? '#fff' : '#9E9E9E'
+                          }}
+                          onClick={() => setFilters(prev => ({ ...prev, esvendible: 'false' }))}
+                        >
+                          No vendible
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    className="flex-1 rounded-lg px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 border-2 transition-colors hover:opacity-80"
+                    style={{ 
+                      backgroundColor: colors.surface, 
+                      borderColor: colors.outlineVariant,
+                      color: colors.onSurface
+                    }}
+                    onClick={handleClearFilters}
+                  >
+                    <RefreshCw size={18} />
+                    <span>Limpiar</span>
+                  </button>
+                  <button
+                    className="flex-1 rounded-lg px-4 py-3 md:px-4 md:py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-80 disabled:opacity-50"
+                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                    onClick={handleSearch}
+                    disabled={isSearching}
+                  >
+                    {isSearching ? (
+                      <div className="w-5 h-5 border-2 border-t-2 rounded-full animate-spin" style={{ borderColor: '#fff', borderTopColor: 'transparent' }} />
+                    ) : (
+                      <>
+                        <Search size={18} />
+                        <span>Buscar</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Add Buttons - Only for Admin */}
+              {isAdmin && (
+                <div className="flex gap-3 mb-6">
+                  <button
+                    className="flex-1 rounded-xl px-4 py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90 shadow-lg"
+                    style={{ 
+                      backgroundColor: colors.primary, 
+                      color: '#fff',
+                      padding: isMobile ? '12px 16px' : '16px 20px',
+                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                    }}
+                    onClick={handleAdd}
+                  >
+                    <Plus size={isMobile ? 20 : 24} color="#fff" />
+                    <span className="font-medium" style={{ 
+                      fontSize: isMobile ? '14px' : '16px',
+                      fontWeight: '600',
+                      fontFamily: 'Inter, sans-serif'
+                    }}>
+                      Agregar Servicio
+                    </span>
+                  </button>
+                  <button
+                    className="flex-1 rounded-xl px-4 py-3 flex items-center justify-center gap-2 transition-colors hover:opacity-90 shadow-lg"
+                    style={{ 
+                      backgroundColor: colors.primary, 
+                      color: '#fff',
+                      padding: isMobile ? '12px 16px' : '16px 20px',
+                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                    }}
+                    onClick={handleAddOferta}
+                  >
+                    <Plus size={isMobile ? 20 : 24} color="#fff" />
+                    <span className="font-medium" style={{ 
+                      fontSize: isMobile ? '14px' : '16px',
+                      fontWeight: '600',
+                      fontFamily: 'Inter, sans-serif'
+                    }}>
+                      Agregar Servicio (Oferta)
+                    </span>
+                  </button>
+                </div>
+              )}
+              </div>
+            </>
           )}
-          </div>
 
           {/* Servicios List */}
           {isLoading ? (
