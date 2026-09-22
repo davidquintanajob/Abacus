@@ -184,7 +184,6 @@ const CurrencyExchangeContent = () => {
   const [selectorIndex, setSelectorIndex] = useState(0);
   const [prioritizeWifiConnection, setPrioritizeWifiConnection] = useState(false);
   const [showWifiConfig, setShowWifiConfig] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
 
@@ -205,26 +204,6 @@ const CurrencyExchangeContent = () => {
 
     return () => unsubscribe();
   }, []); // Solo se ejecuta al montar el componente
-
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, []);
 
   const togglePrioritizeWifiConnection = async () => {
     const newValue = !prioritizeWifiConnection;
@@ -1021,9 +1000,9 @@ const CurrencyExchangeContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={styles.content}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : responsive.headerHeight * 0.01}
         enabled={true}
       >
         <ScrollView 

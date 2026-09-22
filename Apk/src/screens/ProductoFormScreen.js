@@ -68,8 +68,7 @@ const ProductoFormContent = () => {
   const [exchangeRate, setExchangeRate] = useState(null);
   const [priceInputTexts, setPriceInputTexts] = useState({});
   const [generalPriceInputTexts, setGeneralPriceInputTexts] = useState({});
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  
+
   const [formData, setFormData] = useState({
     nombre: producto?.nombre || '',
     categoria: producto?.categoria || '',
@@ -141,27 +140,7 @@ const ProductoFormContent = () => {
   }, [formData.codigoList.length, formData.productoTiendaList.length]);
 
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, []);
-
-  // Initialize Barcode Engine
-  useEffect(() => {
+    // Initialize Barcode Engine
     barcodeEngineRef.current = new BarcodeEngine('PRODUCT_CREATION');
     
     // Set business rules callback to check for duplicate codes
@@ -1300,9 +1279,9 @@ const ProductoFormContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={styles.flex1}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : responsive.headerHeight * 0.01}
         enabled={true}
       >
         <ScrollView 
@@ -1352,9 +1331,9 @@ const ProductoFormContent = () => {
                       navigation.navigate('EntradaForm', { mode: 'add', productoPreSeleccionado: producto });
                     }}
                   >
-                    <Image 
-                      source={require('../../assets/package-add.png')} 
-                      style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24) }}
+                    <Image
+                      source={require('../../assets/package-add.png')}
+                      style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
                       resizeMode="contain"
                     />
                   </TouchableOpacity>
@@ -1365,9 +1344,9 @@ const ProductoFormContent = () => {
                 onPress={() => {}}
                 disabled={true}
               >
-                <Image 
-                  source={require('../../assets/moving.png')} 
-                  style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24) }}
+                <Image
+                  source={require('../../assets/moving.png')}
+                  style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
                   resizeMode="contain"
                 />
               </TouchableOpacity>
@@ -1392,9 +1371,9 @@ const ProductoFormContent = () => {
                       navigation.navigate('SalidaForm', { mode: 'add', productoPreSeleccionado: producto });
                     }}
                   >
-                    <Image 
-                      source={require('../../assets/box.png')} 
-                      style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24) }}
+                    <Image
+                      source={require('../../assets/box.png')}
+                      style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
                       resizeMode="contain"
                     />
                   </TouchableOpacity>
@@ -1404,9 +1383,9 @@ const ProductoFormContent = () => {
                 style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#F57C00' : '#FFF3E0' }]}
                 onPress={handleQuickSale}
               >
-                <Image 
-                  source={require('../../assets/sales.png')} 
-                  style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24) }}
+                <Image
+                  source={require('../../assets/sales.png')}
+                  style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
                   resizeMode="contain"
                 />
               </TouchableOpacity>
@@ -1414,9 +1393,9 @@ const ProductoFormContent = () => {
                 style={[styles.iconActionButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
                 onPress={() => setShowInfoModal(true)}
               >
-                <Image 
-                  source={require('../../assets/information.png')} 
-                  style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24) }}
+                <Image
+                  source={require('../../assets/information.png')}
+                  style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
                   resizeMode="contain"
                 />
               </TouchableOpacity>
@@ -2345,9 +2324,9 @@ const ProductoFormContent = () => {
                     {canManageEntradas && (
                       <View style={styles.infoItem}>
                         <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#1B5E20' : '#E8F5E9' }]}>
-                          <Image 
-                            source={require('../../assets/package-add.png')} 
-                            style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20) }}
+                          <Image
+                            source={require('../../assets/package-add.png')}
+                            style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
                             resizeMode="contain"
                           />
                         </View>
@@ -2360,9 +2339,9 @@ const ProductoFormContent = () => {
 
                     <View style={styles.infoItem}>
                       <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#0D47A1' : '#E3F2FD' }]}>
-                        <Image 
-                          source={require('../../assets/moving.png')} 
-                          style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20) }}
+                        <Image
+                          source={require('../../assets/moving.png')}
+                          style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
                           resizeMode="contain"
                         />
                       </View>
@@ -2375,9 +2354,9 @@ const ProductoFormContent = () => {
                     {canManageSalidas && (
                       <View style={styles.infoItem}>
                         <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#B71C1C' : '#FFEBEE' }]}>
-                          <Image 
-                            source={require('../../assets/box.png')} 
-                            style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20) }}
+                          <Image
+                            source={require('../../assets/box.png')}
+                            style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
                             resizeMode="contain"
                           />
                         </View>
@@ -2390,9 +2369,9 @@ const ProductoFormContent = () => {
 
                     <View style={styles.infoItem}>
                       <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#F57C00' : '#FFF3E0' }]}>
-                        <Image 
-                          source={require('../../assets/sales.png')} 
-                          style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20) }}
+                        <Image
+                          source={require('../../assets/sales.png')}
+                          style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
                           resizeMode="contain"
                         />
                       </View>

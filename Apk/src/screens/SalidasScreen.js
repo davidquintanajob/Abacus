@@ -723,9 +723,9 @@ const SalidasContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'position'}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={styles.content}
-        keyboardVerticalOffset={responsive.headerHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : responsive.headerHeight * 0.01}
         enabled={true}
       >
         <ScrollView 

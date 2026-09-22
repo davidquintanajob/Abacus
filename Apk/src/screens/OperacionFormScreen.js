@@ -42,8 +42,7 @@ const OperacionFormContent = () => {
   const [cuentaSearchText, setCuentaSearchText] = useState('');
   const [config, setConfig] = useState({});
   const [exchangeRate, setExchangeRate] = useState(null);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  
+
   const [formData, setFormData] = useState({
     id_cuenta: null,
     id_usuario: null,
@@ -74,26 +73,6 @@ const OperacionFormContent = () => {
   useEffect(() => {
     fetchCuentas();
     fetchConfig();
-  }, []);
-
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
   }, []);
 
   useEffect(() => {
@@ -302,9 +281,9 @@ const OperacionFormContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={styles.content}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : responsive.headerHeight * 0.01}
         enabled={true}
       >
         <ScrollView 

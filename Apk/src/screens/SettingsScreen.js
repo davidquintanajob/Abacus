@@ -24,7 +24,6 @@ const SettingsContent = () => {
   const [serverIP, setServerIP] = useState('');
   const [isCopied, setIsCopied] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const { toast, showToast, hideToast } = useToast();
 
   const isDarkMode = isDark === true || isDark === 'true';
@@ -50,26 +49,6 @@ const SettingsContent = () => {
   useEffect(() => {
     loadServerIP();
     checkVersionError();
-  }, []);
-
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
   }, []);
 
   const checkVersionError = async () => {
@@ -204,9 +183,9 @@ const SettingsContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={styles.content}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : responsive.headerHeight * 0.01}
         enabled={true}
       >
         <ScrollView 

@@ -103,33 +103,12 @@ const EntradasContent = () => {
     proveedor: false,
     usuario: false
   });
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
 
   useEffect(() => {
     requestCameraPermission();
-  }, []);
-
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
   }, []);
 
   // Initialize Barcode Engine
@@ -859,9 +838,9 @@ const EntradasContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={styles.content}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : responsive.headerHeight * 0.01}
         enabled={true}
       >
         <ScrollView 

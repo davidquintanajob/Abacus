@@ -45,7 +45,6 @@ const VentasContent = () => {
   const [showQRModal, setShowQRModal] = useState(false);
   const [selectedCuenta, setSelectedCuenta] = useState(null);
   const [completeUserData, setCompleteUserData] = useState(null);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [tiendaCuentasConfig, setTiendaCuentasConfig] = useState({});
 
   const [isInitialized, setIsInitialized] = useState(false);
@@ -75,26 +74,6 @@ const VentasContent = () => {
   useEffect(() => {
     userTiendaRef.current = user?.id_tienda;
   }, [user?.id_tienda]);
-
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, []);
 
   // Auto-scroll for summary section (infinite carousel)
   const startAutoScroll = () => {
@@ -943,8 +922,8 @@ const VentasContent = () => {
 
       <KeyboardAvoidingView
         style={styles.content}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : responsive.headerHeight * 0.01}
         enabled={true}
       >
         <ScrollView
@@ -953,7 +932,7 @@ const VentasContent = () => {
           contentContainerStyle={styles.scrollContent}
           keyboardDismissMode="interactive"
           contentInsetAdjustmentBehavior="automatic"
-          automaticallyAdjustContentInsets={false}
+          automaticallyAdjustContentInsets={true}
         >
         {/* Page Title */}
         <View style={styles.pageTitleContainer}>

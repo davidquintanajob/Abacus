@@ -83,7 +83,6 @@ const VentaEditContent = () => {
   const [cupToUsdRate, setCupToUsdRate] = useState(1);
   // Track which payment field is focused to prevent formatting while typing
   const [focusedPaymentField, setFocusedPaymentField] = useState(null);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   // Original VentaEditScreen state
   const [tiendas, setTiendas] = useState([]);
@@ -139,19 +138,6 @@ const VentaEditContent = () => {
       setPermission(status);
     })();
 
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
-      setIsKeyboardVisible(true);
-      setKeyboardHeight(e.endCoordinates.height);
-    });
-    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
-      setIsKeyboardVisible(false);
-      setKeyboardHeight(0);
-    });
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
   }, []);
 
   useEffect(() => {
@@ -841,15 +827,17 @@ const VentaEditContent = () => {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={styles.flex1}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : responsive.headerHeight * 0.01}
         enabled={true}
       >
         <ScrollView
           style={styles.content}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          contentInsetAdjustmentBehavior="automatic"
+          automaticallyAdjustContentInsets={true}
         >
           {/* Camera Section */}
           {showCamera && !isKeyboardVisible && (

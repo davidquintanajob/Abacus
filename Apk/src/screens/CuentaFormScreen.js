@@ -33,8 +33,7 @@ const CuentaFormContent = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingCuenta, setIsFetchingCuenta] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  
+
   const [formData, setFormData] = useState({
     nombre: '',
     tipo_cuenta: '',
@@ -48,26 +47,6 @@ const CuentaFormContent = () => {
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
-
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, []);
 
   useEffect(() => {
     const fetchCompleteCuenta = async () => {
@@ -179,9 +158,9 @@ const CuentaFormContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={styles.content}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : responsive.headerHeight * 0.01}
         enabled={true}
       >
         <ScrollView 

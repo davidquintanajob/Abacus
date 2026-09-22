@@ -55,7 +55,6 @@ const CuentasContent = () => {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [showTipoCuentaDropdown, setShowTipoCuentaDropdown] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const tiposCuenta = ['Efectivo CUP', 'Transferencia CUP', 'Efectivo USD', 'Transferencia USD'];
 
@@ -64,26 +63,6 @@ const CuentasContent = () => {
 
   useEffect(() => {
     setIsInitialized(true);
-  }, []);
-
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
   }, []);
 
   useFocusEffect(
@@ -301,9 +280,9 @@ const CuentasContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={styles.content}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : responsive.headerHeight * 0.01}
         enabled={true}
       >
         <ScrollView 

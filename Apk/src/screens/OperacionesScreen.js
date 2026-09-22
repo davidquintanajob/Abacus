@@ -145,7 +145,6 @@ const OperacionesContent = () => {
   const [showFechaHastaPicker, setShowFechaHastaPicker] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState('CUP'); // 'CUP' or 'USD'
   const [selectedAccountType, setSelectedAccountType] = useState('Efectivo'); // 'Efectivo' or 'Transferencia'
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
@@ -154,27 +153,6 @@ const OperacionesContent = () => {
     setIsInitialized(true);
   }, []);
 
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, []);
-
-  // Initialize user's store from session data immediately
   useEffect(() => {
     if (user?.id_tienda) {
       const userTienda = {
@@ -577,9 +555,9 @@ const OperacionesContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={styles.content}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : responsive.headerHeight * 0.01}
         enabled={true}
       >
         <ScrollView 

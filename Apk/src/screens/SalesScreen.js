@@ -67,7 +67,6 @@ const SalesContent = () => {
   const [isSearching, setIsSearching] = useState(false);
   const searchDebounceRef = useRef(null);
   const [apiBaseUrl, setApiBaseUrl] = useState('');
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const [cuentaConfig, setCuentaConfig] = useState({
     efectivo_cup: [],
@@ -174,26 +173,6 @@ const SalesContent = () => {
       const result = await Camera.requestCameraPermissionsAsync();
       setPermission(result);
     })();
-  }, []);
-
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
   }, []);
 
   useEffect(() => {
@@ -527,20 +506,6 @@ const SalesContent = () => {
     } catch (error) {
     }
   };
-
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
-      setIsKeyboardVisible(true);
-    });
-    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
-      setIsKeyboardVisible(false);
-    });
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, []);
 
   useEffect(() => {
     const loadSound = async () => {
@@ -1436,12 +1401,17 @@ const SalesContent = () => {
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={styles.content}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : responsive.headerHeight * 0.01}
         enabled={true}
       >
-        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <ScrollView 
+          showsVerticalScrollIndicator={false} 
+          keyboardShouldPersistTaps="handled"
+          contentInsetAdjustmentBehavior="automatic"
+          automaticallyAdjustContentInsets={true}
+        >
         {/* Camera Section */}
         {showCamera && !isKeyboardVisible && (
           <View style={styles.cameraContainer}>

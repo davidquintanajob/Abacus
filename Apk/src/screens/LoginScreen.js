@@ -113,8 +113,9 @@ const LoginContent = () => {
       </TouchableOpacity>
       
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={styles.keyboardContainer}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : responsive.headerHeight * 0.01}
       >
         <ScrollView
           style={styles.scrollView}

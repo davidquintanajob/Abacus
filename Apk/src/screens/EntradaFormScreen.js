@@ -76,8 +76,7 @@ const EntradaFormContent = () => {
   const [isMultipleCostSuggestion, setIsMultipleCostSuggestion] = useState(false);
   const [multipleSuggestedCosts, setMultipleSuggestedCosts] = useState([]);
   const [multipleCurrentCosts, setMultipleCurrentCosts] = useState([]);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  
+
   const [formData, setFormData] = useState({
     id_servicio_tienda: null,
     cantidad_entrada: '',
@@ -171,27 +170,6 @@ const EntradaFormContent = () => {
     fetchConfig();
   }, []);
 
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, []);
-
-  // Verificar si se abrió desde alerta de vencimiento o si la entrada tiene vencimiento próximo
   useEffect(() => {
     const checkExpirationAlert = async () => {
       try {
@@ -1785,9 +1763,9 @@ const EntradaFormContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={styles.flex1}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : responsive.headerHeight * 0.01}
         enabled={true}
       >
         <ScrollView 

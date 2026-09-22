@@ -33,7 +33,6 @@ const UsuarioFormContent = () => {
   const [showTiendaDropdown, setShowTiendaDropdown] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [tiendaSearchText, setTiendaSearchText] = useState('');
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   
   const [formData, setFormData] = useState({
     nombre_natural: usuario?.nombre_natural || '',
@@ -54,26 +53,6 @@ const UsuarioFormContent = () => {
 
   useEffect(() => {
     fetchTiendas();
-  }, []);
-
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
   }, []);
 
   useEffect(() => {
@@ -196,9 +175,9 @@ const UsuarioFormContent = () => {
       />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={styles.content}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : keyboardHeight}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? responsive.headerHeight : responsive.headerHeight * 0.01}
         enabled={true}
       >
         <ScrollView 
