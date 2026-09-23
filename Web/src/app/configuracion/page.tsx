@@ -10,7 +10,7 @@ import { SidebarNavigation } from '../../components/layout/SidebarNavigation';
 import { Toast } from '../../components/common/Toast';
 import { configService } from '../../services/configService';
 import { exchangeRateService } from '../../services/exchangeRateService';
-import { RefreshCw, Info, ChevronUp, ChevronDown, Package } from 'lucide-react';
+import { RefreshCw, Info, ChevronUp, ChevronDown, Package, Lock, Store, Globe, X } from 'lucide-react';
 
 export default function ConfiguracionPage() {
   const { colors, isDark, toggleTheme } = useTheme();
@@ -34,6 +34,39 @@ export default function ConfiguracionPage() {
     economico: false,
   });
   const [showPermissions, setShowPermissions] = useState(false);
+  const [showEntradaConfig, setShowEntradaConfig] = useState(false);
+  const [showEntradaPermissions, setShowEntradaPermissions] = useState(false);
+  const [showSalidaPermissions, setShowSalidaPermissions] = useState(false);
+  const [showEntradaManage, setShowEntradaManage] = useState(false);
+  const [showSalidaManage, setShowSalidaManage] = useState(false);
+  const [entradaAccessLevels, setEntradaAccessLevels] = useState({
+    dependiente: 'none',
+    almacenero: 'none',
+    economico: 'none',
+  });
+  const [salidaAccessLevels, setSalidaAccessLevels] = useState({
+    dependiente: 'none',
+    almacenero: 'none',
+    economico: 'none',
+  });
+  const [entradaManagePermissions, setEntradaManagePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
+  const [salidaManagePermissions, setSalidaManagePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
+  const [applyWeightedAverageCost, setApplyWeightedAverageCost] = useState(false);
+  const [autoApplySuggestedCost, setAutoApplySuggestedCost] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
+  const [showEntradaModalAfterProductCreation, setShowEntradaModalAfterProductCreation] = useState(false);
+  const [infoModal, setInfoModal] = useState<{ title: string; content: string } | null>(null);
   const [exchangeRates, setExchangeRates] = useState<any>(null);
   const [isLoadingRates, setIsLoadingRates] = useState(false);
 
@@ -58,6 +91,47 @@ export default function ConfiguracionPage() {
           almacenero: data.permissions.almacenero || false,
           economico: data.permissions.economico || false,
         });
+      }
+      if (data.entradaAccessLevels) {
+        setEntradaAccessLevels({
+          dependiente: data.entradaAccessLevels.dependiente || 'none',
+          almacenero: data.entradaAccessLevels.almacenero || 'none',
+          economico: data.entradaAccessLevels.economico || 'none',
+        });
+      }
+      if (data.salidaAccessLevels) {
+        setSalidaAccessLevels({
+          dependiente: data.salidaAccessLevels.dependiente || 'none',
+          almacenero: data.salidaAccessLevels.almacenero || 'none',
+          economico: data.salidaAccessLevels.economico || 'none',
+        });
+      }
+      if (data.entradaManagePermissions) {
+        setEntradaManagePermissions({
+          dependiente: data.entradaManagePermissions.dependiente || false,
+          almacenero: data.entradaManagePermissions.almacenero || false,
+          economico: data.entradaManagePermissions.economico || false,
+        });
+      }
+      if (data.salidaManagePermissions) {
+        setSalidaManagePermissions({
+          dependiente: data.salidaManagePermissions.dependiente || false,
+          almacenero: data.salidaManagePermissions.almacenero || false,
+          economico: data.salidaManagePermissions.economico || false,
+        });
+      }
+      if (data.autoApplySuggestedCost) {
+        setAutoApplySuggestedCost({
+          dependiente: data.autoApplySuggestedCost.dependiente || false,
+          almacenero: data.autoApplySuggestedCost.almacenero || false,
+          economico: data.autoApplySuggestedCost.economico || false,
+        });
+      }
+      if (data.applyWeightedAverageCost !== undefined) {
+        setApplyWeightedAverageCost(data.applyWeightedAverageCost);
+      }
+      if (data.showEntradaModalAfterProductCreation !== undefined) {
+        setShowEntradaModalAfterProductCreation(data.showEntradaModalAfterProductCreation);
       }
     } catch (error) {
       showToast({ type: 'error', message: 'Error al cargar configuración' });
@@ -97,6 +171,13 @@ export default function ConfiguracionPage() {
         ...config,
         cupToUsdRate: rate,
         permissions: permissions,
+        entradaAccessLevels: entradaAccessLevels,
+        salidaAccessLevels: salidaAccessLevels,
+        entradaManagePermissions: entradaManagePermissions,
+        salidaManagePermissions: salidaManagePermissions,
+        applyWeightedAverageCost: applyWeightedAverageCost,
+        autoApplySuggestedCost: autoApplySuggestedCost,
+        showEntradaModalAfterProductCreation: showEntradaModalAfterProductCreation,
       };
       await configService.updateConfig(updatedConfig);
       setConfig(updatedConfig);
@@ -511,6 +592,628 @@ export default function ConfiguracionPage() {
                   </>
                 )}
               </div>
+
+              {/* Configuración de Entradas */}
+              <div 
+                className="rounded-2xl p-5 mb-6 shadow-lg"
+                style={{ backgroundColor: colors.surface }}
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-2">
+                    <div style={{ width: '24px', height: '24px', filter: isDarkMode ? 'invert(1)' : 'none' }}>
+                      <img
+                        src="/package-add-copia.png"
+                        alt="Configuración de Entradas"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <h2 
+                      className="text-lg font-bold"
+                      style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                    >
+                      Configuración de Entradas
+                    </h2>
+                  </div>
+                  <button
+                    className="w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                    style={{ 
+                      backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                      borderColor: colors.primary 
+                    }}
+                    onClick={() => setShowEntradaConfig(!showEntradaConfig)}
+                  >
+                    {showEntradaConfig ? <ChevronUp size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                  </button>
+                </div>
+
+                {showEntradaConfig && (
+                  <>
+                    <p className="text-sm mb-4" style={{ color: colors.outline }}>
+                      Configura el cálculo automático de costo promedio ponderado y el modal de entrada para nuevos productos
+                    </p>
+
+                    <div className="flex justify-between items-center p-3 rounded-lg mb-3" style={{ backgroundColor: colors.background }}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium" style={{ color: colors.onSurface }}>Aplicar Fórmula de Costo Promedio Ponderado</span>
+                        <button
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                          style={{ backgroundColor: colors.primary, color: '#fff' }}
+                          onClick={() => setInfoModal({
+                            title: 'Fórmula de Costo Promedio Ponderado',
+                            content: 'Cuando está activo, el costo de los productos se recalcula automáticamente al crear una entrada usando la fórmula: (costo_actual × cantidad_actual + costo_entrada × cantidad_entrada) / (cantidad_actual + cantidad_entrada)'
+                          })}
+                        >
+                          !
+                        </button>
+                      </div>
+                      <button
+                        className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                        style={{
+                          backgroundColor: applyWeightedAverageCost ? colors.primary : colors.outlineVariant,
+                        }}
+                        onClick={() => setApplyWeightedAverageCost(!applyWeightedAverageCost)}
+                      >
+                        <div 
+                          className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                          style={{
+                            transform: applyWeightedAverageCost ? 'translateX(24px)' : 'translateX(0)',
+                            backgroundColor: applyWeightedAverageCost ? '#fff' : colors.outline,
+                          }}
+                        />
+                      </button>
+                    </div>
+
+                    {applyWeightedAverageCost && (
+                      <>
+                        <p className="text-sm mb-4" style={{ color: colors.outline }}>
+                          Configura qué roles pueden aplicar automáticamente el costo sugerido por la fórmula sin confirmación
+                        </p>
+
+                        {['dependiente', 'almacenero', 'economico'].map((role) => (
+                          <div key={role} className="flex justify-between items-center p-3 rounded-lg mb-3" style={{ backgroundColor: colors.background }}>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>{role}</span>
+                              <button
+                                className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                onClick={() => setInfoModal({
+                                  title: `Auto-aplicar Costo Sugerido - ${role}`,
+                                  content: 'Activo: Aplica costo sugerido automáticamente, actualiza el costo del producto en todas las tiendas. NO muestra ventana para elegir entre costos.\n\nInactivo: Usa costo ingresado solo para la entrada sin modificar el costo original del producto. NO muestra ventana para elegir entre costos.'
+                                })}
+                              >
+                                !
+                              </button>
+                            </div>
+                            <button
+                              className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                              style={{
+                                backgroundColor: autoApplySuggestedCost[role as keyof typeof autoApplySuggestedCost] ? colors.primary : colors.outlineVariant,
+                              }}
+                              onClick={() => setAutoApplySuggestedCost(prev => ({ ...prev, [role]: !prev[role as keyof typeof prev] }))}
+                            >
+                              <div 
+                                className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                style={{
+                                  transform: autoApplySuggestedCost[role as keyof typeof autoApplySuggestedCost] ? 'translateX(24px)' : 'translateX(0)',
+                                  backgroundColor: autoApplySuggestedCost[role as keyof typeof autoApplySuggestedCost] ? '#fff' : colors.outline,
+                                }}
+                              />
+                            </button>
+                          </div>
+                        ))}
+                      </>
+                    )}
+
+                    <div className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.background }}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium" style={{ color: colors.onSurface }}>Preguntar si Agregar Entrada al Crear Producto</span>
+                        <button
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                          style={{ backgroundColor: colors.primary, color: '#fff' }}
+                          onClick={() => setInfoModal({
+                            title: 'Pregunta de Entrada al Crear Producto',
+                            content: 'Cuando está activo, después de crear un nuevo producto se preguntará si deseas agregar una entrada de stock para ese producto (solo para usuarios con permisos de gestión de entradas).'
+                          })}
+                        >
+                          !
+                        </button>
+                      </div>
+                      <button
+                        className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                        style={{
+                          backgroundColor: showEntradaModalAfterProductCreation ? colors.primary : colors.outlineVariant,
+                        }}
+                        onClick={() => setShowEntradaModalAfterProductCreation(!showEntradaModalAfterProductCreation)}
+                      >
+                        <div 
+                          className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                          style={{
+                            transform: showEntradaModalAfterProductCreation ? 'translateX(24px)' : 'translateX(0)',
+                            backgroundColor: showEntradaModalAfterProductCreation ? '#fff' : colors.outline,
+                          }}
+                        />
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Permisos de Entradas */}
+              <div 
+                className="rounded-2xl p-5 mb-6 shadow-lg"
+                style={{ backgroundColor: colors.surface }}
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-2">
+                    <div style={{ width: '24px', height: '24px', filter: isDarkMode ? 'invert(1)' : 'none' }}>
+                      <img
+                        src="/package-add.png"
+                        alt="Permisos de Entradas"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <h2 
+                      className="text-lg font-bold"
+                      style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                    >
+                      Permisos de Entradas
+                    </h2>
+                  </div>
+                  <button
+                    className="w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                    style={{ 
+                      backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                      borderColor: colors.primary 
+                    }}
+                    onClick={() => setShowEntradaPermissions(!showEntradaPermissions)}
+                  >
+                    {showEntradaPermissions ? <ChevronUp size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                  </button>
+                </div>
+
+                {showEntradaPermissions && (
+                  <>
+                    <p className="text-sm mb-4" style={{ color: colors.outline }}>
+                      Configura el nivel de acceso a las entradas para cada rol
+                    </p>
+
+                    <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: colors.background }}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Lock size={16} style={{ color: colors.outline }} />
+                        <span className="text-sm" style={{ color: colors.outline }}><strong>Sin acceso:</strong> No puede ver la pantalla de Entradas ni ninguna entrada del sistema</span>
+                      </div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Store size={16} style={{ color: colors.outline }} />
+                        <span className="text-sm" style={{ color: colors.outline }}><strong>Mi tienda:</strong> Puede ver la pantalla de Entradas pero solo las entradas de su tienda</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Globe size={16} style={{ color: colors.outline }} />
+                        <span className="text-sm" style={{ color: colors.outline }}><strong>Todas las tiendas:</strong> Puede ver la pantalla de Entradas y las entradas de todas las tiendas</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {['dependiente', 'almacenero', 'economico'].map((role) => (
+                        <div key={role} className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.background }}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>{role}</span>
+                            <button
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                              style={{ backgroundColor: colors.primary, color: '#fff' }}
+                              onClick={() => setInfoModal({
+                                title: `Acceso a Entradas - ${role}`,
+                                content: 'Define si los usuarios con rol ' + role + ' no tienen acceso a entradas, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
+                              })}
+                            >
+                              !
+                            </button>
+                          </div>
+                          <div className="flex gap-2">
+                            {['none', 'own_store', 'all_stores'].map((level) => (
+                              <button
+                                key={level}
+                                className={`w-10 h-10 rounded-lg flex items-center justify-center border-2 transition-colors`}
+                                style={{
+                                  backgroundColor: entradaAccessLevels[role as keyof typeof entradaAccessLevels] === level ? colors.primary : 'transparent',
+                                  borderColor: entradaAccessLevels[role as keyof typeof entradaAccessLevels] === level ? colors.primary : colors.outlineVariant,
+                                }}
+                                onClick={() => {
+                                  setEntradaAccessLevels(prev => ({ ...prev, [role]: level }));
+                                }}
+                              >
+                                {level === 'none' && <Lock size={18} style={{ color: entradaAccessLevels[role as keyof typeof entradaAccessLevels] === level ? '#fff' : colors.onSurface }} />}
+                                {level === 'own_store' && <Store size={18} style={{ color: entradaAccessLevels[role as keyof typeof entradaAccessLevels] === level ? '#fff' : colors.onSurface }} />}
+                                {level === 'all_stores' && <Globe size={18} style={{ color: entradaAccessLevels[role as keyof typeof entradaAccessLevels] === level ? '#fff' : colors.onSurface }} />}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {(entradaAccessLevels.dependiente !== 'none' || entradaAccessLevels.almacenero !== 'none' || entradaAccessLevels.economico !== 'none') && (
+                      <div className="mt-4 p-4 rounded-lg" style={{ backgroundColor: colors.background }}>
+                        <div className="flex justify-between items-center mb-3">
+                          <h3 className="font-semibold" style={{ color: colors.onSurface }}>Gestión de Entradas</h3>
+                          <button
+                            className="w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                            style={{ 
+                              backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                              borderColor: colors.primary 
+                            }}
+                            onClick={() => setShowEntradaManage(!showEntradaManage)}
+                          >
+                            {showEntradaManage ? <ChevronUp size={16} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={16} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                          </button>
+                        </div>
+                        {showEntradaManage && (
+                          <>
+                            <p className="text-sm mb-3" style={{ color: colors.outline }}>
+                              Configura qué roles pueden crear, editar y eliminar entradas (solo visible para roles con acceso)
+                            </p>
+                            {entradaAccessLevels.dependiente !== 'none' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Dependiente</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Entradas - Dependiente',
+                                      content: 'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar entradas y ver los costos de los productos. Cuando está desactivado, solo pueden ver la información sin acceso a los costos.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: entradaManagePermissions.dependiente ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => setEntradaManagePermissions(prev => ({ ...prev, dependiente: !prev.dependiente }))}
+                                >
+                                  <div 
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: entradaManagePermissions.dependiente ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: entradaManagePermissions.dependiente ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {entradaAccessLevels.almacenero !== 'none' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Almacenero</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Entradas - Almacenero',
+                                      content: 'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar entradas y ver los costos de los productos. Cuando está desactivado, solo pueden ver la información sin acceso a los costos.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: entradaManagePermissions.almacenero ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => setEntradaManagePermissions(prev => ({ ...prev, almacenero: !prev.almacenero }))}
+                                >
+                                  <div 
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: entradaManagePermissions.almacenero ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: entradaManagePermissions.almacenero ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {entradaAccessLevels.economico !== 'none' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Económico</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Entradas - Económico',
+                                      content: 'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar entradas y ver los costos de los productos. Cuando está desactivado, solo pueden ver la información sin acceso a los costos.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: entradaManagePermissions.economico ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => setEntradaManagePermissions(prev => ({ ...prev, economico: !prev.economico }))}
+                                >
+                                  <div 
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: entradaManagePermissions.economico ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: entradaManagePermissions.economico ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Permisos de Salidas */}
+              <div 
+                className="rounded-2xl p-5 mb-6 shadow-lg"
+                style={{ backgroundColor: colors.surface }}
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-2">
+                    <div style={{ width: '24px', height: '24px', filter: isDarkMode ? 'invert(1)' : 'none' }}>
+                      <img
+                        src="/box.png"
+                        alt="Permisos de Salidas"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <h2 
+                      className="text-lg font-bold"
+                      style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                    >
+                      Permisos de Salidas
+                    </h2>
+                  </div>
+                  <button
+                    className="w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                    style={{ 
+                      backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                      borderColor: colors.primary 
+                    }}
+                    onClick={() => setShowSalidaPermissions(!showSalidaPermissions)}
+                  >
+                    {showSalidaPermissions ? <ChevronUp size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                  </button>
+                </div>
+
+                {showSalidaPermissions && (
+                  <>
+                    <p className="text-sm mb-4" style={{ color: colors.outline }}>
+                      Configura el nivel de acceso a las salidas para cada rol
+                    </p>
+
+                    <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: colors.background }}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Lock size={16} style={{ color: colors.outline }} />
+                        <span className="text-sm" style={{ color: colors.outline }}><strong>Sin acceso:</strong> No puede ver la pantalla de Salidas ni ninguna salida del sistema</span>
+                      </div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Store size={16} style={{ color: colors.outline }} />
+                        <span className="text-sm" style={{ color: colors.outline }}><strong>Mi tienda:</strong> Puede ver la pantalla de Salidas pero solo las salidas de su tienda</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Globe size={16} style={{ color: colors.outline }} />
+                        <span className="text-sm" style={{ color: colors.outline }}><strong>Todas las tiendas:</strong> Puede ver la pantalla de Salidas y las salidas de todas las tiendas</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {['dependiente', 'almacenero', 'economico'].map((role) => (
+                        <div key={role} className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.background }}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>{role}</span>
+                            <button
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                              style={{ backgroundColor: colors.primary, color: '#fff' }}
+                              onClick={() => setInfoModal({
+                                title: `Acceso a Salidas - ${role}`,
+                                content: 'Define si los usuarios con rol ' + role + ' no tienen acceso a salidas, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
+                              })}
+                            >
+                              !
+                            </button>
+                          </div>
+                          <div className="flex gap-2">
+                            {['none', 'own_store', 'all_stores'].map((level) => (
+                              <button
+                                key={level}
+                                className={`w-10 h-10 rounded-lg flex items-center justify-center border-2 transition-colors`}
+                                style={{
+                                  backgroundColor: salidaAccessLevels[role as keyof typeof salidaAccessLevels] === level ? colors.primary : 'transparent',
+                                  borderColor: salidaAccessLevels[role as keyof typeof salidaAccessLevels] === level ? colors.primary : colors.outlineVariant,
+                                }}
+                                onClick={() => {
+                                  setSalidaAccessLevels(prev => ({ ...prev, [role]: level }));
+                                }}
+                              >
+                                {level === 'none' && <Lock size={18} style={{ color: salidaAccessLevels[role as keyof typeof salidaAccessLevels] === level ? '#fff' : colors.onSurface }} />}
+                                {level === 'own_store' && <Store size={18} style={{ color: salidaAccessLevels[role as keyof typeof salidaAccessLevels] === level ? '#fff' : colors.onSurface }} />}
+                                {level === 'all_stores' && <Globe size={18} style={{ color: salidaAccessLevels[role as keyof typeof salidaAccessLevels] === level ? '#fff' : colors.onSurface }} />}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {(salidaAccessLevels.dependiente !== 'none' || salidaAccessLevels.almacenero !== 'none' || salidaAccessLevels.economico !== 'none') && (
+                      <div className="mt-4 p-4 rounded-lg" style={{ backgroundColor: colors.background }}>
+                        <div className="flex justify-between items-center mb-3">
+                          <h3 className="font-semibold" style={{ color: colors.onSurface }}>Gestión de Salidas</h3>
+                          <button
+                            className="w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                            style={{ 
+                              backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                              borderColor: colors.primary 
+                            }}
+                            onClick={() => setShowSalidaManage(!showSalidaManage)}
+                          >
+                            {showSalidaManage ? <ChevronUp size={16} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={16} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                          </button>
+                        </div>
+                        {showSalidaManage && (
+                          <>
+                            <p className="text-sm mb-3" style={{ color: colors.outline }}>
+                              Configura qué roles pueden crear, editar y eliminar salidas (solo visible para roles con acceso)
+                            </p>
+                            {salidaAccessLevels.dependiente !== 'none' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Dependiente</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Salidas - Dependiente',
+                                      content: 'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar salidas y ver los costos de los productos. Cuando está desactivado, solo pueden ver la información sin acceso a los costos.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: salidaManagePermissions.dependiente ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => setSalidaManagePermissions(prev => ({ ...prev, dependiente: !prev.dependiente }))}
+                                >
+                                  <div 
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: salidaManagePermissions.dependiente ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: salidaManagePermissions.dependiente ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {salidaAccessLevels.almacenero !== 'none' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Almacenero</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Salidas - Almacenero',
+                                      content: 'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar salidas y ver los costos de los productos. Cuando está desactivado, solo pueden ver la información sin acceso a los costos.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: salidaManagePermissions.almacenero ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => setSalidaManagePermissions(prev => ({ ...prev, almacenero: !prev.almacenero }))}
+                                >
+                                  <div 
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: salidaManagePermissions.almacenero ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: salidaManagePermissions.almacenero ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {salidaAccessLevels.economico !== 'none' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Económico</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Salidas - Económico',
+                                      content: 'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar salidas y ver los costos de los productos. Cuando está desactivado, solo pueden ver la información sin acceso a los costos.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: salidaManagePermissions.economico ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => setSalidaManagePermissions(prev => ({ ...prev, economico: !prev.economico }))}
+                                >
+                                  <div 
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: salidaManagePermissions.economico ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: salidaManagePermissions.economico ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Info Modal */}
+              {infoModal && (
+                <div 
+                  className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+                  onClick={() => setInfoModal(null)}
+                >
+                  <div 
+                    className="rounded-2xl p-6 max-w-md w-full shadow-lg"
+                    style={{ backgroundColor: colors.surface }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 
+                        className="text-lg font-bold"
+                        style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                      >
+                        {infoModal.title}
+                      </h3>
+                      <button
+                        className="p-2 rounded-lg transition-colors hover:opacity-80"
+                        style={{ backgroundColor: colors.background, color: colors.onSurface }}
+                        onClick={() => setInfoModal(null)}
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+                    <p 
+                      className="text-sm whitespace-pre-line"
+                      style={{ color: colors.onSurface }}
+                    >
+                      {infoModal.content}
+                    </p>
+                    <button
+                      className="w-full mt-4 rounded-lg px-4 py-2 transition-colors hover:opacity-90"
+                      style={{ backgroundColor: colors.primary, color: '#fff' }}
+                      onClick={() => setInfoModal(null)}
+                    >
+                      Entendido
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

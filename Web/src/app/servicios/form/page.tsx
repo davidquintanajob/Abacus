@@ -603,46 +603,19 @@ export default function ServicioFormPage() {
         toastKey={toast.key}
       />
       
-      {/* ConfirmDialog is now global via GlobalConfirmDialog in layout */}
-      <SidebarNavigation 
-        currentRoute="Servicios" 
-        ref={sidebarNavRef}
-      />
-
       <div 
         className="min-h-screen"
         style={{ backgroundColor: colors.background }}
       >
-        <Header
-          onMenuPress={handleMenuPress}
-          onThemePress={toggleTheme}
-          onNotificationsPress={handleNotificationsPress}
-          onProfilePress={handleProfilePress}
-          showViewToggle={false}
+        <Header 
+          showBackButton={true}
+          onBackPress={() => router.push('/servicios')}
           isDark={isDarkMode}
-          title="Abacus"
-          showLogo={true}
+          title={isViewMode ? 'Información del Servicio' : isEditMode ? 'Editar Servicio' : 'Agregar Servicio'}
           currentRoute="Servicios"
         />
 
         <div className="pt-20 px-4 md:px-4 lg:px-4 pb-8 max-w-4xl mx-auto">
-          {/* Page Title */}
-          <div className="flex items-center mb-6 mt-4">
-            <button
-              className="mr-4 p-2 rounded-lg transition-colors hover:opacity-80"
-              style={{ backgroundColor: colors.surface, color: colors.onSurface }}
-              onClick={() => router.push('/servicios')}
-            >
-              <ArrowLeft size={24} />
-            </button>
-            <h1 
-              className="text-2xl md:text-3xl font-bold"
-              style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
-            >
-              {isViewMode ? 'Información del Servicio' : isEditMode ? 'Editar Servicio' : isOferta ? 'Agregar Servicio (Oferta)' : 'Agregar Servicio'}
-            </h1>
-          </div>
-
           {isFetchingServicio ? (
             <div className="flex flex-col items-center justify-center py-12">
               <div className="w-12 h-12 border-4 border-t-4 rounded-full animate-spin mb-4" style={{ borderRightColor: colors.primary, borderBottomColor: colors.primary, borderLeftColor: colors.primary, borderTopColor: 'transparent' }} />

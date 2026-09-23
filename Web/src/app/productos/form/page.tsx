@@ -6,11 +6,13 @@ import { useTheme } from '../../../context/ThemeContext';
 import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../hooks/useToast';
 import { useConfirmDialog } from '../../../context/ConfirmDialogContext';
+import { useResponsive } from '../../../hooks/useResponsive';
 import { Header } from '../../../components/layout/Header';
 import { SidebarNavigation } from '../../../components/layout/SidebarNavigation';
 import { Toast } from '../../../components/common/Toast';
 import { createProducto, updateProducto, getProductoById } from '../../../services/productoService';
 import { getTiendas } from '../../../services/tiendaService';
+import { getEntradas } from '../../../services/entradaService';
 import { configService } from '../../../services/configService';
 import { 
   ArrowLeft, 
@@ -21,7 +23,14 @@ import {
   ChevronDown,
   ChevronUp,
   Image,
-  XCircle
+  XCircle,
+  Package,
+  ArrowRightLeft,
+  Box,
+  ShoppingCart,
+  Info,
+  RefreshCw,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function ProductoFormPage() {
@@ -31,6 +40,7 @@ export default function ProductoFormPage() {
   const { user } = useAuth();
   const { toast, showToast, hideToast } = useToast();
   const { showConfirmDialog } = useConfirmDialog();
+  const { isMobile } = useResponsive();
   const sidebarNavRef = useRef<any>(null);
 
   const handleMenuPress = () => {
@@ -72,8 +82,8 @@ export default function ProductoFormPage() {
 
   const [showImagePickerModal, setShowImagePickerModal] = useState(false);
   const [showScannerModal, setShowScannerModal] = useState(false);
-  const [priceInputTexts, setPriceInputTexts] = useState({});
-  const [generalPriceInputTexts, setGeneralPriceInputTexts] = useState({});
+  const [priceInputTexts, setPriceInputTexts] = useState<{ [key: number]: { precio_cup?: string; precio_usd?: string; costo_cup?: string; costo_usd?: string } }>({});
+  const [generalPriceInputTexts, setGeneralPriceInputTexts] = useState<{ precio_cup?: string; precio_usd?: string; costo_cup?: string; costo_usd?: string }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImagePick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -106,16 +116,153 @@ export default function ProductoFormPage() {
   const [newNota, setNewNota] = useState('');
   const [isCodesExpanded, setIsCodesExpanded] = useState(false);
   const [isPricesExpanded, setIsPricesExpanded] = useState(false);
+  const [showExpirationAlert, setShowExpirationAlert] = useState(false);
+  const [expirationAlertData, setExpirationAlertData] = useState<{ productoId: string | null; message: string } | null>(null);
+  const [showInfoModal, setShowInfoModal] = useState(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
+
+  // Function to generate suffix based on product name
+  const generateSuffix = (nombre: string) => {
+    if (!nombre || nombre.length < 3) return '';
+    
+    // Get first 3 letters of name (uppercase)
+    const firstThreeLetters = nombre.substring(0, 3).toUpperCase();
+    
+    // Generate random 4-digit number
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    
+    return `${firstThreeLetters}-${randomNum}`;
+  };
+
+  // Auto-generate suffix when name changes (only for new products or when suffix is empty)
+  useEffect(() => {
+    if (isAddMode && formData.nombre.length >= 3 && (!formData.sufijo || formData.sufijo === '')) {
+      const generatedSuffix = generateSuffix(formData.nombre);
+      setFormData(prev => ({ ...prev, sufijo: generatedSuffix }));
+    }
+  }, [formData.nombre, isAddMode]);
+
+  // Function to generate random EAN-13 code
+  const generateRandomEAN13 = () => {
+    // Generate 12 random digits
+    let code = '';
+    for (let i = 0; i < 12; i++) {
+      code += Math.floor(Math.random() * 10);
+    }
+
+    // Calculate checksum for EAN-13
+    let sum = 0;
+    for (let i = 0; i < 12; i++) {
+      const digit = parseInt(code[i]);
+      if (i % 2 === 0) {
+        sum += digit * 1;
+      } else {
+        sum += digit * 3;
+      }
+    }
+    const checksum = (10 - (sum % 10)) % 10;
+
+    // Add checksum to complete EAN-13
+    const fullCode = code + checksum;
+
+    setNewCodigo(fullCode);
+    showToast({ type: 'success', message: 'Código aleatorio generado' });
+  };
+
+  // Function to calculate the threshold for expiration alerts
+  const calculateThreshold = (vidaUtil: number, percentage: number, minDays: number, maxDays: number) => {
+    const threshold = vidaUtil * percentage;
+    return Math.max(minDays, Math.min(maxDays, threshold));
+  };
+
+  // Function to determine the expiration alert level
+  const getExpirationAlert = (fechaCreacion: string, fechaVencimiento: string) => {
+    const hoy = new Date();
+    const vencimiento = new Date(fechaVencimiento);
+    const creacion = new Date(fechaCreacion);
+    
+    // Calculate days
+    const vidaUtil = Math.ceil((vencimiento.getTime() - creacion.getTime()) / (1000 * 60 * 60 * 24));
+    const diasRestantes = Math.ceil((vencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // If already expired
+    if (diasRestantes <= 0) {
+      return { level: 'expired', days: diasRestantes, label: 'Vencido' };
+    }
+    
+    // Calculate thresholds
+    const umbralAmarillo = calculateThreshold(vidaUtil, 0.20, 3, 30);
+    const umbralRojo = calculateThreshold(vidaUtil, 0.10, 1, 7);
+    
+    // Determine level
+    if (diasRestantes <= umbralRojo) {
+      return { level: 'critical', days: diasRestantes, label: 'Crítico' };
+    } else if (diasRestantes <= umbralAmarillo) {
+      return { level: 'warning', days: diasRestantes, label: 'Próximo a vencer' };
+    } else {
+      return { level: 'ok', days: diasRestantes, label: 'Vigente' };
+    }
+  };
 
   useEffect(() => {
     if (id && (isEditMode || isViewMode)) {
       fetchProducto();
+      checkExpirationAlert();
     }
     fetchTiendas();
     fetchExchangeRate();
   }, [id]);
+
+  // Check for expiration alerts
+  const checkExpirationAlert = async () => {
+    if (!id || isAddMode) return;
+    
+    try {
+      const hoy = new Date();
+      const fechaMaxima = new Date(hoy);
+      fechaMaxima.setDate(fechaMaxima.getDate() + 30);
+      const fechaMaximaStr = fechaMaxima.toISOString().split('T')[0];
+      
+      const response = await getEntradas({ 
+        id_servicio: id,
+        fecha_vencimiento_hasta: fechaMaximaStr 
+      }, 1, 100);
+      
+      if (response.data && response.data.length > 0) {
+        const filteredEntries = response.data.filter((entrada: any) => {
+          const productoId = entrada.servicioTienda?.servicio?.id_servicio;
+          return productoId === parseInt(id!);
+        });
+        
+        const hasExpiringEntries = filteredEntries.some((entrada: any) => {
+          if (!entrada.fecha || !entrada.fecha_vencimiento || entrada.cantidad_restante <= 0) {
+            return false;
+          }
+          const alerta = getExpirationAlert(entrada.fecha, entrada.fecha_vencimiento);
+          return alerta.level === 'critical' || alerta.level === 'warning' || alerta.level === 'expired';
+        });
+        
+        if (hasExpiringEntries) {
+          setShowExpirationAlert(true);
+          setExpirationAlertData({
+            productoId: id,
+            message: 'Este producto tiene entradas próximas a vencer'
+          });
+        } else {
+          setShowExpirationAlert(false);
+          setExpirationAlertData(null);
+        }
+      } else {
+        setShowExpirationAlert(false);
+        setExpirationAlertData(null);
+      }
+    } catch (error) {
+      console.error('Error checking expiration alerts:', error);
+      setShowExpirationAlert(false);
+      setExpirationAlertData(null);
+    }
+  };
 
   const fetchExchangeRate = async () => {
     try {
@@ -200,6 +347,13 @@ export default function ProductoFormPage() {
       showToast({ type: 'warning', message: 'Debe agregar al menos un código' });
       return;
     }
+    // Validate that there are no duplicate stores in productoTiendaList
+    const tiendaIds = formData.productoTiendaList.map(item => item.id_tienda).filter(id => id !== null);
+    const uniqueTiendaIds = new Set(tiendaIds);
+    if (tiendaIds.length !== uniqueTiendaIds.size) {
+      showToast({ type: 'error', message: 'No se puede guardar: hay tiendas duplicadas en la lista de precios y costos' });
+      return;
+    }
 
     try {
       setIsSaving(true);
@@ -216,24 +370,42 @@ export default function ProductoFormPage() {
         let baseList: any[] = [];
         
         // If user has configured specific stores in productoTiendaList, only include those stores
+        // This respects the user's decision to remove stores from the form
         if (formData.productoTiendaList.length > 0) {
           formData.productoTiendaList.forEach((specific: any) => {
             if (specific.id_tienda === null) return;
             
+            // Only include stores that have at least one price defined (not null and not 0)
+            const precioCup = specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general);
+            const precioUsd = specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general);
+            
+            // Skip if both prices are 0 or undefined
+            if ((precioCup === 0 || precioCup === null || precioCup === undefined) && 
+                (precioUsd === 0 || precioUsd === null || precioUsd === undefined)) {
+              return;
+            }
+            
             baseList.push({
               id_tienda: specific.id_tienda,
-              precio_cup: specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general),
-              precio_usd: specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general),
+              precio_cup: precioCup,
+              precio_usd: precioUsd,
             });
           });
         } 
         // If no specific stores configured but general prices exist, apply to all active stores
         else if (formData.precio_cup_general !== null || formData.precio_usd_general !== null) {
-          baseList = tiendas.filter(tienda => tienda.activo === true).map(tienda => ({
-            id_tienda: tienda.id_tienda,
-            precio_cup: toFixed5(formData.precio_cup_general),
-            precio_usd: toFixed5(formData.precio_usd_general),
-          }));
+          const precioCupGeneral = toFixed5(formData.precio_cup_general);
+          const precioUsdGeneral = toFixed5(formData.precio_usd_general);
+          
+          // Only apply general prices if at least one is defined and not 0
+          if ((precioCupGeneral !== 0 && precioCupGeneral !== null && precioCupGeneral !== undefined) ||
+              (precioUsdGeneral !== 0 && precioUsdGeneral !== null && precioUsdGeneral !== undefined)) {
+            baseList = tiendas.filter(tienda => tienda.activo === true).map(tienda => ({
+              id_tienda: tienda.id_tienda,
+              precio_cup: precioCupGeneral,
+              precio_usd: precioUsdGeneral,
+            }));
+          }
         }
         
         // Apply global cost fields to all stores
@@ -392,6 +564,33 @@ export default function ProductoFormPage() {
     });
   };
 
+  const handleTiendaPriceFocus = (index: number, field: string) => {
+    const tiendaProducto = formData.productoTiendaList[index];
+    const value = tiendaProducto[field as keyof typeof tiendaProducto];
+    
+    if (value !== null && value !== 0 && !isNaN(parseFloat(String(value)))) {
+      setPriceInputTexts(prev => ({
+        ...prev,
+        [index]: { ...prev[index], [field]: String(parseFloat(String(value))) }
+      }));
+    } else {
+      setPriceInputTexts(prev => ({
+        ...prev,
+        [index]: { ...prev[index], [field]: '' }
+      }));
+    }
+  };
+
+  const handleTiendaPriceBlur = (index: number, field: string) => {
+    setPriceInputTexts(prev => {
+      const updated = { ...prev[index] };
+      if (updated) {
+        delete updated[field as keyof typeof updated];
+      }
+      return { ...prev, [index]: updated };
+    });
+  };
+
   const handleGeneralPriceChange = (field: string, value: number | null) => {
     setFormData(prev => {
       const updated = { ...prev, [field]: value };
@@ -418,33 +617,53 @@ export default function ProductoFormPage() {
       
       return updated;
     });
-    
-    // Auto-apply to tiendas if all general prices are set and no tiendas exist yet
-    const hasAllGeneralPrices = formData.precio_cup_general !== null && formData.precio_usd_general !== null;
-    if (hasAllGeneralPrices && formData.productoTiendaList.length === 0) {
-      const newProductoTiendaList = tiendas.filter(tienda => tienda.activo === true).map(tienda => ({
-        id_tienda: tienda.id_tienda,
-        precio_cup: formData.precio_cup_general || 0,
-        precio_usd: formData.precio_usd_general || 0,
-        costo_cup: canViewCosts ? (formData.costo_cup_general || 0) : 0,
-        costo_usd: canViewCosts ? (formData.costo_usd_general || 0) : 0,
+  };
+
+  const handleGeneralPriceBlur = () => {
+    // Check if general prices are defined and update tiendas accordingly
+    const hasAnyGeneralPrice = 
+      (formData.precio_cup_general !== null && formData.precio_cup_general !== 0) ||
+      (formData.precio_usd_general !== null && formData.precio_usd_general !== 0);
+
+    if (hasAnyGeneralPrice && formData.productoTiendaList.length > 0) {
+      const precioCup = formData.precio_cup_general !== null && formData.precio_cup_general !== 0
+        ? (typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : (isNaN(parseFloat(formData.precio_cup_general)) ? 0 : parseFloat(formData.precio_cup_general)))
+        : null;
+      const precioUsd = formData.precio_usd_general !== null && formData.precio_usd_general !== 0
+        ? (typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : (isNaN(parseFloat(formData.precio_usd_general)) ? 0 : parseFloat(formData.precio_usd_general)))
+        : null;
+      
+      // Get all active tienda IDs
+      const activeTiendaIds = tiendas.filter(tienda => tienda.activo === true).map(tienda => tienda.id_tienda);
+      
+      // Get existing tienda IDs from productoTiendaList
+      const existingTiendaIds = formData.productoTiendaList.map(item => item.id_tienda).filter(id => id !== null);
+      
+      // Find missing tienda IDs
+      const missingTiendaIds = activeTiendaIds.filter(id => !existingTiendaIds.includes(id));
+      
+      // Create new entries for missing tiendas
+      const newTiendaEntries = missingTiendaIds.map(id_tienda => ({
+        id_tienda,
+        precio_cup: precioCup !== null ? precioCup : 0,
+        precio_usd: precioUsd !== null ? precioUsd : 0,
+        costo_cup: formData.costo_cup_general || 0,
+        costo_usd: formData.costo_usd_general || 0,
       }));
       
+      // Update existing entries - only update prices that are defined
       setFormData(prev => ({
         ...prev,
-        productoTiendaList: newProductoTiendaList
-      }));
-      setIsPricesExpanded(true);
-    } else if (hasAllGeneralPrices && formData.productoTiendaList.length > 0) {
-      setFormData(prev => ({
-        ...prev,
-        productoTiendaList: prev.productoTiendaList.map(item => ({
-          ...item,
-          precio_cup: formData.precio_cup_general !== null ? formData.precio_cup_general : item.precio_cup,
-          precio_usd: formData.precio_usd_general !== null ? formData.precio_usd_general : item.precio_usd,
-          costo_cup: canViewCosts ? (formData.costo_cup_general !== null ? formData.costo_cup_general : item.costo_cup) : item.costo_cup,
-          costo_usd: canViewCosts ? (formData.costo_usd_general !== null ? formData.costo_usd_general : item.costo_usd) : item.costo_usd,
-        }))
+        productoTiendaList: [
+          ...prev.productoTiendaList.map(item => ({
+            ...item,
+            ...(precioCup !== null && { precio_cup: precioCup }),
+            ...(precioUsd !== null && { precio_usd: precioUsd }),
+            costo_cup: formData.costo_cup_general || 0,
+            costo_usd: formData.costo_usd_general || 0,
+          })),
+          ...newTiendaEntries
+        ]
       }));
     }
   };
@@ -489,46 +708,19 @@ export default function ProductoFormPage() {
         toastKey={toast.key}
       />
       
-      {/* ConfirmDialog is now global via GlobalConfirmDialog in layout */}
-      <SidebarNavigation 
-        currentRoute="Productos" 
-        ref={sidebarNavRef}
-      />
-
       <div 
         className="min-h-screen"
         style={{ backgroundColor: colors.background }}
       >
-        <Header
-          onMenuPress={handleMenuPress}
-          onThemePress={toggleTheme}
-          onNotificationsPress={handleNotificationsPress}
-          onProfilePress={handleProfilePress}
-          showViewToggle={false}
+        <Header 
+          showBackButton={true}
+          onBackPress={() => router.push('/productos')}
           isDark={isDarkMode}
-          title="Abacus"
-          showLogo={true}
+          title={isViewMode ? 'Información del Producto' : isEditMode ? 'Editar Producto' : 'Agregar Producto'}
           currentRoute="Productos"
         />
 
         <div className="pt-20 px-4 md:px-4 lg:px-4 pb-8 max-w-4xl mx-auto">
-          {/* Page Title */}
-          <div className="flex items-center mb-6 mt-4">
-            <button
-              className="mr-4 p-2 rounded-lg transition-colors hover:opacity-80"
-              style={{ backgroundColor: colors.surface, color: colors.onSurface }}
-              onClick={() => router.push('/productos')}
-            >
-              <ArrowLeft size={24} />
-            </button>
-            <h1 
-              className="text-2xl md:text-3xl font-bold"
-              style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
-            >
-              {isAddMode ? 'Agregar Producto' : isEditMode ? 'Editar Producto' : 'Ver Producto'}
-            </h1>
-          </div>
-
           {isFetchingProducto ? (
             <div className="flex flex-col items-center justify-center py-12">
               <div className="w-12 h-12 border-4 border-t-4 rounded-full animate-spin mb-4" style={{ borderRightColor: colors.primary, borderBottomColor: colors.primary, borderLeftColor: colors.primary, borderTopColor: 'transparent' }} />
@@ -536,6 +728,165 @@ export default function ProductoFormPage() {
             </div>
           ) : (
             <>
+              {/* Action Buttons Section - For Admin and users with permissions */}
+              {(() => {
+                const canManageEntradas = isAdmin || (user?.permissions?.entrada);
+                const canManageSalidas = isAdmin || (user?.permissions?.salida);
+                const mobile = isMobile;
+                
+                if ((!canManageEntradas && !canManageSalidas) || !(isViewMode || isEditMode)) return null;
+                
+                return (
+                  <div 
+                    className="rounded-2xl p-4 mb-6 shadow-lg"
+                    style={{ backgroundColor: colors.surface }}
+                  >
+                    <div className="flex gap-3 flex-wrap justify-center">
+                      {canManageEntradas && (
+                        <button
+                          className="flex items-center justify-center transition-colors hover:opacity-80"
+                          style={{ 
+                            backgroundColor: isDarkMode ? '#1B5E20' : '#E8F5E9',
+                            width: mobile ? '48px' : 'auto',
+                            height: mobile ? '48px' : 'auto',
+                            borderRadius: mobile ? '50%' : '8px',
+                            padding: mobile ? '0' : '12px'
+                          }}
+                          onClick={() => router.push(`/entradas/form?mode=add&productoId=${id}`)}
+                        >
+                          <img 
+                            src="/package-add.png" 
+                            alt="Agregar Entrada" 
+                            style={{ 
+                              width: '24px', 
+                              height: '24px',
+                              filter: isDarkMode ? 'brightness(0) invert(1)' : 'brightness(0)'
+                            }}
+                          />
+                          {!mobile && (
+                            <span className="ml-2 text-sm font-medium" style={{ color: isDarkMode ? '#FFFFFF' : '#000000' }}>Agregar Entrada</span>
+                          )}
+                        </button>
+                      )}
+                      <button
+                        className="flex items-center justify-center transition-colors hover:opacity-80"
+                        style={{ 
+                          backgroundColor: isDarkMode ? '#0D47A1' : '#E3F2FD', 
+                          opacity: 0.5,
+                          width: mobile ? '48px' : 'auto',
+                          height: mobile ? '48px' : 'auto',
+                          borderRadius: mobile ? '50%' : '8px',
+                          padding: mobile ? '0' : '12px'
+                        }}
+                        disabled={true}
+                      >
+                        <img 
+                          src="/moving.png" 
+                          alt="Movimiento" 
+                          style={{ 
+                            width: '24px', 
+                            height: '24px',
+                            filter: isDarkMode ? 'brightness(0) invert(1)' : 'brightness(0)'
+                          }}
+                        />
+                        {!mobile && (
+                          <span className="ml-2 text-sm font-medium" style={{ color: isDarkMode ? '#FFFFFF' : '#000000' }}>Movimiento</span>
+                        )}
+                      </button>
+                      {canManageSalidas && (
+                        <button
+                          className="flex items-center justify-center transition-colors hover:opacity-80"
+                          style={{ 
+                            backgroundColor: isDarkMode ? '#B71C1C' : '#FFEBEE',
+                            width: mobile ? '48px' : 'auto',
+                            height: mobile ? '48px' : 'auto',
+                            borderRadius: mobile ? '50%' : '8px',
+                            padding: mobile ? '0' : '12px'
+                          }}
+                          onClick={() => router.push(`/salidas/form?mode=add&productoId=${id}`)}
+                        >
+                          <img 
+                            src="/box.png" 
+                            alt="Hacer Salida" 
+                            style={{ 
+                              width: '24px', 
+                              height: '24px',
+                              filter: isDarkMode ? 'brightness(0) invert(1)' : 'brightness(0)'
+                            }}
+                          />
+                          {!mobile && (
+                            <span className="ml-2 text-sm font-medium" style={{ color: isDarkMode ? '#FFFFFF' : '#000000' }}>Hacer Salida</span>
+                          )}
+                        </button>
+                      )}
+                      <button
+                        className="flex items-center justify-center transition-colors hover:opacity-80"
+                        style={{ 
+                          backgroundColor: isDarkMode ? '#F57C00' : '#FFF3E0',
+                          width: mobile ? '48px' : 'auto',
+                          height: mobile ? '48px' : 'auto',
+                          borderRadius: mobile ? '50%' : '8px',
+                          padding: mobile ? '0' : '12px'
+                        }}
+                        onClick={() => router.push(`/ventas/form?mode=add&productoId=${id}`)}
+                      >
+                        <img 
+                          src="/sales.png" 
+                          alt="Vender" 
+                          style={{ 
+                            width: '24px', 
+                            height: '24px',
+                            filter: isDarkMode ? 'brightness(0) invert(1)' : 'brightness(0)'
+                          }}
+                        />
+                        {!mobile && (
+                          <span className="ml-2 text-sm font-medium" style={{ color: isDarkMode ? '#FFFFFF' : '#000000' }}>Vender</span>
+                        )}
+                      </button>
+                      <button
+                        className="flex items-center justify-center transition-colors hover:opacity-80"
+                        style={{ 
+                          backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', 
+                          border: '1px solid',
+                          borderColor: colors.primary,
+                          width: mobile ? '48px' : 'auto',
+                          height: mobile ? '48px' : 'auto',
+                          borderRadius: mobile ? '50%' : '8px',
+                          padding: mobile ? '0' : '12px'
+                        }}
+                        onClick={() => setShowInfoModal(true)}
+                      >
+                        <img 
+                          src="/information.png" 
+                          alt="Info" 
+                          style={{ 
+                            width: '24px', 
+                            height: '24px',
+                            filter: isDarkMode ? 'brightness(0) invert(1)' : 'brightness(0)'
+                          }}
+                        />
+                        {!mobile && (
+                          <span className="ml-2 text-sm font-medium" style={{ color: isDarkMode ? colors.primary : '#1976D2' }}>Info</span>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Expiration Alert */}
+              {showExpirationAlert && (
+                <div 
+                  className="rounded-2xl p-4 mb-6 shadow-lg flex items-center gap-3"
+                  style={{ backgroundColor: '#FFF3E0', border: '1px solid #FF9800' }}
+                >
+                  <AlertTriangle size={20} style={{ color: '#FF9800' }} />
+                  <p className="text-sm font-medium" style={{ color: '#E65100' }}>
+                    {expirationAlertData?.message || 'Este producto tiene entradas próximas a vencer'}
+                  </p>
+                </div>
+              )}
+
               {/* Form Card */}
               <div 
                 className="rounded-2xl p-5 mb-6 shadow-lg"
@@ -933,8 +1284,10 @@ export default function ProductoFormPage() {
                         color: colors.onSurface, 
                         borderColor: colors.outlineVariant
                       }}
+                      placeholder="Precio CUP"
                       value={formData.precio_cup_general || ''}
-                      onChange={(e) => handleGeneralPriceChange('precio_cup_general', parseFloat(e.target.value) || null)}
+                      onChange={(e) => handleGeneralPriceChange('precio_cup_general', e.target.value === '' ? null : parseFloat(e.target.value))}
+                      onBlur={handleGeneralPriceBlur}
                       disabled={isReadOnly}
                     />
                   </div>
@@ -951,8 +1304,10 @@ export default function ProductoFormPage() {
                         color: colors.onSurface, 
                         borderColor: colors.outlineVariant
                       }}
+                      placeholder="Precio USD"
                       value={formData.precio_usd_general || ''}
-                      onChange={(e) => handleGeneralPriceChange('precio_usd_general', parseFloat(e.target.value) || null)}
+                      onChange={(e) => handleGeneralPriceChange('precio_usd_general', e.target.value === '' ? null : parseFloat(e.target.value))}
+                      onBlur={handleGeneralPriceBlur}
                       disabled={isReadOnly}
                     />
                   </div>
@@ -975,8 +1330,16 @@ export default function ProductoFormPage() {
                     {canEditProduct && (
                       <button
                         className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:opacity-80"
-                        style={{ backgroundColor: colors.primary, color: '#fff' }}
+                        style={{ 
+                          backgroundColor: formData.productoTiendaList.filter(item => item.id_tienda !== null).length >= tiendas.filter(t => t.activo === true).length 
+                            ? colors.outlineVariant 
+                            : colors.primary,
+                          color: formData.productoTiendaList.filter(item => item.id_tienda !== null).length >= tiendas.filter(t => t.activo === true).length 
+                            ? colors.outline 
+                            : '#fff'
+                        }}
                         onClick={handleAddTiendaProducto}
+                        disabled={formData.productoTiendaList.filter(item => item.id_tienda !== null).length >= tiendas.filter(t => t.activo === true).length}
                       >
                         <Plus size={18} />
                       </button>
@@ -993,107 +1356,117 @@ export default function ProductoFormPage() {
 
                 {isPricesExpanded && (
                   <>
-                    <div className="space-y-4 mb-4">
-                      {formData.productoTiendaList.map((tiendaProducto, index) => {
-                        const tienda = tiendas.find(t => t.id_tienda === tiendaProducto.id_tienda);
-                        return (
-                          <div 
-                            key={index}
-                            className="p-4 rounded-lg"
-                            style={{ backgroundColor: colors.background }}
-                          >
-                            <div className="flex justify-between items-center mb-3">
-                              <h3 className="font-semibold" style={{ color: colors.onSurface }}>
-                                {tienda?.nombre || `Tienda ${tiendaProducto.id_tienda}`}
-                              </h3>
-                              {!isReadOnly && (
-                                <button
-                                  className="p-2 rounded-lg transition-colors hover:opacity-80"
-                                  style={{ backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }}
-                                  onClick={() => handleRemoveTiendaProducto(index)}
-                                >
-                                  <Trash2 size={16} style={{ color: colors.error }} />
-                                </button>
-                              )}
+                    {formData.productoTiendaList.length === 0 ? (
+                      <p className="text-sm text-center py-4" style={{ color: colors.outline }}>
+                        No hay precios configurados
+                      </p>
+                    ) : (
+                      <div className="space-y-4 mb-4">
+                        {formData.productoTiendaList.map((tiendaProducto, index) => {
+                          const tienda = tiendas.find(t => t.id_tienda === tiendaProducto.id_tienda);
+                          return (
+                            <div 
+                              key={index}
+                              className="p-4 rounded-lg"
+                              style={{ backgroundColor: colors.background }}
+                            >
+                              <div className="flex justify-between items-center mb-3">
+                                <h3 className="font-semibold" style={{ color: colors.onSurface }}>
+                                  {tienda?.nombre || `Tienda ${tiendaProducto.id_tienda}`}
+                                </h3>
+                                {!isReadOnly && (
+                                  <button
+                                    className="p-2 rounded-lg transition-colors hover:opacity-80"
+                                    style={{ backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }}
+                                    onClick={() => handleRemoveTiendaProducto(index)}
+                                  >
+                                    <Trash2 size={16} style={{ color: colors.error }} />
+                                  </button>
+                                )}
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium mb-1" style={{ color: colors.outline }}>
+                                    Precio CUP
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                                    style={{ 
+                                      backgroundColor: colors.surface, 
+                                      color: colors.onSurface, 
+                                      borderColor: colors.outlineVariant
+                                    }}
+                                    value={tiendaProducto.precio_cup ?? ''}
+                                    onChange={(e) => handleTiendaProductoChange(index, 'precio_cup', e.target.value)}
+                                    disabled={isReadOnly}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium mb-1" style={{ color: colors.outline }}>
+                                    Precio USD
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                                    style={{ 
+                                      backgroundColor: colors.surface, 
+                                      color: colors.onSurface, 
+                                      borderColor: colors.outlineVariant
+                                    }}
+                                    value={tiendaProducto.precio_usd ?? ''}
+                                    onChange={(e) => handleTiendaProductoChange(index, 'precio_usd', e.target.value)}
+                                    disabled={isReadOnly}
+                                  />
+                                </div>
+                                {canViewCosts && (
+                                  <>
+                                    <div>
+                                      <label className="block text-xs font-medium mb-1" style={{ color: colors.outline }}>
+                                        Costo CUP
+                                      </label>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                                        style={{ 
+                                          backgroundColor: colors.surface, 
+                                          color: colors.onSurface, 
+                                          borderColor: colors.outlineVariant
+                                        }}
+                                        value={tiendaProducto.costo_cup ?? ''}
+                                        onChange={(e) => handleTiendaProductoChange(index, 'costo_cup', e.target.value)}
+                                        disabled={isReadOnly}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium mb-1" style={{ color: colors.outline }}>
+                                        Costo USD
+                                      </label>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                                        style={{ 
+                                          backgroundColor: colors.surface, 
+                                          color: colors.onSurface, 
+                                          borderColor: colors.outlineVariant
+                                        }}
+                                        value={tiendaProducto.costo_usd ?? ''}
+                                        onChange={(e) => handleTiendaProductoChange(index, 'costo_usd', e.target.value)}
+                                        disabled={isReadOnly}
+                                      />
+                                    </div>
+                                  </>
+                                )}
+                              </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <label className="block text-xs font-medium mb-1" style={{ color: colors.outline }}>
-                                  Precio CUP
-                                </label>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
-                                  style={{ 
-                                    backgroundColor: colors.surface, 
-                                    color: colors.onSurface, 
-                                    borderColor: colors.outlineVariant
-                                  }}
-                                  value={tiendaProducto.precio_cup ?? ''}
-                                  onChange={(e) => handleTiendaProductoChange(index, 'precio_cup', e.target.value)}
-                                  disabled={isReadOnly}
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium mb-1" style={{ color: colors.outline }}>
-                                  Precio USD
-                                </label>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
-                                  style={{ 
-                                    backgroundColor: colors.surface, 
-                                    color: colors.onSurface, 
-                                    borderColor: colors.outlineVariant
-                                  }}
-                                  value={tiendaProducto.precio_usd ?? ''}
-                                  onChange={(e) => handleTiendaProductoChange(index, 'precio_usd', e.target.value)}
-                                  disabled={isReadOnly}
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium mb-1" style={{ color: colors.outline }}>
-                                  Costo CUP
-                                </label>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
-                                  style={{ 
-                                    backgroundColor: colors.surface, 
-                                    color: colors.onSurface, 
-                                    borderColor: colors.outlineVariant
-                                  }}
-                                  value={tiendaProducto.costo_cup ?? ''}
-                                  onChange={(e) => handleTiendaProductoChange(index, 'costo_cup', e.target.value)}
-                                  disabled={isReadOnly}
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium mb-1" style={{ color: colors.outline }}>
-                                  Costo USD
-                                </label>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
-                                  style={{ 
-                                    backgroundColor: colors.surface, 
-                                    color: colors.onSurface, 
-                                    borderColor: colors.outlineVariant
-                                  }}
-                                  value={tiendaProducto.costo_usd ?? ''}
-                                  onChange={(e) => handleTiendaProductoChange(index, 'costo_usd', e.target.value)}
-                                  disabled={isReadOnly}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -1227,19 +1600,28 @@ export default function ProductoFormPage() {
                 >
                   Código de barras
                 </label>
-                <input
-                  type="text"
-                  className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
-                  style={{ 
-                    backgroundColor: colors.background, 
-                    color: colors.onSurface, 
-                    borderColor: colors.outlineVariant
-                  }}
-                  placeholder="Escanear o ingresar código"
-                  value={newCodigo}
-                  onChange={(e) => setNewCodigo(e.target.value)}
-                  autoFocus
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
+                    style={{ 
+                      backgroundColor: colors.background, 
+                      color: colors.onSurface, 
+                      borderColor: colors.outlineVariant
+                    }}
+                    placeholder="Escanear o ingresar código"
+                    value={newCodigo}
+                    onChange={(e) => setNewCodigo(e.target.value)}
+                    autoFocus
+                  />
+                  <button
+                    className="px-3 py-3 rounded-lg flex items-center gap-2 transition-colors hover:opacity-80"
+                    style={{ backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }}
+                    onClick={generateRandomEAN13}
+                  >
+                    <RefreshCw size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />
+                  </button>
+                </div>
               </div>
               <div className="mb-4">
                 <label 
@@ -1281,6 +1663,80 @@ export default function ProductoFormPage() {
                   Agregar
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Info Modal */}
+        {showInfoModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div 
+              className="rounded-2xl p-6 w-full max-w-md"
+              style={{ backgroundColor: colors.surface }}
+            >
+              <h2 
+                className="text-xl font-bold mb-4"
+                style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+              >
+                Información de Acciones
+              </h2>
+              <div className="space-y-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <div 
+                    className="p-2 rounded-lg"
+                    style={{ backgroundColor: isDarkMode ? '#1B5E20' : '#E8F5E9' }}
+                  >
+                    <Package size={20} style={{ color: isDarkMode ? '#FFFFFF' : '#000000' }} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-sm" style={{ color: colors.onSurface }}>Agregar Entrada</h3>
+                    <p className="text-xs mt-1" style={{ color: colors.outline }}>Registra la entrada de stock al inventario del producto.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div 
+                    className="p-2 rounded-lg"
+                    style={{ backgroundColor: isDarkMode ? '#0D47A1' : '#E3F2FD' }}
+                  >
+                    <ArrowRightLeft size={20} style={{ color: isDarkMode ? '#FFFFFF' : '#000000' }} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-sm" style={{ color: colors.onSurface }}>Movimiento</h3>
+                    <p className="text-xs mt-1" style={{ color: colors.outline }}>Realiza transferencias de stock entre tiendas o almacenes.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div 
+                    className="p-2 rounded-lg"
+                    style={{ backgroundColor: isDarkMode ? '#B71C1C' : '#FFEBEE' }}
+                  >
+                    <Box size={20} style={{ color: isDarkMode ? '#FFFFFF' : '#000000' }} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-sm" style={{ color: colors.onSurface }}>Hacer Salida</h3>
+                    <p className="text-xs mt-1" style={{ color: colors.outline }}>Registra la salida de stock del inventario del producto.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div 
+                    className="p-2 rounded-lg"
+                    style={{ backgroundColor: isDarkMode ? '#F57C00' : '#FFF3E0' }}
+                  >
+                    <ShoppingCart size={20} style={{ color: isDarkMode ? '#FFFFFF' : '#000000' }} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-sm" style={{ color: colors.onSurface }}>Vender</h3>
+                    <p className="text-xs mt-1" style={{ color: colors.outline }}>Registra una venta del producto reduciendo el stock disponible.</p>
+                  </div>
+                </div>
+              </div>
+              <button
+                className="w-full rounded-lg px-4 py-3 transition-colors hover:opacity-90"
+                style={{ backgroundColor: colors.surface, color: colors.onSurface }}
+                onClick={() => setShowInfoModal(false)}
+              >
+                Cerrar
+              </button>
             </div>
           </div>
         )}

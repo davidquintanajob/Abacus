@@ -1130,6 +1130,16 @@ export default function ProductosPage() {
                 className="rounded-2xl p-4 mb-4 shadow-lg"
                 style={{ backgroundColor: colors.surface }}
               >
+                <div className="flex justify-between items-center mb-4">
+                  <h2 
+                    className="text-lg font-bold"
+                    style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                  >
+                    Filtros
+                  </h2>
+                </div>
+
+                {/* All filters always visible */}
                 <div className="flex items-center gap-3 flex-wrap">
                   {/* Nombre */}
                   <div className="flex-1 min-w-[150px]">
@@ -1374,9 +1384,58 @@ export default function ProductosPage() {
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Action Buttons - Outside filter card, smaller, side by side */}
+                {/* Cantidad fields on second row */}
+                <div className="flex items-center gap-3 flex-wrap mt-3">
+                  {/* Cantidad Mínima */}
+                  <div className="w-[110px]">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Cantidad Mínima
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Mínima..."
+                      value={filters.cantidad_min}
+                      onChange={(e) => setFilters(prev => ({ ...prev, cantidad_min: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Cantidad Máxima */}
+                  <div className="w-[110px]">
+                    <label 
+                      className="block text-sm font-medium mb-2"
+                      style={{ color: colors.outline }}
+                    >
+                      Cantidad Máxima
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Máxima..."
+                      value={filters.cantidad_max}
+                      onChange={(e) => setFilters(prev => ({ ...prev, cantidad_max: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
               <div className="flex gap-3 mb-4">
                 <button
                   className="rounded-lg px-4 py-2 flex items-center justify-center gap-2 border-2 transition-colors hover:opacity-80"
@@ -1720,11 +1779,13 @@ export default function ProductosPage() {
                         </label>
                         <input
                           type="number"
+                          step="0.01"
                           className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
                           style={{ 
                             backgroundColor: colors.background, 
                             color: colors.onSurface, 
-                            borderColor: colors.outlineVariant
+                            borderColor: colors.outlineVariant,
+                            fontFamily: 'Inter, sans-serif'
                           }}
                           placeholder="0"
                           value={filters.cantidad_min}
@@ -1740,11 +1801,13 @@ export default function ProductosPage() {
                         </label>
                         <input
                           type="number"
+                          step="0.01"
                           className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
                           style={{ 
                             backgroundColor: colors.background, 
                             color: colors.onSurface, 
-                            borderColor: colors.outlineVariant
+                            borderColor: colors.outlineVariant,
+                            fontFamily: 'Inter, sans-serif'
                           }}
                           placeholder="0"
                           value={filters.cantidad_max}
@@ -1752,6 +1815,7 @@ export default function ProductosPage() {
                         />
                       </div>
                     </div>
+
                   </>
                 )}
 
@@ -1785,6 +1849,7 @@ export default function ProductosPage() {
                   </button>
                 </div>
               </div>
+              </div>
 
               {/* Action Buttons */}
               <div className="flex gap-3 mb-6">
@@ -1806,7 +1871,6 @@ export default function ProductosPage() {
                   <Download size={20} />
                   <span className="font-medium">Exportar Datos</span>
                 </button>
-              </div>
               </div>
             </>
           )}
