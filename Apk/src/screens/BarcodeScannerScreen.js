@@ -345,6 +345,32 @@ const BarcodeScannerContent = () => {
     showToast({ type: 'success', message: 'Código agregado correctamente' });
   };
 
+  const generateRandomEAN13 = () => {
+    // Generate 12 random digits
+    let code = '';
+    for (let i = 0; i < 12; i++) {
+      code += Math.floor(Math.random() * 10);
+    }
+
+    // Calculate checksum for EAN-13
+    let sum = 0;
+    for (let i = 0; i < 12; i++) {
+      const digit = parseInt(code[i]);
+      if (i % 2 === 0) {
+        sum += digit * 1;
+      } else {
+        sum += digit * 3;
+      }
+    }
+    const checksum = (10 - (sum % 10)) % 10;
+
+    // Add checksum to complete EAN-13
+    const fullCode = code + checksum;
+
+    setManualCode(fullCode);
+    showToast({ type: 'success', message: 'Código aleatorio generado' });
+  };
+
   const handleNextStep = () => {
     if (currentStep < tutorialSteps.length - 1) {
       setCurrentStep(prev => prev + 1);
@@ -490,15 +516,26 @@ const BarcodeScannerContent = () => {
                   keyboardType="numeric"
                   maxLength={13}
                 />
-                <TouchableOpacity
-                  style={[styles.addManualCodeButton, { backgroundColor: colors.primary }]}
-                  onPress={handleAddManualCode}
-                >
-                  <Ionicons name="add" size={responsive.responsiveWidth(20)} color="#fff" />
-                  <Text style={[styles.addManualCodeButtonText, { color: '#fff' }]}>
-                    Agregar código
-                  </Text>
-                </TouchableOpacity>
+                <View style={styles.manualButtonsRow}>
+                  <TouchableOpacity
+                    style={[styles.generateCodeButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                    onPress={generateRandomEAN13}
+                  >
+                    <Ionicons name="refresh" size={responsive.responsiveWidth(16)} color={isDarkMode ? colors.primary : '#1976D2'} />
+                    <Text style={[styles.generateCodeButtonText, { color: isDarkMode ? colors.primary : '#1976D2' }]}>
+                      Generar código
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.addManualCodeButton, { backgroundColor: colors.primary }]}
+                    onPress={handleAddManualCode}
+                  >
+                    <Ionicons name="add" size={responsive.responsiveWidth(20)} color="#fff" />
+                    <Text style={[styles.addManualCodeButtonText, { color: '#fff' }]}>
+                      Agregar código
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
             
@@ -838,6 +875,25 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveWidth(14),
     fontWeight: '600',
     marginLeft: responsive.responsiveWidth(8),
+  },
+  manualButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: responsive.responsiveWidth(10),
+  },
+  generateCodeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: responsive.responsiveWidth(15),
+    paddingVertical: responsive.responsiveHeight(12),
+    borderRadius: responsive.responsiveWidth(10),
+    flex: 1,
+  },
+  generateCodeButtonText: {
+    fontSize: responsive.responsiveWidth(12),
+    fontWeight: '600',
+    marginLeft: responsive.responsiveWidth(5),
   },
   toggleModeButton: {
     position: 'absolute',

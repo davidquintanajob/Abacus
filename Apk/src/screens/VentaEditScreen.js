@@ -334,10 +334,8 @@ const VentaEditContent = () => {
         setUsuarios([ventaUsuario]);
         setHasLoadedUsuarios(true);
       }
-      if (ventaCuentas.length > 0) {
-        setCuentas(ventaCuentas);
-        setHasLoadedCuentas(true);
-      }
+      // Load all available cuentas, not just those with payments
+      await fetchCuentas();
       if (ventaTienda) {
         setTiendas([ventaTienda]);
         setHasLoadedTiendas(true);
@@ -598,6 +596,20 @@ const VentaEditContent = () => {
       // Calculate total paid
       const totalPaidCUP = efectivoCup + transferenciaCup + (efectivoUsd + transferenciaUsd) * cambio;
       const totalPaidUSD = efectivoUsd + transferenciaUsd + (efectivoCup + transferenciaCup) / cambio;
+
+      // Check if paid amount differs from total (using tolerance for rounding discrepancies)
+      const tolerance = 0.1;
+      const amountDifference = Math.abs(totalPaidCUP - totalOriginalCUP);
+      
+      // If the amount paid differs significantly from the total, require a note
+      if (amountDifference > tolerance && (!formData.nota || formData.nota.trim() === '')) {
+        showToast({ 
+          type: 'warning', 
+          message: 'Debes agregar una nota explicando por qué se está cobrando un valor diferente al total' 
+        });
+        setIsSaving(false);
+        return;
+      }
 
       // Calculate difference and distribute equitably
       const diferenciaCUP = totalPaidCUP - totalOriginalCUP;
@@ -1080,6 +1092,16 @@ const VentaEditContent = () => {
                     >
                       <Text style={[styles.cuentaSelectorText, { color: selectedCuenta ? colors.onSurface : colors.outline }]} numberOfLines={1}>
                         {selectedCuenta?.nombre || 'Seleccionar cuenta...'}
+                        {selectedCuenta && (tipo === 'efectivo_usd' || tipo === 'transferencia_usd') && (
+                          <Text style={[styles.cuentaSelectorText, { color: colors.outline, fontWeight: 'bold' }]}>
+                            {' '}(1x{formData.cambio_moneda || cupToUsdRate})
+                          </Text>
+                        )}
+                        {selectedCuenta && (tipo === 'efectivo_cup' || tipo === 'transferencia_cup') && (
+                          <Text style={[styles.cuentaSelectorText, { color: colors.outline, fontWeight: 'bold' }]}>
+                            {' '}({formData.cambio_moneda || cupToUsdRate}x1)
+                          </Text>
+                        )}
                       </Text>
                       <Ionicons name="chevron-down" size={responsive.responsiveWidth(16)} color={colors.outline} />
                     </TouchableOpacity>

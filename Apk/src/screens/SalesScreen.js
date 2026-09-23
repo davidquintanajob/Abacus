@@ -16,7 +16,7 @@ import { useOffline } from '../context/OfflineContext';
 import { getServicios, getServicioByCodigo } from '../services/servicioService';
 import { createVenta } from '../services/ventaService';
 import { getTiendas } from '../services/tiendaService';
-import { getCuentas } from '../services/cuentaService';
+import { getCuentas, getCuentaById } from '../services/cuentaService';
 import { getApiBaseUrl } from '../services/api';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
@@ -254,6 +254,8 @@ const SalesContent = () => {
             cantidad: 1,
             precio_cup: parseFloat(servicioTienda.precio_cup || 0),
             precio_usd: parseFloat(servicioTienda.precio_usd || 0),
+            precio_original_cup: parseFloat(servicioTienda.precio_cup || 0),
+            precio_original_usd: parseFloat(servicioTienda.precio_usd || 0),
             esOferta: preselectedProduct.componentes?.length > 0,
             componentes: [],
           };
@@ -667,6 +669,8 @@ const SalesContent = () => {
         cantidad: 1,
         precio_cup: parseFloat(servicioTienda.precio_cup || 0),
         precio_usd: parseFloat(servicioTienda.precio_usd || 0),
+        precio_original_cup: parseFloat(servicioTienda.precio_cup || 0),
+        precio_original_usd: parseFloat(servicioTienda.precio_usd || 0),
         esOferta: servicio.componentes?.length > 0,
         componentes: [],
       };
@@ -799,6 +803,8 @@ const SalesContent = () => {
         cantidad: 1,
         precio_cup: parseFloat(servicioTienda.precio_cup || 0),
         precio_usd: parseFloat(servicioTienda.precio_usd || 0),
+        precio_original_cup: parseFloat(servicioTienda.precio_cup || 0),
+        precio_original_usd: parseFloat(servicioTienda.precio_usd || 0),
         esOferta: servicio.componentes?.length > 0,
         componentes: [],
       };
@@ -875,6 +881,8 @@ const SalesContent = () => {
         cantidad: 1,
         precio_cup: parseFloat(servicioTienda.precio_cup || 0),
         precio_usd: parseFloat(servicioTienda.precio_usd || 0),
+        precio_original_cup: parseFloat(servicioTienda.precio_cup || 0),
+        precio_original_usd: parseFloat(servicioTienda.precio_usd || 0),
         esOferta: servicio.componentes?.length > 0,
         componentes: [],
       };
@@ -951,7 +959,16 @@ const SalesContent = () => {
   };
 
   const getRemainingAmount = () => {
-    return calculateTotal() - calculatePaidTotal();
+    const roundTo5Decimals = (value) => Math.round(value * 100000) / 100000;
+    const tolerance = 0.01;
+    const remaining = roundTo5Decimals(calculateTotal() - calculatePaidTotal());
+    
+    // If the difference is within tolerance, treat it as zero
+    if (Math.abs(remaining) <= tolerance) {
+      return 0;
+    }
+    
+    return remaining;
   };
 
   // Helper function to format number with 2 decimal places (default)
@@ -1021,6 +1038,17 @@ const SalesContent = () => {
       return;
     }
 
+    if (!config || !config.cupToUsdRate) {
+      showToast({ type: 'warning', message: 'Cargando configuración, por favor espera...' });
+      await loadConfig();
+      return;
+    }
+
+    if (!user || !user.id_usuario) {
+      showToast({ type: 'warning', message: 'Usuario no disponible, por favor recarga la página' });
+      return;
+    }
+
     try {
       const parseAmount = (value) => {
         const parsed = parseFloat(value);
@@ -1032,17 +1060,91 @@ const SalesContent = () => {
       const transferenciaCup = parseAmount(paymentAmounts.transferencia_cup);
       const transferenciaUsd = parseAmount(paymentAmounts.transferencia_usd);
 
-      // Calculate total original prices
-      const totalOriginalCUP = saleItems.reduce((sum, item) => sum + (item.precio_cup * item.cantidad), 0);
-      const totalOriginalUSD = saleItems.reduce((sum, item) => sum + (item.precio_usd * item.cantidad), 0);
+      // Validate that amounts don't exceed database limit (DECIMAL(10, 5) = max 99,999.99999)
+      const MAX_DECIMAL_10_5 = 99999.99999;
+      const validateDecimalLimit = (value, fieldName) => {
+        if (value > MAX_DECIMAL_10_5) {
+          showToast({ 
+            type: 'error', 
+            message: `El valor de ${fieldName} (${value.toFixed(5)}) excede el límite máximo permitido de ${MAX_DECIMAL_10_5.toFixed(5)}. Por favor contacta al administrador del sistema para aumentar el límite de la base de datos.` 
+          });
+          return false;
+        }
+        return true;
+      };
 
+      if (!validateDecimalLimit(efectivoCup, 'efectivo CUP')) return;
+      if (!validateDecimalLimit(efectivoUsd, 'efectivo USD')) return;
+      if (!validateDecimalLimit(transferenciaCup, 'transferencia CUP')) return;
+      if (!validateDecimalLimit(transferenciaUsd, 'transferencia USD')) return;
+
+      // Validate that account funds won't exceed database limit after adding sale amount
+      const validateAccountFundLimit = async (cuenta, amount, fieldName) => {
+        if (!cuenta || amount <= 0) return true;
+        
+        try {
+          const cuentaData = await getCuentaById(cuenta.id_cuenta);
+          const currentFondo = parseFloat(cuentaData.fondo || 0);
+          const newFondo = currentFondo + amount;
+          
+          if (newFondo > MAX_DECIMAL_10_5) {
+            showToast({ 
+              type: 'error', 
+              message: `El fondo de la cuenta "${cuenta.nombre}" excederá el límite máximo. Fondo actual: ${currentFondo.toFixed(5)}, Nuevo fondo: ${newFondo.toFixed(5)}, Límite: ${MAX_DECIMAL_10_5.toFixed(5)}. Por favor contacta al administrador del sistema para aumentar el límite de la base de datos.` 
+            });
+            return false;
+          }
+          return true;
+        } catch (error) {
+          console.error('Error validating account fund:', error);
+          return true; // Allow if we can't validate (fail open)
+        }
+      };
+
+      const fundValidations = await Promise.all([
+        validateAccountFundLimit(selectedCuentas.efectivo_cup, efectivoCup, 'efectivo CUP'),
+        validateAccountFundLimit(selectedCuentas.efectivo_usd, efectivoUsd, 'efectivo USD'),
+        validateAccountFundLimit(selectedCuentas.transferencia_cup, transferenciaCup, 'transferencia CUP'),
+        validateAccountFundLimit(selectedCuentas.transferencia_usd, transferenciaUsd, 'transferencia USD'),
+      ]);
+
+      if (!fundValidations.every(v => v)) return;
+
+      // Calculate total original prices from servicio_tienda (for backend calculations)
+      const totalOriginalCUP = saleItems.reduce((sum, item) => sum + ((item.precio_original_cup || item.precio_cup) * item.cantidad), 0);
+      const totalOriginalUSD = saleItems.reduce((sum, item) => sum + ((item.precio_original_usd || item.precio_usd) * item.cantidad), 0);
+
+      // Calculate total current prices (what user is actually charging)
+      const totalCurrentCUP = saleItems.reduce((sum, item) => sum + (item.precio_cup * item.cantidad), 0);
+      const totalCurrentUSD = saleItems.reduce((sum, item) => sum + (item.precio_usd * item.cantidad), 0);
+
+      // Round all values to 5 decimals to match backend precision and handle rounding discrepancies
+      const roundTo5Decimals = (value) => Math.round(value * 100000) / 100000;
+      
       // Calculate total paid
-      const cambio = parseFloat(config.cupToUsdRate || 1);
-      const totalPaidCUP = efectivoCup + transferenciaCup + (efectivoUsd + transferenciaUsd) * cambio;
-      const totalPaidUSD = efectivoUsd + transferenciaUsd + (efectivoCup + transferenciaCup) / cambio;
+      const cambio = parseFloat(config.cupToUsdRate) || 1;
+      const totalPaidCUP = roundTo5Decimals(efectivoCup + transferenciaCup + (efectivoUsd + transferenciaUsd) * cambio);
+      const totalPaidUSD = roundTo5Decimals(efectivoUsd + transferenciaUsd + (efectivoCup + transferenciaCup) / cambio);
+      const totalOriginalCUPRounded = roundTo5Decimals(totalOriginalCUP);
+      const totalOriginalUSDRounded = roundTo5Decimals(totalOriginalUSD);
+      const totalCurrentCUPRounded = roundTo5Decimals(totalCurrentCUP);
+      const totalCurrentUSDRounded = roundTo5Decimals(totalCurrentUSD);
 
-      // Check if paid amount is less than total
-      if (totalPaidCUP < totalOriginalCUP) {
+      // Check if paid amount is less than total (using rounded values and tolerance for rounding discrepancies)
+      // Use tolerance of 0.1 to ignore small differences due to rounding
+      const tolerance = 0.1;
+      const amountDifference = Math.abs(totalPaidCUP - totalCurrentCUPRounded);
+      
+      // If the amount paid differs significantly from the current charged amount, require a note
+      if (amountDifference > tolerance && (!ventaNota || ventaNota.trim() === '')) {
+        showToast({ 
+          type: 'warning', 
+          message: 'Debes agregar una nota explicando por qué se está cobrando un valor diferente al total' 
+        });
+        return;
+      }
+      
+      if (totalPaidCUP < totalOriginalCUPRounded - tolerance) {
         // Prepare sale data for later use
         const ventaData = {
           fecha_hora: new Date().toISOString(),
@@ -1056,7 +1158,7 @@ const SalesContent = () => {
           id_cuenta_transferencia_cup: transferenciaCup > 0 ? selectedCuentas.transferencia_cup?.id_cuenta : null,
           id_cuenta_transferencia_usd: transferenciaUsd > 0 ? selectedCuentas.transferencia_usd?.id_cuenta : null,
           id_usuario: user.id_usuario,
-          cambio_moneda: config.cupToUsdRate || 1,
+          cambio_moneda: parseFloat(config.cupToUsdRate) || 1,
           totalOriginalCUP,
           totalOriginalUSD,
           totalPaidCUP,
@@ -1081,25 +1183,102 @@ const SalesContent = () => {
     try {
       setIsSubmitting(true);
 
-      // Calculate difference and distribute equitably
+      // Round all values to 5 decimals to match backend precision and handle rounding discrepancies
+      const roundTo5Decimals = (value) => Math.round(value * 100000) / 100000;
+      
       const cambio = parseFloat(config.cupToUsdRate || 1);
-      const totalPaidCUP = efectivoCup + transferenciaCup + (efectivoUsd + transferenciaUsd) * cambio;
-      const totalPaidUSD = efectivoUsd + transferenciaUsd + (efectivoCup + transferenciaCup) / cambio;
+      const efectivoCupRounded = roundTo5Decimals(efectivoCup);
+      const efectivoUsdRounded = roundTo5Decimals(efectivoUsd);
+      const transferenciaCupRounded = roundTo5Decimals(transferenciaCup);
+      const transferenciaUsdRounded = roundTo5Decimals(transferenciaUsd);
+      const totalOriginalCUPRounded = roundTo5Decimals(totalOriginalCUP);
+      const totalOriginalUSDRounded = roundTo5Decimals(totalOriginalUSD);
 
-      const diferenciaCUP = totalPaidCUP - totalOriginalCUP;
-      const diferenciaUSD = totalPaidUSD - totalOriginalUSD;
+      // Calculate difference and distribute equitably using rounded values
+      const totalPaidCUP = efectivoCupRounded + transferenciaCupRounded + (efectivoUsdRounded + transferenciaUsdRounded) * cambio;
+      const totalPaidUSD = efectivoUsdRounded + transferenciaUsdRounded + (efectivoCupRounded + transferenciaCupRounded) / cambio;
+
+      const diferenciaCUP = roundTo5Decimals(totalPaidCUP - totalOriginalCUPRounded);
+      const diferenciaUSD = roundTo5Decimals(totalPaidUSD - totalOriginalUSDRounded);
+
+      // If the difference is very small (within tolerance), treat as no adjustment needed
+      // Only check the currency that was actually paid in
+      const tolerance = 0.1;
+      const paidInCUP = efectivoCupRounded + transferenciaCupRounded > 0;
+      const paidInUSD = efectivoUsdRounded + transferenciaUsdRounded > 0;
+      
+      const cupWithinTolerance = Math.abs(diferenciaCUP) <= tolerance;
+      const usdWithinTolerance = Math.abs(diferenciaUSD) <= tolerance;
+      
+      // If paid in both currencies, both must be within tolerance
+      // If paid in only one currency, only that one needs to be within tolerance
+      const shouldSkipAdjustment = paidInCUP && paidInUSD 
+        ? cupWithinTolerance && usdWithinTolerance
+        : paidInCUP ? cupWithinTolerance : usdWithinTolerance;
+      
+      if (shouldSkipAdjustment) {
+        // No adjustment needed, use exact original prices from servicio_tienda to avoid any backend calculations
+        const ventasSinAjuste = saleItems.map(item => ({
+          id_servicio_tienda: item.id_servicio_tienda,
+          cantidad: item.cantidad,
+          precio_cobrado_cup: item.precio_cup,
+          precio_cobrado_usd: item.precio_usd,
+        }));
+
+        const ventaData = {
+          fecha_hora: new Date().toISOString(),
+          nota: ventaNota,
+          cantidad_cobrada_efectivo_cup: efectivoCupRounded,
+          cantidad_cobrada_efectivo_usd: efectivoUsdRounded,
+          cantidad_cobrada_transferencia_cup: transferenciaCupRounded,
+          cantidad_cobrada_transferencia_usd: transferenciaUsdRounded,
+          id_cuenta_efectivo_cup: efectivoCupRounded > 0 ? selectedCuentas.efectivo_cup?.id_cuenta : null,
+          id_cuenta_efectivo_usd: efectivoUsdRounded > 0 ? selectedCuentas.efectivo_usd?.id_cuenta : null,
+          id_cuenta_transferencia_cup: transferenciaCupRounded > 0 ? selectedCuentas.transferencia_cup?.id_cuenta : null,
+          id_cuenta_transferencia_usd: transferenciaUsdRounded > 0 ? selectedCuentas.transferencia_usd?.id_cuenta : null,
+          id_usuario: user.id_usuario,
+          cambio_moneda: cambio,
+          ventas: ventasSinAjuste,
+        };
+
+        const result = await createVenta(ventaData);
+        
+        showToast({ type: 'success', message: 'Venta realizada correctamente' });
+        
+        // Save sale items for comprobante before resetting
+        setComprobanteSaleItems([...saleItems]);
+        
+        // Show comprobante option
+        setShowComprobanteModal(true);
+        
+        // Reset form
+        setSaleItems([]);
+        setPaymentAmounts({
+          efectivo_cup: '',
+          efectivo_usd: '',
+          transferencia_cup: '',
+          transferencia_usd: '',
+        });
+        
+        setIsSubmitting(false);
+        return result;
+      }
 
       // Calculate adjustment per item (equitable distribution)
       const cantidadProductos = saleItems.length;
-      const ajusteCUPPorItem = cantidadProductos > 0 ? diferenciaCUP / cantidadProductos : 0;
-      const ajusteUSDPorItem = cantidadProductos > 0 ? diferenciaUSD / cantidadProductos : 0;
+      const ajusteCUPPorItem = cantidadProductos > 0 ? roundTo5Decimals(diferenciaCUP / cantidadProductos) : 0;
+      const ajusteUSDPorItem = cantidadProductos > 0 ? roundTo5Decimals(diferenciaUSD / cantidadProductos) : 0;
 
       // Create adjusted sale items for the API
       const ventasConAjuste = saleItems.map(item => {
-        const ajusteCUP = ajusteCUPPorItem / item.cantidad;
-        const ajusteUSD = ajusteUSDPorItem / item.cantidad;
-        const precioCobradoCUP = Math.max(0, item.precio_cup + ajusteCUP);
-        const precioCobradoUSD = Math.max(0, item.precio_usd + ajusteUSD);
+        // Prevent division by zero and limit adjustment to reasonable values
+        const cantidad = item.cantidad > 0 ? item.cantidad : 1;
+        const ajusteCUP = roundTo5Decimals(ajusteCUPPorItem / cantidad);
+        const ajusteUSD = roundTo5Decimals(ajusteUSDPorItem / cantidad);
+        
+        // Limit adjusted prices to prevent overflow (max 999999.99999)
+        const precioCobradoCUP = Math.max(0, Math.min(999999.99999, roundTo5Decimals(item.precio_cup + ajusteCUP)));
+        const precioCobradoUSD = Math.max(0, Math.min(999999.99999, roundTo5Decimals(item.precio_usd + ajusteUSD)));
         
         return {
           id_servicio_tienda: item.id_servicio_tienda,
@@ -1692,6 +1871,16 @@ const SalesContent = () => {
                   >
                     <Text style={[styles.cuentaSelectorText, { color: selectedCuenta ? colors.onSurface : colors.outline }]} numberOfLines={1}>
                       {selectedCuenta?.nombre || 'Seleccionar cuenta...'}
+                      {selectedCuenta && (tipo === 'efectivo_usd' || tipo === 'transferencia_usd') && (
+                        <Text style={[styles.cuentaSelectorText, { color: colors.outline, fontWeight: 'bold' }]}>
+                          {' '}(1x{config.cupToUsdRate || 1})
+                        </Text>
+                      )}
+                      {selectedCuenta && (tipo === 'efectivo_cup' || tipo === 'transferencia_cup') && (
+                        <Text style={[styles.cuentaSelectorText, { color: colors.outline, fontWeight: 'bold' }]}>
+                          {' '}({config.cupToUsdRate || 1}x1)
+                        </Text>
+                      )}
                     </Text>
                     <Ionicons name="chevron-down" size={responsive.responsiveWidth(16)} color={colors.outline} />
                   </TouchableOpacity>

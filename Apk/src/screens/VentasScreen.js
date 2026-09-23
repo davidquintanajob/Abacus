@@ -1473,11 +1473,11 @@ const VentasContent = () => {
                           {cuenta.nombre}
                         </Text>
                         {cuenta.num_cuenta && (
-                          <Text style={[styles.summaryItemValue, { color: colors.outline, fontWeight: '700' }]}>
+                          <Text style={[styles.summaryItemValue, { color: colors.outline, fontWeight: '400', fontSize: responsive.fontSizes.caption }]}>
                             {cuenta.num_cuenta}
                           </Text>
                         )}
-                        <Text style={[styles.summaryItemLabel, { color: cuentaColor, fontSize: responsive.fontSizes.caption }]}>
+                        <Text style={[styles.summaryItemLabel, { color: cuentaColor, fontSize: responsive.fontSizes.caption, fontWeight: '700' }]}>
                           {formatNumberWithSpaces(cuenta.fondo || 0)}
                         </Text>
                       </TouchableOpacity>

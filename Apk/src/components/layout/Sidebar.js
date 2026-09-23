@@ -59,11 +59,11 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
     ...(canAccessSalidas ? [{ icon: require('../../../assets/box.png'), label: 'Salidas', route: 'Salidas' }] : []),
     ...(canAccessVentas ? [{ icon: require('../../../assets/sales.png'), label: 'Ventas', route: 'Ventas' }] : []),
     ...(canAccessOperaciones ? [{ icon: require('../../../assets/report.png'), label: 'Operaciones', route: 'Operaciones' }] : []),
+    { icon: require('../../../assets/report (1).png'), label: 'Informes', route: 'Informes' },
     // Disabled items (coming soon)
     { icon: require('../../../assets/moving.png'), label: 'Movimientos', disabled: true },
     { icon: require('../../../assets/customer-search.png'), label: 'Clientes', disabled: true },
     { icon: require('../../../assets/debt-recovery.png'), label: 'Deudas', disabled: true },
-    { icon: require('../../../assets/report (1).png'), label: 'Informes', disabled: true },
     ...(isAdmin ? [{ icon: require('../../../assets/tienda.png'), label: 'Tiendas', route: 'Tiendas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/usuarios.png'), label: 'Usuarios', route: 'Usuarios' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/Servicios.png'), label: 'Configuraciones del Administrador', route: 'CurrencyExchange' }] : []),

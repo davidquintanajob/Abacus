@@ -87,6 +87,27 @@ const ProductoFormContent = () => {
   });
 
   const [isCodesExpanded, setIsCodesExpanded] = useState(false);
+
+  // Function to generate suffix based on product name
+  const generateSuffix = (nombre) => {
+    if (!nombre || nombre.length < 3) return '';
+    
+    // Get first 3 letters of name (uppercase)
+    const firstThreeLetters = nombre.substring(0, 3).toUpperCase();
+    
+    // Generate random 4-digit number
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    
+    return `${firstThreeLetters}-${randomNum}`;
+  };
+
+  // Auto-generate suffix when name changes (only for new products or when suffix is empty)
+  useEffect(() => {
+    if (!producto && formData.nombre.length >= 3 && (!formData.sufijo || formData.sufijo === '')) {
+      const generatedSuffix = generateSuffix(formData.nombre);
+      setFormData(prev => ({ ...prev, sufijo: generatedSuffix }));
+    }
+  }, [formData.nombre]);
   const [isPricesExpanded, setIsPricesExpanded] = useState(false);
   const [isStockExpanded, setIsStockExpanded] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
@@ -230,7 +251,7 @@ const ProductoFormContent = () => {
       const costoCup = canViewCosts ? (typeof formData.costo_cup_general === 'number' ? formData.costo_cup_general : (isNaN(parseFloat(formData.costo_cup_general)) ? 0 : parseFloat(formData.costo_cup_general))) : 0;
       const costoUsd = canViewCosts ? (typeof formData.costo_usd_general === 'number' ? formData.costo_usd_general : (isNaN(parseFloat(formData.costo_usd_general)) ? 0 : parseFloat(formData.costo_usd_general))) : 0;
       
-      const activeTiendaIds = [];
+      let activeTiendaIds = [];
       if (tiendas && tiendas.length > 0) {
         activeTiendaIds = tiendas.filter(tienda => tienda.activo === true).map(tienda => tienda.id_tienda);
       } else {

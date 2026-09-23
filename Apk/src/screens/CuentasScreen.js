@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Keyboard, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -13,6 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
 import { useViewMode } from '../context/ViewModeContext';
 import { getCuentas, deleteCuenta } from '../services/cuentaService';
+import { createOperacion } from '../services/operacionService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -56,6 +57,22 @@ const CuentasContent = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [showTipoCuentaDropdown, setShowTipoCuentaDropdown] = useState(false);
 
+  // Transfer modal states
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [isTransferring, setIsTransferring] = useState(false);
+  const [transferFormData, setTransferFormData] = useState({
+    cuentaOrigen: null,
+    cuentaDestino: null,
+    cantidad: '',
+    motivo: '',
+  });
+  const [showCuentaOrigenDropdown, setShowCuentaOrigenDropdown] = useState(false);
+  const [showCuentaDestinoDropdown, setShowCuentaDestinoDropdown] = useState(false);
+  const [cuentaOrigenSearchText, setCuentaOrigenSearchText] = useState('');
+  const [cuentaDestinoSearchText, setCuentaDestinoSearchText] = useState('');
+  const [config, setConfig] = useState({});
+  const [exchangeRate, setExchangeRate] = useState(null);
+
   const tiposCuenta = ['Efectivo CUP', 'Transferencia CUP', 'Efectivo USD', 'Transferencia USD'];
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
@@ -63,7 +80,21 @@ const CuentasContent = () => {
 
   useEffect(() => {
     setIsInitialized(true);
+    fetchConfig();
   }, []);
+
+  const fetchConfig = async () => {
+    try {
+      const configService = require('../services/configService').default;
+      const data = await configService.getConfig();
+      setConfig(data);
+      if (data.cupToUsdRate) {
+        setExchangeRate(data.cupToUsdRate);
+      }
+    } catch (err) {
+      console.error('Error fetching config:', err);
+    }
+  };
 
   useFocusEffect(
     React.useCallback(() => {
@@ -230,6 +261,104 @@ const CuentasContent = () => {
     if (pagination.currentPage > 1) {
       setPagination(prev => ({ ...prev, currentPage: prev.currentPage - 1 }));
       fetchCuentas();
+    }
+  };
+
+  const handleTransfer = () => {
+    if (isOfflineMode) {
+      showToast({ type: 'warning', message: 'No disponible en modo offline' });
+      return;
+    }
+    setShowTransferModal(true);
+  };
+
+  const handleTransferSubmit = async () => {
+    if (!transferFormData.cuentaOrigen) {
+      showToast({ type: 'warning', message: 'Debe seleccionar una cuenta origen' });
+      return;
+    }
+    if (!transferFormData.cuentaDestino) {
+      showToast({ type: 'warning', message: 'Debe seleccionar una cuenta destino' });
+      return;
+    }
+    if (!transferFormData.cantidad || parseFloat(transferFormData.cantidad) <= 0) {
+      showToast({ type: 'warning', message: 'La cantidad debe ser mayor a 0' });
+      return;
+    }
+    if (transferFormData.cuentaOrigen.id_cuenta === transferFormData.cuentaDestino.id_cuenta) {
+      showToast({ type: 'warning', message: 'La cuenta origen y destino deben ser diferentes' });
+      return;
+    }
+
+    try {
+      setIsTransferring(true);
+
+      const cantidad = parseFloat(transferFormData.cantidad);
+      const cambio = exchangeRate || 1;
+
+      const cuentaOrigenTipo = transferFormData.cuentaOrigen.tipo_cuenta;
+      const cuentaDestinoTipo = transferFormData.cuentaDestino.tipo_cuenta;
+
+      const isOrigenCUP = cuentaOrigenTipo.includes('CUP');
+      const isDestinoCUP = cuentaDestinoTipo.includes('CUP');
+      const isOrigenUSD = cuentaOrigenTipo.includes('USD');
+      const isDestinoUSD = cuentaDestinoTipo.includes('USD');
+
+      let cantidadOrigen = cantidad;
+      let cantidadDestino = cantidad;
+
+      // Apply currency conversion if transferring between CUP and USD
+      if (isOrigenCUP && isDestinoUSD) {
+        // CUP to USD: divide by exchange rate
+        cantidadDestino = cantidad / cambio;
+      } else if (isOrigenUSD && isDestinoCUP) {
+        // USD to CUP: multiply by exchange rate
+        cantidadDestino = cantidad * cambio;
+      }
+
+      // Create retiro operation for origin account
+      const operacionOrigen = {
+        id_cuenta: transferFormData.cuentaOrigen.id_cuenta,
+        id_usuario: user.id_usuario,
+        cantidad_operacion: cantidadOrigen,
+        tipo_operacion: 'Retiro',
+        fecha_hora: new Date().toISOString(),
+        motivo: `Transferencia a ${transferFormData.cuentaDestino.nombre}. ${transferFormData.motivo}`,
+        cambio_moneda: cambio,
+      };
+
+      // Create ingreso operation for destination account
+      const operacionDestino = {
+        id_cuenta: transferFormData.cuentaDestino.id_cuenta,
+        id_usuario: user.id_usuario,
+        cantidad_operacion: cantidadDestino,
+        tipo_operacion: 'Ingreso',
+        fecha_hora: new Date().toISOString(),
+        motivo: `Transferencia de ${transferFormData.cuentaOrigen.nombre}. ${transferFormData.motivo}`,
+        cambio_moneda: cambio,
+      };
+
+      // Execute both operations
+      await Promise.all([
+        createOperacion(operacionOrigen),
+        createOperacion(operacionDestino),
+      ]);
+
+      showToast({ type: 'success', message: 'Transferencia realizada correctamente' });
+      setShowTransferModal(false);
+      setTransferFormData({
+        cuentaOrigen: null,
+        cuentaDestino: null,
+        cantidad: '',
+        motivo: '',
+      });
+      setCuentaOrigenSearchText('');
+      setCuentaDestinoSearchText('');
+      fetchCuentas();
+    } catch (err) {
+      showToast({ type: 'error', message: err.message || 'Error al realizar la transferencia' });
+    } finally {
+      setIsTransferring(false);
     }
   };
 
@@ -418,6 +547,13 @@ const CuentasContent = () => {
               >
                 <Ionicons name="add-circle-outline" size={responsive.responsiveWidth(20)} color="#fff" />
                 <Text style={[styles.actionButtonText, { color: '#fff' }]}>Agregar Cuenta</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                onPress={handleTransfer}
+              >
+                <Ionicons name="swap-horizontal-outline" size={responsive.responsiveWidth(20)} color={isDarkMode ? colors.primary : '#1976D2'} />
+                <Text style={[styles.actionButtonText, { color: isDarkMode ? colors.primary : '#1976D2' }]}>Transferir</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -627,6 +763,150 @@ const CuentasContent = () => {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Transfer Modal */}
+      <Modal
+        visible={showTransferModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowTransferModal(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.5)' }]}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalContainer}
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Transferir entre Cuentas</Text>
+                <TouchableOpacity onPress={() => setShowTransferModal(false)}>
+                  <Ionicons name="close" size={24} color={colors.onSurface} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+                {/* Cuenta Origen */}
+                <View style={styles.formGroup}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Cuenta Origen *</Text>
+                  <TouchableOpacity
+                    style={[styles.input, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                    onPress={() => setShowCuentaOrigenDropdown(!showCuentaOrigenDropdown)}
+                  >
+                    <Text style={[styles.inputText, { color: cuentaOrigenSearchText ? colors.onSurface : colors.outline }]}>
+                      {cuentaOrigenSearchText || 'Seleccionar cuenta origen'}
+                    </Text>
+                    <Ionicons 
+                      name={showCuentaOrigenDropdown ? "chevron-up" : "chevron-down"} 
+                      size={20} 
+                      color={colors.outline} 
+                    />
+                  </TouchableOpacity>
+                  
+                  {showCuentaOrigenDropdown && (
+                    <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                      <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                        {cuentas.map((cuenta) => (
+                          <TouchableOpacity
+                            key={cuenta.id_cuenta}
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                              setTransferFormData(prev => ({ ...prev, cuentaOrigen: cuenta }));
+                              setCuentaOrigenSearchText(cuenta.nombre);
+                              setShowCuentaOrigenDropdown(false);
+                            }}
+                          >
+                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
+                            <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>{cuenta.tipo_cuenta}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                {/* Cuenta Destino */}
+                <View style={styles.formGroup}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Cuenta Destino *</Text>
+                  <TouchableOpacity
+                    style={[styles.input, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                    onPress={() => setShowCuentaDestinoDropdown(!showCuentaDestinoDropdown)}
+                  >
+                    <Text style={[styles.inputText, { color: cuentaDestinoSearchText ? colors.onSurface : colors.outline }]}>
+                      {cuentaDestinoSearchText || 'Seleccionar cuenta destino'}
+                    </Text>
+                    <Ionicons 
+                      name={showCuentaDestinoDropdown ? "chevron-up" : "chevron-down"} 
+                      size={20} 
+                      color={colors.outline} 
+                    />
+                  </TouchableOpacity>
+                  
+                  {showCuentaDestinoDropdown && (
+                    <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                      <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                        {cuentas.map((cuenta) => (
+                          <TouchableOpacity
+                            key={cuenta.id_cuenta}
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                              setTransferFormData(prev => ({ ...prev, cuentaDestino: cuenta }));
+                              setCuentaDestinoSearchText(cuenta.nombre);
+                              setShowCuentaDestinoDropdown(false);
+                            }}
+                          >
+                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
+                            <Text style={[styles.dropdownItemSubtext, { color: colors.outline }]}>{cuenta.tipo_cuenta}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                {/* Cantidad */}
+                <View style={styles.formGroup}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Cantidad *</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Ingrese la cantidad"
+                    value={transferFormData.cantidad}
+                    onChangeText={(text) => setTransferFormData(prev => ({ ...prev, cantidad: text }))}
+                    keyboardType="numeric"
+                  />
+                </View>
+
+                {/* Motivo */}
+                <View style={styles.formGroup}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Motivo</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Ingrese el motivo (opcional)"
+                    value={transferFormData.motivo}
+                    onChangeText={(text) => setTransferFormData(prev => ({ ...prev, motivo: text }))}
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
+
+                {/* Submit Button */}
+                <TouchableOpacity
+                  style={[styles.submitButton, { backgroundColor: colors.primary }]}
+                  onPress={handleTransferSubmit}
+                  disabled={isTransferring}
+                >
+                  {isTransferring ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={[styles.submitButtonText, { color: '#fff' }]}>Realizar Transferencia</Text>
+                  )}
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1008,7 +1288,70 @@ const createStyles = (responsive) => StyleSheet.create({
     borderBottomWidth: 0,
   },
   dropdownItemText: {
-    fontSize: responsive.fontSizes.body,
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(2),
+  },
+  dropdownItemSubtext: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    maxHeight: '90%',
+    borderRadius: 16,
+    padding: responsive.responsivePadding(20),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  modalTitle: {
+    fontSize: responsive.responsiveFontSize(20),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+  },
+  modalScroll: {
+    maxHeight: responsive.responsiveHeight(500),
+  },
+  formGroup: {
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  textArea: {
+    height: responsive.responsiveHeight(80),
+    textAlignVertical: 'top',
+  },
+  submitButton: {
+    paddingVertical: responsive.responsivePadding(14),
+    paddingHorizontal: responsive.responsivePadding(16),
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: responsive.responsiveMargin(16),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  submitButtonText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
     fontFamily: 'Inter',
   },
 });
