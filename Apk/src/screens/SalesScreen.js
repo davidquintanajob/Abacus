@@ -990,6 +990,10 @@ const SalesContent = () => {
   // Get the display value for a payment field based on toggle state
   const getPaymentDisplayValue = (tipo) => {
     const value = paymentAmounts[tipo];
+    // Return empty string to show placeholder when value is empty or zero
+    if (!value || value === '' || value === '0' || value === '0.00' || value === '0.00000') {
+      return '';
+    }
     // Don't format if this field is currently focused (allows user to type freely)
     if (focusedPaymentField === tipo) {
       return value;
@@ -1871,45 +1875,55 @@ const SalesContent = () => {
                   >
                     <Text style={[styles.cuentaSelectorText, { color: selectedCuenta ? colors.onSurface : colors.outline }]} numberOfLines={1}>
                       {selectedCuenta?.nombre || 'Seleccionar cuenta...'}
-                      {selectedCuenta && (tipo === 'efectivo_usd' || tipo === 'transferencia_usd') && (
-                        <Text style={[styles.cuentaSelectorText, { color: colors.outline, fontWeight: 'bold' }]}>
-                          {' '}(1x{config.cupToUsdRate || 1})
-                        </Text>
-                      )}
-                      {selectedCuenta && (tipo === 'efectivo_cup' || tipo === 'transferencia_cup') && (
-                        <Text style={[styles.cuentaSelectorText, { color: colors.outline, fontWeight: 'bold' }]}>
-                          {' '}({config.cupToUsdRate || 1}x1)
-                        </Text>
-                      )}
                     </Text>
                     <Ionicons name="chevron-down" size={responsive.responsiveWidth(16)} color={colors.outline} />
                   </TouchableOpacity>
                   
-                  <TextInput
-                    style={[styles.paymentInput, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant, flex: 0.4 }]}
-                    placeholder={show5Decimals ? "0.00000" : "0.00"}
-                    placeholderTextColor={colors.outline}
-                    value={getPaymentDisplayValue(tipo)}
-                    onChangeText={(text) => {
-                      // Remove any minus signs
-                      const sanitizedText = text.replace(/-/g, '');
-                      setPaymentAmounts(prev => ({ ...prev, [tipo]: sanitizedText }));
-                    }}
-                    onFocus={() => setFocusedPaymentField(tipo)}
-                    onBlur={() => {
-                      setFocusedPaymentField(null);
-                      // Format the value when field loses focus
-                      const value = paymentAmounts[tipo];
-                      if (value && value !== '') {
-                        const num = parseFloat(value);
-                        if (!isNaN(num)) {
-                          const formatted = show5Decimals ? num.toFixed(5) : num.toFixed(2);
-                          setPaymentAmounts(prev => ({ ...prev, [tipo]: formatted }));
+                  <View style={{ flex: 0.4, marginTop: (tipo === 'efectivo_usd' || tipo === 'transferencia_usd') ? responsive.responsiveHeight(8) : 0 }}>
+                    <TextInput
+                      style={[
+                        styles.paymentInput, 
+                        { 
+                          backgroundColor: colors.background, 
+                          color: colors.onSurface, 
+                          borderColor: colors.outlineVariant,
+                          fontSize: responsive.responsiveWidth(14)
                         }
-                      }
-                    }}
-                    keyboardType="decimal-pad"
-                  />
+                      ]}
+                      placeholder={show5Decimals ? "0.00000" : "0.00"}
+                      placeholderTextColor={colors.outline}
+                      value={getPaymentDisplayValue(tipo)}
+                      onChangeText={(text) => {
+                        // Remove any minus signs
+                        const sanitizedText = text.replace(/-/g, '');
+                        setPaymentAmounts(prev => ({ ...prev, [tipo]: sanitizedText }));
+                      }}
+                      onFocus={() => setFocusedPaymentField(tipo)}
+                      onBlur={() => {
+                        setFocusedPaymentField(null);
+                        // Format the value when field loses focus
+                        const value = paymentAmounts[tipo];
+                        if (value && value !== '') {
+                          const num = parseFloat(value);
+                          if (!isNaN(num)) {
+                            const formatted = show5Decimals ? num.toFixed(5) : num.toFixed(2);
+                            setPaymentAmounts(prev => ({ ...prev, [tipo]: formatted }));
+                          }
+                        }
+                      }}
+                      keyboardType="decimal-pad"
+                    />
+                    {(tipo === 'efectivo_usd' || tipo === 'transferencia_usd') && (
+                      <Text style={[styles.conversionText, { color: colors.outline, fontSize: responsive.responsiveWidth(8) }]}>
+                        {(() => {
+                          const remainingCUP = getRemainingAmount();
+                          const cambio = parseFloat(config.cupToUsdRate || 1);
+                          const remainingUSD = remainingCUP > 0 ? (remainingCUP / cambio).toFixed(2) : '0.00';
+                          return `(${show5Decimals ? formatNumber5Decimals(remainingCUP) : formatNumber2Decimals(remainingCUP)}) / (${cambio}) = (${remainingUSD})`;
+                        })()}
+                      </Text>
+                    )}
+                  </View>
                 </View>
               </View>
             );
@@ -2552,6 +2566,10 @@ const createStyles = (responsive) => StyleSheet.create({
     textAlign: 'right',
     height: responsive.responsiveHeight(40),
     marginTop: 0,
+  },
+  conversionText: {
+    marginTop: responsive.responsiveHeight(2),
+    textAlign: 'right',
   },
   totalSection: {
     flexDirection: 'row',

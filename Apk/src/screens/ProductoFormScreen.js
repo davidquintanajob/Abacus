@@ -101,13 +101,13 @@ const ProductoFormContent = () => {
     return `${firstThreeLetters}-${randomNum}`;
   };
 
-  // Auto-generate suffix when name changes (only for new products or when suffix is empty)
+  // Auto-generate suffix when name changes (only for new products in add mode)
   useEffect(() => {
-    if (!producto && formData.nombre.length >= 3 && (!formData.sufijo || formData.sufijo === '')) {
+    if (isAddMode && formData.nombre.length >= 3) {
       const generatedSuffix = generateSuffix(formData.nombre);
       setFormData(prev => ({ ...prev, sufijo: generatedSuffix }));
     }
-  }, [formData.nombre]);
+  }, [formData.nombre, isAddMode]);
   const [isPricesExpanded, setIsPricesExpanded] = useState(false);
   const [isStockExpanded, setIsStockExpanded] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
