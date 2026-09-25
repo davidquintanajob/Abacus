@@ -46,6 +46,7 @@ const getListaVentaWithRelations = async (id) => {
           { model: Cuenta, as: "cuenta" },
         ],
       },
+      { model: Usuario, as: "usuario" },
     ],
     order: [
       [{ model: Venta, as: "ventas" }, "id_venta", "ASC"],
@@ -509,7 +510,8 @@ const filterListaVentas = async (filters, limit, offset) => {
     order: [["fecha_hora", "DESC"]],
     distinct: true,
   };
-  const { rows, count } = await ListaVenta.findAndCountAll({ ...queryOptions, limit, offset });
+  const paginationOptions = limit === undefined ? {} : { limit, offset };
+  const { rows, count } = await ListaVenta.findAndCountAll({ ...queryOptions, ...paginationOptions });
   const allRows = await ListaVenta.findAll(queryOptions);
   const summary = {
     total_efectivo_cup: 0,
@@ -623,6 +625,8 @@ const createListaVenta = async (listaData) => {
       {
         fecha_hora,
         nota,
+        id_usuario,
+        cambio_moneda,
         cantidad_cobrada_efectivo_cup,
         cantidad_cobrada_efectivo_usd,
         cantidad_cobrada_transferencia_cup,
@@ -776,7 +780,7 @@ const updateListaVenta = async (id, listaData) => {
     }
 
     await lista.update({
-      fecha_hora, nota, cantidad_cobrada_efectivo_cup, cantidad_cobrada_efectivo_usd,
+      fecha_hora, nota, id_usuario, cambio_moneda, cantidad_cobrada_efectivo_cup, cantidad_cobrada_efectivo_usd,
       cantidad_cobrada_transferencia_cup, cantidad_cobrada_transferencia_usd,
     }, { transaction });
 

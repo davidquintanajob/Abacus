@@ -162,11 +162,13 @@ const filterSalidas = async (req, res) => {
       descripcion
     } = req.query;
 
-    let limitNum = parseInt(limit, 10) || 10;
-    if (isNaN(limitNum) || limitNum < 1) {
+    const hasLimit = limit !== undefined;
+    const hasPage = page !== undefined;
+    let limitNum = hasLimit ? parseInt(limit, 10) : undefined;
+    if (hasLimit && (isNaN(limitNum) || limitNum < 1)) {
       throwError("El parámetro 'limit' debe ser un número entero positivo", 400);
     }
-    let pageNum = parseInt(page, 10) || 1;
+    let pageNum = hasPage ? parseInt(page, 10) : 1;
     if (isNaN(pageNum) || pageNum < 1) {
       throwError("El parámetro 'page' debe ser un número entero positivo", 400);
     }
@@ -200,15 +202,15 @@ const filterSalidas = async (req, res) => {
     if (tipo_salida) filters.tipo_salida = tipo_salida.trim();
     if (descripcion) filters.descripcion = descripcion.trim();
 
-    const offset = (pageNum - 1) * limitNum;
+    const offset = limitNum === undefined ? undefined : (pageNum - 1) * limitNum;
     const { rows, count } = await salidaService.filterSalidas(filters, limitNum, offset);
 
-    const totalPages = Math.ceil(count / limitNum);
+    const totalPages = limitNum === undefined ? (count > 0 ? 1 : 0) : Math.ceil(count / limitNum);
     res.status(200).json({
       data: rows,
       pagination: {
         currentPage: pageNum,
-        limit: limitNum,
+        limit: limitNum === undefined ? count : limitNum,
         totalPages,
         totalItems: count,
       },

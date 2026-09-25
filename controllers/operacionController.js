@@ -325,11 +325,13 @@ const filterOperaciones = async (req, res) => {
       tipo_operacion,
     } = req.query;
 
-    let limitNum = parseInt(limit, 10) || 10;
-    if (isNaN(limitNum) || limitNum < 1) {
+    const hasLimit = limit !== undefined;
+    const hasPage = page !== undefined;
+    let limitNum = hasLimit ? parseInt(limit, 10) : undefined;
+    if (hasLimit && (isNaN(limitNum) || limitNum < 1)) {
       throwError("El parámetro 'limit' debe ser un número entero positivo.", 400);
     }
-    let pageNum = parseInt(page, 10) || 1;
+    let pageNum = hasPage ? parseInt(page, 10) : 1;
     if (isNaN(pageNum) || pageNum < 1) {
       throwError("El parámetro 'page' debe ser un número entero positivo.", 400);
     }
@@ -375,15 +377,15 @@ const filterOperaciones = async (req, res) => {
       throwError("cantidad_min no puede ser mayor que cantidad_max.", 400);
     }
 
-    const offset = (pageNum - 1) * limitNum;
+    const offset = limitNum === undefined ? undefined : (pageNum - 1) * limitNum;
     const result = await operacionService.filterOperaciones(filters, limitNum, offset);
 
     res.status(200).json({
       data: result.rows,
       pagination: {
         currentPage: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(result.count / limitNum),
+        limit: limitNum === undefined ? result.count : limitNum,
+        totalPages: limitNum === undefined ? (result.count > 0 ? 1 : 0) : Math.ceil(result.count / limitNum),
         totalItems: result.count,
       },
       summary: result.summary,

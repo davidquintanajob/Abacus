@@ -310,12 +310,12 @@ const filterOperaciones = async (filters, limit, offset) => {
   }
 
   // Consulta paginada
+  const paginationOptions = limit === undefined ? {} : { limit, offset };
   const { rows, count } = await Operacion.findAndCountAll({
     where,
     include,
     order: [["fecha_hora", "DESC"]],
-    limit,
-    offset,
+    ...paginationOptions,
     distinct: true,
   });
 

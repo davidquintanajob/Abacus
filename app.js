@@ -252,8 +252,10 @@ const entradaRoutes = require("./routes/entradaRoutes");
 const salidaRoutes = require("./routes/salidaRoutes");
 const cuentaRoutes = require("./routes/cuentaRoutes");
 const operacionRoutes = require("./routes/operacionRoutes");
+const clienteRoutes = require("./routes/clienteRoutes");
 const listaVentaRoutes = require("./routes/listaVentaRoutes.js");
 const informesRoutes = require("./routes/informesRoutes");
+const movimientosRoutes = require("./routes/movimientoRoutes.js");
 
 app.use("/", servicioRoutes);
 app.use("/", productoRoutes);
@@ -264,8 +266,10 @@ app.use("/", entradaRoutes);
 app.use("/", salidaRoutes);
 app.use("/", cuentaRoutes);
 app.use("/", operacionRoutes);
+app.use("/", clienteRoutes);
 app.use("/", listaVentaRoutes);
 app.use("/", informesRoutes);
+app.use("/", movimientosRoutes);
 
 // Inicializar la base de datos y arrancar el servidor
 const startApp = async () => {
@@ -297,12 +301,33 @@ const startApp = async () => {
     const { Cuenta } = require("./models/cuenta");
     const { Operacion } = require("./models/operacion");
     const { Venta } = require("./models/venta");
+    const { Cliente } = require("./models/cliente");
     const { ListaVenta } = require("./models/lista_venta");
     const { VentaEntrada } = require("./models/venta_entrada");
+    const { MovimientoLista } = require("./models/movimiento_lista.js");
+    const { Movimiento } = require("./models/movimiento.js");
+    const { MovimientoEntrada } = require("./models/movimiento_entrada.js");
 
     const models = {
-      Usuario, Tienda, Servicio, Producto, ServicioTienda, Oferta, Codigo,
-      Entrada, Salida, SalidaEntrada, Cuenta, Operacion, Venta, ListaVenta, VentaEntrada
+      Usuario,
+      Tienda,
+      Servicio,
+      Producto,
+      ServicioTienda,
+      Oferta,
+      Codigo,
+      Entrada,
+      Salida,
+      SalidaEntrada,
+      Cuenta,
+      Operacion,
+      Venta,
+      Cliente,          // ✅ AGREGAR ESTO
+      ListaVenta,
+      VentaEntrada,
+      MovimientoLista,
+      Movimiento,
+      MovimientoEntrada,
     };
 
     Object.values(models).forEach((model) => {

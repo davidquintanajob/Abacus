@@ -132,6 +132,16 @@ Entrada.associate = function (models) {
     foreignKey: "id_entrada",
     as: "ventaEntradas",
   });
+  Entrada.belongsToMany(models.Movimiento, {
+    through: models.MovimientoEntrada,
+    foreignKey: "id_entrada",
+    otherKey: "id_movimiento",
+    as: "movimientos",
+  });
+  Entrada.hasMany(models.MovimientoEntrada, {
+    foreignKey: "id_entrada",
+    as: "movimientoEntradas",
+  });
 };
 
 module.exports = { Entrada };

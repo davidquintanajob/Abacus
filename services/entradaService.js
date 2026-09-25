@@ -393,12 +393,12 @@ const filterEntradas = async (filters, limit, offset) => {
     };
   }
 
+  const paginationOptions = limit === undefined ? {} : { limit, offset };
   const { rows, count } = await Entrada.findAndCountAll({
     where,
     include,
     order: [["fecha", "DESC"]],
-    limit,
-    offset,
+    ...paginationOptions,
     distinct: true,
   });
 

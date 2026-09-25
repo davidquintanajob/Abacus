@@ -502,12 +502,12 @@ const filterSalidas = async (filters, limit, offset) => {
     }
   }
 
+  const paginationOptions = limit === undefined ? {} : { limit, offset };
   const { rows, count } = await Salida.findAndCountAll({
     where,
     include,
     order: [["fecha", "DESC"]],
-    limit,
-    offset,
+    ...paginationOptions,
     distinct: true,
   });
 

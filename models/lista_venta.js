@@ -24,6 +24,27 @@ const ListaVenta = sequelize.define(
         },
       },
     },
+    id_usuario: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "usuarios",
+        key: "id_usuario",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
+    cambio_moneda: {
+      type: DataTypes.DECIMAL(10, 5),
+      allowNull: false,
+      defaultValue: 1.00000,
+      validate: {
+        min: {
+          args: [0.00001],
+          msg: "El cambio de moneda debe ser mayor que cero",
+        },
+      },
+    },
     cantidad_cobrada_efectivo_cup: {
       type: DataTypes.DECIMAL(10, 5),
       allowNull: false,
@@ -87,6 +108,15 @@ ListaVenta.associate = function (models) {
   ListaVenta.hasMany(models.Operacion, {
     foreignKey: "id_lista_venta",
     as: "operaciones",
+  });
+  // ✅ NUEVA ASOCIACIÓN
+  ListaVenta.belongsTo(models.Cliente, {
+    foreignKey: "id_cliente",
+    as: "cliente",
+  });
+  ListaVenta.belongsTo(models.Usuario, {
+    foreignKey: "id_usuario",
+    as: "usuario",
   });
 };
 
