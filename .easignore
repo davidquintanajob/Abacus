@@ -1,0 +1,37 @@
+# Dependencies - EAS installs these on its own
+node_modules/
+
+# Expo cache
+.expo/
+
+# Build outputs
+dist/
+web-build/
+
+# Android build cache - contains Windows-path autolinking cache that breaks on Linux
+Apk/android/build/
+Apk/android/.gradle/
+
+# Debug / lock files
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Backend (not needed for APK build)
+Abacus-backend/
+
+# Archive files (not needed for build)
+*.rar
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# Web folder (not needed for APK build)
+Web/

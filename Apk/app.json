@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Abacus",
+    "slug": "Abacus",
+    "version": "1.0.0",
+    "icon": "./assets/Sin título-2.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*",
+      "Logos/**/*"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "357feb20-6aee-44dc-988c-a663a554b63e"
+      }
+    },
+    "plugins": [
+      "expo-audio",
+      "expo-asset"
+    ],
+    "android": {
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
+    }
+  }
+}
