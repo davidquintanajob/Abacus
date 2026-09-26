@@ -304,6 +304,48 @@ const OperacionesContent = () => {
     }
   };
 
+  // Format a Date object to YYYY-MM-DD using local timezone (avoids UTC offset issues)
+  const formatLocalDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Parse a YYYY-MM-DD string as a local date (avoids UTC midnight offset issues)
+  const parseLocalDate = (dateStr) => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  };
+
+  // Adjust date filters to Cuba timezone (UTC-4) before sending to backend
+  const adjustFiltersForCubaTimezone = (filters) => {
+    const adjustedFilters = { ...filters };
+
+    if (adjustedFilters.fecha_desde) {
+      // Backend interprets "2024-08-27" as UTC 2024-08-27 00:00:00
+      // Cuba 00:00:00 = UTC 04:00:00 (since Cuba is UTC-4)
+      // To filter from Cuba 00:00:00 on 2024-08-27, we need UTC 2024-08-27 04:00:00
+      // Send ISO datetime instead of just date
+      const [year, month, day] = adjustedFilters.fecha_desde.split('-').map(Number);
+      const cubaMidnightUTC = new Date(Date.UTC(year, month - 1, day, 4, 0, 0));
+      adjustedFilters.fecha_desde = cubaMidnightUTC.toISOString();
+    }
+
+    if (adjustedFilters.fecha_hasta) {
+      // Backend adds 1 day to fecha_hasta and uses it as UTC
+      // Cuba 23:59:59 on day D = UTC 03:59:59 on day D+1
+      // To filter until Cuba 23:59:59 on 2024-08-27, we need UTC 2024-08-28 03:59:59
+      // But backend will add 1 day, so we send UTC 2024-08-27 03:59:59
+      // Backend will convert it to UTC 2024-08-28 03:59:59
+      const [year, month, day] = adjustedFilters.fecha_hasta.split('-').map(Number);
+      const cubaEndOfDayUTC = new Date(Date.UTC(year, month - 1, day, 3, 59, 59));
+      adjustedFilters.fecha_hasta = cubaEndOfDayUTC.toISOString();
+    }
+
+    return adjustedFilters;
+  };
+
   const fetchOperaciones = async (overrideFilters = null) => {
     try {
       setIsLoading(true);
@@ -317,21 +359,24 @@ const OperacionesContent = () => {
       }
 
       const userRole = user?.rol?.toLowerCase();
-      const canViewAllOperaciones = 
+      const canViewAllOperaciones =
         userRole === 'administrador' ||
         (userRole === 'dependiente' && operacionAccessLevels?.dependiente === 'all_stores') ||
         (userRole === 'almacenero' && operacionAccessLevels?.almacenero === 'all_stores') ||
         (userRole === 'económico' && operacionAccessLevels?.economico === 'all_stores');
 
       const filtersToUse = overrideFilters || filters;
-      
+
       const fetchLimit = pagination.limit;
       const fetchPage = pagination.currentPage;
-      
+
       // Build filters to send to API
       const apiFilters = { ...filtersToUse };
-      
-      const data = await getOperaciones(apiFilters, fetchPage, fetchLimit);
+
+      // Adjust date filters for Cuba timezone before sending to backend
+      const adjustedFilters = adjustFiltersForCubaTimezone(apiFilters);
+
+      const data = await getOperaciones(adjustedFilters, fetchPage, fetchLimit);
       let operaciones = data.data || [];
 
       setOperaciones(operaciones);
@@ -630,16 +675,14 @@ const OperacionesContent = () => {
   const handleFechaDesdeChange = (event, selectedDate) => {
     setShowFechaDesdePicker(false);
     if (event.type === 'set' && selectedDate) {
-      const formattedDate = selectedDate.toISOString().split('T')[0];
-      setFilters(prev => ({ ...prev, fecha_desde: formattedDate }));
+      setFilters(prev => ({ ...prev, fecha_desde: formatLocalDate(selectedDate) }));
     }
   };
 
   const handleFechaHastaChange = (event, selectedDate) => {
     setShowFechaHastaPicker(false);
     if (event.type === 'set' && selectedDate) {
-      const formattedDate = selectedDate.toISOString().split('T')[0];
-      setFilters(prev => ({ ...prev, fecha_hasta: formattedDate }));
+      setFilters(prev => ({ ...prev, fecha_hasta: formatLocalDate(selectedDate) }));
     }
   };
 
@@ -692,30 +735,28 @@ const OperacionesContent = () => {
   const styles = createStyles(responsive);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar style={isDarkMode ? 'light' : 'dark'} animated={true} />
-
-      <Header 
-        onMenuPress={() => setSidebarOpen(true)}
-        onThemePress={toggleTheme}
-        onSettingsPress={undefined}
-        onNotificationsPress={handleNotificationsPress}
-        onProfilePress={handleProfilePress}
-        onViewModeToggle={toggleViewMode}
-        showViewToggle={true}
-        viewMode={viewMode}
-        isChangingView={isChangingView}
-        isDark={isDarkMode}
-        title="Abacus"
-        showLogo={true}
-      />
-
-      <Sidebar 
-        isOpen={sidebarOpen} 
-        onClose={() => setSidebarOpen(false)}
-        navigation={navigation}
-        currentRoute="Operaciones"
-      />
+    <>
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <Header 
+          title="Operaciones"
+          onMenuPress={() => setSidebarOpen(true)}
+          onThemePress={toggleTheme}
+          onSettingsPress={undefined}
+          onNotificationsPress={handleNotificationsPress}
+          onProfilePress={handleProfilePress}
+          onViewModeToggle={toggleViewMode}
+          showViewToggle={true}
+          viewMode={viewMode}
+          isChangingView={isChangingView}
+          isDark={isDarkMode}
+          showLogo={true}
+        />
+        <Sidebar
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          navigation={navigation}
+          currentRoute="Operaciones"
+        />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
@@ -1432,13 +1473,17 @@ const OperacionesContent = () => {
         visible={showTransferModal}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setShowTransferModal(false)}
+        onRequestClose={() => {
+          // Allow closing with back button on Android, but not from keyboard
+          // The modal should primarily close via the X button or submit button
+          if (Platform.OS === 'android') {
+            setShowTransferModal(false);
+          }
+        }}
+        statusBarTranslucent={true}
       >
         <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.5)' }]}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.modalContainer}
-          >
+          <View style={styles.modalContainer}>
             <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
               <View style={styles.modalHeader}>
                 <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Transferir entre Cuentas</Text>
@@ -1447,7 +1492,7 @@ const OperacionesContent = () => {
                 </TouchableOpacity>
               </View>
 
-              <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+              <ScrollView style={styles.modalScroll} contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 {/* Cuenta Origen */}
                 <View style={styles.formGroup}>
                   <Text style={[styles.label, { color: colors.outline }]}>Cuenta Origen *</Text>
@@ -1590,6 +1635,9 @@ const OperacionesContent = () => {
                     value={transferFormData.cantidad}
                     onChangeText={(text) => setTransferFormData(prev => ({ ...prev, cantidad: text }))}
                     keyboardType="numeric"
+                    returnKeyType="done"
+                    blurOnSubmit={true}
+                    onSubmitEditing={() => Keyboard.dismiss()}
                   />
                 </View>
 
@@ -1604,6 +1652,7 @@ const OperacionesContent = () => {
                     onChangeText={(text) => setTransferFormData(prev => ({ ...prev, motivo: text }))}
                     multiline
                     numberOfLines={3}
+                    blurOnSubmit={false}
                   />
                 </View>
               </ScrollView>
@@ -1623,10 +1672,28 @@ const OperacionesContent = () => {
                 </TouchableOpacity>
               </View>
             </View>
-          </KeyboardAvoidingView>
+          </View>
         </View>
-      </Modal>
 
+        {/* Toast inside modal to ensure it appears on top */}
+        {toast.visible && (
+          <View style={{ position: 'absolute', top: 50, left: 20, right: 20, zIndex: 99999 }}>
+            <Toast
+              visible={toast.visible}
+              type={toast.type}
+              message={toast.message}
+              code={toast.code}
+              duration={toast.duration}
+              onHide={hideToast}
+              toastKey={toast.key}
+            />
+          </View>
+        )}
+      </Modal>
+    </SafeAreaView>
+
+    {/* Toast for when modal is not visible */}
+    {!showTransferModal && (
       <Toast
         visible={toast.visible}
         type={toast.type}
@@ -1636,7 +1703,8 @@ const OperacionesContent = () => {
         onHide={hideToast}
         toastKey={toast.key}
       />
-    </SafeAreaView>
+    )}
+  </>
   );
 };
 

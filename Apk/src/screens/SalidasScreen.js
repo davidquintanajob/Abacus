@@ -283,6 +283,34 @@ const SalidasContent = () => {
     }
   };
 
+  // Adjust date filters to Cuba timezone (UTC-4) before sending to backend
+  const adjustFiltersForCubaTimezone = (filters) => {
+    const adjustedFilters = { ...filters };
+
+    if (adjustedFilters.fecha_desde) {
+      // Backend interprets "2024-08-27" as UTC 2024-08-27 00:00:00
+      // Cuba 00:00:00 = UTC 04:00:00 (since Cuba is UTC-4)
+      // To filter from Cuba 00:00:00 on 2024-08-27, we need UTC 2024-08-27 04:00:00
+      // Send ISO datetime instead of just date
+      const [year, month, day] = adjustedFilters.fecha_desde.split('-').map(Number);
+      const cubaMidnightUTC = new Date(Date.UTC(year, month - 1, day, 4, 0, 0));
+      adjustedFilters.fecha_desde = cubaMidnightUTC.toISOString();
+    }
+
+    if (adjustedFilters.fecha_hasta) {
+      // Backend adds 1 day to fecha_hasta and uses it as UTC
+      // Cuba 23:59:59 on day D = UTC 03:59:59 on day D+1
+      // To filter until Cuba 23:59:59 on 2024-08-27, we need UTC 2024-08-28 03:59:59
+      // But backend will add 1 day, so we send UTC 2024-08-27 03:59:59
+      // Backend will convert it to UTC 2024-08-28 03:59:59
+      const [year, month, day] = adjustedFilters.fecha_hasta.split('-').map(Number);
+      const cubaEndOfDayUTC = new Date(Date.UTC(year, month - 1, day, 3, 59, 59));
+      adjustedFilters.fecha_hasta = cubaEndOfDayUTC.toISOString();
+    }
+
+    return adjustedFilters;
+  };
+
   const fetchSalidas = async (overrideIdTienda = null, overrideFilters = null) => {
     try {
       setIsLoading(true);
@@ -296,24 +324,27 @@ const SalidasContent = () => {
       }
 
       const userRole = user?.rol?.toLowerCase();
-      const canViewAllSalidas = 
+      const canViewAllSalidas =
         userRole === 'administrador' ||
         (userRole === 'dependiente' && salidaAccessLevels?.dependiente === 'all_stores') ||
         (userRole === 'almacenero' && salidaAccessLevels?.almacenero === 'all_stores') ||
         (userRole === 'económico' && salidaAccessLevels?.economico === 'all_stores');
 
       const filtersToUse = overrideFilters || filters;
-      
+
       const fetchLimit = pagination.limit;
       const fetchPage = pagination.currentPage;
-      
+
       const apiFilters = { ...filtersToUse };
-      
+
       if (overrideIdTienda !== null) {
         apiFilters.id_tienda = overrideIdTienda;
       }
-      
-      const data = await getSalidas(apiFilters, fetchPage, fetchLimit);
+
+      // Adjust date filters for Cuba timezone before sending to backend
+      const adjustedFilters = adjustFiltersForCubaTimezone(apiFilters);
+
+      const data = await getSalidas(adjustedFilters, fetchPage, fetchLimit);
       let salidas = data.data || [];
 
       setSalidas(salidas);
