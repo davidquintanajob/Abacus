@@ -1,5 +1,6 @@
 const listaVentaService = require("../services/listaVentaService");
 const { throwError } = require("../helpers/errorLauncher");
+const { Json } = require("sequelize/lib/utils");
 
 const handleError = (res, error) => {
   const status = error.status || 500;
@@ -142,7 +143,8 @@ const createListaVenta = async (req, res) => {
       cambio_moneda,
       ventas,
     } = req.body;
-
+    console.log(JSON.stringify(req.body,null,2));
+    
     const errors = [];
     if (!fecha_hora) errors.push("fecha_hora es obligatorio.");
     if (!ventas || !Array.isArray(ventas) || ventas.length === 0) {

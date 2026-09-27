@@ -54,7 +54,7 @@ const Cuenta = sequelize.define(
     },
     // NUEVO CAMPO: fondo (solo modificable externamente)
     fondo: {
-      type: DataTypes.DECIMAL(10, 5),
+      type: DataTypes.DECIMAL(14, 5),
       allowNull: false,
       defaultValue: 0.00000,
       validate: {

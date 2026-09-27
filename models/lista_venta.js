@@ -35,7 +35,7 @@ const ListaVenta = sequelize.define(
       onDelete: "SET NULL",
     },
     cambio_moneda: {
-      type: DataTypes.DECIMAL(10, 5),
+      type: DataTypes.DECIMAL(14, 5),
       allowNull: false,
       defaultValue: 1.00000,
       validate: {
@@ -46,7 +46,7 @@ const ListaVenta = sequelize.define(
       },
     },
     cantidad_cobrada_efectivo_cup: {
-      type: DataTypes.DECIMAL(10, 5),
+      type: DataTypes.DECIMAL(14, 5),
       allowNull: false,
       defaultValue: 0.00000,
       validate: {
@@ -57,7 +57,7 @@ const ListaVenta = sequelize.define(
       },
     },
     cantidad_cobrada_efectivo_usd: {
-      type: DataTypes.DECIMAL(10, 5),
+      type: DataTypes.DECIMAL(14, 5),
       allowNull: false,
       defaultValue: 0.00000,
       validate: {
@@ -68,7 +68,7 @@ const ListaVenta = sequelize.define(
       },
     },
     cantidad_cobrada_transferencia_cup: {
-      type: DataTypes.DECIMAL(10, 5),
+      type: DataTypes.DECIMAL(14, 5),
       allowNull: false,
       defaultValue: 0.00000,
       validate: {
@@ -79,7 +79,7 @@ const ListaVenta = sequelize.define(
       },
     },
     cantidad_cobrada_transferencia_usd: {
-      type: DataTypes.DECIMAL(10, 5),
+      type: DataTypes.DECIMAL(14, 5),
       allowNull: false,
       defaultValue: 0.00000,
       validate: {
