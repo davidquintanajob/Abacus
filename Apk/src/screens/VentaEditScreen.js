@@ -378,8 +378,8 @@ const VentaEditContent = () => {
         id_cuenta_efectivo_usd: ventaData.operaciones?.find(op => op.cuenta?.tipo_cuenta === 'Efectivo USD')?.id_cuenta || null,
         id_cuenta_transferencia_cup: ventaData.operaciones?.find(op => op.cuenta?.tipo_cuenta === 'Transferencia CUP')?.id_cuenta || null,
         id_cuenta_transferencia_usd: ventaData.operaciones?.find(op => op.cuenta?.tipo_cuenta === 'Transferencia USD')?.id_cuenta || null,
-        id_usuario: ventaData.operaciones?.[0]?.id_usuario || user?.id_usuario,
-        cambio_moneda: ventaData.operaciones?.[0]?.cambio_moneda?.toString() || cupToUsdRate.toString(),
+        id_usuario: ventaData.id_usuario || ventaData.operaciones?.[0]?.id_usuario || user?.id_usuario,
+        cambio_moneda: ventaData.cambio_moneda?.toString() || ventaData.operaciones?.[0]?.cambio_moneda?.toString() || cupToUsdRate.toString(),
       });
 
       const ventaItemsData = ventaData.ventas?.map(v => ({

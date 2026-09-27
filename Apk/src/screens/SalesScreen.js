@@ -1064,13 +1064,13 @@ const SalesContent = () => {
       const transferenciaCup = parseAmount(paymentAmounts.transferencia_cup);
       const transferenciaUsd = parseAmount(paymentAmounts.transferencia_usd);
 
-      // Validate that amounts don't exceed database limit (DECIMAL(10, 5) = max 99,999.99999)
-      const MAX_DECIMAL_10_5 = 99999.99999;
+      // Validate that amounts don't exceed database limit (DECIMAL(12, 5) = max 999,999,999.99999)
+      const MAX_DECIMAL_12_5 = 999999999.99999;
       const validateDecimalLimit = (value, fieldName) => {
-        if (value > MAX_DECIMAL_10_5) {
-          showToast({ 
-            type: 'error', 
-            message: `El valor de ${fieldName} (${value.toFixed(5)}) excede el límite máximo permitido de ${MAX_DECIMAL_10_5.toFixed(5)}. Por favor contacta al administrador del sistema para aumentar el límite de la base de datos.` 
+        if (value > MAX_DECIMAL_12_5) {
+          showToast({
+            type: 'error',
+            message: `El valor de ${fieldName} (${value.toFixed(5)}) excede el límite máximo permitido de ${MAX_DECIMAL_12_5.toFixed(5)}. Por favor contacta al administrador del sistema para aumentar el límite de la base de datos.`
           });
           return false;
         }
@@ -1090,11 +1090,11 @@ const SalesContent = () => {
           const cuentaData = await getCuentaById(cuenta.id_cuenta);
           const currentFondo = parseFloat(cuentaData.fondo || 0);
           const newFondo = currentFondo + amount;
-          
-          if (newFondo > MAX_DECIMAL_10_5) {
-            showToast({ 
-              type: 'error', 
-              message: `El fondo de la cuenta "${cuenta.nombre}" excederá el límite máximo. Fondo actual: ${currentFondo.toFixed(5)}, Nuevo fondo: ${newFondo.toFixed(5)}, Límite: ${MAX_DECIMAL_10_5.toFixed(5)}. Por favor contacta al administrador del sistema para aumentar el límite de la base de datos.` 
+
+          if (newFondo > MAX_DECIMAL_12_5) {
+            showToast({
+              type: 'error',
+              message: `El fondo de la cuenta "${cuenta.nombre}" excederá el límite máximo. Fondo actual: ${currentFondo.toFixed(5)}, Nuevo fondo: ${newFondo.toFixed(5)}, Límite: ${MAX_DECIMAL_12_5.toFixed(5)}. Por favor contacta al administrador del sistema para aumentar el límite de la base de datos.`
             });
             return false;
           }
@@ -1280,9 +1280,9 @@ const SalesContent = () => {
         const ajusteCUP = roundTo5Decimals(ajusteCUPPorItem / cantidad);
         const ajusteUSD = roundTo5Decimals(ajusteUSDPorItem / cantidad);
         
-        // Limit adjusted prices to prevent overflow (max 999999.99999)
-        const precioCobradoCUP = Math.max(0, Math.min(999999.99999, roundTo5Decimals(item.precio_cup + ajusteCUP)));
-        const precioCobradoUSD = Math.max(0, Math.min(999999.99999, roundTo5Decimals(item.precio_usd + ajusteUSD)));
+        // Limit adjusted prices to prevent overflow (max 999999999.99999)
+        const precioCobradoCUP = Math.max(0, Math.min(999999999.99999, roundTo5Decimals(item.precio_cup + ajusteCUP)));
+        const precioCobradoUSD = Math.max(0, Math.min(999999999.99999, roundTo5Decimals(item.precio_usd + ajusteUSD)));
         
         return {
           id_servicio_tienda: item.id_servicio_tienda,

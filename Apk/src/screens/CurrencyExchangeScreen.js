@@ -582,13 +582,13 @@ const CurrencyExchangeContent = () => {
 
   const handleCurrencyModalConfirm = async () => {
     const rate = parseFloat(exchangeRate);
-    
+
     try {
       setIsSaving(true);
       setShowCurrencyModal(false);
 
       // Invertir tipoDatoModificar porque el backend tiene la lógica invertida
-      // Si el usuario quiere basar en USD (mantener USD, actualizar CUP), 
+      // Si el usuario quiere basar en USD (mantener USD, actualizar CUP),
       // el backend espera 'cup' para actualizar CUP basándose en USD
       const invertedTipoDato = currencyModalConfig.tipoDatoModificar === 'usd' ? 'cup' : 'usd';
 
@@ -610,21 +610,27 @@ const CurrencyExchangeContent = () => {
         cuentaChangePermissions: cuentaChangePermissions,
         comprobanteConfig: comprobanteConfig,
         prioritizeWifiConnection: prioritizeWifiConnection,
-        monedaConfig: {
+      };
+
+      // Only include monedaConfig if not 'nada'
+      if (currencyModalConfig.datosModificar !== 'nada') {
+        updatedConfig.monedaConfig = {
           modificarSoloServicios: currencyModalConfig.modificarSoloServicios,
           datosModificar: currencyModalConfig.datosModificar,
           tipoDatoModificar: invertedTipoDato,
           monedaValor: rate,
-        },
-      };
-      
+        };
+      }
+
       const response = await configService.updateConfig(updatedConfig);
       setConfig(updatedConfig);
-      
-      const message = response?.updatedServiciosTienda 
-        ? `Configuración guardada. ${response.updatedServiciosTienda} servicios actualizados.`
-        : 'Configuración guardada correctamente';
-      
+
+      const message = currencyModalConfig.datosModificar === 'nada'
+        ? 'Tipo de cambio actualizado sin modificar precios ni costos'
+        : (response?.updatedServiciosTienda
+          ? `Configuración guardada. ${response.updatedServiciosTienda} servicios actualizados.`
+          : 'Configuración guardada correctamente');
+
       showToast({ type: 'success', message });
     } catch (error) {
       showToast({ type: 'error', message: 'Error al guardar configuración' });
@@ -2558,14 +2564,30 @@ const CurrencyExchangeContent = () => {
                   <TouchableOpacity
                     style={[
                       styles.currencyModalOption,
+                      currencyModalConfig.datosModificar === 'nada' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                    ]}
+                    onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, datosModificar: 'nada' })}
+                  >
+                    <Ionicons
+                      name="close-circle"
+                      size={20}
+                      color={currencyModalConfig.datosModificar === 'nada' ? '#fff' : colors.outline}
+                    />
+                    <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.datosModificar === 'nada' ? '#fff' : colors.onSurface }]}>
+                      Nada
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.currencyModalOption,
                       currencyModalConfig.datosModificar === 'precios' && { backgroundColor: colors.primary, borderColor: colors.primary }
                     ]}
                     onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, datosModificar: 'precios' })}
                   >
-                    <Ionicons 
-                      name="pricetag" 
-                      size={20} 
-                      color={currencyModalConfig.datosModificar === 'precios' ? '#fff' : colors.outline} 
+                    <Ionicons
+                      name="pricetag"
+                      size={20}
+                      color={currencyModalConfig.datosModificar === 'precios' ? '#fff' : colors.outline}
                     />
                     <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.datosModificar === 'precios' ? '#fff' : colors.onSurface }]}>
                       Solo Precios
@@ -2578,10 +2600,10 @@ const CurrencyExchangeContent = () => {
                     ]}
                     onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, datosModificar: 'costos' })}
                   >
-                    <Ionicons 
-                      name="wallet" 
-                      size={20} 
-                      color={currencyModalConfig.datosModificar === 'costos' ? '#fff' : colors.outline} 
+                    <Ionicons
+                      name="wallet"
+                      size={20}
+                      color={currencyModalConfig.datosModificar === 'costos' ? '#fff' : colors.outline}
                     />
                     <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.datosModificar === 'costos' ? '#fff' : colors.onSurface }]}>
                       Solo Costos
@@ -2594,10 +2616,10 @@ const CurrencyExchangeContent = () => {
                     ]}
                     onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, datosModificar: 'ambos' })}
                   >
-                    <Ionicons 
-                      name="layers" 
-                      size={20} 
-                      color={currencyModalConfig.datosModificar === 'ambos' ? '#fff' : colors.outline} 
+                    <Ionicons
+                      name="layers"
+                      size={20}
+                      color={currencyModalConfig.datosModificar === 'ambos' ? '#fff' : colors.outline}
                     />
                     <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.datosModificar === 'ambos' ? '#fff' : colors.onSurface }]}>
                       Ambos
@@ -2606,81 +2628,85 @@ const CurrencyExchangeContent = () => {
                 </View>
               </View>
 
-              <View style={styles.currencyModalSection}>
-                <Text style={[styles.currencyModalSectionTitle, { color: colors.onSurface }]}>
-                  ¿Qué servicios actualizar?
-                </Text>
-                <View style={styles.currencyModalOptions}>
-                  <TouchableOpacity
-                    style={[
-                      styles.currencyModalOption,
-                      !currencyModalConfig.modificarSoloServicios && { backgroundColor: colors.primary, borderColor: colors.primary }
-                    ]}
-                    onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, modificarSoloServicios: false })}
-                  >
-                    <Ionicons 
-                      name="apps" 
-                      size={20} 
-                      color={!currencyModalConfig.modificarSoloServicios ? '#fff' : colors.outline} 
-                    />
-                    <Text style={[styles.currencyModalOptionText, { color: !currencyModalConfig.modificarSoloServicios ? '#fff' : colors.onSurface }]}>
-                      Todos (Productos + Servicios)
+              {currencyModalConfig.datosModificar !== 'nada' && (
+                <>
+                  <View style={styles.currencyModalSection}>
+                    <Text style={[styles.currencyModalSectionTitle, { color: colors.onSurface }]}>
+                      ¿Qué servicios actualizar?
                     </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.currencyModalOption,
-                      currencyModalConfig.modificarSoloServicios && { backgroundColor: colors.primary, borderColor: colors.primary }
-                    ]}
-                    onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, modificarSoloServicios: true })}
-                  >
-                    <Ionicons 
-                      name="list" 
-                      size={20} 
-                      color={currencyModalConfig.modificarSoloServicios ? '#fff' : colors.outline} 
-                    />
-                    <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.modificarSoloServicios ? '#fff' : colors.onSurface }]}>
-                      Solo Servicios (sin producto)
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+                    <View style={styles.currencyModalOptions}>
+                      <TouchableOpacity
+                        style={[
+                          styles.currencyModalOption,
+                          !currencyModalConfig.modificarSoloServicios && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, modificarSoloServicios: false })}
+                      >
+                        <Ionicons
+                          name="apps"
+                          size={20}
+                          color={!currencyModalConfig.modificarSoloServicios ? '#fff' : colors.outline}
+                        />
+                        <Text style={[styles.currencyModalOptionText, { color: !currencyModalConfig.modificarSoloServicios ? '#fff' : colors.onSurface }]}>
+                          Todos (Productos + Servicios)
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.currencyModalOption,
+                          currencyModalConfig.modificarSoloServicios && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, modificarSoloServicios: true })}
+                      >
+                        <Ionicons
+                          name="list"
+                          size={20}
+                          color={currencyModalConfig.modificarSoloServicios ? '#fff' : colors.outline}
+                        />
+                        <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.modificarSoloServicios ? '#fff' : colors.onSurface }]}>
+                          Solo Servicios (sin producto)
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
 
-              <View style={styles.currencyModalSection}>
-                <Text style={[styles.currencyModalSectionTitle, { color: colors.onSurface }]}>
-                  ¿Basar conversión en?
-                </Text>
-                <View style={styles.currencyModalOptions}>
-                  <TouchableOpacity
-                    style={[
-                      styles.currencyModalOption,
-                      currencyModalConfig.tipoDatoModificar === 'usd' && { backgroundColor: colors.primary, borderColor: colors.primary }
-                    ]}
-                    onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, tipoDatoModificar: 'usd' })}
-                  >
-                    <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.tipoDatoModificar === 'usd' ? '#fff' : colors.onSurface }]}>
-                      USD (Actualizar CUP)
+                  <View style={styles.currencyModalSection}>
+                    <Text style={[styles.currencyModalSectionTitle, { color: colors.onSurface }]}>
+                      ¿Basar conversión en?
                     </Text>
-                    <Text style={[styles.currencyModalOptionSubtext, { color: currencyModalConfig.tipoDatoModificar === 'usd' ? '#fff' : colors.outline }]}>
-                      CUP = USD × {exchangeRate}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.currencyModalOption,
-                      currencyModalConfig.tipoDatoModificar === 'cup' && { backgroundColor: colors.primary, borderColor: colors.primary }
-                    ]}
-                    onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, tipoDatoModificar: 'cup' })}
-                  >
-                    <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.tipoDatoModificar === 'cup' ? '#fff' : colors.onSurface }]}>
-                      CUP (Actualizar USD)
-                    </Text>
-                    <Text style={[styles.currencyModalOptionSubtext, { color: currencyModalConfig.tipoDatoModificar === 'cup' ? '#fff' : colors.outline }]}>
-                      USD = CUP / {exchangeRate}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+                    <View style={styles.currencyModalOptions}>
+                      <TouchableOpacity
+                        style={[
+                          styles.currencyModalOption,
+                          currencyModalConfig.tipoDatoModificar === 'usd' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, tipoDatoModificar: 'usd' })}
+                      >
+                        <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.tipoDatoModificar === 'usd' ? '#fff' : colors.onSurface }]}>
+                          USD (Actualizar CUP)
+                        </Text>
+                        <Text style={[styles.currencyModalOptionSubtext, { color: currencyModalConfig.tipoDatoModificar === 'usd' ? '#fff' : colors.outline }]}>
+                          CUP = USD × {exchangeRate}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.currencyModalOption,
+                          currencyModalConfig.tipoDatoModificar === 'cup' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, tipoDatoModificar: 'cup' })}
+                      >
+                        <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.tipoDatoModificar === 'cup' ? '#fff' : colors.onSurface }]}>
+                          CUP (Actualizar USD)
+                        </Text>
+                        <Text style={[styles.currencyModalOptionSubtext, { color: currencyModalConfig.tipoDatoModificar === 'cup' ? '#fff' : colors.outline }]}>
+                          USD = CUP / {exchangeRate}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </>
+              )}
             </ScrollView>
 
             <View style={styles.currencyModalButtons}>

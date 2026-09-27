@@ -284,6 +284,34 @@ const EntradasContent = () => {
     }
   };
 
+  // Adjust date filters to Cuba timezone (UTC-4) before sending to backend
+  const adjustFiltersForCubaTimezone = (filters) => {
+    const adjustedFilters = { ...filters };
+
+    if (adjustedFilters.fecha_desde) {
+      // Backend interprets "2024-08-27" as UTC 2024-08-27 00:00:00
+      // Cuba 00:00:00 = UTC 04:00:00 (since Cuba is UTC-4)
+      // To filter from Cuba 00:00:00 on 2024-08-27, we need UTC 2024-08-27 04:00:00
+      // Send ISO datetime instead of just date
+      const [year, month, day] = adjustedFilters.fecha_desde.split('-').map(Number);
+      const cubaMidnightUTC = new Date(Date.UTC(year, month - 1, day, 4, 0, 0));
+      adjustedFilters.fecha_desde = cubaMidnightUTC.toISOString();
+    }
+
+    if (adjustedFilters.fecha_hasta) {
+      // Backend adds 1 day to fecha_hasta and uses it as UTC
+      // Cuba 23:59:59 on day D = UTC 03:59:59 on day D+1
+      // To filter until Cuba 23:59:59 on 2024-08-27, we need UTC 2024-08-28 03:59:59
+      // But backend will add 1 day, so we send UTC 2024-08-27 03:59:59
+      // Backend will convert it to UTC 2024-08-28 03:59:59
+      const [year, month, day] = adjustedFilters.fecha_hasta.split('-').map(Number);
+      const cubaEndOfDayUTC = new Date(Date.UTC(year, month - 1, day, 3, 59, 59));
+      adjustedFilters.fecha_hasta = cubaEndOfDayUTC.toISOString();
+    }
+
+    return adjustedFilters;
+  };
+
   const fetchEntradas = async (overrideIdTienda = null, overrideFilters = null) => {
     try {
       setIsLoading(true);
@@ -297,7 +325,7 @@ const EntradasContent = () => {
       }
 
       const userRole = user?.rol?.toLowerCase();
-      const canViewAllEntradas = 
+      const canViewAllEntradas =
         userRole === 'administrador' ||
         (userRole === 'dependiente' && entradaAccessLevels?.dependiente === 'all_stores') ||
         (userRole === 'almacenero' && entradaAccessLevels?.almacenero === 'all_stores') ||
@@ -305,7 +333,7 @@ const EntradasContent = () => {
 
       // Use override filters if provided, otherwise use current state
       const filtersToUse = overrideFilters || filters;
-      
+
       const hasActiveFilters = Object.entries(filtersToUse).some(([key, value]) => {
         // Don't count id_tienda as an active filter if it's just the user's default store
         if (key === 'id_tienda' && value === user?.id_tienda?.toString()) {
@@ -315,16 +343,19 @@ const EntradasContent = () => {
       });
       const fetchLimit = pagination.limit;
       const fetchPage = pagination.currentPage;
-      
+
       // Build filters to send to API
       const apiFilters = { ...filtersToUse };
-      
+
       // Use overrideIdTienda if provided (for immediate filter changes)
       if (overrideIdTienda !== null) {
         apiFilters.id_tienda = overrideIdTienda;
       }
-      
-      const data = await getEntradas(apiFilters, fetchPage, fetchLimit);
+
+      // Adjust date filters for Cuba timezone before sending to backend
+      const adjustedFilters = adjustFiltersForCubaTimezone(apiFilters);
+
+      const data = await getEntradas(adjustedFilters, fetchPage, fetchLimit);
       let entradas = data.data || [];
 
       setEntradas(entradas);

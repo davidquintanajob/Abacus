@@ -132,7 +132,7 @@ const createStyles = (responsive, insets) =>
       top: insets.top + 8,
       left: responsive.horizontalPadding,
       right: responsive.horizontalPadding,
-      zIndex: 9999,
+      zIndex: 99999,
       borderRadius: 14,
       flexDirection: 'row',
       alignItems: 'center',

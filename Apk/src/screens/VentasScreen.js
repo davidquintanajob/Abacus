@@ -1611,7 +1611,7 @@ const VentasContent = () => {
                         Tienda: {venta.ventas?.[0]?.servicioTienda?.tienda?.nombre || 'N/A'}
                       </Text>
                       <Text style={[styles.ventaUsuario, { color: colors.outline }]}>
-                        Usuario: {venta.operaciones?.[0]?.usuario?.nombre_natural || 'N/A'}
+                        Usuario: {venta.usuario?.nombre_natural || 'N/A'}
                       </Text>
                       <View style={styles.cantidadRow}>
                         <Text style={[styles.ventaCantidad, { color: colors.primary }]}>
@@ -1708,7 +1708,7 @@ const VentasContent = () => {
                           {venta.ventas?.[0]?.servicioTienda?.tienda?.nombre || 'N/A'}
                         </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
-                          {venta.operaciones?.[0]?.usuario?.nombre_natural || 'N/A'}
+                          {venta.usuario?.nombre_natural || 'N/A'}
                         </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
                           ${venta.cantidad_cobrada_efectivo_cup || 0}

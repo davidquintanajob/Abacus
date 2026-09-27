@@ -238,6 +238,23 @@ const InformeGeneralContent = () => {
 
   const PieChart = ({ data, size = 200 }) => {
     const total = data.reduce((sum, item) => sum + item.value, 0);
+
+    // If total is 0, show empty chart with disabled color
+    if (total === 0) {
+      return (
+        <Svg width={size} height={size}>
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={size / 2 - 10}
+            fill={isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'}
+            stroke={isDarkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}
+            strokeWidth={2}
+          />
+        </Svg>
+      );
+    }
+
     let startAngle = 0;
     const radius = size / 2;
     const center = size / 2;
