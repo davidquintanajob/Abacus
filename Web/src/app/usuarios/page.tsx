@@ -38,7 +38,7 @@ export default function UsuariosPage() {
   const { token, user, permissions } = useAuth();
   const { viewMode, toggleViewMode } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
-  const { showConfirmDialog } = useConfirmDialog();
+  const { showConfirmDialog, hideConfirmDialog } = useConfirmDialog();
   const { setLoading: setNavigating } = useNavigationLoading();
   const { isMobile, isTablet, isDesktop } = useResponsive();
   const sidebarNavRef = useRef<any>(null);
@@ -169,6 +169,7 @@ export default function UsuariosPage() {
       title: 'Eliminar Usuario',
       message: `¿Estás seguro de que quieres eliminar al usuario "${usuario.nombre_natural}"?`,
       onConfirm: () => {
+        hideConfirmDialog();
         deleteUsuario(usuario.id_usuario)
           .then(() => {
             showToast({ type: 'success', message: 'Usuario eliminado correctamente' });

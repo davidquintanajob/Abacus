@@ -79,50 +79,28 @@ export const Header = ({
             <Menu size={24} className="md:w-8 md:h-8 lg:w-9 lg:h-9" style={{ color: colors.primary }} />
           </button>
         )}
-        {onLogoPress ? (
-          <button
-            onClick={onLogoPress}
-            className="flex items-center gap-2 hover:bg-black/5 rounded-lg px-2 py-1 transition-colors"
+        <button
+          onClick={onLogoPress || (() => router.push('/'))}
+          className="flex items-center gap-2 hover:bg-black/5 rounded-lg px-2 py-1 transition-colors"
+        >
+          {showLogo && title === 'Abacus' && (
+            <div className="w-8 h-8 md:w-10 md:h-10">
+              <Image
+                src={isDarkMode ? '/logo-header-dark.png' : '/logo-header-light.png'}
+                alt="Abacus Logo"
+                width={32}
+                height={32}
+                className="w-full h-full object-contain"
+              />
+            </div>
+          )}
+          <h1
+            className="text-2xl md:text-3xl font-bold"
+            style={{ color: colors.primary }}
           >
-            {showLogo && title === 'Abacus' && (
-              <div className="w-8 h-8 md:w-10 md:h-10">
-                <Image
-                  src={isDarkMode ? '/logo-header-dark.png' : '/logo-header-light.png'}
-                  alt="Abacus Logo"
-                  width={32}
-                  height={32}
-                  className="w-full h-full object-contain"
-                />
-              </div>
-            )}
-            <h1
-              className="text-2xl md:text-3xl font-bold"
-              style={{ color: colors.primary }}
-            >
-              {title || 'Abacus'}
-            </h1>
-          </button>
-        ) : (
-          <div className="flex items-center gap-2">
-            {showLogo && title === 'Abacus' && (
-              <div className="w-8 h-8 md:w-10 md:h-10">
-                <Image
-                  src={isDarkMode ? '/logo-header-dark.png' : '/logo-header-light.png'}
-                  alt="Abacus Logo"
-                  width={32}
-                  height={32}
-                  className="w-full h-full object-contain"
-                />
-              </div>
-            )}
-            <h1
-              className="text-2xl md:text-3xl font-bold"
-              style={{ color: colors.primary }}
-            >
-              {title || 'Abacus'}
-            </h1>
-          </div>
-        )}
+            {title || 'Abacus'}
+          </h1>
+        </button>
       </div>
       
       <div className="flex items-center gap-1 md:gap-2">

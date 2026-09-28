@@ -13,6 +13,8 @@ import { SidebarNavigation } from '../../components/layout/SidebarNavigation';
 import { Toast } from '../../components/common/Toast';
 import { getProductos, deleteProducto } from '../../services/productoService';
 import { getTiendas } from '../../services/tiendaService';
+import { useResponsive } from '../../hooks/useResponsive';
+import * as XLSX from 'xlsx';
 import { 
   Search, 
   RefreshCw, 
@@ -33,7 +35,6 @@ import {
   FileText,
   Barcode
 } from 'lucide-react';
-import { useResponsive } from '../../hooks/useResponsive';
 
 export default function ProductosPage() {
   const router = useRouter();
@@ -41,7 +42,7 @@ export default function ProductosPage() {
   const { token, user } = useAuth();
   const { viewMode, toggleViewMode } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
-  const { showConfirmDialog } = useConfirmDialog();
+  const { showConfirmDialog, hideConfirmDialog } = useConfirmDialog();
   const { setLoading: setNavigating } = useNavigationLoading();
   const { isMobile, isTablet, isDesktop } = useResponsive();
   const sidebarNavRef = useRef<any>(null);
@@ -221,7 +222,8 @@ export default function ProductosPage() {
       title: 'Eliminar Producto',
       message: `¿Estás seguro de que quieres eliminar el producto "${producto.nombre}"?`,
       onConfirm: () => {
-        deleteProducto(producto.id_producto)
+        hideConfirmDialog();
+        deleteProducto(producto.id_servicio)
           .then(() => {
             showToast({ type: 'success', message: 'Producto eliminado correctamente' });
             fetchProductos();
@@ -268,7 +270,14 @@ export default function ProductosPage() {
     router.push('/profile');
   };
 
-  const handleExportToCSV = async () => {
+  const sanitizeFileName = (fileName: string) => {
+    return fileName
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_');
+  };
+
+  const handleExportToExcel = async () => {
     try {
       setIsExporting(true);
       
@@ -281,46 +290,30 @@ export default function ProductosPage() {
         return;
       }
 
-      // Build headers based on selected fields
-      const headers = [];
-      if (selectedFields.nombre) headers.push('Nombre');
-      if (selectedFields.categoria) headers.push('Categoría');
-      if (selectedFields.sufijo) headers.push('Sufijo');
-      if (selectedFields.codigo) headers.push('Códigos');
-      if (selectedFields.precio_cup) headers.push('Precio CUP');
-      if (selectedFields.precio_usd) headers.push('Precio USD');
-      if (selectedFields.costo_cup) headers.push('Costo CUP');
-      if (selectedFields.costo_usd) headers.push('Costo USD');
-      if (selectedFields.nota) headers.push('Nota');
+      const excelData = allProductos.map((producto: any) => {
+        const row: any = {};
+        if (selectedFields.nombre) row['Nombre'] = producto.nombre || '';
+        if (selectedFields.categoria) row['Categoría'] = producto.categoria || '';
+        if (selectedFields.sufijo) row['Sufijo'] = producto.producto?.sufijo || producto.sufijo || '';
+        if (selectedFields.codigo) row['Códigos'] = producto.codigos?.map((c: any) => c.codigo_barras_ean).join('; ') || '';
+        if (selectedFields.precio_cup) row['Precio CUP'] = parseFloat(getProductPrice(producto)).toFixed(2);
+        if (selectedFields.precio_usd) row['Precio USD'] = parseFloat(getProductPriceUSD(producto)).toFixed(2);
+        if (selectedFields.costo_cup) row['Costo CUP'] = parseFloat(getProductCost(producto)).toFixed(2);
+        if (selectedFields.costo_usd) row['Costo USD'] = parseFloat(getProductCostUSD(producto)).toFixed(2);
+        if (selectedFields.nota) row['Nota'] = producto.nota || '';
+        return row;
+      });
 
-      const csvContent = [
-        headers.join(','),
-        ...allProductos.map((producto: any) => {
-          const row = [];
-          if (selectedFields.nombre) row.push(`"${producto.nombre || ''}"`);
-          if (selectedFields.categoria) row.push(`"${producto.categoria || ''}"`);
-          if (selectedFields.sufijo) row.push(`"${producto.producto?.sufijo || producto.sufijo || ''}"`);
-          if (selectedFields.codigo) row.push(`"${producto.codigos?.map((c: any) => c.codigo_barras_ean).join('; ') || ''}"`);
-          if (selectedFields.precio_cup) row.push(parseFloat(getProductPrice(producto)).toFixed(2));
-          if (selectedFields.precio_usd) row.push(parseFloat(getProductPriceUSD(producto)).toFixed(2));
-          if (selectedFields.costo_cup) row.push(parseFloat(getProductCost(producto)).toFixed(2));
-          if (selectedFields.costo_usd) row.push(parseFloat(getProductCostUSD(producto)).toFixed(2));
-          if (selectedFields.nota) row.push(`"${producto.nota || ''}"`);
-          return row.join(',');
-        })
-      ].join('\n');
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Productos');
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `productos_${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      showToast({ type: 'success', message: 'Productos exportados correctamente' });
+      const date = new Date();
+      const formattedDate = `${date.getDate().toString().padStart(2, '0')}_${(date.getMonth() + 1).toString().padStart(2, '0')}_${date.getFullYear()}`;
+      const fileName = sanitizeFileName(`Inventario_Productos_${formattedDate}.xlsx`);
+      
+      XLSX.writeFile(wb, fileName);
+      showToast({ type: 'success', message: 'Archivo Excel descargado correctamente' });
     } catch (err: any) {
       showToast({ type: 'error', message: 'Error al exportar: ' + err.message });
     } finally {
@@ -878,7 +871,7 @@ export default function ProductosPage() {
     setShowFieldSelectionModal(false);
     
     if (exportType === 'inventory_excel') {
-      await handleExportToCSV();
+      await handleExportToExcel();
     } else if (exportType === 'inventory_pdf') {
       await handleExportToPDF();
     } else if (exportType === 'qr') {
@@ -1142,7 +1135,7 @@ export default function ProductosPage() {
                 {/* All filters always visible */}
                 <div className="flex items-center gap-3 flex-wrap">
                   {/* Nombre */}
-                  <div className="flex-1 min-w-[150px]">
+                  <div className="flex-1">
                     <label 
                       className="block text-sm font-medium mb-2"
                       style={{ color: colors.outline }}
@@ -1165,7 +1158,7 @@ export default function ProductosPage() {
                   </div>
 
                   {/* Código */}
-                  <div className="flex-1 min-w-[150px]">
+                  <div className="flex-1">
                     <label 
                       className="block text-sm font-medium mb-2"
                       style={{ color: colors.outline }}
@@ -1225,7 +1218,7 @@ export default function ProductosPage() {
                   </div>
 
                   {/* Tienda */}
-                  <div className="flex-1 min-w-[150px] relative">
+                  <div className="flex-1 relative">
                     <div className="flex justify-between items-center mb-2">
                       <label 
                         className="block text-sm font-medium"
@@ -1343,7 +1336,7 @@ export default function ProductosPage() {
                   </div>
 
                   {/* Estado */}
-                  <div className="flex-1 min-w-[150px]">
+                  <div className="flex-1">
                     <label 
                       className="block text-sm font-medium mb-2"
                       style={{ color: colors.outline }}
@@ -1352,30 +1345,33 @@ export default function ProductosPage() {
                     </label>
                     <div className="flex gap-1">
                       <button
-                        className="flex-1 rounded-lg px-2 py-2 transition-colors font-medium text-sm"
+                        className="flex-1 rounded-lg px-3 py-2 border transition-colors font-medium text-sm h-10"
                         style={{ 
                           backgroundColor: filters.esvendible === '' ? '#9E9E9E' : '#E0E0E0',
-                          color: filters.esvendible === '' ? '#fff' : '#9E9E9E'
+                          color: filters.esvendible === '' ? '#fff' : '#9E9E9E',
+                          borderColor: colors.outlineVariant
                         }}
                         onClick={() => setFilters(prev => ({ ...prev, esvendible: '' }))}
                       >
                         Todos
                       </button>
                       <button
-                        className="flex-1 rounded-lg px-2 py-2 transition-colors font-medium text-sm"
+                        className="flex-1 rounded-lg px-3 py-2 border transition-colors font-medium text-sm h-10"
                         style={{ 
                           backgroundColor: filters.esvendible === 'true' ? '#4CAF50' : '#E0E0E0',
-                          color: filters.esvendible === 'true' ? '#fff' : '#9E9E9E'
+                          color: filters.esvendible === 'true' ? '#fff' : '#9E9E9E',
+                          borderColor: colors.outlineVariant
                         }}
                         onClick={() => setFilters(prev => ({ ...prev, esvendible: 'true' }))}
                       >
                         Vendible
                       </button>
                       <button
-                        className="flex-1 rounded-lg px-2 py-2 transition-colors font-medium text-sm"
+                        className="flex-1 rounded-lg px-2 py-2 border transition-colors font-medium text-xs h-10"
                         style={{ 
                           backgroundColor: filters.esvendible === 'false' ? '#F44336' : '#E0E0E0',
-                          color: filters.esvendible === 'false' ? '#fff' : '#9E9E9E'
+                          color: filters.esvendible === 'false' ? '#fff' : '#9E9E9E',
+                          borderColor: colors.outlineVariant
                         }}
                         onClick={() => setFilters(prev => ({ ...prev, esvendible: 'false' }))}
                       >
@@ -1737,30 +1733,33 @@ export default function ProductosPage() {
                       </label>
                       <div className="flex gap-2">
                         <button
-                          className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
+                          className="flex-1 rounded-lg px-4 py-2 border transition-colors font-medium h-10"
                           style={{ 
                             backgroundColor: filters.esvendible === '' ? '#9E9E9E' : '#E0E0E0',
-                            color: filters.esvendible === '' ? '#fff' : '#9E9E9E'
+                            color: filters.esvendible === '' ? '#fff' : '#9E9E9E',
+                            borderColor: colors.outlineVariant
                           }}
                           onClick={() => setFilters(prev => ({ ...prev, esvendible: '' }))}
                         >
                           Todos
                         </button>
                         <button
-                          className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
+                          className="flex-1 rounded-lg px-4 py-2 border transition-colors font-medium h-10"
                           style={{ 
                             backgroundColor: filters.esvendible === 'true' ? '#4CAF50' : '#E0E0E0',
-                            color: filters.esvendible === 'true' ? '#fff' : '#9E9E9E'
+                            color: filters.esvendible === 'true' ? '#fff' : '#9E9E9E',
+                            borderColor: colors.outlineVariant
                           }}
                           onClick={() => setFilters(prev => ({ ...prev, esvendible: 'true' }))}
                         >
                           Vendible
                         </button>
                         <button
-                          className="flex-1 rounded-lg px-4 py-2 transition-colors font-medium"
+                          className="flex-1 rounded-lg px-4 py-2 border transition-colors font-medium h-10"
                           style={{ 
                             backgroundColor: filters.esvendible === 'false' ? '#F44336' : '#E0E0E0',
-                            color: filters.esvendible === 'false' ? '#fff' : '#9E9E9E'
+                            color: filters.esvendible === 'false' ? '#fff' : '#9E9E9E',
+                            borderColor: colors.outlineVariant
                           }}
                           onClick={() => setFilters(prev => ({ ...prev, esvendible: 'false' }))}
                         >

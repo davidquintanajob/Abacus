@@ -99,7 +99,7 @@ export const getProductoByCodigo = async (codigo: string) => {
 
 export const deleteProducto = async (id: string | number) => {
   try {
-    const response = await api.delete(`/servicio/${id}`);
+    const response = await api.delete(`/producto/${id}`);
     return response.data;
   } catch (error: any) {
     const errorMessage = error.response?.data?.errors?.[0] || 

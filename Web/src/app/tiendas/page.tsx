@@ -35,7 +35,7 @@ export default function TiendasPage() {
   const { token, user } = useAuth();
   const { viewMode, toggleViewMode } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
-  const { showConfirmDialog } = useConfirmDialog();
+  const { showConfirmDialog, hideConfirmDialog } = useConfirmDialog();
   const { setLoading: setNavigating } = useNavigationLoading();
   const { isMobile, isTablet, isDesktop } = useResponsive();
   const sidebarNavRef = useRef<any>(null);
@@ -119,6 +119,7 @@ export default function TiendasPage() {
       title: 'Eliminar Tienda',
       message: `¿Estás seguro de que quieres eliminar la tienda "${tienda.nombre}"?`,
       onConfirm: () => {
+        hideConfirmDialog();
         deleteTienda(tienda.id_tienda)
           .then(() => {
             showToast({ type: 'success', message: 'Tienda eliminada correctamente' });

@@ -25,7 +25,7 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverT
   const { colors, isDark } = useTheme();
   const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, logout } = useAuth();
   const { toast, showToast, hideToast } = useToast();
-  const { showConfirmDialog } = useConfirmDialog();
+  const { showConfirmDialog, hideConfirmDialog } = useConfirmDialog();
   const { isLoading: isNavigating, setLoading: setNavigating } = useNavigationLoading();
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -70,6 +70,7 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverT
       message: '¿Estás seguro de que quieres cerrar sesión?',
       onConfirm: async () => {
         try {
+          hideConfirmDialog();
           setIsSyncing(true);
           await logout();
           onClose?.();
@@ -146,12 +147,17 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverT
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h2
-            className="text-2xl font-bold"
-            style={{ color: colors.primary }}
+          <button
+            onClick={() => handleNavigation('Home')}
+            className="flex items-center gap-2 hover:bg-black/5 rounded-lg px-2 py-1 transition-colors"
           >
-            Abacus
-          </h2>
+            <h2
+              className="text-2xl font-bold"
+              style={{ color: colors.primary }}
+            >
+              Abacus
+            </h2>
+          </button>
           <button
             onClick={onClose}
             className="p-1 rounded-full hover:bg-black/5 transition-colors"

@@ -31,7 +31,7 @@ export default function ServicioFormPage() {
   const { colors, isDark, toggleTheme } = useTheme();
   const { user } = useAuth();
   const { toast, showToast, hideToast } = useToast();
-  const { showConfirmDialog } = useConfirmDialog();
+  const { showConfirmDialog, hideConfirmDialog } = useConfirmDialog();
   const sidebarNavRef = useRef<any>(null);
 
   const handleMenuPress = () => {
@@ -510,6 +510,7 @@ export default function ServicioFormPage() {
       title: 'Eliminar Código',
       message: '¿Estás seguro de que quieres eliminar este código?',
       onConfirm: () => {
+        hideConfirmDialog();
         setFormData(prev => ({
           ...prev,
           codigoList: prev.codigoList.filter((_, i) => i !== index)
@@ -947,6 +948,7 @@ export default function ServicioFormPage() {
                                         title: 'Eliminar Componente',
                                         message: '¿Estás seguro de que quieres eliminar este componente?',
                                         onConfirm: () => {
+                                          hideConfirmDialog();
                                           handleRemoveServicioComponente(index);
                                         },
                                         type: 'danger'

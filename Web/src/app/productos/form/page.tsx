@@ -23,6 +23,8 @@ import {
   ChevronDown,
   ChevronUp,
   Image,
+  X,
+  Camera,
   XCircle,
   Package,
   ArrowRightLeft,
@@ -39,7 +41,7 @@ export default function ProductoFormPage() {
   const { colors, isDark, toggleTheme } = useTheme();
   const { user } = useAuth();
   const { toast, showToast, hideToast } = useToast();
-  const { showConfirmDialog } = useConfirmDialog();
+  const { showConfirmDialog, hideConfirmDialog } = useConfirmDialog();
   const { isMobile } = useResponsive();
   const sidebarNavRef = useRef<any>(null);
 
@@ -82,6 +84,13 @@ export default function ProductoFormPage() {
 
   const [showImagePickerModal, setShowImagePickerModal] = useState(false);
   const [showScannerModal, setShowScannerModal] = useState(false);
+  const [showBarcodeScannerModal, setShowBarcodeScannerModal] = useState(false);
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const barcodeVideoRef = useRef<HTMLVideoElement>(null);
+  const barcodeStreamRef = useRef<MediaStream | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [priceInputTexts, setPriceInputTexts] = useState<{ [key: number]: { precio_cup?: string; precio_usd?: string; costo_cup?: string; costo_usd?: string } }>({});
   const [generalPriceInputTexts, setGeneralPriceInputTexts] = useState<{ precio_cup?: string; precio_usd?: string; costo_cup?: string; costo_usd?: string }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -99,7 +108,108 @@ export default function ProductoFormPage() {
   };
 
   const handlePickImage = () => {
+    setShowImagePickerModal(true);
+  };
+
+  const handlePickFromFile = () => {
+    setShowImagePickerModal(false);
     fileInputRef.current?.click();
+  };
+
+  const handlePickFromCamera = async () => {
+    setShowImagePickerModal(false);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' }, 
+        audio: false 
+      });
+      cameraStreamRef.current = stream;
+      setShowCameraModal(true);
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+    } catch (error) {
+      console.error('Error accessing camera:', error);
+      showToast({ type: 'error', message: 'No se pudo acceder a la cámara' });
+    }
+  };
+
+  const handleCapturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+        setFormData(prev => ({ ...prev, imagen: imageData }));
+      }
+    }
+    handleCloseCamera();
+  };
+
+  const handleCloseCamera = () => {
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach(track => track.stop());
+      cameraStreamRef.current = null;
+    }
+    setShowCameraModal(false);
+  };
+
+  const handleOpenBarcodeScanner = () => {
+    // Store existing codes in sessionStorage
+    sessionStorage.setItem('existingCodes', JSON.stringify(formData.codigoList));
+    // Navigate to barcode scanner page
+    router.push('/barcode-scanner');
+  };
+
+  const detectBarcode = async () => {
+    if (!barcodeVideoRef.current || !showBarcodeScannerModal) return;
+    
+    // Check if BarcodeDetector API is available
+    if ('BarcodeDetector' in window) {
+      try {
+        const barcodeDetector = new (window as any).BarcodeDetector();
+        const barcodes = await barcodeDetector.detect(barcodeVideoRef.current);
+        
+        if (barcodes.length > 0) {
+          const code = barcodes[0].rawValue;
+          
+          // Check if code already exists
+          const codeExists = formData.codigoList.some(
+            c => c.codigo_barras_ean.trim().toLowerCase() === code.trim().toLowerCase()
+          );
+          
+          if (codeExists) {
+            showToast({ type: 'warning', message: 'Este código ya existe en la lista' });
+          } else {
+            setNewCodigo(code);
+            handleCloseBarcodeScanner();
+            showToast({ type: 'success', message: `Código escaneado: ${code}` });
+          }
+          return;
+        }
+      } catch (error) {
+        console.error('Barcode detection error:', error);
+      }
+    }
+    
+    // If BarcodeDetector not available or no barcode found, continue scanning
+    requestAnimationFrame(detectBarcode);
+  };
+
+  const handleCloseBarcodeScanner = () => {
+    if (barcodeStreamRef.current) {
+      barcodeStreamRef.current.getTracks().forEach(track => track.stop());
+      barcodeStreamRef.current = null;
+    }
+    setShowBarcodeScannerModal(false);
   };
 
   const userRole = user?.rol?.toLowerCase();
@@ -134,6 +244,25 @@ export default function ProductoFormPage() {
     
     return `${firstThreeLetters}-${randomNum}`;
   };
+
+  // Check for scanned codes when returning from barcode scanner
+  useEffect(() => {
+    const checkScannedCodes = () => {
+      const scannedCodes = sessionStorage.getItem('scannedCodes');
+      if (scannedCodes) {
+        try {
+          const codes = JSON.parse(scannedCodes);
+          setFormData(prev => ({ ...prev, codigoList: codes }));
+          sessionStorage.removeItem('scannedCodes');
+          showToast({ type: 'success', message: `${codes.length} códigos agregados` });
+        } catch (error) {
+          console.error('Error parsing scanned codes:', error);
+        }
+      }
+    };
+
+    checkScannedCodes();
+  }, []);
 
   // Auto-generate suffix when name changes (only for new products or when suffix is empty)
   useEffect(() => {
@@ -489,6 +618,7 @@ export default function ProductoFormPage() {
       title: 'Eliminar Código',
       message: '¿Estás seguro de que quieres eliminar este código?',
       onConfirm: () => {
+        hideConfirmDialog();
         setFormData(prev => ({
           ...prev,
           codigoList: prev.codigoList.filter((_, i) => i !== index)
@@ -1032,6 +1162,115 @@ export default function ProductoFormPage() {
                     />
                   </div>
                 </div>
+
+                {/* Image Picker Modal */}
+                {showImagePickerModal && (
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div 
+                      className="rounded-2xl p-6 max-w-sm w-full shadow-2xl relative"
+                      style={{ backgroundColor: colors.surface }}
+                    >
+                      <button
+                        className="absolute top-4 right-4 p-2 rounded-full hover:bg-black/5 transition-colors"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                        onClick={() => setShowImagePickerModal(false)}
+                      >
+                        <X size={24} style={{ color: colors.outline }} />
+                      </button>
+                      <h2 
+                        className="text-xl font-bold mb-4"
+                        style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                      >
+                        Seleccionar Imagen
+                      </h2>
+                      <div className="space-y-3">
+                        <button
+                          className="w-full rounded-lg px-4 py-3 flex items-center gap-3 transition-colors hover:opacity-90"
+                          style={{ backgroundColor: colors.surfaceVariant, color: colors.onSurface }}
+                          onClick={handlePickFromFile}
+                        >
+                          <Image size={20} />
+                          <span>Buscar en la PC</span>
+                        </button>
+                        <button
+                          className="w-full rounded-lg px-4 py-3 flex items-center gap-3 transition-colors hover:opacity-90"
+                          style={{ backgroundColor: colors.surfaceVariant, color: colors.onSurface }}
+                          onClick={handlePickFromCamera}
+                        >
+                          <Camera size={20} />
+                          <span>Usar cámara</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Camera Modal */}
+                {showCameraModal && (
+                  <div className="fixed inset-0 bg-black flex items-center justify-center z-50">
+                    <div className="relative w-full h-full flex flex-col">
+                      <div className="absolute top-4 right-4 z-10">
+                        <button
+                          className="p-3 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                          onClick={handleCloseCamera}
+                        >
+                          <X size={24} color="white" />
+                        </button>
+                      </div>
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover"
+                      />
+                      <canvas ref={canvasRef} className="hidden" />
+                      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4">
+                        <button
+                          className="w-16 h-16 rounded-full bg-white flex items-center justify-center hover:bg-white/90 transition-colors"
+                          onClick={handleCapturePhoto}
+                        >
+                          <div className="w-12 h-12 rounded-full border-4 border-gray-800" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Barcode Scanner Modal */}
+                {showBarcodeScannerModal && (
+                  <div className="fixed inset-0 bg-black flex items-center justify-center z-50">
+                    <div className="relative w-full h-full flex flex-col">
+                      <div className="absolute top-4 right-4 z-10">
+                        <button
+                          className="p-3 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                          onClick={handleCloseBarcodeScanner}
+                        >
+                          <X size={24} color="white" />
+                        </button>
+                      </div>
+                      <video
+                        ref={barcodeVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="relative w-64 h-64">
+                          <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white" />
+                          <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white" />
+                          <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white" />
+                          <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white" />
+                        </div>
+                      </div>
+                      <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 text-white text-center">
+                        <p className="text-lg font-semibold">Escanea el código de barras</p>
+                        <p className="text-sm opacity-75">Apunta la cámara al código</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Cost fields (only for canViewCosts) */}
                 {canViewCosts && (
@@ -1614,6 +1853,13 @@ export default function ProductoFormPage() {
                     onChange={(e) => setNewCodigo(e.target.value)}
                     autoFocus
                   />
+                  <button
+                    className="px-3 py-3 rounded-lg flex items-center gap-2 transition-colors hover:opacity-80"
+                    style={{ backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }}
+                    onClick={handleOpenBarcodeScanner}
+                  >
+                    <Camera size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />
+                  </button>
                   <button
                     className="px-3 py-3 rounded-lg flex items-center gap-2 transition-colors hover:opacity-80"
                     style={{ backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }}

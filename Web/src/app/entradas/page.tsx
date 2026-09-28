@@ -33,8 +33,6 @@ import {
 } from 'lucide-react';
 import { useResponsive } from '../../hooks/useResponsive';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 
 export default function EntradasPage() {
   const router = useRouter();
@@ -42,7 +40,7 @@ export default function EntradasPage() {
   const { token, user } = useAuth();
   const { viewMode, toggleViewMode } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
-  const { showConfirmDialog } = useConfirmDialog();
+  const { showConfirmDialog, hideConfirmDialog } = useConfirmDialog();
   const { setLoading: setNavigating } = useNavigationLoading();
   const { isMobile, isTablet, isDesktop } = useResponsive();
   const sidebarNavRef = useRef<any>(null);
@@ -284,6 +282,7 @@ export default function EntradasPage() {
       title: 'Eliminar Entrada',
       message: `¿Estás seguro de que quieres eliminar la entrada "${entrada.codigo_lote}"?`,
       onConfirm: () => {
+        hideConfirmDialog();
         deleteEntrada(entrada.id_entrada)
           .then(() => {
             showToast({ type: 'success', message: 'Entrada eliminada correctamente' });
@@ -314,7 +313,7 @@ export default function EntradasPage() {
 
   const handleAdd = () => {
     localStorage.setItem('entradas_filters', JSON.stringify(filters));
-    router.push(`/entradas/form?mode=add`);
+    router.push('/entradas/form/add?mode=add');
   };
 
   const handleNextPage = () => {
@@ -391,71 +390,93 @@ export default function EntradasPage() {
 
   const exportToPDF = async (entradas: any[]) => {
     try {
-      const doc = new jsPDF();
+      let tableRows = '';
       
-      // Title
-      doc.setFontSize(18);
-      doc.setTextColor(0, 36, 64);
-      doc.text('Historial de Entradas', 105, 20, { align: 'center' });
-      
-      doc.setFontSize(12);
-      doc.setTextColor(11, 28, 48);
-      doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 105, 30, { align: 'center' });
+      // Table header based on selected fields (matching APK style)
+      let tableHeader = '<tr style="background-color: #f0f0f0;">';
+      if (selectedFields.producto) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Nombre</th>';
+      if (selectedFields.tienda) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Tienda</th>';
+      if (selectedFields.cantidad) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Cantidad</th>';
+      if (canManageEntradas && selectedFields.costo_cup) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo CUP</th>';
+      if (canManageEntradas && selectedFields.costo_usd) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Costo USD</th>';
+      if (selectedFields.fecha) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Fecha</th>';
+      if (selectedFields.codigo_lote) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Código Lote</th>';
+      if (selectedFields.fecha_vencimiento) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Fecha Vencimiento</th>';
+      if (selectedFields.proveedor) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Proveedor</th>';
+      if (selectedFields.usuario) tableHeader += '<th style="border: 1px solid #ddd; padding: 8px;">Usuario</th>';
+      tableHeader += '</tr>';
 
-      // Prepare table headers based on selected fields
-      const headers: string[] = [];
-      if (selectedFields.producto) headers.push('Nombre');
-      if (selectedFields.tienda) headers.push('Tienda');
-      if (selectedFields.cantidad) headers.push('Cantidad');
-      if (canManageEntradas && selectedFields.costo_cup) headers.push('Costo CUP');
-      if (canManageEntradas && selectedFields.costo_usd) headers.push('Costo USD');
-      if (selectedFields.fecha) headers.push('Fecha');
-      if (selectedFields.codigo_lote) headers.push('Código Lote');
-      if (selectedFields.fecha_vencimiento) headers.push('Fecha Vencimiento');
-      if (selectedFields.proveedor) headers.push('Proveedor');
-      if (selectedFields.usuario) headers.push('Usuario');
-
-      // Prepare table data
-      const tableData = entradas.map(entrada => {
-        const row: any[] = [];
-        if (selectedFields.producto) row.push(entrada.servicioTienda?.servicio?.nombre || 'N/A');
-        if (selectedFields.tienda) row.push(entrada.servicioTienda?.tienda?.nombre || 'N/A');
-        if (selectedFields.cantidad) row.push(entrada.cantidad_entrada);
-        if (canManageEntradas && selectedFields.costo_cup) row.push(entrada.costo_cup);
-        if (canManageEntradas && selectedFields.costo_usd) row.push(entrada.costo_usd);
-        if (selectedFields.fecha) row.push(new Date(entrada.fecha).toLocaleDateString());
-        if (selectedFields.codigo_lote) row.push(entrada.codigo_lote);
-        if (selectedFields.fecha_vencimiento) row.push(entrada.fecha_vencimiento ? new Date(entrada.fecha_vencimiento).toLocaleDateString() : 'N/A');
-        if (selectedFields.proveedor) row.push(entrada.nombre_proveedor || 'N/A');
-        if (selectedFields.usuario) row.push(entrada.usuario?.nombre_natural || 'N/A');
-        return row;
+      // Table rows based on selected fields
+      entradas.forEach(entrada => {
+        tableRows += '<tr>';
+        if (selectedFields.producto) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.servicioTienda?.servicio?.nombre || 'N/A'}</td>`;
+        if (selectedFields.tienda) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.servicioTienda?.tienda?.nombre || 'N/A'}</td>`;
+        if (selectedFields.cantidad) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.cantidad_entrada}</td>`;
+        if (canManageEntradas && selectedFields.costo_cup) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.costo_cup}</td>`;
+        if (canManageEntradas && selectedFields.costo_usd) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.costo_usd}</td>`;
+        if (selectedFields.fecha) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${new Date(entrada.fecha).toLocaleDateString()}</td>`;
+        if (selectedFields.codigo_lote) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.codigo_lote}</td>`;
+        if (selectedFields.fecha_vencimiento) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.fecha_vencimiento ? new Date(entrada.fecha_vencimiento).toLocaleDateString() : 'N/A'}</td>`;
+        if (selectedFields.proveedor) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.nombre_proveedor || 'N/A'}</td>`;
+        if (selectedFields.usuario) tableRows += `<td style="border: 1px solid #ddd; padding: 8px;">${entrada.usuario?.nombre_natural || 'N/A'}</td>`;
+        tableRows += '</tr>';
       });
 
-      // Generate table
-      (doc as any).autoTable({
-        head: [headers],
-        body: tableData,
-        startY: 40,
-        styles: {
-          fontSize: 8,
-          cellPadding: 3,
-        },
-        headStyles: {
-          fillColor: [0, 36, 64],
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-        },
-        alternateRowStyles: {
-          fillColor: [248, 249, 255],
-        },
-      });
+      const htmlContent = `
+        <html>
+          <head>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; }
+              h1 { text-align: center; color: #002440; margin-bottom: 10px; }
+              p { text-align: center; color: #0b1c30; margin-bottom: 20px; }
+              table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+              th { 
+                background-color: #002440; 
+                color: #ffffff; 
+                border: 1px solid #002440; 
+                padding: 12px 8px; 
+                text-align: left; 
+                font-weight: bold;
+              }
+              td { 
+                border: 1px solid #d3e4fe; 
+                padding: 8px; 
+                text-align: left; 
+                color: #0b1c30;
+              }
+              tr:nth-child(even) { background-color: #f8f9ff; }
+              tr:nth-child(odd) { background-color: #ffffff; }
+            </style>
+          </head>
+          <body>
+            <h1>Historial de Entradas</h1>
+            <p>Fecha: ${new Date().toLocaleDateString()}</p>
+            <table>
+              ${tableHeader}
+              ${tableRows}
+            </table>
+          </body>
+        </html>
+      `;
 
-      const date = new Date();
-      const formattedDate = `${date.getDate().toString().padStart(2, '0')}_${(date.getMonth() + 1).toString().padStart(2, '0')}_${date.getFullYear()}`;
-      const fileName = sanitizeFileName(`Historial_Entradas_${formattedDate}.pdf`);
+      // Use html2pdf.js to generate PDF
+      const html2pdf = (await import('html2pdf.js')).default;
+      const element = document.createElement('div');
+      element.innerHTML = htmlContent;
+      document.body.appendChild(element);
       
-      doc.save(fileName);
-      showToast({ type: 'success', message: 'Archivo PDF descargado correctamente' });
+      const opt = {
+        margin: 10,
+        filename: `Historial_Entradas_${new Date().toISOString().split('T')[0]}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+      
+      await html2pdf().set(opt).from(element).save();
+      document.body.removeChild(element);
+
+      showToast({ type: 'success', message: 'PDF exportado correctamente' });
     } catch (error) {
       throw error;
     }
@@ -825,6 +846,101 @@ export default function EntradasPage() {
                     />
                   </div>
                 </div>
+
+                {/* Cant.Restante and Fecha fields on second row */}
+                <div className="flex items-center gap-3 flex-wrap mt-3">
+                  {/* Cant.Restante Mínima */}
+                  <div className="min-w-[140px]">
+                    <label 
+                      className="block text-sm font-medium mb-2 whitespace-nowrap"
+                      style={{ color: colors.outline }}
+                    >
+                      Cant.Restante Mínima
+                    </label>
+                    <input
+                      type="number"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Mínima..."
+                      value={filters.cantidad_restante_min}
+                      onChange={(e) => setFilters(prev => ({ ...prev, cantidad_restante_min: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Cant.Restante Máxima */}
+                  <div className="min-w-[140px]">
+                    <label 
+                      className="block text-sm font-medium mb-2 whitespace-nowrap"
+                      style={{ color: colors.outline }}
+                    >
+                      Cant.Restante Máxima
+                    </label>
+                    <input
+                      type="number"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Máxima..."
+                      value={filters.cantidad_restante_max}
+                      onChange={(e) => setFilters(prev => ({ ...prev, cantidad_restante_max: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Fecha Desde */}
+                  <div className="min-w-[140px]">
+                    <label 
+                      className="block text-sm font-medium mb-2 whitespace-nowrap"
+                      style={{ color: colors.outline }}
+                    >
+                      Fecha Desde
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif',
+                        colorScheme: isDarkMode ? 'dark' : 'light'
+                      }}
+                      value={filters.fecha_desde}
+                      onChange={(e) => setFilters(prev => ({ ...prev, fecha_desde: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Fecha Hasta */}
+                  <div className="min-w-[140px]">
+                    <label 
+                      className="block text-sm font-medium mb-2 whitespace-nowrap"
+                      style={{ color: colors.outline }}
+                    >
+                      Fecha Hasta
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif',
+                        colorScheme: isDarkMode ? 'dark' : 'light'
+                      }}
+                      value={filters.fecha_hasta}
+                      onChange={(e) => setFilters(prev => ({ ...prev, fecha_hasta: e.target.value }))}
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Action Buttons - Outside filter card, smaller, side by side */}
@@ -1040,238 +1156,256 @@ export default function EntradasPage() {
                   </div>
                 </div>
 
-                {showAdvancedFilters && (
-                  <>
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
-                        Usuario
-                      </label>
-                      <div className="relative">
-                        <button
-                          className="w-full border rounded-lg p-3 flex justify-between items-center"
-                          style={{ 
-                            backgroundColor: colors.background, 
-                            borderColor: colors.outlineVariant 
-                          }}
-                          onClick={() => {
-                            if (canViewAllEntradas) {
-                              setShowUserDropdown(!showUserDropdown);
-                              if (!hasLoadedAllUsers && !isLoadingUsers) {
-                                fetchAllUsers();
-                              }
-                            }
-                          }}
-                        >
-                          <span className="text-sm" style={{ color: filters.id_usuario ? colors.onSurface : colors.outline }}>
-                            {users.find(u => u.id_usuario === parseInt(filters.id_usuario))?.nombre_natural || 'Todos los usuarios'}
-                          </span>
-                          {showUserDropdown ? (
-                            <ChevronUp size={20} color={colors.outline} />
-                          ) : (
-                            <ChevronDown size={20} color={colors.outline} />
-                          )}
-                        </button>
-                        
-                        {showUserDropdown && (
-                          <div 
-                            className="absolute z-10 w-full border rounded-lg mt-1 max-h-48 overflow-auto"
-                            style={{ 
-                              backgroundColor: colors.surface, 
-                              borderColor: colors.outlineVariant 
-                            }}
-                          >
-                            {isLoadingUsers ? (
-                              <div className="flex items-center justify-center py-4 gap-2">
-                                <div className="animate-spin rounded-full h-5 w-5 border-b-2" style={{ borderColor: colors.primary }}></div>
-                                <span className="text-sm" style={{ color: colors.outline }}>Cargando usuarios...</span>
-                              </div>
-                            ) : (
-                              <>
-                                <div 
-                                  className="flex items-center border rounded-lg px-3 py-2 mb-1"
-                                  style={{ 
-                                    backgroundColor: colors.background, 
-                                    borderColor: colors.outlineVariant 
-                                  }}
-                                >
-                                  <Search size={18} color={colors.outline} className="mr-2" />
-                                  <input
-                                    type="text"
-                                    className="flex-1 text-sm bg-transparent outline-none"
-                                    style={{ color: colors.onSurface }}
-                                    placeholder="Buscar usuario..."
-                                    value={userSearchText}
-                                    onChange={(e) => setUserSearchText(e.target.value)}
-                                  />
-                                </div>
-                                <button
-                                  className="w-full text-left px-3 py-3 border-b"
-                                  style={{ borderColor: 'rgba(0, 0, 0, 0.05)' }}
-                                  onClick={() => {
-                                    setFilters(prev => ({ ...prev, id_usuario: '' }));
-                                    setShowUserDropdown(false);
-                                    setUserSearchText('');
-                                    setPagination(prev => ({ ...prev, currentPage: 1 }));
-                                    fetchEntradas();
-                                  }}
-                                >
-                                  <span className="text-sm" style={{ color: colors.onSurface }}>Todos los usuarios</span>
-                                </button>
-                                {filteredUsers.length > 0 ? (
-                                  filteredUsers.map((userItem, index) => (
-                                    <button
-                                      key={userItem.id_usuario}
-                                      className="w-full text-left px-3 py-3 border-b last:border-b-0"
-                                      style={{ borderColor: 'rgba(0, 0, 0, 0.05)' }}
-                                      onClick={() => {
-                                        setFilters(prev => ({ ...prev, id_usuario: userItem.id_usuario.toString() }));
-                                        setShowUserDropdown(false);
-                                        setUserSearchText('');
-                                        setPagination(prev => ({ ...prev, currentPage: 1 }));
-                                        fetchEntradas();
-                                      }}
-                                    >
-                                      <span className="text-sm" style={{ color: colors.onSurface }}>{userItem.nombre_natural}</span>
-                                    </button>
-                                  ))
-                                ) : (
-                                  <div className="px-3 py-3">
-                                    <span className="text-sm" style={{ color: colors.outline }}>No se encontraron usuarios</span>
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
-                        Código de Lote
-                      </label>
-                      <input
-                        type="text"
-                        className="w-full border rounded-lg p-3 text-sm"
-                        style={{ 
-                          backgroundColor: colors.background, 
-                          color: colors.onSurface, 
-                          borderColor: colors.outlineVariant 
-                        }}
-                        placeholder="Buscar por código de lote..."
-                        value={filters.codigo_lote}
-                        onChange={(e) => setFilters(prev => ({ ...prev, codigo_lote: e.target.value }))}
-                      />
-                    </div>
-
-                    <div className="flex gap-2 mb-4">
-                      <div className="flex-1">
-                        <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
-                          Cant.Restante Mínima
-                        </label>
-                        <input
-                          type="number"
-                          className="w-full border rounded-lg p-3 text-sm"
-                          style={{ 
-                            backgroundColor: colors.background, 
-                            color: colors.onSurface, 
-                            borderColor: colors.outlineVariant 
-                          }}
-                          placeholder="Cantidad mínima..."
-                          value={filters.cantidad_restante_min}
-                          onChange={(e) => setFilters(prev => ({ ...prev, cantidad_restante_min: e.target.value }))}
-                        />
-                      </div>
-
-                      <div className="flex-1">
-                        <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
-                          Cant.Restante Máxima
-                        </label>
-                        <input
-                          type="number"
-                          className="w-full border rounded-lg p-3 text-sm"
-                          style={{ 
-                            backgroundColor: colors.background, 
-                            color: colors.onSurface, 
-                            borderColor: colors.outlineVariant 
-                          }}
-                          placeholder="Cantidad máxima..."
-                          value={filters.cantidad_restante_max}
-                          onChange={(e) => setFilters(prev => ({ ...prev, cantidad_restante_max: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 mb-4">
-                      <div className="flex-1">
-                        <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
-                          Fecha Desde
-                        </label>
-                        <input
-                          type="date"
-                          className="w-full border rounded-lg p-3 text-sm"
-                          style={{ 
-                            backgroundColor: colors.background, 
-                            color: colors.onSurface, 
-                            borderColor: colors.outlineVariant 
-                          }}
-                          value={filters.fecha_desde}
-                          onChange={(e) => setFilters(prev => ({ ...prev, fecha_desde: e.target.value }))}
-                        />
-                      </div>
-
-                      <div className="flex-1">
-                        <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
-                          Fecha Hasta
-                        </label>
-                        <input
-                          type="date"
-                          className="w-full border rounded-lg p-3 text-sm"
-                          style={{ 
-                            backgroundColor: colors.background, 
-                            color: colors.onSurface, 
-                            borderColor: colors.outlineVariant 
-                          }}
-                          value={filters.fecha_hasta}
-                          onChange={(e) => setFilters(prev => ({ ...prev, fecha_hasta: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                <div className="flex gap-3 mt-2">
-                  <button
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border"
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
+                    Código de Lote
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full border rounded-lg p-3 text-sm"
                     style={{ 
-                      backgroundColor: colors.surface, 
+                      backgroundColor: colors.background, 
+                      color: colors.onSurface, 
                       borderColor: colors.outlineVariant 
                     }}
-                    onClick={handleClearFilters}
-                  >
-                    <RefreshCw size={18} color={colors.onSurface} />
-                    <span className="text-sm font-medium" style={{ color: colors.onSurface }}>Limpiar</span>
-                  </button>
-                  <button
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg"
-                    style={{ 
-                      backgroundColor: colors.primary,
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                    }}
-                    onClick={handleSearch}
-                    disabled={isSearching}
-                  >
-                    {isSearching ? (
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    ) : (
-                      <>
-                        <Search size={18} color="#fff" />
-                        <span className="text-sm font-medium" style={{ color: '#fff' }}>Buscar</span>
-                      </>
-                    )}
-                  </button>
+                    placeholder="Buscar por código de lote..."
+                    value={filters.codigo_lote}
+                    onChange={(e) => setFilters(prev => ({ ...prev, codigo_lote: e.target.value }))}
+                  />
                 </div>
               </div>
+              </div>
+
+
+              {/* Advanced Filters Section */}
+              {showAdvancedFilters && (
+                <div style={{ maxWidth: '56rem', margin: '0 auto' }}>
+                  <div 
+                    className="rounded-2xl p-5 mb-6 shadow-lg"
+                    style={{ backgroundColor: colors.surface }}
+                  >
+                    {/* Mobile/Tablet: Usuario filter first */}
+                    {!isDesktop && (
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
+                          Usuario
+                        </label>
+                        <div className="relative">
+                          <button
+                            className="w-full border rounded-lg p-3 flex justify-between items-center"
+                            style={{ 
+                              backgroundColor: colors.background, 
+                              borderColor: colors.outlineVariant 
+                            }}
+                            onClick={() => {
+                              if (canViewAllEntradas) {
+                                setShowUserDropdown(!showUserDropdown);
+                                if (!hasLoadedAllUsers && !isLoadingUsers) {
+                                  fetchAllUsers();
+                                }
+                              }
+                            }}
+                          >
+                            <span className="text-sm" style={{ color: filters.id_usuario ? colors.onSurface : colors.outline }}>
+                              {users.find(u => u.id_usuario === parseInt(filters.id_usuario))?.nombre_natural || 'Todos los usuarios'}
+                            </span>
+                            {showUserDropdown ? (
+                              <ChevronUp size={20} color={colors.outline} />
+                            ) : (
+                              <ChevronDown size={20} color={colors.outline} />
+                            )}
+                          </button>
+                          
+                          {showUserDropdown && (
+                            <div 
+                              className="absolute z-10 w-full border rounded-lg mt-1 max-h-48 overflow-auto"
+                              style={{ 
+                                backgroundColor: colors.surface, 
+                                borderColor: colors.outlineVariant 
+                              }}
+                            >
+                              {isLoadingUsers ? (
+                                <div className="flex items-center justify-center py-4 gap-2">
+                                  <div className="animate-spin rounded-full h-5 w-5 border-b-2" style={{ borderColor: colors.primary }}></div>
+                                  <span className="text-sm" style={{ color: colors.outline }}>Cargando usuarios...</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <div 
+                                    className="flex items-center border rounded-lg px-3 py-2 mb-1"
+                                    style={{ 
+                                      backgroundColor: colors.background, 
+                                      borderColor: colors.outlineVariant 
+                                    }}
+                                  >
+                                    <Search size={18} color={colors.outline} className="mr-2" />
+                                    <input
+                                      type="text"
+                                      className="flex-1 text-sm bg-transparent outline-none"
+                                      style={{ color: colors.onSurface }}
+                                      placeholder="Buscar usuario..."
+                                      value={userSearchText}
+                                      onChange={(e) => setUserSearchText(e.target.value)}
+                                    />
+                                  </div>
+                                  <button
+                                    className="w-full text-left px-3 py-3 border-b"
+                                    style={{ borderColor: 'rgba(0, 0, 0, 0.05)' }}
+                                    onClick={() => {
+                                      setFilters(prev => ({ ...prev, id_usuario: '' }));
+                                      setShowUserDropdown(false);
+                                      setUserSearchText('');
+                                      setPagination(prev => ({ ...prev, currentPage: 1 }));
+                                      fetchEntradas();
+                                    }}
+                                  >
+                                    <span className="text-sm" style={{ color: colors.onSurface }}>Todos los usuarios</span>
+                                  </button>
+                                  {filteredUsers.length > 0 ? (
+                                    filteredUsers.map((userItem, index) => (
+                                      <button
+                                        key={userItem.id_usuario}
+                                        className="w-full text-left px-3 py-3 border-b last:border-b-0"
+                                        style={{ borderColor: 'rgba(0, 0, 0, 0.05)' }}
+                                        onClick={() => {
+                                          setFilters(prev => ({ ...prev, id_usuario: userItem.id_usuario.toString() }));
+                                          setShowUserDropdown(false);
+                                          setUserSearchText('');
+                                          setPagination(prev => ({ ...prev, currentPage: 1 }));
+                                          fetchEntradas();
+                                        }}
+                                      >
+                                        <span className="text-sm" style={{ color: colors.onSurface }}>{userItem.nombre_natural}</span>
+                                      </button>
+                                    ))
+                                  ) : (
+                                    <div className="px-3 py-3">
+                                      <span className="text-sm" style={{ color: colors.outline }}>No se encontraron usuarios</span>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Mobile/Tablet: Cant.Restante and Fecha filters in advanced section */}
+                    {!isDesktop && (
+                      <>
+                        <div className="flex gap-2 mb-4">
+                          <div className="flex-1">
+                            <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
+                              Cant.Restante Mínima
+                            </label>
+                            <input
+                              type="number"
+                              className="w-full border rounded-lg p-3 text-sm"
+                              style={{ 
+                                backgroundColor: colors.background, 
+                                color: colors.onSurface, 
+                                borderColor: colors.outlineVariant 
+                              }}
+                              placeholder="Cantidad mínima..."
+                              value={filters.cantidad_restante_min}
+                              onChange={(e) => setFilters(prev => ({ ...prev, cantidad_restante_min: e.target.value }))}
+                            />
+                          </div>
+
+                          <div className="flex-1">
+                            <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
+                              Cant.Restante Máxima
+                            </label>
+                            <input
+                              type="number"
+                              className="w-full border rounded-lg p-3 text-sm"
+                              style={{ 
+                                backgroundColor: colors.background, 
+                                color: colors.onSurface, 
+                                borderColor: colors.outlineVariant 
+                              }}
+                              placeholder="Cantidad máxima..."
+                              value={filters.cantidad_restante_max}
+                              onChange={(e) => setFilters(prev => ({ ...prev, cantidad_restante_max: e.target.value }))}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 mb-4">
+                          <div className="flex-1">
+                            <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
+                              Fecha Desde
+                            </label>
+                            <input
+                              type="date"
+                              className="w-full border rounded-lg p-3 text-sm"
+                              style={{ 
+                                backgroundColor: colors.background, 
+                                color: colors.onSurface, 
+                                borderColor: colors.outlineVariant,
+                                colorScheme: isDarkMode ? 'dark' : 'light'
+                              }}
+                              value={filters.fecha_desde}
+                              onChange={(e) => setFilters(prev => ({ ...prev, fecha_desde: e.target.value }))}
+                            />
+                          </div>
+
+                          <div className="flex-1">
+                            <label className="block text-sm font-medium mb-2" style={{ color: colors.outline }}>
+                              Fecha Hasta
+                            </label>
+                            <input
+                              type="date"
+                              className="w-full border rounded-lg p-3 text-sm"
+                              style={{ 
+                                backgroundColor: colors.background, 
+                                color: colors.onSurface, 
+                                borderColor: colors.outlineVariant,
+                                colorScheme: isDarkMode ? 'dark' : 'light'
+                              }}
+                              value={filters.fecha_hasta}
+                              onChange={(e) => setFilters(prev => ({ ...prev, fecha_hasta: e.target.value }))}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    <div className="flex gap-3 mt-2">
+                      <button
+                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border"
+                        style={{ 
+                          backgroundColor: colors.surface, 
+                          borderColor: colors.outlineVariant 
+                        }}
+                        onClick={handleClearFilters}
+                      >
+                        <RefreshCw size={18} color={colors.onSurface} />
+                        <span className="text-sm font-medium" style={{ color: colors.onSurface }}>Limpiar</span>
+                      </button>
+                      <button
+                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg"
+                        style={{ 
+                          backgroundColor: colors.primary,
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        }}
+                        onClick={handleSearch}
+                        disabled={isSearching}
+                      >
+                        {isSearching ? (
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                        ) : (
+                          <>
+                            <Search size={18} color="#fff" />
+                            <span className="text-sm font-medium" style={{ color: '#fff' }}>Buscar</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex gap-3 mb-6">
@@ -1299,7 +1433,6 @@ export default function EntradasPage() {
                   <Download size={20} color="#fff" />
                   <span className="text-sm font-medium" style={{ color: '#fff' }}>Exportar Datos</span>
                 </button>
-              </div>
               </div>
             </>
           )}

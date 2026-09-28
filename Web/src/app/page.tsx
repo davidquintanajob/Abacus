@@ -7,8 +7,10 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useViewMode } from '../context/ViewModeContext';
 import { useNavigationLoading } from '../context/NavigationLoadingContext';
+import { useToast } from '../hooks/useToast';
 import { Header } from '../components/layout/Header';
 import { SidebarNavigation } from '../components/layout/SidebarNavigation';
+import { Toast } from '../components/common/Toast';
 import { AlertTriangle, Clock, XCircle, CheckCircle, Phone, MessageCircle, ArrowRight, Lock, Box, FileText, ShoppingCart, DollarSign, Users, X } from 'lucide-react';
 import { getEntradas } from '../services/entradaService';
 import { SvgIcon } from '../components/common/SvgIcon';
@@ -23,6 +25,7 @@ export default function HomePage() {
   const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels } = useAuth();
   const { isMobile, isTablet, isDesktop } = useResponsive();
   const { setLoading: setNavigating } = useNavigationLoading();
+  const { toast, showToast, hideToast } = useToast();
   const sidebarNavRef = useRef<any>(null);
 
   // Reset navigation loading state when page loads
@@ -273,6 +276,37 @@ export default function HomePage() {
         
         setAllExpiringProducts(productosConAlerta);
         setExpiringProducts(productosConAlerta.slice(0, 3));
+        
+        // Mostrar toast de alerta si hay productos próximos a vencer
+        if (productosConAlerta.length > 0) {
+          // Agrupar por nombre de producto y contar entradas
+          const productosAgrupados = productosConAlerta.reduce((acc: any, producto: any) => {
+            const nombre = producto.nombreProducto;
+            if (!acc[nombre]) {
+              acc[nombre] = { count: 0, nombres: [] };
+            }
+            acc[nombre].count++;
+            acc[nombre].nombres.push(producto.nombreProducto);
+            return acc;
+          }, {});
+          
+          const mensajes = Object.entries(productosAgrupados).map(([nombre, data]: [string, any]) => {
+            return `hay ${data.count} entradas de ${nombre} próximas a vencer`;
+          });
+          
+          const message = mensajes.join('. ');
+          
+          const messageCapitalized = message
+            .split('. ')
+            .map((sentence: string) => sentence.charAt(0).toUpperCase() + sentence.slice(1))
+            .join('. ');
+          
+          showToast({
+            type: 'warning',
+            message: messageCapitalized,
+            duration: 8000
+          });
+        }
       } catch (error) {
         // Error al cargar productos próximos a vencer — servidor no disponible
       } finally {
@@ -997,6 +1031,16 @@ export default function HomePage() {
           </div>
         </div>
       )}
+      
+      <Toast
+        visible={toast.visible}
+        type={toast.type}
+        message={toast.message}
+        code={toast.code}
+        duration={toast.duration}
+        onHide={hideToast}
+        toastKey={toast.key}
+      />
     </div>
   );
 }

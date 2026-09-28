@@ -37,7 +37,7 @@ export default function ServiciosPage() {
   const { token, user } = useAuth();
   const { viewMode, toggleViewMode } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
-  const { showConfirmDialog } = useConfirmDialog();
+  const { showConfirmDialog, hideConfirmDialog } = useConfirmDialog();
   const { setLoading: setNavigating } = useNavigationLoading();
   const { isMobile, isTablet, isDesktop } = useResponsive();
   const sidebarNavRef = useRef<any>(null);
@@ -138,6 +138,7 @@ export default function ServiciosPage() {
       title: 'Eliminar Servicio',
       message: `¿Estás seguro de que quieres eliminar el servicio "${servicio.nombre}"?`,
       onConfirm: () => {
+        hideConfirmDialog();
         deleteServicio(servicio.id_servicio)
           .then(() => {
             showToast({ type: 'success', message: 'Servicio eliminado correctamente' });
@@ -394,30 +395,33 @@ export default function ServiciosPage() {
                     </label>
                     <div className="flex gap-1">
                       <button
-                        className="flex-1 rounded-lg px-2 py-2 transition-colors font-medium text-sm"
+                        className="flex-1 rounded-lg px-3 py-2 border transition-colors font-medium text-sm h-10"
                         style={{ 
                           backgroundColor: filters.esvendible === '' ? '#9E9E9E' : '#E0E0E0',
-                          color: filters.esvendible === '' ? '#fff' : '#9E9E9E'
+                          color: filters.esvendible === '' ? '#fff' : '#9E9E9E',
+                          borderColor: colors.outlineVariant
                         }}
                         onClick={() => setFilters(prev => ({ ...prev, esvendible: '' }))}
                       >
                         Todos
                       </button>
                       <button
-                        className="flex-1 rounded-lg px-2 py-2 transition-colors font-medium text-sm"
+                        className="flex-1 rounded-lg px-3 py-2 border transition-colors font-medium text-sm h-10"
                         style={{ 
                           backgroundColor: filters.esvendible === 'true' ? '#4CAF50' : '#E0E0E0',
-                          color: filters.esvendible === 'true' ? '#fff' : '#9E9E9E'
+                          color: filters.esvendible === 'true' ? '#fff' : '#9E9E9E',
+                          borderColor: colors.outlineVariant
                         }}
                         onClick={() => setFilters(prev => ({ ...prev, esvendible: 'true' }))}
                       >
                         Vendible
                       </button>
                       <button
-                        className="flex-1 rounded-lg px-2 py-2 transition-colors font-medium text-sm"
+                        className="flex-1 rounded-lg px-2 py-2 border transition-colors font-medium text-xs h-10"
                         style={{ 
                           backgroundColor: filters.esvendible === 'false' ? '#F44336' : '#E0E0E0',
-                          color: filters.esvendible === 'false' ? '#fff' : '#9E9E9E'
+                          color: filters.esvendible === 'false' ? '#fff' : '#9E9E9E',
+                          borderColor: colors.outlineVariant
                         }}
                         onClick={() => setFilters(prev => ({ ...prev, esvendible: 'false' }))}
                       >
