@@ -504,6 +504,13 @@ const SalesContent = () => {
       const data = await configService.getConfig();
       if (data.tiendaCuentasConfig && data.tiendaCuentasConfig[tiendaId]) {
         setCuentaConfig(data.tiendaCuentasConfig[tiendaId]);
+      } else {
+        setCuentaConfig({
+          efectivo_cup: [],
+          efectivo_usd: [],
+          transferencia_cup: [],
+          transferencia_usd: [],
+        });
       }
     } catch (error) {
     }
@@ -522,7 +529,6 @@ const SalesContent = () => {
         );
         setSound(sound);
       } catch (error) {
-        console.log('Error loading sound:', error);
       }
     };
 
@@ -1654,11 +1660,25 @@ const SalesContent = () => {
                 <TouchableOpacity
                   key={tienda.id_tienda}
                   style={styles.dropdownItem}
-                  onPress={() => {
-                    setSelectedTienda(tienda);
+                  onPress={async () => {
                     setShowTiendaSelector(false);
-                    loadCuentaConfig(tienda.id_tienda);
-                    loadConfig();
+                    // Clear selected cuentas and payment amounts BEFORE changing tienda
+                    setSelectedCuentas({
+                      efectivo_cup: null,
+                      efectivo_usd: null,
+                      transferencia_cup: null,
+                      transferencia_usd: null,
+                    });
+                    setPaymentAmounts({
+                      efectivo_cup: '',
+                      efectivo_usd: '',
+                      transferencia_cup: '',
+                      transferencia_usd: '',
+                    });
+                    // Load new config BEFORE changing tienda to avoid race condition
+                    await loadCuentaConfig(tienda.id_tienda);
+                    // Change tienda after config is loaded
+                    setSelectedTienda(tienda);
                   }}
                 >
                   <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
