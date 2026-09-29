@@ -1816,7 +1816,11 @@ const SalesContent = () => {
           </View>
 
           <View style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-            <Ionicons name="search" size={responsive.responsiveWidth(20)} color={colors.outline} />
+            {isSearching ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Ionicons name="search" size={responsive.responsiveWidth(20)} color={colors.outline} />
+            )}
             <TextInput
               style={[styles.searchInput, { color: colors.onSurface }]}
               placeholder="Buscar producto o servicio..."
