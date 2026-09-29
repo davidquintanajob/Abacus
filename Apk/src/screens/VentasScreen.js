@@ -1615,10 +1615,10 @@ const VentasContent = () => {
                       </Text>
                       <View style={styles.cantidadRow}>
                         <Text style={[styles.ventaCantidad, { color: colors.primary }]}>
-                          Total CUP: ${(parseFloat(venta.cantidad_cobrada_efectivo_cup || 0) + parseFloat(venta.cantidad_cobrada_transferencia_cup || 0)).toFixed(2)}
+                          Total CUP: ${(venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_cup || 0) * (v.cantidad || 0)), 0) || 0).toFixed(2)}
                         </Text>
                         <Text style={[styles.ventaCantidad, { color: colors.primary }]}>
-                          Total USD: ${(parseFloat(venta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(venta.cantidad_cobrada_transferencia_usd || 0)).toFixed(2)}
+                          Total USD: ${(venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_usd || 0) * (v.cantidad || 0)), 0) || 0).toFixed(2)}
                         </Text>
                       </View>
                       <View style={styles.cardPaymentTypesContainer}>
@@ -1711,10 +1711,10 @@ const VentasContent = () => {
                           {venta.operaciones?.[0]?.usuario?.nombre_natural || 'N/A'}
                         </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
-                          ${venta.cantidad_cobrada_efectivo_cup || 0}
+                          ${(venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_cup || 0) * (v.cantidad || 0)), 0) || 0).toFixed(2)}
                         </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
-                          ${venta.cantidad_cobrada_efectivo_usd || 0}
+                          ${(venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_usd || 0) * (v.cantidad || 0)), 0) || 0).toFixed(2)}
                         </Text>
                         <View style={[styles.tableCellWithFlags, { width: responsive.responsiveWidth(200) }]}>
                           <View style={styles.paymentTypesContainer}>

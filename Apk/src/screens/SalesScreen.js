@@ -107,6 +107,11 @@ const SalesContent = () => {
   const [showComprobanteModal, setShowComprobanteModal] = useState(false);
   const [comprobanteSaleItems, setComprobanteSaleItems] = useState([]);
 
+  // State for price adjustment modal
+  const [showPriceAdjustmentModal, setShowPriceAdjustmentModal] = useState(false);
+  const [priceAdjustmentItems, setPriceAdjustmentItems] = useState([]);
+  const [pendingSaleDataForAdjustment, setPendingSaleDataForAdjustment] = useState(null);
+
   const barcodeEngineRef = useRef(null);
 
   useEffect(() => {
@@ -324,6 +329,94 @@ const SalesContent = () => {
     setShowConfirmSaleModal(false);
     setPendingSaleData(null);
     setConfirmSaleCountdown(3);
+  };
+
+  const roundTo5Decimals = (value) => Math.round(value * 100000) / 100000;
+
+  const handleProcessSaleWithAdjustedPrices = async () => {
+    if (!pendingSaleDataForAdjustment) return;
+
+    const {
+      efectivoCup,
+      efectivoUsd,
+      transferenciaCup,
+      transferenciaUsd,
+      totalOriginalCUP,
+      totalOriginalUSD,
+      cambio,
+    } = pendingSaleDataForAdjustment;
+
+    setShowPriceAdjustmentModal(false);
+
+    // Determine sale currency type
+    const paidInCUP = efectivoCup + transferenciaCup > 0;
+    const paidInUSD = efectivoUsd + transferenciaUsd > 0;
+    const saleCurrency = paidInCUP ? 'CUP' : 'USD';
+
+    // Create adjusted sale items using user-adjusted prices
+    const ventasConAjuste = priceAdjustmentItems.map(item => ({
+      id_servicio_tienda: item.id_servicio_tienda,
+      cantidad: item.cantidad,
+      precio_cobrado_cup: saleCurrency === 'CUP' ? item.precio_cup_ajustado : 0,
+      precio_cobrado_usd: saleCurrency === 'USD' ? item.precio_usd_ajustado : 0,
+    }));
+
+    const ventaData = {
+      fecha_hora: new Date().toISOString(),
+      nota: ventaNota,
+      cantidad_cobrada_efectivo_cup: efectivoCup,
+      cantidad_cobrada_efectivo_usd: efectivoUsd,
+      cantidad_cobrada_transferencia_cup: transferenciaCup,
+      cantidad_cobrada_transferencia_usd: transferenciaUsd,
+      id_cuenta_efectivo_cup: efectivoCup > 0 ? selectedCuentas.efectivo_cup?.id_cuenta : null,
+      id_cuenta_efectivo_usd: efectivoUsd > 0 ? selectedCuentas.efectivo_usd?.id_cuenta : null,
+      id_cuenta_transferencia_cup: transferenciaCup > 0 ? selectedCuentas.transferencia_cup?.id_cuenta : null,
+      id_cuenta_transferencia_usd: transferenciaUsd > 0 ? selectedCuentas.transferencia_usd?.id_cuenta : null,
+      id_usuario: user.id_usuario,
+      cambio_moneda: config.cupToUsdRate || 1,
+      ventas: ventasConAjuste,
+    };
+
+    setIsSubmitting(true);
+
+    try {
+      const result = await createVenta(ventaData);
+
+      showToast({ type: 'success', message: 'Venta realizada correctamente' });
+
+      // Update sale items with adjusted prices for comprobante
+      const saleItemsConAjuste = saleItems.map((item, index) => {
+        const ajusteItem = priceAdjustmentItems[index];
+        return {
+          ...item,
+          precio_cup: ajusteItem.precio_cup_ajustado,
+          precio_usd: ajusteItem.precio_usd_ajustado,
+        };
+      });
+
+      setComprobanteSaleItems([...saleItemsConAjuste]);
+
+      // Show comprobante option
+      setShowComprobanteModal(true);
+
+      // Reset form
+      setSaleItems([]);
+      setPaymentAmounts({
+        efectivo_cup: '',
+        efectivo_usd: '',
+        transferencia_cup: '',
+        transferencia_usd: '',
+      });
+
+      // Clear adjustment states
+      setPriceAdjustmentItems([]);
+      setPendingSaleDataForAdjustment(null);
+
+      setIsSubmitting(false);
+    } catch (error) {
+      showToast({ type: 'error', message: error.message || 'Error al realizar la venta' });
+      setIsSubmitting(false);
+    }
   };
 
   const loadApiBaseUrl = async () => {
@@ -1274,6 +1367,37 @@ const SalesContent = () => {
         return result;
       }
 
+      // Check if total paid is greater than 0 - if so, show price adjustment modal
+      const totalPaid = efectivoCupRounded + transferenciaCupRounded + efectivoUsdRounded + transferenciaUsdRounded;
+      if (totalPaid > 0) {
+        // Determine sale currency type
+        const paidInCUP = efectivoCupRounded + transferenciaCupRounded > 0;
+        const paidInUSD = efectivoUsdRounded + transferenciaUsdRounded > 0;
+        const saleCurrency = paidInCUP ? 'CUP' : 'USD';
+
+        // Prepare items for price adjustment modal with current prices
+        const adjustmentItems = saleItems.map(item => ({
+          ...item,
+          precio_cup_ajustado: item.precio_cup,
+          precio_usd_ajustado: item.precio_usd,
+        }));
+
+        setPriceAdjustmentItems(adjustmentItems);
+        setPendingSaleDataForAdjustment({
+          efectivoCup: efectivoCupRounded,
+          efectivoUsd: efectivoUsdRounded,
+          transferenciaCup: transferenciaCupRounded,
+          transferenciaUsd: transferenciaUsdRounded,
+          totalOriginalCUP: totalOriginalCUPRounded,
+          totalOriginalUSD: totalOriginalUSDRounded,
+          cambio: cambio,
+          saleCurrency: saleCurrency,
+        });
+        setShowPriceAdjustmentModal(true);
+        setIsSubmitting(false);
+        return;
+      }
+
       // Calculate adjustment per item (equitable distribution)
       const cantidadProductos = saleItems.length;
       const ajusteCUPPorItem = cantidadProductos > 0 ? roundTo5Decimals(diferenciaCUP / cantidadProductos) : 0;
@@ -2182,6 +2306,108 @@ const SalesContent = () => {
         </View>
       </Modal>
 
+      {/* Price Adjustment Modal */}
+      {showPriceAdjustmentModal && (
+        <Modal
+          visible={showPriceAdjustmentModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => {
+            setShowPriceAdjustmentModal(false);
+            setPriceAdjustmentItems([]);
+            setPendingSaleDataForAdjustment(null);
+          }}
+        >
+          <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+            <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Ajustar Precios por Producto</Text>
+                <TouchableOpacity onPress={() => {
+                  setShowPriceAdjustmentModal(false);
+                  setPriceAdjustmentItems([]);
+                  setPendingSaleDataForAdjustment(null);
+                }}>
+                  <Ionicons name="close" size={24} color={colors.onSurface} />
+                </TouchableOpacity>
+              </View>
+              
+              <ScrollView style={styles.modalScroll}>
+                <Text style={[styles.modalDescription, { color: colors.outline }]}>
+                  El monto cobrado difiere del total de la venta. Ajuste el precio de cada producto según corresponda.
+                </Text>
+                
+                {priceAdjustmentItems.map((item, index) => (
+                  <View key={index} style={[styles.priceAdjustmentItem, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                    <Text style={[styles.priceAdjustmentProductName, { color: colors.onSurface }]}>
+                      {item.nombre} x{item.cantidad}
+                    </Text>
+                    
+                    <View style={styles.priceAdjustmentRow}>
+                      {pendingSaleDataForAdjustment?.saleCurrency === 'CUP' ? (
+                        <View style={styles.priceAdjustmentField}>
+                          <Text style={[styles.priceAdjustmentLabel, { color: colors.outline }]}>Precio CUP:</Text>
+                          <TextInput
+                            style={[styles.priceAdjustmentInput, { backgroundColor: colors.surface, borderColor: colors.outlineVariant, color: colors.onSurface }]}
+                            value={item.precio_cup_ajustado?.toString() || ''}
+                            onChangeText={(text) => {
+                              const newItems = [...priceAdjustmentItems];
+                              const newPriceCUP = parseFloat(text) || 0;
+                              newItems[index].precio_cup_ajustado = newPriceCUP;
+                              // Auto-convert to USD
+                              const cambio = pendingSaleDataForAdjustment?.cambio || 1;
+                              newItems[index].precio_usd_ajustado = roundTo5Decimals(newPriceCUP / cambio);
+                              setPriceAdjustmentItems(newItems);
+                            }}
+                            keyboardType="decimal-pad"
+                          />
+                        </View>
+                      ) : (
+                        <View style={styles.priceAdjustmentField}>
+                          <Text style={[styles.priceAdjustmentLabel, { color: colors.outline }]}>Precio USD:</Text>
+                          <TextInput
+                            style={[styles.priceAdjustmentInput, { backgroundColor: colors.surface, borderColor: colors.outlineVariant, color: colors.onSurface }]}
+                            value={item.precio_usd_ajustado?.toString() || ''}
+                            onChangeText={(text) => {
+                              const newItems = [...priceAdjustmentItems];
+                              const newPriceUSD = parseFloat(text) || 0;
+                              newItems[index].precio_usd_ajustado = newPriceUSD;
+                              // Auto-convert to CUP
+                              const cambio = pendingSaleDataForAdjustment?.cambio || 1;
+                              newItems[index].precio_cup_ajustado = roundTo5Decimals(newPriceUSD * cambio);
+                              setPriceAdjustmentItems(newItems);
+                            }}
+                            keyboardType="decimal-pad"
+                          />
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+              
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: colors.outlineVariant }]}
+                  onPress={() => {
+                    setShowPriceAdjustmentModal(false);
+                    setPriceAdjustmentItems([]);
+                    setPendingSaleDataForAdjustment(null);
+                  }}
+                >
+                  <Text style={[styles.modalButtonText, { color: colors.onSurface }]}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: colors.primary }]}
+                  onPress={handleProcessSaleWithAdjustedPrices}
+                >
+                  <Text style={[styles.modalButtonText, { color: '#fff' }]}>Confirmar Venta</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+
       <Toast
         visible={toast.visible}
         type={toast.type}
@@ -2737,6 +2963,7 @@ const createStyles = (responsive) => StyleSheet.create({
     paddingBottom: responsive.responsiveHeight(8),
   },
   modalFooter: {
+    flexDirection: 'row',
     paddingTop: responsive.responsiveHeight(16),
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
@@ -2749,6 +2976,46 @@ const createStyles = (responsive) => StyleSheet.create({
     marginBottom: responsive.responsiveHeight(8),
   },
   modalItemText: {
+    fontSize: responsive.responsiveWidth(14),
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: responsive.responsiveHeight(16),
+    borderRadius: responsive.responsiveWidth(8),
+    alignItems: 'center',
+    marginHorizontal: responsive.responsiveWidth(4),
+  },
+  modalButtonText: {
+    fontSize: responsive.responsiveWidth(16),
+    fontWeight: '600',
+  },
+  priceAdjustmentItem: {
+    padding: responsive.responsiveWidth(16),
+    borderRadius: responsive.responsiveWidth(8),
+    borderWidth: 1,
+    marginBottom: responsive.responsiveHeight(12),
+  },
+  priceAdjustmentProductName: {
+    fontSize: responsive.responsiveWidth(16),
+    fontWeight: '600',
+    marginBottom: responsive.responsiveHeight(12),
+  },
+  priceAdjustmentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  priceAdjustmentField: {
+    flex: 1,
+    marginRight: responsive.responsiveWidth(8),
+  },
+  priceAdjustmentLabel: {
+    fontSize: responsive.responsiveWidth(12),
+    marginBottom: responsive.responsiveHeight(4),
+  },
+  priceAdjustmentInput: {
+    padding: responsive.responsiveWidth(10),
+    borderRadius: responsive.responsiveWidth(6),
+    borderWidth: 1,
     fontSize: responsive.responsiveWidth(14),
   },
   modalDescription: {
