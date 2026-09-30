@@ -129,6 +129,11 @@ const VentaEditContent = () => {
   const [isLoadingTiendas, setIsLoadingTiendas] = useState(false);
   const [isLoadingCuentas, setIsLoadingCuentas] = useState(false);
 
+  // State for individual price edit modal
+  const [showPriceEditModal, setShowPriceEditModal] = useState(false);
+  const [editingItemIndex, setEditingItemIndex] = useState(null);
+  const [editingItemPrices, setEditingItemPrices] = useState({ cup: '', usd: '' });
+
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isReadOnly = isViewMode || isOfflineMode;
 
@@ -454,6 +459,36 @@ const VentaEditContent = () => {
       }
     } catch (error) {
     }
+  };
+
+  const roundTo5Decimals = (value) => Math.round(value * 100000) / 100000;
+
+  const handleOpenPriceEditModal = (index) => {
+    const item = saleItems[index];
+    setEditingItemIndex(index);
+    setEditingItemPrices({
+      cup: item.precio_cup?.toString() || '',
+      usd: item.precio_usd?.toString() || ''
+    });
+    setShowPriceEditModal(true);
+  };
+
+  const handleSavePriceEdit = () => {
+    if (editingItemIndex !== null) {
+      const newItems = [...saleItems];
+      newItems[editingItemIndex].precio_cup = parseFloat(editingItemPrices.cup) || 0;
+      newItems[editingItemIndex].precio_usd = parseFloat(editingItemPrices.usd) || 0;
+      setSaleItems(newItems);
+    }
+    setShowPriceEditModal(false);
+    setEditingItemIndex(null);
+    setEditingItemPrices({ cup: '', usd: '' });
+  };
+
+  const handleCancelPriceEdit = () => {
+    setShowPriceEditModal(false);
+    setEditingItemIndex(null);
+    setEditingItemPrices({ cup: '', usd: '' });
   };
 
   const searchServicios = async (searchTerm) => {
@@ -974,7 +1009,12 @@ const VentaEditContent = () => {
               </Text>
             ) : (
               saleItems.map((item, index) => (
-                <View key={index} style={[styles.itemCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                <TouchableOpacity
+                  key={index}
+                  style={[styles.itemCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                  onPress={() => handleOpenPriceEditModal(index)}
+                  activeOpacity={0.7}
+                >
                   {item.imagen && (
                     <Image
                       source={{ uri: item.imagen }}
@@ -1047,7 +1087,7 @@ const VentaEditContent = () => {
                   >
                     <Ionicons name="close" size={responsive.responsiveWidth(16)} color={colors.error} />
                   </TouchableOpacity>
-                </View>
+                </TouchableOpacity>
               ))
             )}
           </Card>
@@ -1284,6 +1324,76 @@ const VentaEditContent = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Price Edit Modal */}
+      {showPriceEditModal && (
+        <Modal
+          visible={showPriceEditModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={handleCancelPriceEdit}
+        >
+          <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+            <View style={[styles.priceEditModalContent, { backgroundColor: colors.surface }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Editar Precio</Text>
+                <TouchableOpacity onPress={handleCancelPriceEdit}>
+                  <Ionicons name="close" size={24} color={colors.onSurface} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.priceEditModalBody}>
+                <View style={styles.priceEditModalRow}>
+                  <View style={styles.priceEditModalField}>
+                    <Text style={[styles.priceEditModalLabel, { color: colors.outline }]}>Precio CUP:</Text>
+                    <TextInput
+                      style={[styles.priceEditModalInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant, color: colors.onSurface }]}
+                      value={editingItemPrices.cup}
+                      onChangeText={(text) => {
+                        const newPriceCUP = parseFloat(text) || 0;
+                        const cambio = parseFloat(cupToUsdRate || 1);
+                        const newPriceUSD = roundTo5Decimals(newPriceCUP / cambio);
+                        setEditingItemPrices({ cup: text, usd: newPriceUSD.toString() });
+                      }}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+
+                  <View style={styles.priceEditModalField}>
+                    <Text style={[styles.priceEditModalLabel, { color: colors.outline }]}>Precio USD:</Text>
+                    <TextInput
+                      style={[styles.priceEditModalInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant, color: colors.onSurface }]}
+                      value={editingItemPrices.usd}
+                      onChangeText={(text) => {
+                        const newPriceUSD = parseFloat(text) || 0;
+                        const cambio = parseFloat(cupToUsdRate || 1);
+                        const newPriceCUP = roundTo5Decimals(newPriceUSD * cambio);
+                        setEditingItemPrices({ cup: newPriceCUP.toString(), usd: text });
+                      }}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: colors.outlineVariant }]}
+                  onPress={handleCancelPriceEdit}
+                >
+                  <Text style={[styles.modalButtonText, { color: colors.onSurface }]}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: colors.primary }]}
+                  onPress={handleSavePriceEdit}
+                >
+                  <Text style={[styles.modalButtonText, { color: '#fff' }]}>Guardar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -1631,6 +1741,49 @@ const createStyles = (responsive) => StyleSheet.create({
     borderRadius: responsive.responsiveWidth(16),
     padding: responsive.responsiveWidth(20),
     flexDirection: 'column',
+  },
+  priceEditModalContent: {
+    width: '80%',
+    borderRadius: responsive.responsiveWidth(16),
+    padding: responsive.responsiveWidth(20),
+  },
+  priceEditModalBody: {
+    paddingVertical: responsive.responsiveHeight(20),
+  },
+  priceEditModalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  priceEditModalField: {
+    flex: 1,
+    marginRight: responsive.responsiveWidth(12),
+  },
+  priceEditModalLabel: {
+    fontSize: responsive.responsiveWidth(14),
+    marginBottom: responsive.responsiveHeight(8),
+  },
+  priceEditModalInput: {
+    padding: responsive.responsiveWidth(12),
+    borderRadius: responsive.responsiveWidth(8),
+    borderWidth: 1,
+    fontSize: responsive.responsiveWidth(16),
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    paddingTop: responsive.responsiveHeight(16),
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: responsive.responsiveHeight(16),
+    borderRadius: responsive.responsiveWidth(8),
+    alignItems: 'center',
+    marginHorizontal: responsive.responsiveWidth(4),
+  },
+  modalButtonText: {
+    fontSize: responsive.responsiveWidth(16),
+    fontWeight: '600',
   },
   modalHeader: {
     flexDirection: 'row',
