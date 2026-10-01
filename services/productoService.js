@@ -378,7 +378,7 @@ const filterProductos = async (filterCriteria = {}, id_tienda, cantidadMin, cant
   const matchingIdsOptions = {
     attributes: ["id_servicio"],
     where: whereClause,
-    order: [["id_servicio", "ASC"]],
+    order: [["nombre", "ASC"], ["id_servicio", "ASC"]],
     distinct: true,
     raw: true,
     include: [{ model: Producto, as: "producto", required: true }],
@@ -443,14 +443,15 @@ const filterProductos = async (filterCriteria = {}, id_tienda, cantidadMin, cant
       raw: true,
     });
 
-    filteredIds = productosConCantidad
+    const idsConCantidadEnRango = new Set(productosConCantidad
       .filter((item) => {
         const total = Number(item.totalCantidad || 0);
         const minOk = cantidadMin === undefined || total >= Number(cantidadMin);
         const maxOk = cantidadMax === undefined || total <= Number(cantidadMax);
         return minOk && maxOk;
       })
-      .map((item) => item.id_servicio);
+      .map((item) => item.id_servicio));
+    filteredIds = matchedIds.filter((id) => idsConCantidadEnRango.has(id));
   }
 
   if (filteredIds.length === 0) {
@@ -461,7 +462,7 @@ const filterProductos = async (filterCriteria = {}, id_tienda, cantidadMin, cant
   const rows = pagedIds.length > 0
     ? await Servicio.findAll({
         where: { id_servicio: { [Op.in]: pagedIds } },
-        order: [["nombre", "ASC"]],
+        order: [["nombre", "ASC"], ["id_servicio", "ASC"]],
         include: [
           { model: Producto, as: "producto" },
           { model: Codigo, as: "codigos" },
