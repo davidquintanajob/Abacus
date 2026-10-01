@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Modal, Keyboard } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -539,15 +539,16 @@ const VentasContent = () => {
     try {
       setIsLoadingServicios(true);
       let allServicios = [];
-      
+
       if (isOfflineMode) {
         allServicios = await storageService.getServicios();
       } else {
         const filters = nombreFilter ? { nombre: nombreFilter } : {};
-        const data = await getServicios(filters, 1, 10);
+        // Use fetchProducto=true to get servicios and productos (including ofertas)
+        const data = await getServicios({ ...filters, fetchProducto: true }, 1, 10);
         allServicios = data.data || [];
       }
-      
+
       setServicios(allServicios);
       setHasLoadedAllServicios(true);
     } catch (error) {
@@ -558,7 +559,7 @@ const VentasContent = () => {
     }
   };
 
-  const fetchCuentas = async () => {
+  const fetchCuentas = useCallback(async () => {
     try {
       if (isOfflineMode) {
         return;
@@ -596,7 +597,7 @@ const VentasContent = () => {
     } catch (error) {
       console.error('Error fetching cuentas:', error);
     }
-  };
+  }, [filters.id_tienda, tiendaCuentasConfig, isOfflineMode]);
 
   const fetchCompleteUserData = async () => {
     try {
@@ -1150,7 +1151,7 @@ const VentasContent = () => {
               </View>
 
               <View style={styles.filterGroup}>
-                <Text style={[styles.label, { color: colors.outline }]}>Nombre de Servicio</Text>
+                <Text style={[styles.label, { color: colors.outline }]}>Nombre de Servicio o Producto</Text>
                 <TouchableOpacity
                   style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
                   onPress={() => {
@@ -1614,12 +1615,27 @@ const VentasContent = () => {
                         Usuario: {venta.operaciones?.[0]?.usuario?.nombre_natural || 'N/A'}
                       </Text>
                       <View style={styles.cantidadRow}>
-                        <Text style={[styles.ventaCantidad, { color: colors.primary }]}>
-                          Total CUP: ${(parseFloat(venta.cantidad_cobrada_efectivo_cup || 0) + parseFloat(venta.cantidad_cobrada_transferencia_cup || 0)).toFixed(2)}
-                        </Text>
-                        <Text style={[styles.ventaCantidad, { color: colors.primary }]}>
-                          Total USD: ${(parseFloat(venta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(venta.cantidad_cobrada_transferencia_usd || 0)).toFixed(2)}
-                        </Text>
+                        {(() => {
+                          const totalCUP = venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_cup || 0) * (v.cantidad || 0)), 0) || 0;
+                          const totalUSD = venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_usd || 0) * (v.cantidad || 0)), 0) || 0;
+                          const paidInCUP = (parseFloat(venta.cantidad_cobrada_efectivo_cup || 0) + parseFloat(venta.cantidad_cobrada_transferencia_cup || 0)) > 0;
+                          const paidInUSD = (parseFloat(venta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(venta.cantidad_cobrada_transferencia_usd || 0)) > 0;
+
+                          return (
+                            <>
+                              {paidInCUP && (
+                                <Text style={[styles.ventaCantidad, { color: colors.primary }]}>
+                                  Total CUP: ${totalCUP.toFixed(2)}
+                                </Text>
+                              )}
+                              {paidInUSD && (
+                                <Text style={[styles.ventaCantidad, { color: colors.primary }]}>
+                                  Total USD: ${totalUSD.toFixed(2)}
+                                </Text>
+                              )}
+                            </>
+                          );
+                        })()}
                       </View>
                       <View style={styles.cardPaymentTypesContainer}>
                         {getPaymentTypes(venta).map((paymentType, idx) => (
@@ -1711,10 +1727,18 @@ const VentasContent = () => {
                           {venta.operaciones?.[0]?.usuario?.nombre_natural || 'N/A'}
                         </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
-                          ${venta.cantidad_cobrada_efectivo_cup || 0}
+                          {(() => {
+                            const totalCUP = venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_cup || 0) * (v.cantidad || 0)), 0) || 0;
+                            const paidInCUP = (parseFloat(venta.cantidad_cobrada_efectivo_cup || 0) + parseFloat(venta.cantidad_cobrada_transferencia_cup || 0)) > 0;
+                            return paidInCUP ? `$${totalCUP.toFixed(2)}` : '-';
+                          })()}
                         </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
-                          ${venta.cantidad_cobrada_efectivo_usd || 0}
+                          {(() => {
+                            const totalUSD = venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_usd || 0) * (v.cantidad || 0)), 0) || 0;
+                            const paidInUSD = (parseFloat(venta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(venta.cantidad_cobrada_transferencia_usd || 0)) > 0;
+                            return paidInUSD ? `$${totalUSD.toFixed(2)}` : '-';
+                          })()}
                         </Text>
                         <View style={[styles.tableCellWithFlags, { width: responsive.responsiveWidth(200) }]}>
                           <View style={styles.paymentTypesContainer}>
@@ -1770,17 +1794,21 @@ const VentasContent = () => {
                 <TouchableOpacity
                   style={[styles.paginationButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
                   onPress={() => setPagination(prev => ({ ...prev, currentPage: Math.max(1, prev.currentPage - 1) }))}
-                  disabled={pagination.currentPage === 1}
+                  disabled={pagination.currentPage === 1 || isSearching}
                 >
                   <Ionicons name="chevron-back" size={responsive.responsiveWidth(20)} color={colors.onSurface} />
                 </TouchableOpacity>
-                <Text style={[styles.paginationText, { color: colors.onSurface }]}>
-                  Página {pagination.currentPage} de {pagination.totalPages}
-                </Text>
+                {isSearching ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text style={[styles.paginationText, { color: colors.onSurface }]}>
+                    Página {pagination.currentPage} de {pagination.totalPages}
+                  </Text>
+                )}
                 <TouchableOpacity
                   style={[styles.paginationButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
                   onPress={() => setPagination(prev => ({ ...prev, currentPage: Math.min(pagination.totalPages, prev.currentPage + 1) }))}
-                  disabled={pagination.currentPage === pagination.totalPages}
+                  disabled={pagination.currentPage === pagination.totalPages || isSearching}
                 >
                   <Ionicons name="chevron-forward" size={responsive.responsiveWidth(20)} color={colors.onSurface} />
                 </TouchableOpacity>

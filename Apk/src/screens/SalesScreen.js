@@ -107,6 +107,11 @@ const SalesContent = () => {
   const [showComprobanteModal, setShowComprobanteModal] = useState(false);
   const [comprobanteSaleItems, setComprobanteSaleItems] = useState([]);
 
+  // State for individual price edit modal
+  const [showPriceEditModal, setShowPriceEditModal] = useState(false);
+  const [editingItemIndex, setEditingItemIndex] = useState(null);
+  const [editingItemPrices, setEditingItemPrices] = useState({ cup: '', usd: '' });
+
   const barcodeEngineRef = useRef(null);
 
   useEffect(() => {
@@ -324,6 +329,36 @@ const SalesContent = () => {
     setShowConfirmSaleModal(false);
     setPendingSaleData(null);
     setConfirmSaleCountdown(3);
+  };
+
+  const roundTo5Decimals = (value) => Math.round(value * 100000) / 100000;
+
+  const handleOpenPriceEditModal = (index) => {
+    const item = saleItems[index];
+    setEditingItemIndex(index);
+    setEditingItemPrices({
+      cup: item.precio_cup?.toString() || '',
+      usd: item.precio_usd?.toString() || ''
+    });
+    setShowPriceEditModal(true);
+  };
+
+  const handleSavePriceEdit = () => {
+    if (editingItemIndex !== null) {
+      const newItems = [...saleItems];
+      newItems[editingItemIndex].precio_cup = parseFloat(editingItemPrices.cup) || 0;
+      newItems[editingItemIndex].precio_usd = parseFloat(editingItemPrices.usd) || 0;
+      setSaleItems(newItems);
+    }
+    setShowPriceEditModal(false);
+    setEditingItemIndex(null);
+    setEditingItemPrices({ cup: '', usd: '' });
+  };
+
+  const handleCancelPriceEdit = () => {
+    setShowPriceEditModal(false);
+    setEditingItemIndex(null);
+    setEditingItemPrices({ cup: '', usd: '' });
   };
 
   const loadApiBaseUrl = async () => {
@@ -1274,29 +1309,13 @@ const SalesContent = () => {
         return result;
       }
 
-      // Calculate adjustment per item (equitable distribution)
-      const cantidadProductos = saleItems.length;
-      const ajusteCUPPorItem = cantidadProductos > 0 ? roundTo5Decimals(diferenciaCUP / cantidadProductos) : 0;
-      const ajusteUSDPorItem = cantidadProductos > 0 ? roundTo5Decimals(diferenciaUSD / cantidadProductos) : 0;
-
-      // Create adjusted sale items for the API
-      const ventasConAjuste = saleItems.map(item => {
-        // Prevent division by zero and limit adjustment to reasonable values
-        const cantidad = item.cantidad > 0 ? item.cantidad : 1;
-        const ajusteCUP = roundTo5Decimals(ajusteCUPPorItem / cantidad);
-        const ajusteUSD = roundTo5Decimals(ajusteUSDPorItem / cantidad);
-        
-        // Limit adjusted prices to prevent overflow (max 999999999.99999)
-        const precioCobradoCUP = Math.max(0, Math.min(999999999.99999, roundTo5Decimals(item.precio_cup + ajusteCUP)));
-        const precioCobradoUSD = Math.max(0, Math.min(999999999.99999, roundTo5Decimals(item.precio_usd + ajusteUSD)));
-        
-        return {
-          id_servicio_tienda: item.id_servicio_tienda,
-          cantidad: item.cantidad,
-          precio_cobrado_cup: precioCobradoCUP,
-          precio_cobrado_usd: precioCobradoUSD,
-        };
-      });
+      // Use current prices from saleItems (user can edit them in product cards)
+      const ventasConAjuste = saleItems.map(item => ({
+        id_servicio_tienda: item.id_servicio_tienda,
+        cantidad: item.cantidad,
+        precio_cobrado_cup: item.precio_cup,
+        precio_cobrado_usd: item.precio_usd,
+      }));
 
       // Update sale items with adjusted prices for comprobante
       const saleItemsConAjuste = saleItems.map((item, index) => {
@@ -1692,7 +1711,11 @@ const SalesContent = () => {
           </View>
 
           <View style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-            <Ionicons name="search" size={responsive.responsiveWidth(20)} color={colors.outline} />
+            {isSearching ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Ionicons name="search" size={responsive.responsiveWidth(20)} color={colors.outline} />
+            )}
             <TextInput
               style={[styles.searchInput, { color: colors.onSurface }]}
               placeholder="Buscar producto o servicio..."
@@ -1771,10 +1794,15 @@ const SalesContent = () => {
             </Text>
           ) : (
             saleItems.map((item, index) => (
-              <View key={index} style={[styles.itemCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+              <TouchableOpacity
+                key={index}
+                style={[styles.itemCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                onPress={() => handleOpenPriceEditModal(index)}
+                activeOpacity={0.7}
+              >
                 {item.imagen && (
-                  <Image 
-                    source={{ uri: item.imagen }} 
+                  <Image
+                    source={{ uri: item.imagen }}
                     style={styles.itemImage}
                   />
                 )}
@@ -1844,9 +1872,9 @@ const SalesContent = () => {
                   style={[styles.deleteButton, { backgroundColor: colors.errorContainer }]}
                   onPress={() => removeItem(index)}
                 >
-                  <Ionicons name="close" size={responsive.responsiveWidth(16)} color={colors.error} />
+                  <Ionicons name="trash-outline" size={responsive.responsiveWidth(16)} color={colors.error} />
                 </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             ))
           )}
         </Card>
@@ -2009,7 +2037,7 @@ const SalesContent = () => {
         onRequestClose={() => setShowCuentaSelector(false)}
       >
         <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface, padding: responsive.responsiveWidth(20) }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Seleccionar Cuenta</Text>
               <TouchableOpacity onPress={() => setShowCuentaSelector(false)}>
@@ -2095,7 +2123,7 @@ const SalesContent = () => {
         }}
       >
         <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface, padding: responsive.responsiveWidth(20) }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Comprobante</Text>
               <TouchableOpacity onPress={() => {
@@ -2169,7 +2197,7 @@ const SalesContent = () => {
               </View>
             </ScrollView>
             
-            <View style={styles.modalFooter}>
+            <View style={[styles.modalFooter, { justifyContent: 'center' }]}>
               <TouchableOpacity
                 style={[styles.shareButton, { backgroundColor: colors.primary }]}
                 onPress={handleGenerateComprobante}
@@ -2181,6 +2209,76 @@ const SalesContent = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Price Edit Modal */}
+      {showPriceEditModal && (
+        <Modal
+          visible={showPriceEditModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={handleCancelPriceEdit}
+        >
+          <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+            <View style={[styles.priceEditModalContent, { backgroundColor: colors.surface }]}>
+              <View style={styles.modalHeader}>
+                <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Editar Precio</Text>
+                <TouchableOpacity onPress={handleCancelPriceEdit}>
+                  <Ionicons name="close" size={24} color={colors.onSurface} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.priceEditModalBody}>
+                <View style={styles.priceEditModalRow}>
+                  <View style={styles.priceEditModalField}>
+                    <Text style={[styles.priceEditModalLabel, { color: colors.outline }]}>Precio CUP:</Text>
+                    <TextInput
+                      style={[styles.priceEditModalInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant, color: colors.onSurface }]}
+                      value={editingItemPrices.cup}
+                      onChangeText={(text) => {
+                        const newPriceCUP = parseFloat(text) || 0;
+                        const cambio = parseFloat(config.cupToUsdRate || 1);
+                        const newPriceUSD = roundTo5Decimals(newPriceCUP / cambio);
+                        setEditingItemPrices({ cup: text, usd: newPriceUSD.toString() });
+                      }}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+
+                  <View style={styles.priceEditModalField}>
+                    <Text style={[styles.priceEditModalLabel, { color: colors.outline }]}>Precio USD:</Text>
+                    <TextInput
+                      style={[styles.priceEditModalInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant, color: colors.onSurface }]}
+                      value={editingItemPrices.usd}
+                      onChangeText={(text) => {
+                        const newPriceUSD = parseFloat(text) || 0;
+                        const cambio = parseFloat(config.cupToUsdRate || 1);
+                        const newPriceCUP = roundTo5Decimals(newPriceUSD * cambio);
+                        setEditingItemPrices({ cup: newPriceCUP.toString(), usd: text });
+                      }}
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: colors.outlineVariant }]}
+                  onPress={handleCancelPriceEdit}
+                >
+                  <Text style={[styles.modalButtonText, { color: colors.onSurface }]}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: colors.primary }]}
+                  onPress={handleSavePriceEdit}
+                >
+                  <Text style={[styles.modalButtonText, { color: '#fff' }]}>Guardar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       <Toast
         visible={toast.visible}
@@ -2716,8 +2814,32 @@ const createStyles = (responsive) => StyleSheet.create({
     width: '90%',
     height: '80%',
     borderRadius: responsive.responsiveWidth(16),
+  },
+  priceEditModalContent: {
+    width: '80%',
+    borderRadius: responsive.responsiveWidth(16),
     padding: responsive.responsiveWidth(20),
-    flexDirection: 'column',
+  },
+  priceEditModalBody: {
+    paddingVertical: responsive.responsiveHeight(20),
+  },
+  priceEditModalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  priceEditModalField: {
+    flex: 1,
+    marginRight: responsive.responsiveWidth(12),
+  },
+  priceEditModalLabel: {
+    fontSize: responsive.responsiveWidth(14),
+    marginBottom: responsive.responsiveHeight(8),
+  },
+  priceEditModalInput: {
+    padding: responsive.responsiveWidth(12),
+    borderRadius: responsive.responsiveWidth(8),
+    borderWidth: 1,
+    fontSize: responsive.responsiveWidth(16),
   },
   modalHeader: {
     flexDirection: 'row',
@@ -2737,6 +2859,7 @@ const createStyles = (responsive) => StyleSheet.create({
     paddingBottom: responsive.responsiveHeight(8),
   },
   modalFooter: {
+    flexDirection: 'row',
     paddingTop: responsive.responsiveHeight(16),
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
@@ -2749,6 +2872,46 @@ const createStyles = (responsive) => StyleSheet.create({
     marginBottom: responsive.responsiveHeight(8),
   },
   modalItemText: {
+    fontSize: responsive.responsiveWidth(14),
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: responsive.responsiveHeight(16),
+    borderRadius: responsive.responsiveWidth(8),
+    alignItems: 'center',
+    marginHorizontal: responsive.responsiveWidth(4),
+  },
+  modalButtonText: {
+    fontSize: responsive.responsiveWidth(16),
+    fontWeight: '600',
+  },
+  priceAdjustmentItem: {
+    padding: responsive.responsiveWidth(16),
+    borderRadius: responsive.responsiveWidth(8),
+    borderWidth: 1,
+    marginBottom: responsive.responsiveHeight(12),
+  },
+  priceAdjustmentProductName: {
+    fontSize: responsive.responsiveWidth(16),
+    fontWeight: '600',
+    marginBottom: responsive.responsiveHeight(12),
+  },
+  priceAdjustmentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  priceAdjustmentField: {
+    flex: 1,
+    marginRight: responsive.responsiveWidth(8),
+  },
+  priceAdjustmentLabel: {
+    fontSize: responsive.responsiveWidth(12),
+    marginBottom: responsive.responsiveHeight(4),
+  },
+  priceAdjustmentInput: {
+    padding: responsive.responsiveWidth(10),
+    borderRadius: responsive.responsiveWidth(6),
+    borderWidth: 1,
     fontSize: responsive.responsiveWidth(14),
   },
   modalDescription: {
