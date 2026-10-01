@@ -46,7 +46,7 @@ const Operacion = sequelize.define(
       onDelete: "SET NULL",
     },
     cantidad_operacion: {
-      type: DataTypes.DECIMAL(14, 5),
+      type: DataTypes.DECIMAL,
       allowNull: false,
       defaultValue: 0.00000,
       validate: {
@@ -82,7 +82,7 @@ const Operacion = sequelize.define(
       },
     },
     cambio_moneda: {
-      type: DataTypes.DECIMAL(14, 5),
+      type: DataTypes.DECIMAL,
       allowNull: false,
       defaultValue: 1.00000,
       validate: {

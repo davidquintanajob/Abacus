@@ -28,22 +28,22 @@ const ServicioTienda = sequelize.define("servicio_tienda", {
     onDelete: "CASCADE",
   },
   precio_cup: {
-    type: DataTypes.DECIMAL(14, 5),
+    type: DataTypes.DECIMAL,
     allowNull: false,
     defaultValue: 0.00000,
   },
   precio_usd: {
-    type: DataTypes.DECIMAL(14, 5),
+    type: DataTypes.DECIMAL,
     allowNull: false,
     defaultValue: 0.00000,
   },
   costo_cup: {
-    type: DataTypes.DECIMAL(14, 5),
+    type: DataTypes.DECIMAL,
     allowNull: false,
     defaultValue: 0.00000,
   },
   costo_usd: {
-    type: DataTypes.DECIMAL(14, 5),
+    type: DataTypes.DECIMAL,
     allowNull: false,
     defaultValue: 0.00000,
   },

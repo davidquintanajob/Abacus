@@ -506,7 +506,7 @@ const filterListaVentas = async (filters, limit, offset) => {
 
   const queryOptions = {
     where,
-    include: [ventasInclude, operacionesInclude],
+    include: [ventasInclude, operacionesInclude, { model: Usuario, as: "usuario", required: false }],
     order: [["fecha_hora", "DESC"]],
     distinct: true,
   };

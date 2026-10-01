@@ -67,12 +67,12 @@ const Salida = sequelize.define(
       },
     },
     costo_cup: {
-      type: DataTypes.DECIMAL(14, 5),
+      type: DataTypes.DECIMAL,
       allowNull: false,
       defaultValue: 0.00000,
     },
     costo_usd: {
-      type: DataTypes.DECIMAL(14, 5),
+      type: DataTypes.DECIMAL,
       allowNull: false,
       defaultValue: 0.00000,
     },

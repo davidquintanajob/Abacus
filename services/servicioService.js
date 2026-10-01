@@ -258,15 +258,22 @@ const getServicioByCodigo = async (codigo) => {
   return servicio;
 };
 
+// ============================================================
+// filterServicios OPTIMIZADO
+// - Paginación y filtrado ahora se hacen en SQL (LIMIT/OFFSET + EXISTS)
+// - Se eliminaron los includes de "codigos" y "tienda" (anidado)
+// - Menos round-trips: count + IDs paginados + detalle de la página
+// ============================================================
 const filterServicios = async (
   filterCriteria = {},
   tienda_nombre,
   id_tienda,
   includeProductos,
-  conStock = false,   // nuevo parámetro
+  conStock = false,   // parámetro de stock (solo aplica a productos)
   limit = 10,
   offset = 0
 ) => {
+  // --- 1. Construir WHERE básico sobre la tabla servicios ---
   const whereClause = {};
   const { codigo: codigoFilter, ...serviceFilterCriteria } = filterCriteria;
 
@@ -279,28 +286,7 @@ const filterServicios = async (
     }
   }
 
-  // Incluye para la consulta principal (solo para obtener IDs)
-  const includeProducto = { model: Producto, as: "producto" };
-  const includeServicioTienda = {
-    model: ServicioTienda,
-    as: "tiendas_servicio",
-    include: [{ model: Tienda, as: "tienda" }],
-  };
-
-  // Construcción de includes para la consulta de IDs
-  const matchingIncludes = [];
-
-  if (codigoFilter !== undefined && codigoFilter !== null && codigoFilter !== "") {
-    const normalizedCodigo = String(codigoFilter).trim();
-    matchingIncludes.push({
-      model: Codigo,
-      as: "codigos",
-      required: true,
-      where: { codigo_barras_ean: { [Op.iLike]: `%${normalizedCodigo}%` } },
-    });
-  }
-
-  // Filtro por tienda: se usa para obtener los IDs que coinciden con la tienda (sin condición de cantidad aún)
+  // --- 2. Resolver tiendas (una sola vez) ---
   let tiendaIds = [];
   if (id_tienda !== undefined && id_tienda !== null && id_tienda !== "") {
     const parsedIdTienda = parseInt(id_tienda, 10);
@@ -308,112 +294,129 @@ const filterServicios = async (
       throwError("El parámetro 'id_tienda' debe ser un número entero positivo", 400);
     }
     tiendaIds.push(parsedIdTienda);
-    matchingIncludes.push({
-      model: ServicioTienda,
-      as: "tiendas_servicio",
-      required: true,
-      where: { id_tienda: parsedIdTienda },
-    });
   } else if (tienda_nombre && typeof tienda_nombre === "string" && tienda_nombre.trim()) {
     const normalizedTiendaNombre = tienda_nombre.trim();
-    // Obtenemos los ids de tienda que coinciden con el nombre (para usarlos en el filtro de stock)
     const tiendas = await Tienda.findAll({
       where: { nombre: { [Op.iLike]: `%${normalizedTiendaNombre}%` } },
       attributes: ["id_tienda"],
       raw: true,
     });
-    tiendaIds = tiendas.map(t => t.id_tienda);
+    tiendaIds = tiendas.map((t) => t.id_tienda);
     if (tiendaIds.length === 0) {
-      // Si no hay tiendas, no habrá resultados
       return { rows: [], count: 0 };
     }
-    matchingIncludes.push({
-      model: ServicioTienda,
-      as: "tiendas_servicio",
-      required: true,
-      include: [{
-        model: Tienda,
-        as: "tienda",
-        where: { nombre: { [Op.iLike]: `%${normalizedTiendaNombre}%` } },
-        required: true,
-      }],
-    });
   }
 
-  // Consulta para obtener IDs de servicios que cumplen los filtros (sin stock)
-  const matchingIdsOptions = {
-    attributes: ["id_servicio"],
-    where: whereClause,
-    order: [["id_servicio", "ASC"]],
-    distinct: true,
-    raw: true,
-  };
-  if (matchingIncludes.length > 0) {
-    matchingIdsOptions.include = matchingIncludes;
+  // --- 3. Construir condiciones EXISTS (filtrado lateral en SQL) ---
+  const sequelizeInstance = Servicio.sequelize;
+  const servicioAlias = Servicio.name;      // alias que usa Sequelize en el SQL generado
+  const codigoTable   = Codigo.getTableName();
+  const productTable  = Producto.getTableName();
+  const stTable       = ServicioTienda.getTableName();
+
+  const andConditions = [];
+
+  // 3.a Filtro por código de barras (búsqueda parcial, antes se hacía con JOIN)
+  if (codigoFilter !== undefined && codigoFilter !== null && codigoFilter !== "") {
+    const normalizedCodigo = String(codigoFilter).trim();
+    const escaped = sequelizeInstance.escape(`%${normalizedCodigo}%`);
+    andConditions.push(
+      sequelizeInstance.literal(
+        `EXISTS (
+          SELECT 1 FROM "${codigoTable}" AS "c"
+          WHERE "c"."id_servicio" = "${servicioAlias}"."id_servicio"
+            AND "c"."codigo_barras_ean" ILIKE ${escaped}
+        )`
+      )
+    );
   }
 
-  const matchingServicios = await Servicio.findAll(matchingIdsOptions);
-  let matchedIds = matchingServicios.map((item) => item.id_servicio);
+  // 3.b Filtro por tienda (id o nombre ya resuelto a tiendaIds)
+  if (tiendaIds.length > 0) {
+    const ids = tiendaIds.join(",");
+    andConditions.push(
+      sequelizeInstance.literal(
+        `EXISTS (
+          SELECT 1 FROM "${stTable}" AS "st"
+          WHERE "st"."id_servicio" = "${servicioAlias}"."id_servicio"
+            AND "st"."id_tienda" IN (${ids})
+        )`
+      )
+    );
+  }
 
-  // Si no hay coincidencias, retornar vacío
-  if (matchedIds.length === 0) {
+  // 3.c fetchProducto=false → excluir servicios que son productos
+  if (includeProductos === false) {
+    andConditions.push(
+      sequelizeInstance.literal(
+        `NOT EXISTS (
+          SELECT 1 FROM "${productTable}" AS "p"
+          WHERE "p"."id_servicio" = "${servicioAlias}"."id_servicio"
+        )`
+      )
+    );
+  }
+
+  // 3.d conStock=true + fetchProducto=true + tienda → solo productos con stock>0
+  //     (los servicios que NO son productos pasan siempre, igual que antes)
+  if (includeProductos === true && conStock === true && tiendaIds.length > 0) {
+    const ids = tiendaIds.join(",");
+    andConditions.push(
+      sequelizeInstance.literal(
+        `(
+          NOT EXISTS (
+            SELECT 1 FROM "${productTable}" AS "p2"
+            WHERE "p2"."id_servicio" = "${servicioAlias}"."id_servicio"
+          )
+          OR
+          EXISTS (
+            SELECT 1 FROM "${stTable}" AS "st2"
+            WHERE "st2"."id_servicio" = "${servicioAlias}"."id_servicio"
+              AND "st2"."id_tienda" IN (${ids})
+              AND "st2"."cantidad" > 0
+          )
+        )`
+      )
+    );
+  }
+
+  if (andConditions.length > 0) {
+    whereClause[Op.and] = andConditions;
+  }
+
+  // --- 4. COUNT en SQL (1 round-trip, sin traer filas) ---
+  const count = await Servicio.count({ where: whereClause });
+
+  if (count === 0) {
     return { rows: [], count: 0 };
   }
 
-  // Aplicar filtro de exclusión de productos si fetchProducto es false
-  if (includeProductos === false) {
-    const productosIds = await Producto.findAll({
-      attributes: ["id_servicio"],
-      raw: true,
-    }).then((rows) => rows.map((item) => item.id_servicio));
-    matchedIds = matchedIds.filter(id => !productosIds.includes(id));
-    if (matchedIds.length === 0) {
-      return { rows: [], count: 0 };
-    }
+  // --- 5. IDs paginados en SQL (1 round-trip, solo 10 filas) ---
+  //     Mantenemos el mismo orden de paginación que antes: id_servicio ASC
+  const idRows = await Servicio.findAll({
+    attributes: ["id_servicio"],
+    where: whereClause,
+    order: [["id_servicio", "ASC"]],
+    limit,
+    offset,
+    raw: true,
+  });
+
+  const pagedIds = idRows.map((r) => r.id_servicio);
+
+  if (pagedIds.length === 0) {
+    return { rows: [], count };
   }
 
-  // --- NUEVA LÓGICA: filtro de stock solo para productos ---
-  if (includeProductos === true && conStock === true && tiendaIds.length > 0) {
-    // 1. Obtener todos los IDs de servicios que son productos
-    const allProductIds = await Producto.findAll({
-      attributes: ["id_servicio"],
-      raw: true,
-    }).then(rows => rows.map(r => r.id_servicio));
-    const productIdSet = new Set(allProductIds);
-
-    // 2. Obtener los IDs de productos que tienen cantidad > 0 en alguna de las tiendas filtradas
-    const stockProductRows = await ServicioTienda.findAll({
-      attributes: ["id_servicio"],
-      where: {
-        id_tienda: { [Op.in]: tiendaIds },
-        cantidad: { [Op.gt]: 0 }
-      },
-      raw: true,
-    });
-    const stockProductIds = new Set(stockProductRows.map(r => r.id_servicio));
-
-    // 3. Filtrar matchedIds: los que son productos deben estar en stockProductIds
-    matchedIds = matchedIds.filter(id => {
-      if (productIdSet.has(id)) {
-        return stockProductIds.has(id);
-      }
-      return true; // servicios que no son productos se mantienen
-    });
-
-    if (matchedIds.length === 0) {
-      return { rows: [], count: 0 };
-    }
-  }
-
-  // Paginación y obtención de los registros completos
-  const pagedIds = matchedIds.slice(offset, offset + limit);
+  // --- 6. Detalle SOLO de la página (1 round-trip) ---
+  //     Includes: producto, tiendas_servicio (sin tienda anidada), componentes
+  //     y ofertas_que_incluyen (con producto y tiendas_servicio).
+  //     Se eliminaron "codigos" y "tienda".
   const includeList = [
     { model: Producto, as: "producto" },
-    { model: Codigo, as: "codigos" },
     {
       model: ServicioTienda,
       as: "tiendas_servicio",
-      include: [{ model: Tienda, as: "tienda" }],
     },
     {
       model: Servicio,
@@ -421,12 +424,7 @@ const filterServicios = async (
       through: { attributes: ["cantidad"] },
       include: [
         { model: Producto, as: "producto" },
-        { model: Codigo, as: "codigos" },
-        {
-          model: ServicioTienda,
-          as: "tiendas_servicio",
-          include: [{ model: Tienda, as: "tienda" }],
-        },
+        { model: ServicioTienda, as: "tiendas_servicio" },
       ],
     },
     {
@@ -435,27 +433,20 @@ const filterServicios = async (
       through: { attributes: ["cantidad"] },
       include: [
         { model: Producto, as: "producto" },
-        { model: Codigo, as: "codigos" },
-        {
-          model: ServicioTienda,
-          as: "tiendas_servicio",
-          include: [{ model: Tienda, as: "tienda" }],
-        },
+        { model: ServicioTienda, as: "tiendas_servicio" },
       ],
     },
   ];
 
-  const rows = pagedIds.length > 0
-    ? await Servicio.findAll({
-        where: { id_servicio: { [Op.in]: pagedIds } },
-        order: [["createdAt", "DESC"]],
-        include: includeList,
-      })
-    : [];
+  const rows = await Servicio.findAll({
+    where: { id_servicio: { [Op.in]: pagedIds } },
+    order: [["createdAt", "DESC"]],
+    include: includeList,
+  });
 
   return {
     rows,
-    count: matchedIds.length,
+    count,
   };
 };
 
@@ -636,12 +627,11 @@ const deleteServicio = async (id) => {
   }
 };
 
-// Actualiza module.exports para incluir deleteServicio
 module.exports = {
   createServicio,
   getServicioById,
   getServicioByCodigo,
   filterServicios,
   updateServicio,
-  deleteServicio,   // <--- agregar esta línea
+  deleteServicio,
 };
