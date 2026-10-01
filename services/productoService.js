@@ -8,6 +8,7 @@ const { Salida } = require("../models/salida");
 const { Op, Sequelize } = require("sequelize");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { throwError } = require("../helpers/errorLauncher");
 
 // Directorio donde se guardarán las imágenes
@@ -22,6 +23,31 @@ const ensureImageUploadDir = () => {
 
 // Detectar si es una URL remota
 const isRemoteImage = (value) => /^https?:\/\//i.test(value);
+
+const detectImageExtension = (buffer) => {
+  if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "png";
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "jpg";
+  if (buffer.subarray(0, 6).toString("ascii").match(/^GIF8[79]a$/)) return "gif";
+  if (buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") return "webp";
+  if (buffer.subarray(0, 2).toString("ascii") === "BM") return "bmp";
+  if (buffer.subarray(4, 8).toString("ascii") === "ftyp" && ["avif", "avis"].includes(buffer.subarray(8, 12).toString("ascii"))) return "avif";
+
+  throwError("El contenido no corresponde a una imagen PNG, JPEG, GIF, WebP, BMP o AVIF válida", 400);
+};
+
+const removeProductImageFiles = (productId, exceptFileName = null) => {
+  if (!fs.existsSync(IMAGE_UPLOAD_DIR)) return;
+
+  const legacyPrefix = `${productId}.`;
+  const hashedPrefix = `${productId}-`;
+  for (const fileName of fs.readdirSync(IMAGE_UPLOAD_DIR)) {
+    const isLegacyImage = fileName.startsWith(legacyPrefix) && /^[a-z0-9]+$/i.test(fileName.slice(legacyPrefix.length));
+    const isHashedImage = fileName.startsWith(hashedPrefix) && /^[a-f0-9]{64}\.[a-z0-9]+$/i.test(fileName.slice(hashedPrefix.length));
+    if (fileName !== exceptFileName && (isLegacyImage || isHashedImage)) {
+      fs.unlinkSync(path.join(IMAGE_UPLOAD_DIR, fileName));
+    }
+  }
+};
 
 // Parsear imagen base64 o URL
 const parseBase64Image = (imagen) => {
@@ -44,7 +70,7 @@ const parseBase64Image = (imagen) => {
   }
 
   const normalizedBase64 = base64.replace(/\s/g, "");
-  if (!normalizedBase64) {
+  if (!normalizedBase64 || !/^[A-Za-z0-9+/]*={0,2}$/.test(normalizedBase64) || normalizedBase64.length % 4 === 1) {
     throwError("La imagen base64 es inválida", 400);
   }
 
@@ -57,7 +83,7 @@ const parseBase64Image = (imagen) => {
     throwError("La imagen no puede superar 10 MB", 400);
   }
 
-  return { kind: "file", buffer };
+  return { kind: "file", buffer, extension: detectImageExtension(buffer) };
 };
 
 // Persistir imagen: guarda en disco y devuelve ruta relativa
@@ -85,9 +111,10 @@ const persistProductImage = async (imagen, productId, createdImagePaths = []) =>
   }
 
   ensureImageUploadDir();
-  const fileName = `${productId}.webp`;
+  const digest = crypto.createHash("sha256").update(parsedImage.buffer).digest("hex");
+  const fileName = `${productId}-${digest}.${parsedImage.extension}`;
   const filePath = path.join(IMAGE_UPLOAD_DIR, fileName);
-  const tempPath = path.join(IMAGE_UPLOAD_DIR, `${productId}-${Date.now()}.tmp`);
+  const tempPath = path.join(IMAGE_UPLOAD_DIR, `${productId}-${crypto.randomBytes(8).toString("hex")}.tmp`);
   const existedBefore = fs.existsSync(filePath);
 
   fs.writeFileSync(tempPath, parsedImage.buffer);
@@ -254,8 +281,8 @@ const createProducto = async (productoData, productoTiendaList, codigoList) => {
     await transaction.commit();
     return await getProductoById(newServicio.id_servicio);
   } catch (error) {
-    cleanupCreatedImages(createdImagePaths);
     if (transaction && !transaction.finished) {
+      cleanupCreatedImages(createdImagePaths);
       await transaction.rollback();
     }
     throw error;
@@ -483,15 +510,14 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
     );
 
     let imagenValue = producto.imagen;
+    let removeOldImages = false;
     if (productoData.imagen !== undefined) {
       if (productoData.imagen === null || productoData.imagen === "") {
         imagenValue = null;
-        const existingImagePath = path.join(IMAGE_UPLOAD_DIR, `${id}.webp`);
-        if (fs.existsSync(existingImagePath)) {
-          fs.unlinkSync(existingImagePath);
-        }
+        removeOldImages = true;
       } else {
         imagenValue = await persistProductImage(productoData.imagen, id, createdImagePaths);
+        removeOldImages = true;
       }
     }
 
@@ -636,10 +662,16 @@ const updateProducto = async (id, productoData, productoTiendaList, codigoList) 
     }
 
     await transaction.commit();
+    if (removeOldImages) {
+      const currentFileName = typeof imagenValue === "string" && imagenValue.startsWith("/imagenes_productos/")
+        ? path.basename(imagenValue)
+        : null;
+      removeProductImageFiles(id, currentFileName);
+    }
     return await getProductoById(id);
   } catch (error) {
-    cleanupCreatedImages(createdImagePaths);
     if (transaction && !transaction.finished) {
+      cleanupCreatedImages(createdImagePaths);
       await transaction.rollback();
     }
     throw error;
@@ -700,12 +732,8 @@ const deleteProducto = async (id) => {
     await servicio.destroy({ transaction });
 
     // 6. (Opcional) Eliminar archivo de imagen si existe
-    const imagePath = path.join(IMAGE_UPLOAD_DIR, `${id}.webp`);
-    if (fs.existsSync(imagePath)) {
-      fs.unlinkSync(imagePath);
-    }
-
     await transaction.commit();
+    removeProductImageFiles(id);
   } catch (error) {
     await transaction.rollback();
     throw error;
