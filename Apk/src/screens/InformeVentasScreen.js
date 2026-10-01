@@ -213,11 +213,6 @@ const InformeVentasContent = () => {
         apiFilters.fecha_hasta = `${apiFilters.fecha_hasta}T23:59:59`;
       }
 
-      console.log('Filters being sent to API:', apiFilters);
-      console.log('id_usuario value:', apiFilters.id_usuario, 'type:', typeof apiFilters.id_usuario);
-      console.log('forma_cobro value:', apiFilters.forma_cobro, 'type:', typeof apiFilters.forma_cobro);
-      console.log('id_tienda value:', apiFilters.id_tienda, 'type:', typeof apiFilters.id_tienda);
-      console.log('nombre_servicio value:', apiFilters.nombre_servicio, 'type:', typeof apiFilters.nombre_servicio);
 
       // Fetch all ventas with pagination
       let allVentas = [];
@@ -238,26 +233,20 @@ const InformeVentasContent = () => {
       }
 
       // Apply frontend filtering since backend might not be filtering correctly
-      console.log('Total ventas before frontend filtering:', allVentas.length);
       
       if (filters.id_usuario) {
-        console.log('Filtering by id_usuario:', filters.id_usuario);
         allVentas = allVentas.filter(v => 
           v.operaciones && v.operaciones.some(op => op.usuario && op.usuario.id_usuario === parseInt(filters.id_usuario))
         );
-        console.log('After filtering by usuario:', allVentas.length);
       }
       
       if (filters.forma_cobro) {
-        console.log('Filtering by forma_cobro:', filters.forma_cobro);
         allVentas = allVentas.filter(v => 
           v.operaciones && v.operaciones.some(op => op.cuenta && op.cuenta.tipo_cuenta === filters.forma_cobro)
         );
-        console.log('After filtering by forma_cobro:', allVentas.length);
       }
       
       if (filters.nombre_servicio) {
-        console.log('Filtering by nombre_servicio:', filters.nombre_servicio);
         allVentas = allVentas.filter(v => 
           v.ventas && v.ventas.some(venta => 
             venta.servicioTienda && 
@@ -265,21 +254,17 @@ const InformeVentasContent = () => {
             venta.servicioTienda.servicio.nombre === filters.nombre_servicio
           )
         );
-        console.log('After filtering by nombre_servicio:', allVentas.length);
       }
       
       if (filters.id_tienda) {
-        console.log('Filtering by id_tienda:', filters.id_tienda);
         allVentas = allVentas.filter(v => 
           v.ventas && v.ventas.some(venta => 
             venta.servicioTienda && 
             venta.servicioTienda.id_tienda === parseInt(filters.id_tienda)
           )
         );
-        console.log('After filtering by id_tienda:', allVentas.length);
       }
       
-      console.log('Total ventas after frontend filtering:', allVentas.length);
 
       setLoadingProgress(80);
       setLoadingMessage('Procesando datos...');
