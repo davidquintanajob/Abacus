@@ -636,7 +636,30 @@ const ProductoFormContent = () => {
     }
   };
 
+  const calculateProfitMargin = () => {
+    const precioCup = formData.precio_cup_general !== null && formData.precio_cup_general !== ''
+      ? (typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : (isNaN(parseFloat(formData.precio_cup_general)) ? 0 : parseFloat(formData.precio_cup_general)))
+      : 0;
+    const precioUsd = formData.precio_usd_general !== null && formData.precio_usd_general !== ''
+      ? (typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : (isNaN(parseFloat(formData.precio_usd_general)) ? 0 : parseFloat(formData.precio_usd_general)))
+      : 0;
+    const costoCup = canViewCosts ? (typeof formData.costo_cup_general === 'number' ? formData.costo_cup_general : (isNaN(parseFloat(formData.costo_cup_general)) ? 0 : parseFloat(formData.costo_cup_general))) : 0;
+    const costoUsd = canViewCosts ? (typeof formData.costo_usd_general === 'number' ? formData.costo_usd_general : (isNaN(parseFloat(formData.costo_usd_general)) ? 0 : parseFloat(formData.costo_usd_general))) : 0;
+
+    const gananciaCup = precioCup - costoCup;
+    const gananciaUsd = precioUsd - costoUsd;
+
+    const porcentajeGananciaCup = precioCup > 0 ? (gananciaCup / precioCup) * 100 : 0;
+    const porcentajeGananciaUsd = precioUsd > 0 ? (gananciaUsd / precioUsd) * 100 : 0;
+
+    return {
+      porcentajeGananciaCup: !isNaN(porcentajeGananciaCup) ? porcentajeGananciaCup : 0,
+      porcentajeGananciaUsd: !isNaN(porcentajeGananciaUsd) ? porcentajeGananciaUsd : 0
+    };
+  };
+
   const handleSave = async () => {
+    setIsSaving(true);
     if (!formData.nombre.trim()) {
       showToast({ type: 'warning', message: 'El nombre es requerido' });
       return;
@@ -723,8 +746,6 @@ const ProductoFormContent = () => {
     }
 
     try {
-      setIsSaving(true);
-
       const dataToSend = {
         nombre: formData.nombre,
         categoria: formData.categoria,
@@ -2055,6 +2076,17 @@ const ProductoFormContent = () => {
           )}
 
           {(!isViewMode || canEditProduct) && !isOfflineMode && (
+            <View style={styles.profitMarginContainer}>
+              <Text style={[styles.profitMarginLabel, { color: colors.outline }]}>% Ganancia</Text>
+              <View style={[styles.profitBadge, { backgroundColor: calculateProfitMargin().porcentajeGananciaCup >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: calculateProfitMargin().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                <Text style={[styles.profitMarginValue, { color: calculateProfitMargin().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                  {calculateProfitMargin().porcentajeGananciaCup.toFixed(2)}%
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {(!isViewMode || canEditProduct) && !isOfflineMode && (
             <View style={styles.buttonGroup}>
               <TouchableOpacity
                 style={[styles.button, styles.cancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
@@ -3129,5 +3161,30 @@ const createStyles = (responsive) => StyleSheet.create({
     width: responsive.responsiveWidth(80),
     height: responsive.responsiveHeight(80),
     borderRadius: 8,
+  },
+  profitMarginContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: responsive.responsivePadding(8),
+    paddingHorizontal: responsive.responsivePadding(12),
+    borderRadius: 8,
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  profitMarginLabel: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+  },
+  profitBadge: {
+    paddingHorizontal: responsive.responsivePadding(12),
+    paddingVertical: responsive.responsivePadding(6),
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  profitMarginValue: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '600',
+    fontFamily: 'Inter',
   },
 });

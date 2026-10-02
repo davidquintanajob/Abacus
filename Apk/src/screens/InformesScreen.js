@@ -42,8 +42,8 @@ const InformesContent = () => {
       subtitle: 'Análisis detallado de ventas',
       icon: 'cart-outline',
       color: '#2196F3',
-      route: 'InformeVentas',
-      available: true,
+      route: null,
+      available: false,
     },
     {
       id: 'perdidas',

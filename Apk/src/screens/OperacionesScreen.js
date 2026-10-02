@@ -581,11 +581,10 @@ const OperacionesContent = () => {
         cambio_moneda: cambio,
       };
 
-      // Execute both operations
-      await Promise.all([
-        createOperacion(operacionOrigen),
-        createOperacion(operacionDestino),
-      ]);
+      // Execute operations sequentially: first retiro, then ingreso
+      // If retiro fails, ingreso should not be created
+      await createOperacion(operacionOrigen);
+      await createOperacion(operacionDestino);
 
       showToast({ type: 'success', message: 'Transferencia realizada correctamente' });
       setShowTransferModal(false);

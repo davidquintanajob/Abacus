@@ -14,6 +14,7 @@ import { useOffline } from '../context/OfflineContext';
 import { createEntrada, updateEntrada, getEntradaById, getEntradas, createEntradasBulk } from '../services/entradaService';
 import { getProductos, getProductoById, updateProducto } from '../services/productoService';
 import { getTiendas } from '../services/tiendaService';
+import { getCuentas, createOperacion } from '../services/cuentaService';
 import configService from '../services/configService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
@@ -95,6 +96,8 @@ const EntradaFormContent = () => {
   const [showFechaEntradaPicker, setShowFechaEntradaPicker] = useState(false);
   const [showExpirationAlert, setShowExpirationAlert] = useState(false);
   const [expirationAlertData, setExpirationAlertData] = useState(null);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawModalData, setWithdrawModalData] = useState(null);
 
   // Función para calcular el umbral dinámico
   const calculateThreshold = (vidaUtil, percentage, minDays, maxDays) => {
@@ -1016,6 +1019,42 @@ const EntradaFormContent = () => {
       } else {
         await createEntrada(entradaData);
         showToast({ type: 'success', message: 'Entrada creada correctamente' });
+        
+        // Check if auto-withdraw is enabled and ask user
+        if (config.autoWithdrawOnEntry && isAddMode && !isEditMode) {
+          const tiendaId = formData.tienda.id_tienda;
+          const productoNombre = formData.producto.nombre;
+          const cantidad = formData.cantidad_entrada;
+          const costoCup = parseFloat(formData.costo_cup) || 0;
+          const costoUsd = parseFloat(formData.costo_usd) || 0;
+          
+          // Calculate total cost
+          const totalCostCup = cantidad * costoCup;
+          const totalCostUsd = cantidad * costoUsd;
+          
+          try {
+            // Fetch accounts related to the tienda
+            const cuentasResponse = await getCuentas({ id_tienda: tiendaId });
+            const cuentas = cuentasResponse.data || [];
+            
+            if (cuentas.length > 0) {
+              // Show modal instead of alert
+              setWithdrawModalData({
+                tiendaId,
+                cuentas,
+                defaultMotivo: `compra de ${cantidad} unidades de ${productoNombre}`,
+                defaultTipo: 'Retiro',
+                defaultCantidadCup: totalCostCup,
+                defaultCantidadUsd: totalCostUsd
+              });
+              setShowWithdrawModal(true);
+              return; // Don't navigate yet, wait for user response
+            }
+          } catch (error) {
+            console.error('[executeSave] Error fetching cuentas:', error);
+            // Continue with normal navigation if error fetching cuentas
+          }
+        }
       }
       
       // If coming from modal, navigate to ProductosScreen instead of going back
@@ -2914,6 +2953,73 @@ const EntradaFormContent = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Modal de Retiro Automático */}
+      <Modal
+        visible={showWithdrawModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowWithdrawModal(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.5)' }]}>
+          <View style={[styles.smallModalContent, { backgroundColor: colors.surface }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.outlineVariant }]}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                Retiro Automático
+              </Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setShowWithdrawModal(false)}
+              >
+                <Ionicons name="close" size={24} color={colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={[styles.modalMessage, { color: colors.onSurface }]}>
+                ¿Desea hacer una operación de retiro de una cuenta relacionada a la tienda por esta entrada?
+              </Text>
+            </View>
+
+            <View style={styles.modalButtonContainer}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonSecondary, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
+                onPress={() => {
+                  setShowWithdrawModal(false);
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Entradas' }],
+                  });
+                }}
+              >
+                <Text style={[styles.modalButtonText, { color: colors.onSurface }]}>
+                  No
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonPrimary, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  setShowWithdrawModal(false);
+                  navigation.navigate('OperacionForm', {
+                    mode: 'add',
+                    tiendaId: withdrawModalData.tiendaId,
+                    cuentas: withdrawModalData.cuentas,
+                    defaultMotivo: withdrawModalData.defaultMotivo,
+                    defaultTipo: withdrawModalData.defaultTipo,
+                    defaultCantidadCup: withdrawModalData.defaultCantidadCup,
+                    defaultCantidadUsd: withdrawModalData.defaultCantidadUsd,
+                    fromEntrada: true
+                  });
+                }}
+              >
+                <Text style={[styles.modalButtonText, { color: '#fff' }]}>
+                  Sí
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -3224,6 +3330,22 @@ const createStyles = (responsive) => StyleSheet.create({
     overflow: 'hidden',
     flexDirection: 'column',
   },
+  smallModalContent: {
+    width: '100%',
+    maxWidth: responsive.responsiveWidth(400),
+    borderRadius: 16,
+    overflow: 'hidden',
+    flexDirection: 'column',
+  },
+  modalBody: {
+    padding: responsive.responsivePadding(20),
+  },
+  modalMessage: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontFamily: 'Inter',
+    lineHeight: responsive.responsiveFontSize(24),
+    textAlign: 'center',
+  },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -3234,7 +3356,7 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   modalTitle: {
     fontSize: responsive.responsiveFontSize(18),
-    fontWeight: '600',
+    fontWeight: 'bold',
     fontFamily: 'Inter',
   },
   closeButton: {
@@ -3424,6 +3546,12 @@ const createStyles = (responsive) => StyleSheet.create({
     fontFamily: 'Inter',
   },
   modalFooter: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(12),
+    padding: responsive.responsivePadding(16),
+    borderTopWidth: 1,
+  },
+  modalButtonContainer: {
     flexDirection: 'row',
     gap: responsive.responsiveMargin(12),
     padding: responsive.responsivePadding(16),
