@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Modal, KeyboardAvoidingView, Platform, Keyboard, Dimensions, Image, Vibration, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Modal, KeyboardAvoidingView, Platform, Keyboard, Dimensions, Image, Vibration, ActivityIndicator, BackHandler } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -111,8 +111,18 @@ const SalesContent = () => {
   const [showPriceEditModal, setShowPriceEditModal] = useState(false);
   const [editingItemIndex, setEditingItemIndex] = useState(null);
   const [editingItemPrices, setEditingItemPrices] = useState({ cup: '', usd: '' });
+  const [originalItemPrices, setOriginalItemPrices] = useState({ cup: 0, usd: 0 });
+  const [priceChangePending, setPriceChangePending] = useState(false);
 
   const barcodeEngineRef = useRef(null);
+  const backPressedCount = useRef(0);
+  const backPressedTimer = useRef(null);
+  const saleItemsRef = useRef(saleItems);
+
+  // Keep saleItemsRef in sync with saleItems
+  useEffect(() => {
+    saleItemsRef.current = saleItems;
+  }, [saleItems]);
 
   useEffect(() => {
     barcodeEngineRef.current = new BarcodeEngine('SALES');
@@ -121,6 +131,37 @@ const SalesContent = () => {
     loadConfig();
     loadInitialData();
     loadApiBaseUrl();
+
+    // Handler for back button press
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // If there are products in the sale, require double press
+      if (saleItemsRef.current.length > 0) {
+        if (backPressedCount.current === 0) {
+          // First press - show toast
+          backPressedCount.current = 1;
+          showToast({ type: 'warning', message: 'Presiona nuevamente para salir (perderás los productos de la venta)' });
+          
+          // Reset count after 2 seconds
+          if (backPressedTimer.current) {
+            clearTimeout(backPressedTimer.current);
+          }
+          backPressedTimer.current = setTimeout(() => {
+            backPressedCount.current = 0;
+          }, 2000);
+          
+          return true; // Prevent default back behavior
+        } else {
+          // Second press - allow exit
+          backPressedCount.current = 0;
+          if (backPressedTimer.current) {
+            clearTimeout(backPressedTimer.current);
+          }
+          return false; // Allow default back behavior
+        }
+      }
+      // No products - allow normal exit
+      return false;
+    });
 
     // Restore sale state when screen comes into focus
     const unsubscribe = navigation.addListener('focus', async () => {
@@ -169,6 +210,10 @@ const SalesContent = () => {
       if (sound) {
         sound.unloadAsync();
       }
+      if (backPressedTimer.current) {
+        clearTimeout(backPressedTimer.current);
+      }
+      backHandler.remove();
       unsubscribe();
     };
   }, []);
@@ -340,19 +385,40 @@ const SalesContent = () => {
       cup: item.precio_cup?.toString() || '',
       usd: item.precio_usd?.toString() || ''
     });
+    setOriginalItemPrices({
+      cup: item.precio_cup || 0,
+      usd: item.precio_usd || 0
+    });
     setShowPriceEditModal(true);
   };
 
   const handleSavePriceEdit = () => {
     if (editingItemIndex !== null) {
+      const newCup = parseFloat(editingItemPrices.cup) || 0;
+      const newUsd = parseFloat(editingItemPrices.usd) || 0;
+      
+      // Check if price changed from original
+      const priceChanged = newCup !== originalItemPrices.cup || newUsd !== originalItemPrices.usd;
+      
+      if (priceChanged) {
+        // Show toast indicating user must add a reason
+        showToast({ 
+          type: 'warning', 
+          message: 'Debe agregar un motivo a la venta por el cambio de precio del producto' 
+        });
+        setPriceChangePending(true);
+      }
+      
+      // Save the price change
       const newItems = [...saleItems];
-      newItems[editingItemIndex].precio_cup = parseFloat(editingItemPrices.cup) || 0;
-      newItems[editingItemIndex].precio_usd = parseFloat(editingItemPrices.usd) || 0;
+      newItems[editingItemIndex].precio_cup = newCup;
+      newItems[editingItemIndex].precio_usd = newUsd;
       setSaleItems(newItems);
+      
+      setShowPriceEditModal(false);
+      setEditingItemIndex(null);
+      setEditingItemPrices({ cup: '', usd: '' });
     }
-    setShowPriceEditModal(false);
-    setEditingItemIndex(null);
-    setEditingItemPrices({ cup: '', usd: '' });
   };
 
   const handleCancelPriceEdit = () => {
@@ -1226,6 +1292,21 @@ const SalesContent = () => {
 
   const processSale = async (efectivoCup, efectivoUsd, transferenciaCup, transferenciaUsd, totalOriginalCUP, totalOriginalUSD) => {
     try {
+      // Check if there are pending price changes and no reason/motivo provided
+      if (priceChangePending && (!ventaNota || ventaNota.trim() === '')) {
+        showToast({ 
+          type: 'warning', 
+          message: 'Debe agregar un motivo a la venta por el cambio de precio del producto' 
+        });
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // Reset price change pending flag since user has provided a reason
+      if (priceChangePending && ventaNota && ventaNota.trim() !== '') {
+        setPriceChangePending(false);
+      }
+
       setIsSubmitting(true);
 
       // Round all values to 5 decimals to match backend precision and handle rounding discrepancies

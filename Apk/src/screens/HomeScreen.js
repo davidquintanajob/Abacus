@@ -714,60 +714,62 @@ const HomeContent = () => {
           </View>
         </View>
 
-        {/* Estadísticas */}
-        <View style={styles.statsSection}>
-          <Text style={[styles.sectionTitle, { color: colors.outline }]}>
-            RESUMEN
-          </Text>
-          <Card style={[styles.statsCard, { backgroundColor: colors.surface }]}>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <View style={[styles.statItemIconContainer, { backgroundColor: `${colors.primary}15` }]}>
-                  <Ionicons name="cube" size={responsive.responsiveWidth(20)} color={colors.primary} />
+        {/* Estadísticas - Solo para administradores */}
+        {isAdmin && (
+          <View style={styles.statsSection}>
+            <Text style={[styles.sectionTitle, { color: colors.outline }]}>
+              RESUMEN
+            </Text>
+            <Card style={[styles.statsCard, { backgroundColor: colors.surface }]}>
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <View style={[styles.statItemIconContainer, { backgroundColor: `${colors.primary}15` }]}>
+                    <Ionicons name="cube" size={responsive.responsiveWidth(20)} color={colors.primary} />
+                  </View>
+                  <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
+                    {loadingSummary ? '...' : summaryData.cantidad_productos || 0}
+                  </Text>
+                  <Text style={[styles.statItemLabel, { color: colors.outline }]}>
+                    Productos en stock
+                  </Text>
                 </View>
-                <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
-                  {loadingSummary ? '...' : summaryData.cantidad_productos || 0}
-                </Text>
-                <Text style={[styles.statItemLabel, { color: colors.outline }]}>
-                  Productos en stock
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <View style={[styles.statItemIconContainer, { backgroundColor: '#16A34A15' }]}>
-                  <Ionicons name="cart" size={responsive.responsiveWidth(20)} color="#16A34A" />
+                <View style={styles.statItem}>
+                  <View style={[styles.statItemIconContainer, { backgroundColor: '#16A34A15' }]}>
+                    <Ionicons name="cart" size={responsive.responsiveWidth(20)} color="#16A34A" />
+                  </View>
+                  <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
+                    {loadingSummary ? '...' : (summaryData.total_ventas_cup || 0).toFixed(0)}
+                  </Text>
+                  <Text style={[styles.statItemLabel, { color: colors.outline }]}>
+                    Ventas hoy
+                  </Text>
                 </View>
-                <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
-                  {loadingSummary ? '...' : (summaryData.total_ventas_cup || 0).toFixed(0)}
-                </Text>
-                <Text style={[styles.statItemLabel, { color: colors.outline }]}>
-                  Ventas hoy
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <View style={[styles.statItemIconContainer, { backgroundColor: `${colors.secondary}15` }]}>
-                  <Ionicons name="cash" size={responsive.responsiveWidth(20)} color={colors.secondary} />
+                <View style={styles.statItem}>
+                  <View style={[styles.statItemIconContainer, { backgroundColor: `${colors.secondary}15` }]}>
+                    <Ionicons name="cash" size={responsive.responsiveWidth(20)} color={colors.secondary} />
+                  </View>
+                  <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
+                    {loadingSummary ? '...' : formatCurrency(summaryData.ganancia_cup || 0)}
+                  </Text>
+                  <Text style={[styles.statItemLabel, { color: colors.outline }]}>
+                    Ganancia hoy (CUP)
+                  </Text>
                 </View>
-                <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
-                  {loadingSummary ? '...' : formatCurrency(summaryData.ganancia_cup || 0)}
-                </Text>
-                <Text style={[styles.statItemLabel, { color: colors.outline }]}>
-                  Ganancia hoy (CUP)
-                </Text>
-              </View>
-              <View style={styles.statItem}>
-                <View style={[styles.statItemIconContainer, { backgroundColor: '#185FA515' }]}>
-                  <Ionicons name="people" size={responsive.responsiveWidth(20)} color="#185FA5" />
+                <View style={styles.statItem}>
+                  <View style={[styles.statItemIconContainer, { backgroundColor: '#185FA515' }]}>
+                    <Ionicons name="people" size={responsive.responsiveWidth(20)} color="#185FA5" />
+                  </View>
+                  <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
+                    {loadingSummary ? '...' : summaryData.usuarios_activos || 0}
+                  </Text>
+                  <Text style={[styles.statItemLabel, { color: colors.outline }]}>
+                    Usuarios activos
+                  </Text>
                 </View>
-                <Text style={[styles.statItemValue, { color: colors.onSurface }]}>
-                  {loadingSummary ? '...' : summaryData.usuarios_activos || 0}
-                </Text>
-                <Text style={[styles.statItemLabel, { color: colors.outline }]}>
-                  Usuarios activos
-                </Text>
               </View>
-            </View>
-          </Card>
-        </View>
+            </Card>
+          </View>
+        )}
 
         {/* Sección de Soporte */}
         <View style={styles.supportSection}>

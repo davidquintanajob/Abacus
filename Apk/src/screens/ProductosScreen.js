@@ -95,7 +95,8 @@ const ProductosContent = () => {
     costo_usd: false,
     nota: false,
     cantidad: false,
-    sufijo: false
+    sufijo: false,
+    imagen: false
   });
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
@@ -162,30 +163,39 @@ const ProductosContent = () => {
         return;
       }
       if (isInitializedRef.current) {
-        // Restore saved filters from AsyncStorage
-        const restoreFilters = async () => {
+        // Restore saved state from AsyncStorage
+        const restoreState = async () => {
           try {
-            const savedFilters = await AsyncStorage.getItem('productos_filters');
-            if (savedFilters) {
-              const parsedFilters = JSON.parse(savedFilters);
-              setFilters(parsedFilters);
-              fetchProductos(null, parsedFilters);
+            const savedState = await AsyncStorage.getItem('productos_state');
+            if (savedState) {
+              const parsedState = JSON.parse(savedState);
+              setFilters(parsedState.filters);
+              setPagination(prev => ({ ...prev, currentPage: parsedState.pagination.currentPage }));
+              fetchProductos(null, parsedState.filters);
             } else {
-              // Restore user's tienda filter if it's empty and user has a tienda
-              const shouldRestore = !filtersRef.current.id_tienda && userTiendaRef.current;
-              if (shouldRestore) {
-                setFilters(prev => ({ ...prev, id_tienda: userTiendaRef.current.toString() }));
-                fetchProductos(userTiendaRef.current.toString());
+              // Fallback to old filters key for backwards compatibility
+              const savedFilters = await AsyncStorage.getItem('productos_filters');
+              if (savedFilters) {
+                const parsedFilters = JSON.parse(savedFilters);
+                setFilters(parsedFilters);
+                fetchProductos(null, parsedFilters);
               } else {
-                fetchProductos();
+                // Restore user's tienda filter if it's empty and user has a tienda
+                const shouldRestore = !filtersRef.current.id_tienda && userTiendaRef.current;
+                if (shouldRestore) {
+                  setFilters(prev => ({ ...prev, id_tienda: userTiendaRef.current.toString() }));
+                  fetchProductos(userTiendaRef.current.toString());
+                } else {
+                  fetchProductos();
+                }
               }
             }
           } catch (error) {
-            console.error('Error restoring filters:', error);
+            console.error('Error restoring state:', error);
             fetchProductos();
           }
         };
-        restoreFilters();
+        restoreState();
       }
     }, [])
   );
@@ -423,10 +433,14 @@ const ProductosContent = () => {
     );
   };
 
-  const handleProductoPress = (producto) => {
-    // Save current filters before navigating
-    AsyncStorage.setItem('productos_filters', JSON.stringify(filters)).catch(err => {
-      console.error('Error saving filters:', err);
+  const handleOpenProducto = (producto) => {
+    // Save current filters and pagination before navigating
+    const stateToSave = {
+      filters,
+      pagination: { currentPage: pagination.currentPage }
+    };
+    AsyncStorage.setItem('productos_state', JSON.stringify(stateToSave)).catch(err => {
+      console.error('Error saving state:', err);
     });
     
     const mode = canEdit ? 'edit' : 'view';
@@ -439,9 +453,13 @@ const ProductosContent = () => {
       return;
     }
     
-    // Save current filters before navigating
-    AsyncStorage.setItem('productos_filters', JSON.stringify(filters)).catch(err => {
-      console.error('Error saving filters:', err);
+    // Save current filters and pagination before navigating
+    const stateToSave = {
+      filters,
+      pagination: { currentPage: pagination.currentPage }
+    };
+    AsyncStorage.setItem('productos_state', JSON.stringify(stateToSave)).catch(err => {
+      console.error('Error saving state:', err);
     });
     
     navigation.navigate('ProductoForm', { producto, mode: 'edit' });
@@ -453,9 +471,13 @@ const ProductosContent = () => {
       return;
     }
     
-    // Save current filters before navigating
-    AsyncStorage.setItem('productos_filters', JSON.stringify(filters)).catch(err => {
-      console.error('Error saving filters:', err);
+    // Save current filters and pagination before navigating
+    const stateToSave = {
+      filters,
+      pagination: { currentPage: pagination.currentPage }
+    };
+    AsyncStorage.setItem('productos_state', JSON.stringify(stateToSave)).catch(err => {
+      console.error('Error saving state:', err);
     });
     
     navigation.navigate('ProductoForm', { mode: 'add' });
@@ -528,7 +550,24 @@ const ProductosContent = () => {
         // Apply filters locally in offline mode
         allProductos = await storageService.filterProductosLocal(filters);
       } else {
-        const data = await getProductos(filters, 1, 10000);
+        // Build export filters - only remove empty filters
+        const exportFilters = { ...filters };
+        if (exportFilters.cantidad_min === '' || exportFilters.cantidad_min === undefined) {
+          delete exportFilters.cantidad_min;
+        }
+        if (exportFilters.cantidad_max === '' || exportFilters.cantidad_max === undefined) {
+          delete exportFilters.cantidad_max;
+        }
+        
+        // Add cantidad_min=0 only if no cantidad filters and no tienda filter
+        // This is needed because backend only includes tiendas_servicio when cantidad filters are present
+        if (!exportFilters.cantidad_min && !exportFilters.cantidad_max && !exportFilters.id_tienda) {
+          exportFilters.cantidad_min = '0';
+        }
+        
+        // Fetch all products with a high limit instead of relying on count
+        // Use a very high limit to get all products at once
+        const data = await getProductos(exportFilters, 1, 10000);
         allProductos = data.data || [];
       }
 
@@ -1101,6 +1140,7 @@ const ProductosContent = () => {
       if (selectedFields.nota) fieldCount++;
       if (selectedFields.cantidad) fieldCount++;
       if (selectedFields.sufijo) fieldCount++;
+      if (selectedFields.imagen) fieldCount++;
       
       // Grid settings (3x3 for 6 or fewer fields, 3x2 for more than 6 fields)
       const cols = 3;
@@ -1121,6 +1161,12 @@ const ProductosContent = () => {
           // QR code takes 55% of cell width
           const qrSize = cellWidth * 0.55;
           contentHeight += qrSize + 8; // QR + small gap
+        }
+        
+        if (selectedFields.imagen && producto.producto?.imagen) {
+          // Image takes 40% of cell width
+          const imageSize = cellWidth * 0.4;
+          contentHeight += imageSize + 8; // Image + small gap
         }
         
         // Calculate text height precisely
@@ -1168,7 +1214,101 @@ const ProductosContent = () => {
         
         let textY;
         
-        if (selectedFields.codigo_qr_barra) {
+        if (selectedFields.imagen && producto.producto?.imagen) {
+          // Handle image - could be URL or base64
+          let imageUri = producto.producto.imagen;
+          let pdfImage;
+          
+          try {
+            // If it's a remote URL, download it
+            if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
+              const response = await fetch(imageUri);
+              const blob = await response.blob();
+              const arrayBuffer = await blob.arrayBuffer();
+              
+              // Try to embed as PNG first, then JPEG
+              try {
+                pdfImage = await pdfDoc.embedPng(arrayBuffer);
+              } catch (e) {
+                pdfImage = await pdfDoc.embedJpg(arrayBuffer);
+              }
+            } else if (imageUri.startsWith('data:image')) {
+              // Base64 image
+              const base64Data = imageUri.split(',')[1];
+              const binaryString = atob(base64Data);
+              const arrayBuffer = new ArrayBuffer(binaryString.length);
+              const uint8Array = new Uint8Array(arrayBuffer);
+              for (let i = 0; i < binaryString.length; i++) {
+                uint8Array[i] = binaryString.charCodeAt(i);
+              }
+              
+              try {
+                pdfImage = await pdfDoc.embedPng(arrayBuffer);
+              } catch (e) {
+                pdfImage = await pdfDoc.embedJpg(arrayBuffer);
+              }
+            } else if (imageUri.startsWith('/')) {
+              // Relative path from backend - construct full URL
+              const fullImageUrl = `${apiBaseUrl}${imageUri}`;
+              
+              // Download using FileSystem for React Native compatibility
+              const downloadResult = await FileSystem.downloadAsync(
+                fullImageUrl,
+                FileSystem.cacheDirectory + `temp_image_${Date.now()}.webp`
+              );
+              
+              const localFile = await FileSystem.readAsStringAsync(downloadResult.uri, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+              const binaryString = atob(localFile);
+              const arrayBuffer = new ArrayBuffer(binaryString.length);
+              const uint8Array = new Uint8Array(arrayBuffer);
+              for (let i = 0; i < binaryString.length; i++) {
+                uint8Array[i] = binaryString.charCodeAt(i);
+              }
+              
+              try {
+                pdfImage = await pdfDoc.embedPng(arrayBuffer);
+              } catch (e) {
+                pdfImage = await pdfDoc.embedJpg(arrayBuffer);
+              }
+            } else {
+              // Local file path
+              const localFile = await FileSystem.readAsStringAsync(imageUri, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+              const binaryString = atob(localFile);
+              const arrayBuffer = new ArrayBuffer(binaryString.length);
+              const uint8Array = new Uint8Array(arrayBuffer);
+              for (let i = 0; i < binaryString.length; i++) {
+                uint8Array[i] = binaryString.charCodeAt(i);
+              }
+              
+              try {
+                pdfImage = await pdfDoc.embedPng(arrayBuffer);
+              } catch (e) {
+                pdfImage = await pdfDoc.embedJpg(arrayBuffer);
+              }
+            }
+            
+            // Draw image
+            const imageSize = cellWidth * 0.4;
+            const imageX = x + (cellWidth - imageSize) / 2;
+            const imageY = y + cellHeight - imageSize - 10;
+            
+            currentPage.drawImage(pdfImage, {
+              x: imageX,
+              y: imageY,
+              width: imageSize,
+              height: imageSize,
+            });
+            
+            textY = imageY - 18;
+          } catch (error) {
+            // If image fails to load, skip it and continue with text
+            textY = y + cellHeight - 20;
+          }
+        } else if (selectedFields.codigo_qr_barra) {
           // Generate QR code with only the product barcode
           const qrString = producto.codigos?.[0]?.codigo_barras_ean || 'N/A';
           
@@ -1200,7 +1340,7 @@ const ProductosContent = () => {
           
           textY = qrY - 18;
         } else {
-          // No QR code, start text from top
+          // No QR code or image, start text from top
           textY = y + cellHeight - 20;
         }
         
@@ -1343,10 +1483,17 @@ const ProductosContent = () => {
         if (selectedFields.cantidad) productInfo += `<p><strong>Cantidad:</strong> ${calculateAbsoluteTotalQuantity(producto)}</p>`;
         if (selectedFields.sufijo) productInfo += `<p><strong>Sufijo:</strong> ${producto.producto?.sufijo || 'N/A'}</p>`;
 
+        // Prepare product image if selected
+        let productImage = '';
+        if (selectedFields.imagen && producto.producto?.imagen) {
+          productImage = `<img class="product-image" src="${producto.producto.imagen}" />`;
+        }
+
         // Only include barcode image if field is selected
         if (selectedFields.codigo_qr_barra) {
           barcodeContent += `
             <div class="barcode-item">
+              ${productImage}
               <img class="barcode-image" src="${barcodeImageBase64}" />
               <div class="product-info">
                 ${productInfo}
@@ -1356,6 +1503,7 @@ const ProductosContent = () => {
         } else {
           barcodeContent += `
             <div class="barcode-item">
+              ${productImage}
               <div class="product-info">
                 ${productInfo}
               </div>
@@ -1390,6 +1538,13 @@ const ProductosContent = () => {
                 max-width: 150px;
                 height: auto;
                 margin-bottom: 8px;
+              }
+              .product-image {
+                width: 100%;
+                max-width: 100px;
+                height: auto;
+                margin-bottom: 8px;
+                object-fit: contain;
               }
               .product-info {
                 font-size: 14px;
@@ -2159,7 +2314,7 @@ const ProductosContent = () => {
                 return (
                   <TouchableOpacity
                     key={producto.id_servicio}
-                    onPress={() => handleProductoPress(producto)}
+                    onPress={() => handleOpenProducto(producto)}
                     activeOpacity={0.7}
                   >
                     <Card style={[styles.productoCard, { backgroundColor: colors.surface }]}>
@@ -2560,6 +2715,10 @@ const ProductosContent = () => {
                 {Object.keys(selectedFields).map((field) => {
                   // Only show codigo_qr_barra field for barcode or qr exports
                   if (field === 'codigo_qr_barra' && exportType !== 'barcode' && exportType !== 'qr') {
+                    return null;
+                  }
+                  // Only show imagen field for barcode or qr exports
+                  if (field === 'imagen' && exportType !== 'barcode' && exportType !== 'qr') {
                     return null;
                   }
                   return (

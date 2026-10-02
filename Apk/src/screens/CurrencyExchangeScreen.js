@@ -128,6 +128,7 @@ const CurrencyExchangeContent = () => {
     almacenero: false,
     economico: false,
   });
+  const [autoWithdrawOnEntry, setAutoWithdrawOnEntry] = useState(false);
   const [showEntradaModalAfterProductCreation, setShowEntradaModalAfterProductCreation] = useState(false);
   const [showPermissions, setShowPermissions] = useState(false);
   const [showEntradaPermissions, setShowEntradaPermissions] = useState(false);
@@ -289,6 +290,9 @@ const CurrencyExchangeContent = () => {
       }
       if (data.autoApplySuggestedCost) {
         setAutoApplySuggestedCost(data.autoApplySuggestedCost);
+      }
+      if (data.autoWithdrawOnEntry !== undefined) {
+        setAutoWithdrawOnEntry(data.autoWithdrawOnEntry);
       }
       if (data.showEntradaModalAfterProductCreation !== undefined) {
         setShowEntradaModalAfterProductCreation(data.showEntradaModalAfterProductCreation);
@@ -779,6 +783,24 @@ const CurrencyExchangeContent = () => {
     } catch (error) {
       showToast({ type: 'error', message: 'Error al actualizar configuración de costo promedio' });
       setApplyWeightedAverageCost(applyWeightedAverageCost);
+    }
+  };
+
+  const toggleAutoWithdrawOnEntry = async () => {
+    const newValue = !autoWithdrawOnEntry;
+    setAutoWithdrawOnEntry(newValue);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        autoWithdrawOnEntry: newValue,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Configuración de retiro automático actualizada correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar configuración de retiro automático' });
+      setAutoWithdrawOnEntry(autoWithdrawOnEntry);
     }
   };
 
@@ -1321,6 +1343,29 @@ const CurrencyExchangeContent = () => {
                   onValueChange={toggleWeightedAverageCost}
                   trackColor={{ false: colors.outlineVariant, true: colors.primary }}
                   thumbColor={applyWeightedAverageCost ? '#fff' : colors.outline}
+                />
+              </View>
+
+              <View style={styles.permissionItem}>
+                <View style={styles.permissionInfo}>
+                  <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                    Retiro Automático al Agregar Entrada
+                  </Text>
+                  <TouchableOpacity 
+                    style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                    onPress={() => showInfoModal(
+                      'Retiro Automático al Agregar Entrada',
+                      'Cuando está activo, al agregar una nueva entrada se preguntará al usuario si desea hacer una operación de retiro de una cuenta relacionada a la tienda. El motivo será "compra de X cantidad de productos Y".'
+                    )}
+                  >
+                    <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                  </TouchableOpacity>
+                </View>
+                <Switch
+                  value={autoWithdrawOnEntry}
+                  onValueChange={toggleAutoWithdrawOnEntry}
+                  trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                  thumbColor={autoWithdrawOnEntry ? '#fff' : colors.outline}
                 />
               </View>
 

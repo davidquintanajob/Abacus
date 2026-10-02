@@ -553,6 +553,24 @@ const ServicioFormContent = () => {
     return { costo_cup: totalCostoCup, costo_usd: totalCostoUsd };
   };
 
+  const calculateProfitMargin = () => {
+    const precioCup = typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : parseFloat(formData.precio_cup_general) || 0;
+    const precioUsd = typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : parseFloat(formData.precio_usd_general) || 0;
+    const costoCup = typeof formData.costo_cup_general === 'number' ? formData.costo_cup_general : parseFloat(formData.costo_cup_general) || 0;
+    const costoUsd = typeof formData.costo_usd_general === 'number' ? formData.costo_usd_general : parseFloat(formData.costo_usd_general) || 0;
+
+    const gananciaCup = precioCup - costoCup;
+    const gananciaUsd = precioUsd - costoUsd;
+
+    const porcentajeGananciaCup = precioCup > 0 ? (gananciaCup / precioCup) * 100 : 0;
+    const porcentajeGananciaUsd = precioUsd > 0 ? (gananciaUsd / precioUsd) * 100 : 0;
+
+    return {
+      porcentajeGananciaCup: !isNaN(porcentajeGananciaCup) ? porcentajeGananciaCup : 0,
+      porcentajeGananciaUsd: !isNaN(porcentajeGananciaUsd) ? porcentajeGananciaUsd : 0
+    };
+  };
+
   // Update cost fields when oferta components change
   useEffect(() => {
     if (isOferta) {
@@ -1399,6 +1417,17 @@ const ServicioFormContent = () => {
               </>
             )}
           </View>
+
+          {(!isViewMode || canEditService) && !isOfflineMode && (
+            <View style={styles.profitMarginContainer}>
+              <Text style={[styles.profitMarginLabel, { color: colors.outline }]}>% Ganancia</Text>
+              <View style={[styles.profitBadge, { backgroundColor: calculateProfitMargin().porcentajeGananciaCup >= 0 ? (isDark ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDark ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: calculateProfitMargin().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                <Text style={[styles.profitMarginValue, { color: calculateProfitMargin().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                  {calculateProfitMargin().porcentajeGananciaCup.toFixed(2)}%
+                </Text>
+              </View>
+            </View>
+          )}
 
           {(!isViewMode || canEditService) && !isOfflineMode && (
             <View style={styles.buttonGroup}>
@@ -2250,6 +2279,31 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   scannerCancelButtonText: {
     fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  profitMarginContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: responsive.responsivePadding(8),
+    paddingHorizontal: responsive.responsivePadding(12),
+    borderRadius: 8,
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  profitMarginLabel: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+  },
+  profitBadge: {
+    paddingHorizontal: responsive.responsivePadding(12),
+    paddingVertical: responsive.responsivePadding(6),
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  profitMarginValue: {
+    fontSize: responsive.fontSizes.bodySmall,
     fontWeight: '600',
     fontFamily: 'Inter',
   },

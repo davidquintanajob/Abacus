@@ -27,7 +27,7 @@ const OperacionFormContent = () => {
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
 
-  const { operacion, mode, canViewAllOperaciones: canViewAllOperacionesParam } = route.params || { mode: 'add' };
+  const { operacion, mode, canViewAllOperaciones: canViewAllOperacionesParam, tiendaId, cuentas: preloadedCuentas, defaultMotivo, defaultTipo, defaultCantidadCup, defaultCantidadUsd, fromEntrada } = route.params || { mode: 'add' };
 
   const isViewMode = mode === 'view';
   const isEditMode = mode === 'edit';
@@ -46,10 +46,10 @@ const OperacionFormContent = () => {
   const [formData, setFormData] = useState({
     id_cuenta: null,
     id_usuario: null,
-    cantidad_operacion: '',
-    tipo_operacion: 'Ingreso',
+    cantidad_operacion: defaultCantidadCup?.toString() || defaultCantidadUsd?.toString() || '',
+    tipo_operacion: defaultTipo || 'Ingreso',
     fecha_hora: new Date().toISOString(),
-    motivo: '',
+    motivo: defaultMotivo || '',
     cambio_moneda: '',
     cuenta: null,
     usuario: null,
@@ -125,10 +125,23 @@ const OperacionFormContent = () => {
         setCuentas([]);
         return;
       }
+
+      // If cuentas are preloaded from EntradaForm, use them
+      if (preloadedCuentas && preloadedCuentas.length > 0) {
+        setCuentas(preloadedCuentas);
+        return;
+      }
+
+      // Otherwise fetch from API, filtering by tienda if provided
+      const filters = {};
+      if (tiendaId) {
+        filters.id_tienda = tiendaId;
+      }
       
-      const data = await getCuentas({}, 1, 1000);
-      setCuentas(data.data || []);
-    } catch (err) {
+      const response = await getCuentas(filters);
+      setCuentas(response.data || []);
+    } catch (error) {
+      console.error('[fetchCuentas] Error:', error);
       setCuentas([]);
     }
   };
@@ -215,7 +228,15 @@ const OperacionFormContent = () => {
         showToast({ type: 'success', message: 'Operación creada correctamente' });
       }
 
-      navigation.goBack();
+      // If coming from EntradaForm, navigate to EntradasScreen instead of goBack
+      if (fromEntrada) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Entradas' }],
+        });
+      } else {
+        navigation.goBack();
+      }
     } catch (error) {
       showToast({ type: 'error', message: error.message, code: error.code });
     } finally {
