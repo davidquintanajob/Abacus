@@ -256,6 +256,7 @@ const clienteRoutes = require("./routes/clienteRoutes");
 const listaVentaRoutes = require("./routes/listaVentaRoutes.js");
 const informesRoutes = require("./routes/informesRoutes");
 const movimientosRoutes = require("./routes/movimientoRoutes.js");
+const deudaRoutes = require("./routes/deudaRoutes.js");
 
 app.use("/", servicioRoutes);
 app.use("/", productoRoutes);
@@ -270,6 +271,7 @@ app.use("/", clienteRoutes);
 app.use("/", listaVentaRoutes);
 app.use("/", informesRoutes);
 app.use("/", movimientosRoutes);
+app.use("/", deudaRoutes);
 
 // Inicializar la base de datos y arrancar el servidor
 const startApp = async () => {
@@ -307,6 +309,8 @@ const startApp = async () => {
     const { MovimientoLista } = require("./models/movimiento_lista.js");
     const { Movimiento } = require("./models/movimiento.js");
     const { MovimientoEntrada } = require("./models/movimiento_entrada.js");
+    const { Deuda } = require("./models/deuda.js");
+    const { PagoDeuda } = require("./models/pago_deuda.js");
 
     const models = {
       Usuario,
@@ -328,6 +332,8 @@ const startApp = async () => {
       MovimientoLista,
       Movimiento,
       MovimientoEntrada,
+      Deuda,
+      PagoDeuda
     };
 
     Object.values(models).forEach((model) => {

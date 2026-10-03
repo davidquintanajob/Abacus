@@ -24,27 +24,6 @@ const ListaVenta = sequelize.define(
         },
       },
     },
-    id_usuario: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      references: {
-        model: "usuarios",
-        key: "id_usuario",
-      },
-      onUpdate: "CASCADE",
-      onDelete: "SET NULL",
-    },
-    cambio_moneda: {
-      type: DataTypes.DECIMAL,
-      allowNull: false,
-      defaultValue: 1.00000,
-      validate: {
-        min: {
-          args: [0.00001],
-          msg: "El cambio de moneda debe ser mayor que cero",
-        },
-      },
-    },
     cantidad_cobrada_efectivo_cup: {
       type: DataTypes.DECIMAL,
       allowNull: false,
@@ -89,12 +68,24 @@ const ListaVenta = sequelize.define(
         },
       },
     },
+    // ✅ FK opcional hacia Cliente
+    id_cliente: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "clientes",
+        key: "id_cliente",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "SET NULL",
+    },
   },
   {
     timestamps: true,
     tableName: "lista_ventas",
     indexes: [
       { fields: ["fecha_hora"] },
+      { fields: ["id_cliente"] },
     ],
   }
 );
@@ -109,14 +100,14 @@ ListaVenta.associate = function (models) {
     foreignKey: "id_lista_venta",
     as: "operaciones",
   });
-  // ✅ NUEVA ASOCIACIÓN
   ListaVenta.belongsTo(models.Cliente, {
     foreignKey: "id_cliente",
     as: "cliente",
   });
-  ListaVenta.belongsTo(models.Usuario, {
-    foreignKey: "id_usuario",
-    as: "usuario",
+  // ✅ NUEVA ASOCIACIÓN
+  ListaVenta.hasOne(models.Deuda, {
+    foreignKey: "id_lista_venta",
+    as: "deuda",
   });
 };
 

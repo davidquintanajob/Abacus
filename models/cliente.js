@@ -42,7 +42,7 @@ const Cliente = sequelize.define(
     telefono: {
       type: DataTypes.STRING,
       allowNull: true,
-      unique: true, // En Postgres los NULL no colisionan, así que se permite múltiples clientes sin teléfono
+      unique: true, // En Postgres los NULL no colisionan
       validate: {
         len: {
           args: [0, 30],
@@ -96,6 +96,11 @@ Cliente.associate = function (models) {
   Cliente.hasMany(models.ListaVenta, {
     foreignKey: "id_cliente",
     as: "listaVentas",
+  });
+  // ✅ NUEVA ASOCIACIÓN
+  Cliente.hasMany(models.Deuda, {
+    foreignKey: "id_cliente",
+    as: "deudas",
   });
 };
 

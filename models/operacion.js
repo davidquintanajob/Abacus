@@ -2,7 +2,7 @@ const { DataTypes } = require("sequelize");
 const sequelize = require("../helpers/database.js");
 
 // Tipos de operación permitidos
-const tiposOperacion = ["Ingreso", "Retiro", "Ingreso por Venta"];
+const tiposOperacion = ["Ingreso", "Retiro", "Ingreso por Venta", "Pago de deuda"];
 
 const Operacion = sequelize.define(
   "operacion",
@@ -34,7 +34,7 @@ const Operacion = sequelize.define(
       onUpdate: "CASCADE",
       onDelete: "SET NULL",
     },
-    // ✅ NUEVA CLAVE FORÁNEA hacia ListaVenta (opcional)
+    // Clave foránea hacia ListaVenta (opcional)
     id_lista_venta: {
       type: DataTypes.INTEGER,
       allowNull: true,
@@ -99,7 +99,7 @@ const Operacion = sequelize.define(
     indexes: [
       { fields: ["id_cuenta"] },
       { fields: ["id_usuario"] },
-      { fields: ["id_lista_venta"] }, // ✅ NUEVO ÍNDICE
+      { fields: ["id_lista_venta"] },
       { fields: ["fecha_hora"] },
       { fields: ["tipo_operacion"] },
     ],
@@ -116,10 +116,14 @@ Operacion.associate = function (models) {
     foreignKey: "id_usuario",
     as: "usuario",
   });
-  // ✅ NUEVA ASOCIACIÓN
   Operacion.belongsTo(models.ListaVenta, {
     foreignKey: "id_lista_venta",
     as: "listaVenta",
+  });
+  // ✅ NUEVA RELACIÓN 1:1 con PagoDeuda (una operación puede o no tener un pago de deuda)
+  Operacion.hasOne(models.PagoDeuda, {
+    foreignKey: "id_operacion",
+    as: "pagoDeuda",
   });
 };
 

@@ -22,6 +22,36 @@ const getClienteById = async (req, res) => {
   }
 };
 
+const validateClienteFields = (body) => {
+  const { nombre, nota, direccion, telefono, localizacion_coordenadas_gps, tipo_cliente, descuento } = body;
+  const errors = [];
+
+  if (nombre !== undefined) {
+    if (nombre.trim() === "") errors.push("nombre no puede estar vacío.");
+    if (nombre.length < 1 || nombre.length > 150) errors.push("nombre debe tener entre 1 y 150 caracteres.");
+  }
+  if (nota !== undefined && nota !== null && nota.length > 255) {
+    errors.push("nota no puede exceder 255 caracteres.");
+  }
+  if (direccion !== undefined && direccion !== null && direccion.length > 255) {
+    errors.push("direccion no puede exceder 255 caracteres.");
+  }
+  if (telefono !== undefined && telefono !== null && telefono.length > 30) {
+    errors.push("telefono no puede exceder 30 caracteres.");
+  }
+  if (localizacion_coordenadas_gps !== undefined && localizacion_coordenadas_gps !== null && localizacion_coordenadas_gps.length > 100) {
+    errors.push("localizacion_coordenadas_gps no puede exceder 100 caracteres.");
+  }
+  if (tipo_cliente !== undefined && tipo_cliente !== null && tipo_cliente.length > 50) {
+    errors.push("tipo_cliente no puede exceder 50 caracteres.");
+  }
+  if (descuento !== undefined && descuento !== null && descuento.length > 50) {
+    errors.push("descuento no puede exceder 50 caracteres.");
+  }
+  return errors;
+};
+
+// ---------- CREATE ----------
 const createCliente = async (req, res) => {
   try {
     const {
@@ -32,30 +62,17 @@ const createCliente = async (req, res) => {
       localizacion_coordenadas_gps,
       tipo_cliente,
       descuento,
+      deuda,
+      pago_deuda,
     } = req.body;
 
-    const errors = [];
+    const errors = validateClienteFields(req.body);
+
     if (!nombre || nombre.trim() === "") errors.push("nombre es obligatorio.");
-    if (nombre && (nombre.length < 1 || nombre.length > 150)) {
-      errors.push("nombre debe tener entre 1 y 150 caracteres.");
-    }
-    if (nota !== undefined && nota !== null && nota.length > 255) {
-      errors.push("nota no puede exceder 255 caracteres.");
-    }
-    if (direccion !== undefined && direccion !== null && direccion.length > 255) {
-      errors.push("direccion no puede exceder 255 caracteres.");
-    }
-    if (telefono !== undefined && telefono !== null && telefono.length > 30) {
-      errors.push("telefono no puede exceder 30 caracteres.");
-    }
-    if (localizacion_coordenadas_gps !== undefined && localizacion_coordenadas_gps !== null && localizacion_coordenadas_gps.length > 100) {
-      errors.push("localizacion_coordenadas_gps no puede exceder 100 caracteres.");
-    }
-    if (tipo_cliente !== undefined && tipo_cliente !== null && tipo_cliente.length > 50) {
-      errors.push("tipo_cliente no puede exceder 50 caracteres.");
-    }
-    if (descuento !== undefined && descuento !== null && descuento.length > 50) {
-      errors.push("descuento no puede exceder 50 caracteres.");
+
+    // Validar que si hay pago_deuda, también haya deuda
+    if (pago_deuda && !deuda) {
+      errors.push("Si se envía 'pago_deuda', también debe enviarse 'deuda'.");
     }
 
     if (errors.length > 0) {
@@ -72,7 +89,19 @@ const createCliente = async (req, res) => {
       descuento: descuento || null,
     };
 
-    const newCliente = await clienteService.createCliente(clienteData);
+    // Obtener id_usuario desde pago_deuda o desde el token
+    const idUsuario =
+      (pago_deuda && pago_deuda.id_usuario) ||
+      req.user?.id_usuario ||
+      req.user?.userId ||
+      null;
+
+    const newCliente = await clienteService.createCliente(
+      clienteData,
+      deuda,
+      pago_deuda,
+      idUsuario
+    );
     res.status(201).json({
       message: "Cliente creado exitosamente",
       data: newCliente,
@@ -82,6 +111,7 @@ const createCliente = async (req, res) => {
   }
 };
 
+// ---------- UPDATE (solo datos propios del cliente) ----------
 const updateCliente = async (req, res) => {
   try {
     const { id } = req.params;
@@ -99,29 +129,7 @@ const updateCliente = async (req, res) => {
       throwError("Se debe proporcionar al menos un campo para actualizar.", 400);
     }
 
-    const errors = [];
-    if (nombre !== undefined && (nombre.trim() === "" || nombre.length < 1 || nombre.length > 150)) {
-      errors.push("nombre debe tener entre 1 y 150 caracteres.");
-    }
-    if (nota !== undefined && nota !== null && nota.length > 255) {
-      errors.push("nota no puede exceder 255 caracteres.");
-    }
-    if (direccion !== undefined && direccion !== null && direccion.length > 255) {
-      errors.push("direccion no puede exceder 255 caracteres.");
-    }
-    if (telefono !== undefined && telefono !== null && telefono.length > 30) {
-      errors.push("telefono no puede exceder 30 caracteres.");
-    }
-    if (localizacion_coordenadas_gps !== undefined && localizacion_coordenadas_gps !== null && localizacion_coordenadas_gps.length > 100) {
-      errors.push("localizacion_coordenadas_gps no puede exceder 100 caracteres.");
-    }
-    if (tipo_cliente !== undefined && tipo_cliente !== null && tipo_cliente.length > 50) {
-      errors.push("tipo_cliente no puede exceder 50 caracteres.");
-    }
-    if (descuento !== undefined && descuento !== null && descuento.length > 50) {
-      errors.push("descuento no puede exceder 50 caracteres.");
-    }
-
+    const errors = validateClienteFields(req.body);
     if (errors.length > 0) {
       throwError("Datos inválidos", 400, errors);
     }
@@ -157,7 +165,7 @@ const deleteCliente = async (req, res) => {
 
 const filterClientes = async (req, res) => {
   try {
-    const { limit, page, nombre, telefono, tipo_cliente } = req.query;
+    const { limit, page, nombre, telefono, direccion, tipo_cliente, tiene_deuda } = req.query;
 
     let limitNum = parseInt(limit, 10) || 10;
     if (isNaN(limitNum) || limitNum < 1) {
@@ -171,7 +179,14 @@ const filterClientes = async (req, res) => {
     const filters = {};
     if (nombre) filters.nombre = nombre.trim();
     if (telefono) filters.telefono = telefono.trim();
+    if (direccion) filters.direccion = direccion.trim();
     if (tipo_cliente) filters.tipo_cliente = tipo_cliente.trim();
+
+    if (tiene_deuda !== undefined) {
+      if (tiene_deuda === "true") filters.tiene_deuda = true;
+      else if (tiene_deuda === "false") filters.tiene_deuda = false;
+      else throwError("El parámetro 'tiene_deuda' debe ser true o false.", 400);
+    }
 
     const offset = (pageNum - 1) * limitNum;
     const { rows, count } = await clienteService.filterClientes(filters, limitNum, offset);
