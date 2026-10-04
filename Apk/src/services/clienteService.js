@@ -10,7 +10,9 @@ export const getClientes = async (filters = {}, page = 1, limit = 10) => {
     // Add filters
     if (filters.nombre) queryParams.append('nombre', filters.nombre);
     if (filters.telefono) queryParams.append('telefono', filters.telefono);
+    if (filters.direccion) queryParams.append('direccion', filters.direccion);
     if (filters.tipo_cliente) queryParams.append('tipo_cliente', filters.tipo_cliente);
+    if (filters.tiene_deuda !== undefined) queryParams.append('tiene_deuda', filters.tiene_deuda);
 
     const response = await api.get(`/cliente/filter?${queryParams}`);
     return response.data;

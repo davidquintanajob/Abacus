@@ -50,10 +50,13 @@ const ClientesScreen = () => {
   const [filters, setFilters] = useState({ 
     nombre: '', 
     telefono: '', 
-    tipo_cliente: '' 
+    direccion: '',
+    tipo_cliente: '',
+    tiene_deuda: ''
   });
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [showEstadoDeudaDropdown, setShowEstadoDeudaDropdown] = useState(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
@@ -116,8 +119,24 @@ const ClientesScreen = () => {
       // Build filters to send to API
       const apiFilters = { ...filtersToUse };
 
+      // Remove empty filters to avoid API errors
+      if (!apiFilters.nombre) delete apiFilters.nombre;
+      if (!apiFilters.telefono) delete apiFilters.telefono;
+      if (!apiFilters.direccion) delete apiFilters.direccion;
+      if (!apiFilters.tipo_cliente) delete apiFilters.tipo_cliente;
+      if (apiFilters.tiene_deuda === '' || apiFilters.tiene_deuda === undefined) delete apiFilters.tiene_deuda;
+      else apiFilters.tiene_deuda = apiFilters.tiene_deuda === 'true';
+
       const data = await getClientes(apiFilters, fetchPage, fetchLimit);
       let clientes = data.data || [];
+
+      // Calcular tiene_deuda para cada cliente basado en sus deudas
+      clientes = clientes.map(cliente => {
+        const tieneDeuda = cliente.deudas && cliente.deudas.some(
+          deuda => deuda.monto_restante_cup > 0 || deuda.monto_restante_usd > 0
+        );
+        return { ...cliente, tiene_deuda: tieneDeuda };
+      });
 
       setClientes(clientes);
       setPagination(data.pagination || pagination);
@@ -153,7 +172,9 @@ const ClientesScreen = () => {
     const clearedFilters = { 
       nombre: '', 
       telefono: '', 
-      tipo_cliente: '' 
+      direccion: '',
+      tipo_cliente: '',
+      tiene_deuda: ''
     };
     setFilters(clearedFilters);
     setPagination(prev => ({ ...prev, currentPage: 1 }));
@@ -264,11 +285,11 @@ const ClientesScreen = () => {
     <>
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Header 
-          title="Clientes"
+          title="Abacus"
           onMenuPress={() => setSidebarOpen(true)}
           onThemePress={toggleTheme}
           onSettingsPress={undefined}
-          onNotificationsPress={undefined}
+          onNotificationsPress={() => navigation.navigate('Notifications')}
           onProfilePress={() => navigation.navigate('UserProfile')}
           onViewModeToggle={toggleViewMode}
           showViewToggle={true}
@@ -335,6 +356,17 @@ const ClientesScreen = () => {
               </View>
 
               <View style={styles.filterGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Dirección</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Buscar por dirección..."
+                  value={filters.direccion}
+                  onChangeText={(text) => setFilters(prev => ({ ...prev, direccion: text }))}
+                />
+              </View>
+
+              <View style={styles.filterGroup}>
                 <Text style={[styles.label, { color: colors.outline }]}>Tipo de Cliente</Text>
                 <TextInput
                   style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
@@ -343,6 +375,55 @@ const ClientesScreen = () => {
                   value={filters.tipo_cliente}
                   onChangeText={(text) => setFilters(prev => ({ ...prev, tipo_cliente: text }))}
                 />
+              </View>
+
+              <View style={styles.filterGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Estado de Deuda</Text>
+                <TouchableOpacity
+                  style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                  onPress={() => setShowEstadoDeudaDropdown(!showEstadoDeudaDropdown)}
+                >
+                  <Text style={[styles.dropdownText, { color: filters.tiene_deuda ? colors.onSurface : colors.outline }]}>
+                    {filters.tiene_deuda === 'true' ? 'Con deuda pendiente' : filters.tiene_deuda === 'false' ? 'Sin deuda' : 'Todos'}
+                  </Text>
+                  <Ionicons 
+                    name={showEstadoDeudaDropdown ? "chevron-up" : "chevron-down"} 
+                    size={responsive.responsiveWidth(20)} 
+                    color={colors.outline} 
+                  />
+                </TouchableOpacity>
+                
+                {showEstadoDeudaDropdown && (
+                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                    <TouchableOpacity
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        setFilters(prev => ({ ...prev, tiene_deuda: '' }));
+                        setShowEstadoDeudaDropdown(false);
+                      }}
+                    >
+                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todos</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        setFilters(prev => ({ ...prev, tiene_deuda: 'true' }));
+                        setShowEstadoDeudaDropdown(false);
+                      }}
+                    >
+                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Con deuda pendiente</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.dropdownItem, styles.dropdownItemLast]}
+                      onPress={() => {
+                        setFilters(prev => ({ ...prev, tiene_deuda: 'false' }));
+                        setShowEstadoDeudaDropdown(false);
+                      }}
+                    >
+                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Sin deuda</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             </>
           )}
@@ -430,89 +511,99 @@ const ClientesScreen = () => {
                   activeOpacity={0.7}
                 >
                   <Card style={[styles.clienteCard, { backgroundColor: colors.surface }]}>
-                    <View style={styles.clienteInfo}>
-                      <View style={styles.clienteHeader}>
-                        <Text style={[styles.clienteNombre, { color: colors.onSurface }]} numberOfLines={2} ellipsizeMode="tail">
-                          {cliente.nombre}
-                        </Text>
-                      </View>
-                      {cliente.telefono && (
-                        <Text style={[styles.clienteTelefono, { color: colors.primary }]}>
-                          Tel: {cliente.telefono}
-                        </Text>
-                      )}
-                      {cliente.tipo_cliente && (
-                        <Text style={[styles.clienteTipo, { color: colors.outline }]}>
-                          Tipo: {cliente.tipo_cliente}
-                        </Text>
-                      )}
-                      {cliente.direccion && (
-                        <Text style={[styles.clienteDireccion, { color: colors.outline }]} numberOfLines={1}>
-                          Dirección: {cliente.direccion}
-                        </Text>
-                      )}
-                      {cliente.nota && (
-                        <View style={[styles.noteBadge, { backgroundColor: isDarkMode ? colors.primaryContainer : '#FFF3E0', borderColor: isDarkMode ? colors.primary : '#FF9800' }]}>
-                          <Text style={[styles.noteText, { color: isDarkMode ? colors.primary : '#FF9800' }]}>
-                            Nota: {cliente.nota}
-                          </Text>
+                    {/* Flags container */}
+                    <View style={styles.clienteFlags}>
+                      {cliente.tiene_deuda && (
+                        <View style={[styles.deudaFlag, { backgroundColor: colors.error }]}>
+                          <Ionicons name="alert-circle" size={responsive.responsiveWidth(14)} color="#fff" />
                         </View>
                       )}
-                      {/* Deuda flag - TODO: Implement when deuda model is available */}
-                      {cliente.tiene_deuda && (
-                        <View style={[styles.deudaBadge, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE', borderColor: colors.error }]}>
-                          <Text style={[styles.deudaText, { color: colors.error }]}>
-                            Tiene deudas pendientes
-                          </Text>
+                      {cliente.nota && (
+                        <View style={[styles.noteFlag, { backgroundColor: '#2196F3' }]}>
+                          <Ionicons name="document-text-outline" size={responsive.responsiveWidth(14)} color="#fff" />
                         </View>
                       )}
                     </View>
-                    <View style={styles.clienteActions}>
-                      {cliente.telefono && (
-                        <TouchableOpacity
-                          style={[styles.actionButtonSmall, styles.callButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E8F5E9' }]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleCall(cliente.telefono);
-                          }}
-                        >
-                          <Image
-                            source={require('../../assets/llamada-telefonica.png')}
-                            style={styles.actionIconSmall}
-                            resizeMode="contain"
-                          />
-                        </TouchableOpacity>
-                      )}
-                      {canManageClientes && (
-                        <>
-                          <TouchableOpacity
-                            style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              handleClientePress(cliente);
-                            }}
-                          >
-                            <Image
-                              source={require('../../assets/editar.png')}
-                              style={styles.actionIconSmall}
-                              resizeMode="contain"
-                            />
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              handleDelete(cliente);
-                            }}
-                          >
-                            <Image
-                              source={require('../../assets/basura.png')}
-                              style={styles.actionIconSmall}
-                              resizeMode="contain"
-                            />
-                          </TouchableOpacity>
-                        </>
-                      )}
+                    <View style={styles.clienteCardHeader}>
+                      <View style={styles.clienteInfo}>
+                        <View style={styles.clienteHeader}>
+                          <Text style={[styles.clienteNombre, { color: colors.onSurface }]} numberOfLines={2} ellipsizeMode="tail">
+                            {cliente.nombre}
+                          </Text>
+                        </View>
+                        {cliente.telefono && (
+                          <Text style={[styles.clienteTelefono, { color: colors.primary }]}>
+                            Tel: {cliente.telefono}
+                          </Text>
+                        )}
+                        {cliente.tipo_cliente && (
+                          <Text style={[styles.clienteTipo, { color: colors.outline }]}>
+                            Tipo: {cliente.tipo_cliente}
+                          </Text>
+                        )}
+                        {cliente.direccion && (
+                          <Text style={[styles.clienteDireccion, { color: colors.outline }]} numberOfLines={1}>
+                            Dirección: {cliente.direccion}
+                          </Text>
+                        )}
+                        {cliente.nota && (
+                          <View style={[styles.noteBadge, { backgroundColor: isDarkMode ? colors.primaryContainer : '#FFF3E0', borderColor: isDarkMode ? colors.primary : '#FF9800' }]}>
+                            <Text style={[styles.noteText, { color: isDarkMode ? colors.primary : '#FF9800' }]}>
+                              Nota: {cliente.nota}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      <View style={styles.clienteCardRight}>
+                        {/* Action buttons */}
+                        <View style={styles.clienteActions}>
+                          {cliente.telefono && (
+                            <TouchableOpacity
+                              style={[styles.actionButtonSmall, styles.callButtonSmall, { backgroundColor: isDarkMode ? 'rgba(76, 175, 80, 0.2)' : '#E8F5E9' }]}
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                handleCall(cliente.telefono);
+                              }}
+                            >
+                              <Image
+                                source={require('../../assets/llamada-telefonica.png')}
+                                style={styles.actionIconSmall}
+                                resizeMode="contain"
+                              />
+                            </TouchableOpacity>
+                          )}
+                          {canManageClientes && (
+                            <>
+                              <TouchableOpacity
+                                style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                                onPress={(e) => {
+                                  e.stopPropagation();
+                                  handleClientePress(cliente);
+                                }}
+                              >
+                                <Image
+                                  source={require('../../assets/editar.png')}
+                                  style={styles.actionIconSmall}
+                                  resizeMode="contain"
+                                />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                                onPress={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(cliente);
+                                }}
+                              >
+                                <Image
+                                  source={require('../../assets/basura.png')}
+                                  style={styles.actionIconSmall}
+                                  resizeMode="contain"
+                                />
+                              </TouchableOpacity>
+                            </>
+                          )}
+                        </View>
+                      </View>
                     </View>
                   </Card>
                 </TouchableOpacity>
@@ -563,7 +654,7 @@ const ClientesScreen = () => {
                             <View style={styles.tableActionsRow}>
                               {cliente.telefono && (
                                 <TouchableOpacity
-                                  style={[styles.tableActionButton, styles.tableCallButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E8F5E9' }]}
+                                  style={[styles.tableActionButton, styles.tableCallButton, { backgroundColor: isDarkMode ? 'rgba(76, 175, 80, 0.2)' : '#E8F5E9' }]}
                                   onPress={(e) => {
                                     e.stopPropagation();
                                     handleCall(cliente.telefono);
@@ -654,7 +745,7 @@ const createStyles = (responsive) => StyleSheet.create({
   pageTitleContainer: {
     alignItems: 'center',
     marginBottom: responsive.responsiveMargin(16),
-    marginTop: responsive.responsiveMargin(5),
+    marginTop: responsive.responsiveMargin(65),
   },
   pageTitle: {
     fontSize: responsive.responsiveFontSize(24),
@@ -703,6 +794,35 @@ const createStyles = (responsive) => StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     padding: responsive.responsivePadding(12),
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+  },
+  dropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: responsive.responsivePadding(12),
+  },
+  dropdownText: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+  },
+  dropdownMenu: {
+    borderWidth: 1,
+    borderRadius: 8,
+    marginTop: responsive.responsiveMargin(4),
+    padding: responsive.responsivePadding(4),
+  },
+  dropdownItem: {
+    paddingVertical: responsive.responsivePadding(10),
+    paddingHorizontal: responsive.responsivePadding(12),
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  dropdownItemText: {
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
   },
@@ -807,6 +927,55 @@ const createStyles = (responsive) => StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 4,
+    position: 'relative',
+    overflow: 'visible',
+  },
+  clienteCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  clienteCardRight: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: responsive.responsiveMargin(8),
+  },
+  clienteFlags: {
+    position: 'absolute',
+    top: -10,
+    left: -10,
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(4),
+    zIndex: 1,
+  },
+  deudaFlag: {
+    width: responsive.responsiveWidth(32),
+    height: responsive.responsiveHeight(32),
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  noteFlag: {
+    width: responsive.responsiveWidth(32),
+    height: responsive.responsiveHeight(32),
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: responsive.responsiveMargin(-12),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  clienteActions: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(8),
   },
   clienteInfo: {
     flex: 1,
@@ -865,8 +1034,8 @@ const createStyles = (responsive) => StyleSheet.create({
     marginTop: responsive.responsiveMargin(12),
   },
   actionButtonSmall: {
-    width: responsive.responsiveWidth(36),
-    height: responsive.responsiveHeight(36),
+    width: responsive.responsiveWidth(40),
+    height: responsive.responsiveHeight(40),
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -877,15 +1046,15 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   callButtonSmall: {
     borderWidth: 1,
-    borderColor: '#4CAF50',
+    borderColor: 'transparent',
   },
   editButtonSmall: {
     borderWidth: 1,
-    borderColor: '#2196F3',
+    borderColor: 'transparent',
   },
   deleteButtonSmall: {
     borderWidth: 1,
-    borderColor: '#F44336',
+    borderColor: 'transparent',
   },
   tableScrollView: {
     marginBottom: responsive.responsiveMargin(16),
@@ -897,6 +1066,8 @@ const createStyles = (responsive) => StyleSheet.create({
     flexDirection: 'row',
     paddingVertical: responsive.responsivePadding(12),
     paddingHorizontal: responsive.responsivePadding(8),
+    borderBottomWidth: 2,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
   tableHeaderText: {
     fontSize: responsive.responsiveFontSize(14),

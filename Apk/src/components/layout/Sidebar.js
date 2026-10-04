@@ -71,8 +71,7 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
     { icon: require('../../../assets/report (1).png'), label: 'Informes', route: 'Informes' },
     ...(canAccessMovimientos ? [{ icon: require('../../../assets/moving.png'), label: 'Movimientos', route: 'Movimientos' }] : []),
     ...(canAccessClientes ? [{ icon: require('../../../assets/customer-search.png'), label: 'Clientes', route: 'Clientes' }] : []),
-    // Disabled items (coming soon)
-    { icon: require('../../../assets/debt-recovery.png'), label: 'Deudas', disabled: true },
+    ...(canAccessClientes ? [{ icon: require('../../../assets/debt-recovery.png'), label: 'Deudas', route: 'Deudas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/tienda.png'), label: 'Tiendas', route: 'Tiendas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/usuarios.png'), label: 'Usuarios', route: 'Usuarios' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/Servicios.png'), label: 'Configuraciones del Administrador', route: 'CurrencyExchange' }] : []),

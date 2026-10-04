@@ -23,16 +23,21 @@ export const Card = ({ children, style, variant = 'default' }) => {
     }
   };
 
+  const cardStyle = [
+    styles.card, 
+    { 
+      backgroundColor: getBackgroundColor(),
+      borderColor: colors.outlineVariant,
+      shadowColor: colors.shadow 
+    }
+  ];
+
+  if (style) {
+    cardStyle.push(style);
+  }
+
   return (
-    <View style={[
-      styles.card, 
-      { 
-        backgroundColor: getBackgroundColor(),
-        borderColor: colors.outlineVariant,
-        shadowColor: colors.shadow 
-      },
-      style
-    ]}>
+    <View style={cardStyle}>
       {children}
     </View>
   );

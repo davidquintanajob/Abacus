@@ -85,7 +85,7 @@ export const Header = ({
             </Text>
             {showVersion && (
               <Text style={[styles.version, { color: colors.outline }]}>
-                v{version}
+                {`v${version}`}
               </Text>
             )}
           </View>
