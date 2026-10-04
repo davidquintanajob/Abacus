@@ -425,10 +425,14 @@ const filterMovimientos = async (filters, limit, offset) => {
   }
 
   const movimientoWhere = {};
-  if (filters.id_servicio_tienda_origen) {
+  if (filters.id_servicio_tienda_origen && filters.id_servicio_tienda_destino) {
+    movimientoWhere[Op.or] = [
+      { id_servicio_tienda_origen: filters.id_servicio_tienda_origen },
+      { id_servicio_tienda_destino: filters.id_servicio_tienda_destino },
+    ];
+  } else if (filters.id_servicio_tienda_origen) {
     movimientoWhere.id_servicio_tienda_origen = filters.id_servicio_tienda_origen;
-  }
-  if (filters.id_servicio_tienda_destino) {
+  } else if (filters.id_servicio_tienda_destino) {
     movimientoWhere.id_servicio_tienda_destino = filters.id_servicio_tienda_destino;
   }
 

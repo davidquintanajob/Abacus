@@ -46,7 +46,6 @@ const getListaVentaWithRelations = async (id) => {
           { model: Cuenta, as: "cuenta" },
         ],
       },
-      { model: Usuario, as: "usuario" },
     ],
     order: [
       [{ model: Venta, as: "ventas" }, "id_venta", "ASC"],
@@ -506,7 +505,7 @@ const filterListaVentas = async (filters, limit, offset) => {
 
   const queryOptions = {
     where,
-    include: [ventasInclude, operacionesInclude, { model: Usuario, as: "usuario", required: false }],
+    include: [ventasInclude, operacionesInclude],
     order: [["fecha_hora", "DESC"]],
     distinct: true,
   };
@@ -552,6 +551,7 @@ const createListaVenta = async (listaData) => {
     id_usuario,
     cambio_moneda,
     ventas,
+    is_deuda = false,
   } = listaData;
 
   // 1. Validar usuario
@@ -560,16 +560,16 @@ const createListaVenta = async (listaData) => {
 
   // 2. Validar cuentas (si se usan)
   const cuentas = {};
-  if (cantidad_cobrada_efectivo_cup > 0) {
+  if (!is_deuda && cantidad_cobrada_efectivo_cup > 0) {
     cuentas.efectivo_cup = await validateCuentaExists(id_cuenta_efectivo_cup, "Efectivo CUP");
   }
-  if (cantidad_cobrada_efectivo_usd > 0) {
+  if (!is_deuda && cantidad_cobrada_efectivo_usd > 0) {
     cuentas.efectivo_usd = await validateCuentaExists(id_cuenta_efectivo_usd, "Efectivo USD");
   }
-  if (cantidad_cobrada_transferencia_cup > 0) {
+  if (!is_deuda && cantidad_cobrada_transferencia_cup > 0) {
     cuentas.transferencia_cup = await validateCuentaExists(id_cuenta_transferencia_cup, "Transferencia CUP");
   }
-  if (cantidad_cobrada_transferencia_usd > 0) {
+  if (!is_deuda && cantidad_cobrada_transferencia_usd > 0) {
     cuentas.transferencia_usd = await validateCuentaExists(id_cuenta_transferencia_usd, "Transferencia USD");
   }
 
@@ -626,6 +626,7 @@ const createListaVenta = async (listaData) => {
         fecha_hora,
         nota,
         id_usuario,
+        is_deuda,
         cambio_moneda,
         cantidad_cobrada_efectivo_cup,
         cantidad_cobrada_efectivo_usd,
@@ -668,27 +669,29 @@ const createListaVenta = async (listaData) => {
       { key: "transferencia_usd", cantidad: cantidad_cobrada_transferencia_usd, cuenta: cuentas.transferencia_usd },
     ];
 
-    for (const item of tiposCobro) {
-      if (item.cantidad > 0) {
-        const cuenta = item.cuenta;
-        if (!cuenta) throwError(`Falta cuenta para ${item.key}`, 400);
+    if (!is_deuda) {
+      for (const item of tiposCobro) {
+        if (item.cantidad > 0) {
+          const cuenta = item.cuenta;
+          if (!cuenta) throwError(`Falta cuenta para ${item.key}`, 400);
 
-        const operacion = await Operacion.create(
-          {
-            id_cuenta: cuenta.id_cuenta,
-            id_usuario,
-            id_lista_venta: nuevaLista.id_lista_venta,
-            cantidad_operacion: item.cantidad,
-            tipo_operacion: "Ingreso por Venta",
-            fecha_hora,
-            motivo: "Ingreso por Venta",
-            cambio_moneda,
-          },
-          { transaction }
-        );
+          const operacion = await Operacion.create(
+            {
+              id_cuenta: cuenta.id_cuenta,
+              id_usuario,
+              id_lista_venta: nuevaLista.id_lista_venta,
+              cantidad_operacion: item.cantidad,
+              tipo_operacion: "Ingreso por Venta",
+              fecha_hora,
+              motivo: "Ingreso por Venta",
+              cambio_moneda,
+            },
+            { transaction }
+          );
 
-        await actualizarFondoCuenta(cuenta.id_cuenta, item.cantidad, transaction);
-        operacionesCreadas.push(operacion);
+          await actualizarFondoCuenta(cuenta.id_cuenta, item.cantidad, transaction);
+          operacionesCreadas.push(operacion);
+        }
       }
     }
 
@@ -737,16 +740,16 @@ const updateListaVenta = async (id, listaData) => {
       cantidad_cobrada_transferencia_cup, cantidad_cobrada_transferencia_usd,
       id_cuenta_efectivo_cup, id_cuenta_efectivo_usd,
       id_cuenta_transferencia_cup, id_cuenta_transferencia_usd,
-      id_usuario, cambio_moneda, ventas,
+      id_usuario, cambio_moneda, ventas, is_deuda = false,
     } = listaData;
     const usuario = await Usuario.findByPk(id_usuario, { transaction });
     if (!usuario) throwError("Usuario no encontrado.", 404);
 
     const cuentas = {};
-    if (cantidad_cobrada_efectivo_cup > 0) cuentas.efectivo_cup = await validateCuentaExists(id_cuenta_efectivo_cup, "Efectivo CUP");
-    if (cantidad_cobrada_efectivo_usd > 0) cuentas.efectivo_usd = await validateCuentaExists(id_cuenta_efectivo_usd, "Efectivo USD");
-    if (cantidad_cobrada_transferencia_cup > 0) cuentas.transferencia_cup = await validateCuentaExists(id_cuenta_transferencia_cup, "Transferencia CUP");
-    if (cantidad_cobrada_transferencia_usd > 0) cuentas.transferencia_usd = await validateCuentaExists(id_cuenta_transferencia_usd, "Transferencia USD");
+    if (!is_deuda && cantidad_cobrada_efectivo_cup > 0) cuentas.efectivo_cup = await validateCuentaExists(id_cuenta_efectivo_cup, "Efectivo CUP");
+    if (!is_deuda && cantidad_cobrada_efectivo_usd > 0) cuentas.efectivo_usd = await validateCuentaExists(id_cuenta_efectivo_usd, "Efectivo USD");
+    if (!is_deuda && cantidad_cobrada_transferencia_cup > 0) cuentas.transferencia_cup = await validateCuentaExists(id_cuenta_transferencia_cup, "Transferencia CUP");
+    if (!is_deuda && cantidad_cobrada_transferencia_usd > 0) cuentas.transferencia_usd = await validateCuentaExists(id_cuenta_transferencia_usd, "Transferencia USD");
 
     const ventasData = [];
     for (const v of ventas) {
@@ -780,7 +783,7 @@ const updateListaVenta = async (id, listaData) => {
     }
 
     await lista.update({
-      fecha_hora, nota, id_usuario, cambio_moneda, cantidad_cobrada_efectivo_cup, cantidad_cobrada_efectivo_usd,
+      fecha_hora, nota, id_usuario, is_deuda, cambio_moneda, cantidad_cobrada_efectivo_cup, cantidad_cobrada_efectivo_usd,
       cantidad_cobrada_transferencia_cup, cantidad_cobrada_transferencia_usd,
     }, { transaction });
 
@@ -805,15 +808,17 @@ const updateListaVenta = async (id, listaData) => {
       { key: "transferencia_cup", cantidad: cantidad_cobrada_transferencia_cup, cuenta: cuentas.transferencia_cup },
       { key: "transferencia_usd", cantidad: cantidad_cobrada_transferencia_usd, cuenta: cuentas.transferencia_usd },
     ];
-    for (const item of tiposCobro) {
-      if (item.cantidad > 0) {
-        if (!item.cuenta) throwError(`Falta cuenta para ${item.key}`, 400);
-        await Operacion.create({
-          id_cuenta: item.cuenta.id_cuenta, id_usuario, id_lista_venta: lista.id_lista_venta,
-          cantidad_operacion: item.cantidad, tipo_operacion: "Ingreso por Venta", fecha_hora,
-          motivo: "Ingreso por Venta", cambio_moneda,
-        }, { transaction });
-        await actualizarFondoCuenta(item.cuenta.id_cuenta, item.cantidad, transaction);
+    if (!is_deuda) {
+      for (const item of tiposCobro) {
+        if (item.cantidad > 0) {
+          if (!item.cuenta) throwError(`Falta cuenta para ${item.key}`, 400);
+          await Operacion.create({
+            id_cuenta: item.cuenta.id_cuenta, id_usuario, id_lista_venta: lista.id_lista_venta,
+            cantidad_operacion: item.cantidad, tipo_operacion: "Ingreso por Venta", fecha_hora,
+            motivo: "Ingreso por Venta", cambio_moneda,
+          }, { transaction });
+          await actualizarFondoCuenta(item.cuenta.id_cuenta, item.cantidad, transaction);
+        }
       }
     }
 

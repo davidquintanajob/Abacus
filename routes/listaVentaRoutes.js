@@ -228,6 +228,7 @@ router.get("/lista-venta/:id", authenticate(), listaVentaController.getListaVent
  *       - Se valida que `id_usuario` y `cambio_moneda` estén presentes y sean válidos.
  *       - Se verifica que los montos cobrados no sean negativos.
  *       - Para cada monto cobrado > 0, se valida que la cuenta asociada (`id_cuenta_*`) esté presente y exista en la base de datos.
+ *       - Si `is_deuda` es `true`, no se validan ni se crean operaciones de cobro y no se modifican los fondos de las cuentas.
  *       - Cada venta debe tener `id_servicio_tienda`, `cantidad > 0`, `precio_cobrado_cup >= 0` y `precio_cobrado_usd >= 0`.
  *
  *       **2. Validaciones de negocio:**
@@ -245,6 +246,7 @@ router.get("/lista-venta/:id", authenticate(), listaVentaController.getListaVent
  *           - Se crea una operación de tipo "Ingreso" asociada a la lista_venta, con el usuario y la cuenta correspondiente.
  *           - La operación se crea con el monto de la forma de cobro en `cantidad_operacion`, y el resto de campos como `motivo = "Ingreso por Venta"`, `fecha_hora = fecha_hora de la lista`.
  *           - Se actualiza el `fondo` de la cuenta sumando el monto cobrado.
+ *       - Si `is_deuda` es `true`, se omite por completo la creación de operaciones y la actualización de fondos; el descuento de inventario no cambia.
  *
  *       **4. Respuesta:**
  *       Se devuelve la lista_venta creada con todas sus relaciones (ventas, sus entradas, servicio_tienda, tienda, servicio, producto; y operaciones con usuario y cuenta).
@@ -267,6 +269,9 @@ router.get("/lista-venta/:id", authenticate(), listaVentaController.getListaVent
  *                 format: date-time
  *               nota:
  *                 type: string
+ *               is_deuda:
+ *                 type: boolean
+ *                 default: false
  *               cantidad_cobrada_efectivo_cup:
  *                 type: number
  *                 default: 0
@@ -357,6 +362,9 @@ router.post("/lista-venta", authenticate(), listaVentaController.createListaVent
  *               nota:
  *                 type: string
  *                 nullable: true
+ *               is_deuda:
+ *                 type: boolean
+ *                 default: false
  *               cantidad_cobrada_efectivo_cup:
  *                 type: number
  *                 default: 0

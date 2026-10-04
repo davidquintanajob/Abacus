@@ -59,6 +59,7 @@ const authenticate = require("../helpers/authenticate");
  * /movimiento/filter:
  *   get:
  *     summary: Filtrar movimientos con paginación
+ *     description: Si se envían id_servicio_tienda_origen e id_servicio_tienda_destino, se buscan movimientos que coincidan con el origen o el destino; los demás filtros se mantienen como condiciones adicionales.
  *     tags: [Movimientos]
  *     security:
  *       - bearerAuth: []

@@ -24,6 +24,11 @@ const ListaVenta = sequelize.define(
         },
       },
     },
+    is_deuda: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
     cantidad_cobrada_efectivo_cup: {
       type: DataTypes.DECIMAL,
       allowNull: false,

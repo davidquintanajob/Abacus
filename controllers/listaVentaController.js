@@ -142,6 +142,7 @@ const createListaVenta = async (req, res) => {
       id_usuario,
       cambio_moneda,
       ventas,
+      is_deuda = false,
     } = req.body;
     console.log(JSON.stringify(req.body,null,2));
     
@@ -153,6 +154,7 @@ const createListaVenta = async (req, res) => {
     if (!id_usuario) errors.push("id_usuario es obligatorio.");
     if (cambio_moneda === undefined || cambio_moneda === null) errors.push("cambio_moneda es obligatorio.");
     if (isNaN(cambio_moneda) || cambio_moneda <= 0) errors.push("cambio_moneda debe ser mayor que cero.");
+    if (typeof is_deuda !== "boolean") errors.push("is_deuda debe ser true o false.");
 
     // Validar que los montos no sean negativos
     const montos = [
@@ -177,7 +179,7 @@ const createListaVenta = async (req, res) => {
     };
     for (const [key, val] of Object.entries(cuentasMap)) {
       const cantidad = req.body[key];
-      if (cantidad && cantidad > 0) {
+      if (!is_deuda && cantidad && cantidad > 0) {
         if (!val || isNaN(val) || val <= 0) {
           errors.push(`Se requiere id_cuenta para ${key} porque su cantidad es > 0.`);
         }
@@ -202,6 +204,7 @@ const createListaVenta = async (req, res) => {
       id_usuario,
       cambio_moneda,
       ventas,
+      is_deuda,
     };
 
     const newLista = await listaVentaService.createListaVenta(listaData);
@@ -241,6 +244,7 @@ const updateListaVenta = async (req, res) => {
       id_usuario,
       cambio_moneda,
       ventas,
+      is_deuda = false,
     } = req.body;
     const errors = [];
     if (!fecha_hora) errors.push("fecha_hora es obligatorio.");
@@ -249,6 +253,7 @@ const updateListaVenta = async (req, res) => {
     if (cambio_moneda === undefined || cambio_moneda === null || isNaN(cambio_moneda) || cambio_moneda <= 0) {
       errors.push("cambio_moneda debe ser mayor que cero.");
     }
+    if (typeof is_deuda !== "boolean") errors.push("is_deuda debe ser true o false.");
     const montos = [
       cantidad_cobrada_efectivo_cup,
       cantidad_cobrada_efectivo_usd,
@@ -265,7 +270,7 @@ const updateListaVenta = async (req, res) => {
       [cantidad_cobrada_transferencia_usd, id_cuenta_transferencia_usd, "cantidad_cobrada_transferencia_usd"],
     ];
     for (const [monto, cuenta, campo] of cuentas) {
-      if (monto > 0 && (!cuenta || isNaN(cuenta) || cuenta <= 0)) {
+      if (!is_deuda && monto > 0 && (!cuenta || isNaN(cuenta) || cuenta <= 0)) {
         errors.push(`Se requiere id_cuenta para ${campo} porque su cantidad es > 0.`);
       }
     }
@@ -285,6 +290,7 @@ const updateListaVenta = async (req, res) => {
       id_usuario,
       cambio_moneda,
       ventas,
+      is_deuda,
     };
     const updated = await listaVentaService.updateListaVenta(id, data);
     res.status(200).json({ message: "Lista de ventas actualizada correctamente", data: updated });
