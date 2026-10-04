@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Modal, Image } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -19,12 +19,13 @@ import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import configService from '../services/configService';
 
 const MovimientosContent = () => {
   const navigation = useNavigation();
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
-  const { token, user, permissions } = useAuth();
+  const { token, user, permissions, movimientoAccessLevels, movimientoManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
   const { viewMode, toggleViewMode, isChangingView } = useViewMode();
@@ -51,11 +52,12 @@ const MovimientosContent = () => {
   }, [filters]);
 
   // Filter states
+  const today = new Date().toISOString().split('T')[0];
   const [filters, setFilters] = useState({ 
     tipo_movimiento: '', 
     estado: '', 
-    fecha_desde: '', 
-    fecha_hasta: '', 
+    fecha_desde: today, 
+    fecha_hasta: today, 
     id_servicio_tienda_origen: '', 
     id_servicio_tienda_destino: '',
     id_usuario: ''
@@ -76,12 +78,40 @@ const MovimientosContent = () => {
   const [hasLoadedAllUsers, setHasLoadedAllUsers] = useState(false);
   const [showEstadoDropdown, setShowEstadoDropdown] = useState(false);
   const [showTipoMovimientoDropdown, setShowTipoMovimientoDropdown] = useState(false);
+  const [tipoMovimientoSearchText, setTipoMovimientoSearchText] = useState('');
   const [showFechaDesdePicker, setShowFechaDesdePicker] = useState(false);
   const [showFechaHastaPicker, setShowFechaHastaPicker] = useState(false);
   const [hasShownOfflineToast, setHasShownOfflineToast] = useState(false);
 
+  const predefinedMovimientoTypes = ['Transferencia', 'Ajuste', 'Devolucion'];
+  const [customMovimientoTypes, setCustomMovimientoTypes] = useState([]);
+
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
+
+  // Load custom movimiento types
+  useEffect(() => {
+    const loadCustomMovimientoTypes = async () => {
+      try {
+        const config = await configService.getConfig();
+        if (config.customMovimientoTypes) {
+          setCustomMovimientoTypes(config.customMovimientoTypes);
+        }
+        
+        const asyncStorageTypes = await AsyncStorage.getItem('customMovimientoTypes');
+        if (asyncStorageTypes) {
+          const parsedTypes = JSON.parse(asyncStorageTypes);
+          setCustomMovimientoTypes(prev => {
+            const combined = [...new Set([...prev, ...parsedTypes])];
+            return combined;
+          });
+        }
+      } catch (error) {
+        console.error('Error loading custom movimiento types:', error);
+      }
+    };
+    loadCustomMovimientoTypes();
+  }, []);
 
   // Initialize
   useEffect(() => {
@@ -204,6 +234,24 @@ const MovimientosContent = () => {
       // Build filters to send to API
       const apiFilters = { ...filtersToUse };
 
+      // Apply movement access level filters
+      const userRole = user?.rol?.toLowerCase();
+      const isAdmin = userRole === 'administrador';
+      const userTiendaId = user?.id_tienda;
+
+      if (!isAdmin && movimientoAccessLevels) {
+        const accessLevel = 
+          userRole === 'dependiente' ? movimientoAccessLevels.dependiente :
+          userRole === 'almacenero' ? movimientoAccessLevels.almacenero :
+          userRole === 'económico' ? movimientoAccessLevels.economico : 'none';
+
+        if (accessLevel === 'mi_tienda' && userTiendaId) {
+          // Filter movements where user's tienda is origin or destination
+          // This will be handled by the backend, but we can add the filter here
+          apiFilters.id_tienda_origen_destino = userTiendaId;
+        }
+      }
+
       // Remove estado filter if empty to avoid backend validation error
       if (apiFilters.estado === '' || apiFilters.estado === null || apiFilters.estado === undefined) {
         delete apiFilters.estado;
@@ -214,6 +262,21 @@ const MovimientosContent = () => {
 
       const data = await getMovimientos(adjustedFilters, fetchPage, fetchLimit);
       let movimientosList = data.data || [];
+
+      // Additional client-side filtering if needed
+      if (!isAdmin && movimientoAccessLevels && userTiendaId) {
+        const accessLevel = 
+          userRole === 'dependiente' ? movimientoAccessLevels.dependiente :
+          userRole === 'almacenero' ? movimientoAccessLevels.almacenero :
+          userRole === 'económico' ? movimientoAccessLevels.economico : 'none';
+
+        if (accessLevel === 'mi_tienda') {
+          movimientosList = movimientosList.filter(movimiento => 
+            movimiento.id_tienda_origen === userTiendaId || 
+            movimiento.id_tienda_destino === userTiendaId
+          );
+        }
+      }
 
       setMovimientos(movimientosList);
       setPagination(data.pagination || pagination);
@@ -273,6 +336,142 @@ const MovimientosContent = () => {
         },
       ]
     );
+  };
+
+  const handleCompleteMovimiento = async (movimiento) => {
+    if (isOfflineMode) {
+      showToast({ type: 'warning', message: 'No disponible en modo offline' });
+      return;
+    }
+    Alert.alert(
+      'Completar Movimiento',
+      `¿Estás seguro de que quieres completar este movimiento? Esto moverá el stock de la tienda origen a la tienda destino.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Completar',
+          style: 'default',
+          onPress: async () => {
+            try {
+              const { updateMovimiento } = await import('../services/movimientoService');
+              const idUsuario = parseInt(user?.id_usuario);
+              
+              const updateData = {
+                estado: true,
+                id_usuario: idUsuario,
+                tipo_movimiento: movimiento.tipo_movimiento,
+                nota: movimiento.nota || '',
+                id_servicio_tienda_origen: movimiento.id_servicio_tienda_origen || movimiento.movimientos?.[0]?.id_servicio_tienda_origen,
+                id_servicio_tienda_destino: movimiento.id_servicio_tienda_destino || movimiento.movimientos?.[0]?.id_servicio_tienda_destino,
+                movimientos: movimiento.movimientos || [],
+              };
+              
+              await updateMovimiento(movimiento.id_movimiento_lista, updateData);
+              showToast({ type: 'success', message: 'Movimiento completado correctamente' });
+              fetchMovimientos();
+            } catch (err) {
+              showToast({ type: 'error', message: err.message, code: err.code });
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Helper functions for permission-based button visibility
+  const canShowEditDeleteButtons = (movimiento) => {
+    const userRole = user?.rol?.toLowerCase();
+    const isAdmin = userRole === 'administrador';
+    const userTiendaId = user?.id_tienda;
+
+    if (isAdmin) {
+      return true;
+    }
+
+    if (!movimientoManagePermissions) {
+      return false;
+    }
+
+    const canManage = 
+      userRole === 'dependiente' ? movimientoManagePermissions.dependiente :
+      userRole === 'almacenero' ? movimientoManagePermissions.almacenero :
+      userRole === 'económico' ? movimientoManagePermissions.economico : false;
+
+    if (!canManage) {
+      return false;
+    }
+
+    const accessLevel = 
+      userRole === 'dependiente' ? movimientoAccessLevels.dependiente :
+      userRole === 'almacenero' ? movimientoAccessLevels.almacenero :
+      userRole === 'económico' ? movimientoAccessLevels.economico : 'none';
+
+    // If user has "mi_tienda" access, only show edit/delete if their tienda is origen
+    if (accessLevel === 'mi_tienda' && userTiendaId) {
+      return movimiento.id_tienda_origen === userTiendaId;
+    }
+
+    // If user has "todas" access, show edit/delete
+    if (accessLevel === 'todas') {
+      return true;
+    }
+
+    return false;
+  };
+
+  const canShowCompleteButton = (movimiento) => {
+    const userRole = user?.rol?.toLowerCase();
+    const isAdmin = userRole === 'administrador';
+    const userTiendaId = user?.id_tienda;
+
+    console.log('[MovimientosScreen] canShowCompleteButton check:', {
+      movimientoId: movimiento.id_movimiento_lista,
+      estado: movimiento.estado,
+      estadoType: typeof movimiento.estado,
+      userRole,
+      isAdmin,
+      userTiendaId,
+    });
+
+    // Only show complete button if movement is pending
+    if (movimiento.estado === true || movimiento.estado === 1) {
+      return false;
+    }
+
+    // Admin always sees complete button for pending movements
+    if (isAdmin) {
+      return true;
+    }
+
+    if (!movimientoManagePermissions) {
+      return false;
+    }
+
+    const canManage = 
+      userRole === 'dependiente' ? movimientoManagePermissions.dependiente :
+      userRole === 'almacenero' ? movimientoManagePermissions.almacenero :
+      userRole === 'económico' ? movimientoManagePermissions.economico : false;
+
+    if (!canManage) {
+      return false;
+    }
+
+    const accessLevel = 
+      userRole === 'dependiente' ? movimientoAccessLevels.dependiente :
+      userRole === 'almacenero' ? movimientoAccessLevels.almacenero :
+      userRole === 'económico' ? movimientoAccessLevels.economico : 'none';
+
+    // If user has "mi_tienda" access, only show complete button if their tienda is destino
+    if (accessLevel === 'mi_tienda' && userTiendaId) {
+      return movimiento.id_tienda_destino === userTiendaId;
+    }
+
+    // If user has "todas" access, show complete button
+    if (accessLevel === 'todas') {
+      return true;
+    }
+
+    return false;
   };
 
   const handleMovimientoPress = (movimiento) => {
@@ -468,69 +667,56 @@ const MovimientosContent = () => {
 
           <View style={styles.filterGroup}>
             <Text style={[styles.label, { color: colors.outline }]}>Tipo de Movimiento</Text>
-            <TouchableOpacity
-              style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-              onPress={() => setShowTipoMovimientoDropdown(!showTipoMovimientoDropdown)}
-            >
-              <Text style={[styles.dropdownText, { color: filters.tipo_movimiento !== '' ? colors.onSurface : colors.outline }]}>
-                {filters.tipo_movimiento === '' ? 'Todos' : filters.tipo_movimiento}
-              </Text>
-              <Ionicons 
-                name={showTipoMovimientoDropdown ? "chevron-up" : "chevron-down"} 
-                size={responsive.responsiveWidth(20)} 
-                color={colors.outline} 
-              />
-            </TouchableOpacity>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+              placeholderTextColor={colors.outline}
+              placeholder="Todos"
+              value={filters.tipo_movimiento}
+              onChangeText={(text) => {
+                const newFilters = { ...filters, tipo_movimiento: text };
+                setFilters(newFilters);
+                setTipoMovimientoSearchText(text);
+              }}
+              onFocus={() => setShowTipoMovimientoDropdown(true)}
+              onBlur={() => {
+                setTimeout(() => setShowTipoMovimientoDropdown(false), 200);
+              }}
+            />
             {showTipoMovimientoDropdown && (
               <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                <TouchableOpacity
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    const newFilters = { ...filters, tipo_movimiento: '' };
-                    setFilters(newFilters);
-                    setShowTipoMovimientoDropdown(false);
-                    setPagination(prev => ({ ...prev, currentPage: 1 }));
-                    fetchMovimientos(newFilters);
-                  }}
-                >
-                  <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todos</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    const newFilters = { ...filters, tipo_movimiento: 'Ajuste' };
-                    setFilters(newFilters);
-                    setShowTipoMovimientoDropdown(false);
-                    setPagination(prev => ({ ...prev, currentPage: 1 }));
-                    fetchMovimientos(newFilters);
-                  }}
-                >
-                  <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Ajuste</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    const newFilters = { ...filters, tipo_movimiento: 'Devolucion' };
-                    setFilters(newFilters);
-                    setShowTipoMovimientoDropdown(false);
-                    setPagination(prev => ({ ...prev, currentPage: 1 }));
-                    fetchMovimientos(newFilters);
-                  }}
-                >
-                  <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Devolucion</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.dropdownItem, styles.dropdownItemLast]}
-                  onPress={() => {
-                    const newFilters = { ...filters, tipo_movimiento: 'Transferencia' };
-                    setFilters(newFilters);
-                    setShowTipoMovimientoDropdown(false);
-                    setPagination(prev => ({ ...prev, currentPage: 1 }));
-                    fetchMovimientos(newFilters);
-                  }}
-                >
-                  <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Transferencia</Text>
-                </TouchableOpacity>
+                <ScrollView style={styles.dropdownScroll}>
+                  <TouchableOpacity
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      const newFilters = { ...filters, tipo_movimiento: '' };
+                      setFilters(newFilters);
+                      setShowTipoMovimientoDropdown(false);
+                      setTipoMovimientoSearchText('');
+                      setPagination(prev => ({ ...prev, currentPage: 1 }));
+                      fetchMovimientos(newFilters);
+                    }}
+                  >
+                    <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todos</Text>
+                  </TouchableOpacity>
+                  {[...predefinedMovimientoTypes, ...customMovimientoTypes]
+                    .filter(t => t.toLowerCase().includes(tipoMovimientoSearchText.toLowerCase()))
+                    .map((type, index) => (
+                      <TouchableOpacity
+                        key={type}
+                        style={[styles.dropdownItem, index === ([...predefinedMovimientoTypes, ...customMovimientoTypes].filter(t => t.toLowerCase().includes(tipoMovimientoSearchText.toLowerCase())).length - 1) && styles.dropdownItemLast]}
+                        onPress={() => {
+                          const newFilters = { ...filters, tipo_movimiento: type };
+                          setFilters(newFilters);
+                          setShowTipoMovimientoDropdown(false);
+                          setTipoMovimientoSearchText('');
+                          setPagination(prev => ({ ...prev, currentPage: 1 }));
+                          fetchMovimientos(newFilters);
+                        }}
+                      >
+                        <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{type}</Text>
+                      </TouchableOpacity>
+                    ))}
+                </ScrollView>
               </View>
             )}
           </View>
@@ -973,15 +1159,30 @@ const MovimientosContent = () => {
                   activeOpacity={0.7}
                 >
                   <Card style={[styles.movimientoCard, { backgroundColor: colors.surface }]}>
+                    <View style={styles.movimientoFlagsContainer}>
+                      <View style={[styles.estadoFlag, { backgroundColor: movimiento.estado ? '#4CAF50' : '#FF9800' }]}>
+                        <Ionicons name={movimiento.estado ? "checkmark" : "alert"} size={responsive.responsiveWidth(14)} color="#fff" />
+                      </View>
+                      {movimiento.nota && (
+                        <View style={[styles.noteFlag, styles.noteFlagOverlapped, { backgroundColor: '#2196F3' }]}>
+                          <Ionicons name="document-text-outline" size={responsive.responsiveWidth(14)} color="#fff" />
+                        </View>
+                      )}
+                    </View>
                     <View style={styles.movimientoInfo}>
                       <View style={styles.movimientoHeader}>
-                        <Text style={[styles.movimientoTipo, { color: colors.onSurface }]}>
-                          {movimiento.tipo_movimiento}
-                        </Text>
-                        <View style={[styles.estadoBadge, { backgroundColor: getEstadoColor(movimiento.estado).bgColor, borderColor: getEstadoColor(movimiento.estado).borderColor }]}>
-                          <Text style={[styles.estadoBadgeText, { color: getEstadoColor(movimiento.estado).color }]}>
-                            {getEstadoColor(movimiento.estado).label}
-                          </Text>
+                        <View style={styles.movimientoTiendasContainer}>
+                          <View style={[styles.tiendaBadge, { backgroundColor: isDarkMode ? 'rgba(33, 150, 243, 0.2)' : '#E3F2FD', borderColor: '#2196F3' }]}>
+                            <Text style={[styles.tiendaBadgeText, { color: '#2196F3' }]}>
+                              {movimiento.tienda_origen?.nombre || movimiento.movimientos?.[0]?.servicioTiendaOrigen?.tienda?.nombre || 'N/A'}
+                            </Text>
+                          </View>
+                          <Ionicons name="arrow-forward" size={responsive.responsiveWidth(16)} color={colors.outline} />
+                          <View style={[styles.tiendaBadge, { backgroundColor: isDarkMode ? 'rgba(255, 152, 0, 0.2)' : '#FFF3E0', borderColor: '#FF9800' }]}>
+                            <Text style={[styles.tiendaBadgeText, { color: '#FF9800' }]}>
+                              {movimiento.tienda_destino?.nombre || movimiento.movimientos?.[0]?.servicioTiendaDestino?.tienda?.nombre || 'N/A'}
+                            </Text>
+                          </View>
                         </View>
                       </View>
                       <Text style={[styles.movimientoFecha, { color: colors.outline }]}>
@@ -990,35 +1191,45 @@ const MovimientosContent = () => {
                       <Text style={[styles.movimientoUsuario, { color: colors.outline }]}>
                         Usuario: {movimiento.usuario?.nombre_natural || 'N/A'}
                       </Text>
-                      <Text style={[styles.movimientoNota, { color: colors.outline }]}>
-                        {movimiento.nota || 'Sin nota'}
-                      </Text>
                       <Text style={[styles.movimientoItems, { color: colors.primary }]}>
                         {movimiento.movimientos?.length || 0} productos
                       </Text>
                     </View>
-                    {isAdmin && (
-                      <View style={styles.movimientoActions}>
+                    <View style={styles.movimientoActions}>
+                      {canShowEditDeleteButtons(movimiento) && (
+                        <>
+                          <TouchableOpacity
+                            style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleEdit(movimiento);
+                            }}
+                          >
+                            <Ionicons name="create-outline" size={responsive.responsiveWidth(20)} color={colors.primary} />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleDelete(movimiento);
+                            }}
+                          >
+                            <Ionicons name="trash-outline" size={responsive.responsiveWidth(20)} color={colors.error} />
+                          </TouchableOpacity>
+                        </>
+                      )}
+                      {canShowCompleteButton(movimiento) && (
                         <TouchableOpacity
-                          style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                          style={[styles.actionButtonSmall, styles.completeButtonSmall, { backgroundColor: isDarkMode ? 'rgba(76, 175, 80, 0.2)' : '#E8F5E9' }]}
                           onPress={(e) => {
                             e.stopPropagation();
-                            handleEdit(movimiento);
+                            handleCompleteMovimiento(movimiento);
                           }}
                         >
-                          <Ionicons name="create-outline" size={responsive.responsiveWidth(20)} color={colors.primary} />
+                          <Image source={require('../../assets/success.png')} style={[styles.completeIcon, { tintColor: isDarkMode ? '#fff' : undefined }]} />
                         </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleDelete(movimiento);
-                          }}
-                        >
-                          <Ionicons name="trash-outline" size={responsive.responsiveWidth(20)} color={colors.error} />
-                        </TouchableOpacity>
-                      </View>
-                    )}
+                      )}
+                    </View>
                   </Card>
                 </TouchableOpacity>
               ))
@@ -1026,14 +1237,13 @@ const MovimientosContent = () => {
               <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.tableScrollView}>
                 <View style={styles.tableContainer}>
                 <View style={[styles.tableHeader, { backgroundColor: colors.primary }]}>
-                  <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Tipo</Text>
-                  <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Estado</Text>
+                  <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(140) }]}>Origen</Text>
+                  <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(140) }]}>Destino</Text>
+                  <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80) }]}>Estado</Text>
                   <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(180) }]}>Usuario</Text>
                   <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Fecha</Text>
                   <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80), textAlign: 'center' }]}>Productos</Text>
-                  {isAdmin && (
-                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Acciones</Text>
-                  )}
+                  <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Acciones</Text>
                 </View>
                 {movimientos.map((movimiento, index) => {
                   return (
@@ -1043,14 +1253,30 @@ const MovimientosContent = () => {
                       activeOpacity={0.7}
                     >
                       <View style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? colors.surface : colors.surfaceVariant }]}>
-                        <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
-                          {movimiento.tipo_movimiento}
-                        </Text>
-                        <View style={[styles.tableEstadoCell, { width: responsive.responsiveWidth(120) }]}>
-                          <View style={[styles.tableEstadoBadge, { backgroundColor: getEstadoColor(movimiento.estado).bgColor, borderColor: getEstadoColor(movimiento.estado).borderColor }]}>
-                            <Text style={[styles.tableEstadoBadgeText, { color: getEstadoColor(movimiento.estado).color }]}>
-                              {getEstadoColor(movimiento.estado).label}
+                        <View style={[styles.tableCell, { width: responsive.responsiveWidth(140) }]}>
+                          <View style={[styles.tableTiendaBadge, { backgroundColor: isDarkMode ? 'rgba(33, 150, 243, 0.2)' : '#E3F2FD', borderColor: '#2196F3' }]}>
+                            <Text style={[styles.tableTiendaBadgeText, { color: '#2196F3' }]}>
+                              {movimiento.tienda_origen?.nombre || movimiento.movimientos?.[0]?.servicioTiendaOrigen?.tienda?.nombre || 'N/A'}
                             </Text>
+                          </View>
+                        </View>
+                        <View style={[styles.tableCell, { width: responsive.responsiveWidth(140) }]}>
+                          <View style={[styles.tableTiendaBadge, { backgroundColor: isDarkMode ? 'rgba(255, 152, 0, 0.2)' : '#FFF3E0', borderColor: '#FF9800' }]}>
+                            <Text style={[styles.tableTiendaBadgeText, { color: '#FF9800' }]}>
+                              {movimiento.tienda_destino?.nombre || movimiento.movimientos?.[0]?.servicioTiendaDestino?.tienda?.nombre || 'N/A'}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={[styles.tableCell, { width: responsive.responsiveWidth(80), alignItems: 'center' }]}>
+                          <View style={styles.tableFlagsRow}>
+                            <View style={[styles.tableEstadoFlag, { backgroundColor: movimiento.estado ? '#4CAF50' : '#FF9800' }]}>
+                              <Ionicons name={movimiento.estado ? "checkmark" : "alert"} size={responsive.responsiveWidth(12)} color="#fff" />
+                            </View>
+                            {movimiento.nota && (
+                              <View style={[styles.tableNoteFlag, { backgroundColor: '#2196F3' }]}>
+                                <Ionicons name="document-text-outline" size={responsive.responsiveWidth(12)} color="#fff" />
+                              </View>
+                            )}
                           </View>
                         </View>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(180) }]}>
@@ -1062,30 +1288,43 @@ const MovimientosContent = () => {
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(80), textAlign: 'center' }]}>
                           {movimiento.movimientos?.length || 0}
                         </Text>
-                        {isAdmin && (
-                          <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(100) }]}>
-                            <View style={styles.tableActionsRow}>
+                        <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(100) }]}>
+                          <View style={styles.tableActionsRow}>
+                            {canShowEditDeleteButtons(movimiento) && (
+                              <>
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableEditButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleEdit(movimiento);
+                                  }}
+                                >
+                                  <Ionicons name="create-outline" size={responsive.responsiveWidth(18)} color={colors.primary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableDeleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(movimiento);
+                                  }}
+                                >
+                                  <Ionicons name="trash-outline" size={responsive.responsiveWidth(18)} color={colors.error} />
+                                </TouchableOpacity>
+                              </>
+                            )}
+                            {canShowCompleteButton(movimiento) && (
                               <TouchableOpacity
-                                style={[styles.tableActionButton, styles.tableEditButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                                style={[styles.tableActionButton, styles.tableCompleteButton, { backgroundColor: isDarkMode ? 'rgba(76, 175, 80, 0.2)' : '#E8F5E9' }]}
                                 onPress={(e) => {
                                   e.stopPropagation();
-                                  handleEdit(movimiento);
+                                  handleCompleteMovimiento(movimiento);
                                 }}
                               >
-                                <Ionicons name="create-outline" size={responsive.responsiveWidth(18)} color={colors.primary} />
+                                <Image source={require('../../assets/success.png')} style={[styles.tableCompleteIcon, { tintColor: isDarkMode ? '#fff' : undefined }]} />
                               </TouchableOpacity>
-                              <TouchableOpacity
-                                style={[styles.tableActionButton, styles.tableDeleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                                onPress={(e) => {
-                                  e.stopPropagation();
-                                  handleDelete(movimiento);
-                                }}
-                              >
-                                <Ionicons name="trash-outline" size={responsive.responsiveWidth(18)} color={colors.error} />
-                              </TouchableOpacity>
-                            </View>
+                            )}
                           </View>
-                        )}
+                        </View>
                       </View>
                     </TouchableOpacity>
                   );
@@ -1364,6 +1603,14 @@ const createStyles = (responsive) => StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  movimientoFlagsContainer: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(4),
+    zIndex: 1,
+  },
   movimientoInfo: {
     flex: 1,
   },
@@ -1372,6 +1619,46 @@ const createStyles = (responsive) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: responsive.responsiveMargin(8),
+  },
+  movimientoTiendasContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+    flex: 1,
+  },
+  tiendaBadge: {
+    paddingHorizontal: responsive.responsivePadding(10),
+    paddingVertical: responsive.responsivePadding(6),
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  tiendaBadgeText: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  movimientoFlags: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(4),
+  },
+  estadoFlag: {
+    width: responsive.responsiveWidth(24),
+    height: responsive.responsiveHeight(24),
+    borderRadius: responsive.responsiveWidth(12),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noteFlag: {
+    width: responsive.responsiveWidth(24),
+    height: responsive.responsiveHeight(24),
+    borderRadius: responsive.responsiveWidth(12),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noteFlagOverlapped: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
   },
   movimientoTipo: {
     fontSize: responsive.responsiveFontSize(18),
@@ -1428,6 +1715,19 @@ const createStyles = (responsive) => StyleSheet.create({
     borderWidth: 1,
     borderColor: 'transparent',
   },
+  completeButtonSmall: {
+    width: responsive.responsiveWidth(40),
+    height: responsive.responsiveHeight(40),
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  completeIcon: {
+    width: responsive.responsiveWidth(20),
+    height: responsive.responsiveHeight(20),
+  },
   tableScrollView: {
     marginBottom: responsive.responsiveMargin(16),
   },
@@ -1463,6 +1763,39 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(13),
     fontFamily: 'Inter',
     paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableCell: {
+    flex: 1,
+  },
+  tableTiendaBadge: {
+    paddingHorizontal: responsive.responsivePadding(8),
+    paddingVertical: responsive.responsivePadding(4),
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  tableTiendaBadgeText: {
+    fontSize: responsive.responsiveFontSize(11),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  tableFlagsRow: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(4),
+    alignItems: 'center',
+  },
+  tableEstadoFlag: {
+    width: responsive.responsiveWidth(18),
+    height: responsive.responsiveHeight(18),
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tableNoteFlag: {
+    width: responsive.responsiveWidth(18),
+    height: responsive.responsiveHeight(18),
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tableEstadoCell: {
     flex: 1,
@@ -1500,6 +1833,19 @@ const createStyles = (responsive) => StyleSheet.create({
   tableDeleteButton: {
     borderWidth: 1,
     borderColor: 'transparent',
+  },
+  tableCompleteButton: {
+    width: responsive.responsiveWidth(32),
+    height: responsive.responsiveHeight(32),
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  tableCompleteIcon: {
+    width: responsive.responsiveWidth(18),
+    height: responsive.responsiveHeight(18),
   },
   paginationContainer: {
     flexDirection: 'row',

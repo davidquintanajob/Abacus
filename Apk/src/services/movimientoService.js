@@ -1,4 +1,5 @@
 import api from './api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const getMovimientos = async (filters = {}, page = 1, limit = 10) => {
   try {
@@ -61,6 +62,14 @@ export const createMovimiento = async (movimientoData) => {
 
 export const updateMovimiento = async (id, movimientoData) => {
   try {
+    console.log('[movimientoService] updateMovimiento called with:', {
+      id,
+      hasIdUsuario: !!movimientoData.id_usuario,
+      movimientoDataKeys: Object.keys(movimientoData),
+    });
+
+    // Only include id_usuario if it's already in the data
+    // Don't try to fetch from AsyncStorage for updates
     const response = await api.put(`/movimiento/${id}`, movimientoData);
     return response.data;
   } catch (error) {

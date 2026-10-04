@@ -38,6 +38,10 @@ import InformeGeneralScreen from './src/screens/InformeGeneralScreen';
 import InformeVentasScreen from './src/screens/InformeVentasScreen';
 import { MovimientosScreen } from './src/screens/MovimientosScreen';
 import { MovimientoFormScreen } from './src/screens/MovimientoFormScreen';
+import ClientesScreen from './src/screens/ClientesScreen';
+import ClienteFormScreen from './src/screens/ClienteFormScreen';
+import DeudaScreen from './src/screens/DeudaScreen';
+import DeudaFormScreen from './src/screens/DeudaFormScreen';
 import { navigationRef } from './src/navigationRef';
 
 const Stack = createNativeStackNavigator();
@@ -88,6 +92,10 @@ const AppStack = ({ initialRoute }) => (
     <Stack.Screen name="InformeVentas" component={InformeVentasScreen} />
     <Stack.Screen name="Movimientos" component={MovimientosScreen} />
     <Stack.Screen name="MovimientoForm" component={MovimientoFormScreen} />
+    <Stack.Screen name="Clientes" component={ClientesScreen} />
+    <Stack.Screen name="ClienteForm" component={ClienteFormScreen} />
+    <Stack.Screen name="Deudas" component={DeudaScreen} />
+    <Stack.Screen name="DeudaForm" component={DeudaFormScreen} />
     <Stack.Screen name="BarcodeScanner" component={BarcodeScannerScreen} />
     <Stack.Screen name="CurrencyExchange" component={CurrencyExchangeScreen} />
   </Stack.Navigator>

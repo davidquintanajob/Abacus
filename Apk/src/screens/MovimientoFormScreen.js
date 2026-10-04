@@ -15,13 +15,15 @@ import { getTiendas } from '../services/tiendaService';
 import { getServicios, getServicioById } from '../services/servicioService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
+import configService from '../services/configService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const MovimientoFormContent = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
-  const { user } = useAuth();
+  const { user, movimientoAccessLevels, movimientoManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
 
@@ -40,9 +42,14 @@ const MovimientoFormContent = () => {
   const [showProductoDropdown, setShowProductoDropdown] = useState(false);
   const [productoSearchText, setProductoSearchText] = useState('');
 
+  const predefinedMovimientoTypes = ['Transferencia', 'Ajuste', 'Devolucion'];
+  const [customMovimientoTypes, setCustomMovimientoTypes] = useState([]);
+  const [showTipoMovimientoDropdown, setShowTipoMovimientoDropdown] = useState(false);
+  const [tipoMovimientoSearchText, setTipoMovimientoSearchText] = useState('');
+
   const [formData, setFormData] = useState({
     tipo_movimiento: 'Transferencia',
-    estado: true,
+    estado: false,
     nota: '',
     id_tienda_origen: null,
     id_tienda_destino: null,
@@ -60,12 +67,66 @@ const MovimientoFormContent = () => {
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
 
+  // Load custom movimiento types
+  useEffect(() => {
+    const loadCustomMovimientoTypes = async () => {
+      try {
+        // Load from config
+        const config = await configService.getConfig();
+        if (config.customMovimientoTypes) {
+          setCustomMovimientoTypes(config.customMovimientoTypes);
+        }
+        
+        // Load from AsyncStorage as backup
+        const asyncStorageTypes = await AsyncStorage.getItem('customMovimientoTypes');
+        if (asyncStorageTypes) {
+          const parsedTypes = JSON.parse(asyncStorageTypes);
+          setCustomMovimientoTypes(prev => {
+            const combined = [...new Set([...prev, ...parsedTypes])];
+            return combined;
+          });
+        }
+      } catch (error) {
+        console.error('Error loading custom movimiento types:', error);
+      }
+    };
+    loadCustomMovimientoTypes();
+  }, []);
+
+  const saveCustomMovimientoType = async (newType) => {
+    if (!newType || newType.trim() === '') return;
+    
+    // Check if already exists
+    const allTypes = [...predefinedMovimientoTypes, ...customMovimientoTypes];
+    if (allTypes.includes(newType.trim())) return;
+    
+    const updatedTypes = [...customMovimientoTypes, newType.trim()];
+    setCustomMovimientoTypes(updatedTypes);
+    
+    try {
+      // Save to AsyncStorage
+      await AsyncStorage.setItem('customMovimientoTypes', JSON.stringify(updatedTypes));
+      
+      // Save to config
+      const config = await configService.getConfig();
+      const updatedConfig = {
+        ...config,
+        customMovimientoTypes: updatedTypes,
+      };
+      await configService.updateConfig(updatedConfig);
+    } catch (error) {
+      console.error('Error saving custom movimiento type:', error);
+    }
+  };
+
   useEffect(() => {
     const fetchCompleteMovimiento = async () => {
       if (movimiento?.id_movimiento_lista) {
         try {
           setIsFetchingMovimiento(true);
           const completeMovimiento = isOfflineMode ? movimiento : await getMovimientoById(movimiento.id_movimiento_lista);
+          
+          console.log('[MovimientoFormScreen] completeMovimiento raw data:', completeMovimiento);
           
           // Extraer tiendas de los movimientos si no están en el nivel raíz
           const tiendaOrigen = completeMovimiento.tienda_origen || 
@@ -98,12 +159,22 @@ const MovimientoFormContent = () => {
           setFormData({
             tipo_movimiento: completeMovimiento.tipo_movimiento || 'Transferencia',
             estado: completeMovimiento.estado ?? true,
-            nota: completeMovimiento.nota || '',
+            nota: completeMovimiento.nota || completeMovimiento.movimientos?.[0]?.nota || '',
             id_tienda_origen: completeMovimiento.id_tienda_origen || tiendaOrigen?.id_tienda,
             id_tienda_destino: completeMovimiento.id_tienda_destino || tiendaDestino?.id_tienda,
             tienda_origen: tiendaOrigen,
             tienda_destino: tiendaDestino,
             movimientos: movimientosConServicio,
+          });
+
+          console.log('[MovimientoFormScreen] Datos cargados para edición:', {
+            tipo_movimiento: completeMovimiento.tipo_movimiento,
+            estado: completeMovimiento.estado,
+            notaFromRoot: completeMovimiento.nota,
+            notaFromMovimientos: completeMovimiento.movimientos?.[0]?.nota,
+            finalNota: completeMovimiento.nota || completeMovimiento.movimientos?.[0]?.nota || '',
+            notaLength: (completeMovimiento.nota || completeMovimiento.movimientos?.[0]?.nota || '').length,
+            notaType: typeof (completeMovimiento.nota || completeMovimiento.movimientos?.[0]?.nota || ''),
           });
         } catch (err) {
           console.error('[fetchCompleteMovimiento] Error:', err);
@@ -120,13 +191,84 @@ const MovimientoFormContent = () => {
       try {
         if (isOfflineMode) return;
         const response = await getTiendas({ activo: true });
-        setTiendas(response.data || []);
+        let tiendasList = response.data || [];
+
+        // Filter tiendas based on movement permissions
+        const userRole = user?.rol?.toLowerCase();
+        const isAdmin = userRole === 'administrador';
+        const userTiendaId = user?.id_tienda;
+
+        if (!isAdmin && movimientoAccessLevels && movimientoManagePermissions) {
+          const accessLevel = 
+            userRole === 'dependiente' ? movimientoAccessLevels.dependiente :
+            userRole === 'almacenero' ? movimientoAccessLevels.almacenero :
+            userRole === 'económico' ? movimientoAccessLevels.economico : 'none';
+
+          const canManage = 
+            userRole === 'dependiente' ? movimientoManagePermissions.dependiente :
+            userRole === 'almacenero' ? movimientoManagePermissions.almacenero :
+            userRole === 'económico' ? movimientoManagePermissions.economico : false;
+
+          // If user has manage permission but only "mi_tienda" access, filter for origen
+          if (canManage && accessLevel === 'mi_tienda' && userTiendaId) {
+            // For origen dropdown, only show user's tienda
+            // For destino dropdown, show all (they can send to any tienda)
+            // We'll handle this in the render
+          }
+        }
+
+        setTiendas(tiendasList);
       } catch (error) {
         setTiendas([]);
       }
     };
     fetchTiendas();
-  }, [isOfflineMode]);
+  }, [isOfflineMode, movimientoAccessLevels, movimientoManagePermissions, user]);
+
+  // Helper function to filter tiendas based on permissions
+  const getFilteredTiendas = (type) => {
+    const userRole = user?.rol?.toLowerCase();
+    const isAdmin = userRole === 'administrador';
+    const userTiendaId = user?.id_tienda;
+
+    let filteredTiendas = tiendas;
+
+    if (isAdmin) {
+      filteredTiendas = tiendas;
+    } else if (!movimientoAccessLevels || !movimientoManagePermissions) {
+      filteredTiendas = tiendas;
+    } else {
+      const accessLevel = 
+        userRole === 'dependiente' ? movimientoAccessLevels.dependiente :
+        userRole === 'almacenero' ? movimientoAccessLevels.almacenero :
+        userRole === 'económico' ? movimientoAccessLevels.economico : 'none';
+
+      const canManage = 
+        userRole === 'dependiente' ? movimientoManagePermissions.dependiente :
+        userRole === 'almacenero' ? movimientoManagePermissions.almacenero :
+        userRole === 'económico' ? movimientoManagePermissions.economico : false;
+
+      // If user has manage permission with "mi_tienda" access
+      if (canManage && accessLevel === 'mi_tienda' && userTiendaId) {
+        if (type === 'origen') {
+          // Only show user's tienda for origen
+          filteredTiendas = tiendas.filter(tienda => tienda.id_tienda === userTiendaId);
+        } else if (type === 'destino') {
+          // Show all tiendas for destino (they can send to any tienda)
+          filteredTiendas = tiendas;
+        }
+      }
+    }
+
+    // Prevent selecting the same tienda as both origen and destino
+    if (type === 'origen' && formData.id_tienda_destino) {
+      filteredTiendas = filteredTiendas.filter(tienda => tienda.id_tienda !== formData.id_tienda_destino);
+    } else if (type === 'destino' && formData.id_tienda_origen) {
+      filteredTiendas = filteredTiendas.filter(tienda => tienda.id_tienda !== formData.id_tienda_origen);
+    }
+
+    return filteredTiendas;
+  };
 
   useEffect(() => {
     const fetchProductosOrigen = async () => {
@@ -248,12 +390,22 @@ const MovimientoFormContent = () => {
       const movimientoData = {
         tipo_movimiento: formData.tipo_movimiento,
         estado: formData.estado,
-        nota: formData.nota,
+        nota: formData.nota || '',
         id_servicio_tienda_origen: movimientosConDestino[0].id_servicio_tienda_origen,
         id_servicio_tienda_destino: movimientosConDestino[0].id_servicio_tienda_destino,
-        id_usuario: idUsuario,
         movimientos: movimientosConDestino,
+        id_usuario: idUsuario,
       };
+
+      console.log('[MovimientoFormScreen] Guardando movimiento:', {
+        isEditMode,
+        tipo_movimiento: formData.tipo_movimiento,
+        estado: formData.estado,
+        nota: formData.nota,
+        notaLength: formData.nota?.length,
+        notaType: typeof formData.nota,
+        idUsuario,
+      });
 
       if (isEditMode) {
         await updateMovimiento(movimiento.id_movimiento_lista, movimientoData);
@@ -298,13 +450,56 @@ const MovimientoFormContent = () => {
               <Card style={[styles.formCard, { backgroundColor: colors.surface }]}>
                 <View style={styles.formGroup}>
                   <Text style={[styles.label, { color: colors.outline }]}>Tipo de Movimiento *</Text>
-                  <View style={styles.chipContainer}>
-                    {['Transferencia', 'Ajuste', 'Devolución'].map((tipo) => (
-                      <TouchableOpacity key={tipo} style={[styles.chip, formData.tipo_movimiento === tipo && { backgroundColor: colors.primary }]} onPress={() => setFormData(prev => ({ ...prev, tipo_movimiento: tipo }))}>
-                        <Text style={[styles.chipText, formData.tipo_movimiento === tipo && { color: '#fff' }, formData.tipo_movimiento !== tipo && { color: isDarkMode ? '#fff' : colors.onSurface }]}>{tipo}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                  {isReadOnly ? (
+                    <View style={[styles.input, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <Text style={[styles.inputText, { color: colors.onSurface }]}>{formData.tipo_movimiento || 'N/A'}</Text>
+                    </View>
+                  ) : (
+                    <>
+                      <TextInput
+                        style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                        placeholderTextColor={colors.outline}
+                        placeholder="Seleccionar o escribir tipo..."
+ value={formData.tipo_movimiento}
+                        onChangeText={(text) => {
+                          setFormData(prev => ({ ...prev, tipo_movimiento: text }));
+                          setTipoMovimientoSearchText(text);
+                        }}
+                        onFocus={() => !isReadOnly && setShowTipoMovimientoDropdown(true)}
+                        onBlur={() => {
+                          setShowTipoMovimientoDropdown(false);
+                          // Save custom type if it doesn't exist in predefined or custom types
+                          if (formData.tipo_movimiento && formData.tipo_movimiento.trim() !== '') {
+                            const allTypes = [...predefinedMovimientoTypes, ...customMovimientoTypes];
+                            if (!allTypes.includes(formData.tipo_movimiento.trim())) {
+                              saveCustomMovimientoType(formData.tipo_movimiento);
+                            }
+                          }
+                        }}
+                      />
+                      {showTipoMovimientoDropdown && (
+                        <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                          <ScrollView style={styles.dropdownScroll}>
+                            {[...predefinedMovimientoTypes, ...customMovimientoTypes]
+                              .filter(t => t.toLowerCase().includes(tipoMovimientoSearchText.toLowerCase()))
+                              .map((type, index) => (
+                                <TouchableOpacity
+                                  key={type}
+                                  style={[styles.dropdownItem, index === ([...predefinedMovimientoTypes, ...customMovimientoTypes].filter(t => t.toLowerCase().includes(tipoMovimientoSearchText.toLowerCase())).length - 1) && styles.dropdownItemLast]}
+                                  onPress={() => {
+                                    setFormData(prev => ({ ...prev, tipo_movimiento: type }));
+                                    setShowTipoMovimientoDropdown(false);
+                                    setTipoMovimientoSearchText('');
+                                  }}
+                                >
+                                  <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{type}</Text>
+                                </TouchableOpacity>
+                              ))}
+                          </ScrollView>
+                        </View>
+                      )}
+                    </>
+                  )}
                 </View>
                 <View style={styles.formGroup}>
                   <Text style={[styles.label, { color: colors.outline }]}>Estado</Text>
@@ -332,7 +527,7 @@ const MovimientoFormContent = () => {
                   {showTiendaOrigenDropdown && (
                     <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
                       <ScrollView style={styles.dropdownScroll}>
-                        {tiendas.map((tienda) => (
+                        {getFilteredTiendas('origen').map((tienda) => (
                           <TouchableOpacity key={tienda.id_tienda} style={styles.dropdownItem} onPress={() => { setFormData(prev => ({ ...prev, id_tienda_origen: tienda.id_tienda, tienda_origen: tienda })); setShowTiendaOrigenDropdown(false); }}>
                             <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
                           </TouchableOpacity>
@@ -356,7 +551,7 @@ const MovimientoFormContent = () => {
                   {showTiendaDestinoDropdown && (
                     <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
                       <ScrollView style={styles.dropdownScroll}>
-                        {tiendas.map((tienda) => (
+                        {getFilteredTiendas('destino').map((tienda) => (
                           <TouchableOpacity key={tienda.id_tienda} style={styles.dropdownItem} onPress={() => { setFormData(prev => ({ ...prev, id_tienda_destino: tienda.id_tienda, tienda_destino: tienda })); setShowTiendaDestinoDropdown(false); }}>
                             <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
                           </TouchableOpacity>
@@ -422,6 +617,22 @@ const MovimientoFormContent = () => {
                         <TextInput style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]} placeholderTextColor={colors.outline} placeholder="0.00" value={movimientoItem.cantidad} onChangeText={(text) => setMovimientoItem(prev => ({ ...prev, cantidad: text }))} keyboardType="decimal-pad" />
                       </View>
                     </View>
+                    {movimientoItem.servicio_tienda && (
+                      <View style={[styles.stockInfoPanel, { backgroundColor: isDarkMode ? 'rgba(76, 175, 80, 0.1)' : '#E8F5E9', borderColor: '#4CAF50' }]}>
+                        <View style={styles.stockInfoRow}>
+                          <Text style={[styles.stockInfoText, { color: colors.onSurface }]}>
+                            Stock actual: <Text style={[styles.stockInfoValue, { color: '#4CAF50' }]}>{formatNumber(movimientoItem.servicio_tienda.cantidad)}</Text>
+                          </Text>
+                        </View>
+                        <View style={styles.stockInfoRowLast}>
+                          <Text style={[styles.stockInfoText, { color: colors.onSurface }]}>
+                            Stock después del movimiento: <Text style={[styles.stockInfoValue, { color: movimientoItem.cantidad && parseFloat(movimientoItem.cantidad) > movimientoItem.servicio_tienda.cantidad ? '#F44336' : '#4CAF50' }]}>
+                              {movimientoItem.cantidad ? formatNumber(Math.max(0, movimientoItem.servicio_tienda.cantidad - parseFloat(movimientoItem.cantidad))) : formatNumber(movimientoItem.servicio_tienda.cantidad)}
+                            </Text>
+                          </Text>
+                        </View>
+                      </View>
+                    )}
                     <TouchableOpacity style={[styles.addButton, { backgroundColor: colors.primary }]} onPress={handleAddMovimientoItem}>
                       <Ionicons name="add" size={20} color="#fff" />
                       <Text style={[styles.addButtonText, { color: '#fff' }]}>Agregar Producto</Text>
@@ -498,7 +709,12 @@ const createStyles = (responsive) => StyleSheet.create({
   switchLabelSimple: { fontSize: responsive.fontSizes.body, fontFamily: 'Inter' },
   sectionTitle: { fontSize: responsive.responsiveFontSize(18), fontWeight: '700', fontFamily: 'Hanken Grotesk', marginBottom: responsive.responsiveMargin(16) },
   itemForm: { marginBottom: responsive.responsiveMargin(16) },
-  addButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: responsive.responsivePadding(12), borderRadius: 8, gap: responsive.responsiveMargin(8) },
+  stockInfoPanel: { padding: responsive.responsivePadding(12), borderRadius: 8, borderWidth: 1, marginTop: responsive.responsiveMargin(8) },
+  stockInfoRow: { marginBottom: responsive.responsiveMargin(4) },
+  stockInfoRowLast: { marginBottom: 0 },
+  stockInfoText: { fontSize: responsive.fontSizes.bodySmall, fontFamily: 'Inter' },
+  stockInfoValue: { fontWeight: '600', fontFamily: 'Inter' },
+  addButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: responsive.responsivePadding(12), borderRadius: 8, gap: responsive.responsiveMargin(8), marginTop: responsive.responsiveMargin(8) },
   addButtonText: { fontSize: responsive.fontSizes.body, fontWeight: '500', fontFamily: 'Inter' },
   itemsList: { gap: responsive.responsiveMargin(12) },
   itemCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: responsive.responsivePadding(16), borderRadius: 8, borderWidth: 1 },

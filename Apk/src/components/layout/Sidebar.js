@@ -16,7 +16,7 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
   const responsive = useResponsive();
   const insets = useSafeAreaInsets() || { top: 0, bottom: 0, left: 0, right: 0 };
   const { toast, showToast, hideToast } = useToast();
-  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels } = useAuth();
+  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels, deudaAccessLevels } = useAuth();
   const { isOfflineMode } = useOffline();
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -51,6 +51,13 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
     (userRole === 'almacenero' && ventaAccessLevels?.almacenero !== 'none') ||
     (userRole === 'económico' && ventaAccessLevels?.economico !== 'none'));
 
+  const canAccessClientes =
+    !isOfflineMode &&
+    (isAdmin ||
+    (userRole === 'dependiente' && deudaAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'almacenero' && deudaAccessLevels?.almacenero !== 'none') ||
+    (userRole === 'económico' && deudaAccessLevels?.economico !== 'none'));
+
   const canAccessMovimientos = !isOfflineMode;
 
   const menuItems = [
@@ -63,8 +70,8 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
     ...(canAccessOperaciones ? [{ icon: require('../../../assets/report.png'), label: 'Operaciones', route: 'Operaciones' }] : []),
     { icon: require('../../../assets/report (1).png'), label: 'Informes', route: 'Informes' },
     ...(canAccessMovimientos ? [{ icon: require('../../../assets/moving.png'), label: 'Movimientos', route: 'Movimientos' }] : []),
+    ...(canAccessClientes ? [{ icon: require('../../../assets/customer-search.png'), label: 'Clientes', route: 'Clientes' }] : []),
     // Disabled items (coming soon)
-    { icon: require('../../../assets/customer-search.png'), label: 'Clientes', disabled: true },
     { icon: require('../../../assets/debt-recovery.png'), label: 'Deudas', disabled: true },
     ...(isAdmin ? [{ icon: require('../../../assets/tienda.png'), label: 'Tiendas', route: 'Tiendas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/usuarios.png'), label: 'Usuarios', route: 'Usuarios' }] : []),
