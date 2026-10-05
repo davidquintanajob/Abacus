@@ -2229,7 +2229,7 @@ const ProductosContent = () => {
                 <Text style={[styles.label, { color: colors.outline }]}>Categoría</Text>
                 <View style={styles.inputContainer}>
                   <TextInput
-                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    style={[styles.input, styles.inputWithDropdown, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
                     placeholderTextColor={colors.outline}
                     placeholder="Seleccionar o escribir categoría..."
                     value={filters.categoria}
@@ -3031,6 +3031,13 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
   },
+  inputFixedWidth: {
+    width: '100%',
+  },
+  inputWithDropdown: {
+    width: '100%',
+    paddingRight: responsive.responsivePadding(48),
+  },
   rowInputs: {
     flexDirection: 'row',
     gap: responsive.responsiveMargin(8),
@@ -3282,11 +3289,13 @@ const createStyles = (responsive) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     position: 'relative',
+    width: '100%',
   },
   dropdownIcon: {
     position: 'absolute',
-    right: responsive.responsiveWidth(12),
-    padding: responsive.responsivePadding(4),
+    right: 0,
+    padding: responsive.responsivePadding(12),
+    zIndex: 1,
   },
   dropdownScroll: {
     maxHeight: responsive.responsiveHeight(200),
