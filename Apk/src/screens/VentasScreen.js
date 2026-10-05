@@ -1596,7 +1596,16 @@ const VentasContent = () => {
                   onPress={() => handleVentaPress(venta)}
                   activeOpacity={0.7}
                 >
-                  <Card style={[styles.ventaCard, { backgroundColor: colors.surface }]}>
+                  <Card style={[
+                    styles.ventaCard, 
+                    { 
+                      backgroundColor: venta.is_deuda 
+                        ? (venta.deuda?.monto_restante_cup > 0 || venta.deuda?.monto_restante_usd > 0 
+                            ? (isDarkMode ? 'rgba(255, 193, 7, 0.15)' : '#FFF8E1') 
+                            : (isDarkMode ? 'rgba(76, 175, 80, 0.15)' : '#E8F5E9'))
+                        : colors.surface 
+                    }
+                  ]}>
                     {venta.nota && (
                       <View style={[styles.noteFlag, { backgroundColor: '#2196F3' }]}>
                         <Ionicons name="document-text-outline" size={responsive.responsiveWidth(14)} color="#fff" />
@@ -1611,9 +1620,11 @@ const VentasContent = () => {
                       <Text style={[styles.ventaTienda, { color: colors.outline }]}>
                         Tienda: {venta.ventas?.[0]?.servicioTienda?.tienda?.nombre || 'N/A'}
                       </Text>
-                      <Text style={[styles.ventaUsuario, { color: colors.outline }]}>
-                        Usuario: {venta.operaciones?.[0]?.usuario?.nombre_natural || 'N/A'}
-                      </Text>
+                      {!venta.is_deuda && (
+                        <Text style={[styles.ventaUsuario, { color: colors.outline }]}>
+                          Usuario: {venta.operaciones?.[0]?.usuario?.nombre_natural || 'N/A'}
+                        </Text>
+                      )}
                       <View style={styles.cantidadRow}>
                         {(() => {
                           const totalCUP = venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_cup || 0) * (v.cantidad || 0)), 0) || 0;
@@ -1707,7 +1718,16 @@ const VentasContent = () => {
                       onPress={() => handleVentaPress(venta)}
                       activeOpacity={0.7}
                     >
-                      <View style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? colors.surface : colors.surfaceVariant }]}>
+                      <View style={[
+                        styles.tableRow, 
+                        { 
+                          backgroundColor: venta.is_deuda 
+                            ? (venta.deuda?.monto_restante_cup > 0 || venta.deuda?.monto_restante_usd > 0 
+                                ? (isDarkMode ? 'rgba(255, 193, 7, 0.15)' : '#FFF8E1') 
+                                : (isDarkMode ? 'rgba(76, 175, 80, 0.15)' : '#E8F5E9'))
+                            : (index % 2 === 0 ? colors.surface : colors.surfaceVariant)
+                        }
+                      ]}>
                         <View style={[styles.tableCellWithFlags, { width: responsive.responsiveWidth(150) }]}>
                           <View style={styles.tableFlagsContainer}>
                             {venta.nota && (
@@ -1723,9 +1743,11 @@ const VentasContent = () => {
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
                           {venta.ventas?.[0]?.servicioTienda?.tienda?.nombre || 'N/A'}
                         </Text>
-                        <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
-                          {venta.operaciones?.[0]?.usuario?.nombre_natural || 'N/A'}
-                        </Text>
+                        {!venta.is_deuda && (
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
+                            {venta.operaciones?.[0]?.usuario?.nombre_natural || 'N/A'}
+                          </Text>
+                        )}
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
                           {(() => {
                             const totalCUP = venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_cup || 0) * (v.cantidad || 0)), 0) || 0;

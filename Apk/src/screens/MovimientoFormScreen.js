@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -46,6 +46,7 @@ const MovimientoFormContent = () => {
   const [customMovimientoTypes, setCustomMovimientoTypes] = useState([]);
   const [showTipoMovimientoDropdown, setShowTipoMovimientoDropdown] = useState(false);
   const [tipoMovimientoSearchText, setTipoMovimientoSearchText] = useState('');
+  const dropdownPressedRef = useRef(false);
 
   const [formData, setFormData] = useState({
     tipo_movimiento: 'Transferencia',
@@ -139,43 +140,78 @@ const MovimientoFormContent = () => {
           setIsFetchingMovimiento(true);
           const completeMovimiento = isOfflineMode ? movimiento : await getMovimientoById(movimiento.id_movimiento_lista);
           
-          // Extraer tiendas de los movimientos si no están en el nivel raíz
-          const tiendaOrigen = completeMovimiento.tienda_origen || 
-                             completeMovimiento.movimientos?.[0]?.servicioTiendaOrigen?.tienda ||
-                             completeMovimiento.movimientos?.[0]?.servicio_tienda_origen?.tienda;
-          const tiendaDestino = completeMovimiento.tienda_destino || 
-                              completeMovimiento.movimientos?.[0]?.servicioTiendaDestino?.tienda ||
-                              completeMovimiento.movimientos?.[0]?.servicio_tienda_destino?.tienda;
+          console.log('[fetchCompleteMovimiento] completeMovimiento:', JSON.stringify(completeMovimiento, null, 2));
+          console.log('[fetchCompleteMovimiento] movimientos:', completeMovimiento.movimientos);
+          console.log('[fetchCompleteMovimiento] movimientos type:', typeof completeMovimiento.movimientos);
+          console.log('[fetchCompleteMovimiento] movimientos isArray:', Array.isArray(completeMovimiento.movimientos));
           
-          // Mapear movimientos con servicio_tienda completo
-          const movimientosConServicio = await Promise.all(
-            (completeMovimiento.movimientos || []).map(async (mov) => {
-              // Obtener servicio_tienda origen completo
-              const servicioOrigen = await getServicioById(mov.servicioTiendaOrigen?.servicio?.id_servicio || mov.id_servicio_tienda_origen);
-              const tiendaServicioOrigen = servicioOrigen.tiendas_servicio?.find(ts => ts.id_tienda === completeMovimiento.id_tienda_origen);
-              
-              return {
-                id_servicio_tienda: mov.id_servicio_tienda_origen,
+          // Handle case where backend returns single object instead of array
+          let movimientosArray;
+          if (Array.isArray(completeMovimiento.movimientos)) {
+            movimientosArray = completeMovimiento.movimientos;
+          } else if (completeMovimiento.movimientos && typeof completeMovimiento.movimientos === 'object') {
+            movimientosArray = [completeMovimiento.movimientos];
+          } else {
+            movimientosArray = [];
+          }
+          
+          // Extraer tiendas de los movimientos según la estructura actual del backend
+          const tiendaOrigen = movimientosArray[0]?.servicioTiendaOrigen?.tienda ||
+                             completeMovimiento.tienda_origen;
+          const tiendaDestino = movimientosArray[0]?.servicioTiendaDestino?.tienda ||
+                              completeMovimiento.tienda_destino;
+          
+          const movimientosPromises = movimientosArray.map(async (mov) => {
+            // Try to get servicio ID from new structure first, then fallback to old structure
+            let servicioId = mov.servicioTiendaOrigen?.servicio?.id_servicio || 
+                           mov.servicio?.id_servicio || 
+                           mov.id_servicio;
+            
+            // If still null, try to get from id_servicio_tienda_origen (old structure)
+            if (!servicioId && mov.id_servicio_tienda_origen) {
+              try {
+                const servicioTienda = await getServicioById(mov.id_servicio_tienda_origen);
+                servicioId = servicioTienda?.servicio?.id_servicio;
+              } catch (err) {
+                console.error('[fetchCompleteMovimiento] Error fetching servicio_tienda:', err);
+              }
+            }
+            
+            if (!servicioId) {
+              console.error('Servicio ID not found in movimiento:', mov);
+              return null;
+            }
+            const servicio = await getServicioById(servicioId);
+            
+            // Buscar servicio_tienda en la tienda origen
+            const tiendaServicioOrigen = servicio.tiendas_servicio?.find(
+              ts => ts.id_tienda === completeMovimiento.id_tienda_origen
+            );
+            
+            return {
+              id_servicio_tienda: tiendaServicioOrigen?.id_servicio_tienda || null,
+              cantidad: mov.cantidad,
+              nota: mov.nota || '',
+              servicio_tienda: tiendaServicioOrigen || {
+                id_servicio_tienda: null,
+                servicio: servicio,
                 cantidad: mov.cantidad,
-                nota: mov.nota || '',
-                servicio_tienda: tiendaServicioOrigen || {
-                  id_servicio_tienda: mov.id_servicio_tienda_origen,
-                  servicio: servicioOrigen,
-                  cantidad: mov.cantidad,
-                },
-              };
-            })
-          );
+              },
+            };
+          });
+          
+          const movimientosConServicio = await Promise.all(movimientosPromises);
+          const movimientosFiltrados = movimientosConServicio.filter(m => m !== null);
 
           setFormData({
             tipo_movimiento: completeMovimiento.tipo_movimiento || 'Transferencia',
             estado: completeMovimiento.estado ?? true,
-            nota: completeMovimiento.nota || completeMovimiento.movimientos?.[0]?.nota || '',
+            nota: completeMovimiento.nota || '',
             id_tienda_origen: completeMovimiento.id_tienda_origen || tiendaOrigen?.id_tienda,
             id_tienda_destino: completeMovimiento.id_tienda_destino || tiendaDestino?.id_tienda,
             tienda_origen: tiendaOrigen,
             tienda_destino: tiendaDestino,
-            movimientos: movimientosConServicio,
+            movimientos: movimientosFiltrados,
           });
         } catch (err) {
           console.error('[fetchCompleteMovimiento] Error:', err);
@@ -405,20 +441,20 @@ const MovimientoFormContent = () => {
 
     setIsSaving(true);
     try {
-      // Para cada movimiento, preparar los datos sin verificar si el producto existe en la tienda de destino
-      // El backend se encargará de esta validación
-      const movimientosConDestino = formData.movimientos.map((item) => {
-        const idOrigen = parseInt(item.id_servicio_tienda);
+      // Preparar movimientos según la API del backend
+      // Solo enviamos id_servicio, cantidad y nota en cada movimiento
+      // Los IDs de tiendas van en el nivel raíz
+      const movimientosItems = formData.movimientos.map((item) => {
+        const idServicio = parseInt(item.servicio_tienda?.servicio?.id_servicio || item.id_servicio_tienda);
         
-        if (isNaN(idOrigen)) {
-          throw new Error(`id_servicio_tienda_origen no es válido`);
+        if (isNaN(idServicio)) {
+          throw new Error(`id_servicio no es válido`);
         }
 
         return {
-          id_servicio_tienda_origen: idOrigen,
-          id_servicio_tienda_destino: parseInt(item.id_servicio_tienda_destino),
+          id_servicio: idServicio,
           cantidad: item.cantidad,
-          nota: item.nota,
+          nota: item.nota || '',
         };
       });
 
@@ -432,9 +468,9 @@ const MovimientoFormContent = () => {
         tipo_movimiento: formData.tipo_movimiento,
         estado: formData.estado,
         nota: formData.nota || '',
-        id_servicio_tienda_origen: movimientosConDestino[0].id_servicio_tienda_origen,
-        id_servicio_tienda_destino: movimientosConDestino[0].id_servicio_tienda_destino,
-        movimientos: movimientosConDestino,
+        id_tienda_origen: parseInt(formData.id_tienda_origen),
+        id_tienda_destino: parseInt(formData.id_tienda_destino),
+        movimientos: movimientosItems,
         id_usuario: idUsuario,
       };
 
@@ -486,31 +522,26 @@ const MovimientoFormContent = () => {
                       <Text style={[styles.inputText, { color: colors.onSurface }]}>{formData.tipo_movimiento || 'N/A'}</Text>
                     </View>
                   ) : (
-                    <>
-                      <TextInput
-                        style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                        placeholderTextColor={colors.outline}
-                        placeholder="Seleccionar o escribir tipo..."
- value={formData.tipo_movimiento}
-                        onChangeText={(text) => {
-                          setFormData(prev => ({ ...prev, tipo_movimiento: text }));
-                          setTipoMovimientoSearchText(text);
-                        }}
-                        onFocus={() => !isReadOnly && setShowTipoMovimientoDropdown(true)}
-                        onBlur={() => {
-                          setShowTipoMovimientoDropdown(false);
-                          // Save custom type if it doesn't exist in predefined or custom types
-                          if (formData.tipo_movimiento && formData.tipo_movimiento.trim() !== '') {
-                            const allTypes = [...predefinedMovimientoTypes, ...customMovimientoTypes];
-                            if (!allTypes.includes(formData.tipo_movimiento.trim())) {
-                              saveCustomMovimientoType(formData.tipo_movimiento);
-                            }
-                          }
-                        }}
-                      />
+                    <View>
+                      <TouchableOpacity
+                        style={[styles.input, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                        onPress={() => setShowTipoMovimientoDropdown(!showTipoMovimientoDropdown)}
+                      >
+                        <Text style={[styles.inputText, { color: formData.tipo_movimiento ? colors.onSurface : colors.outline }]}>
+                          {formData.tipo_movimiento || 'Seleccionar o escribir tipo...'}
+                        </Text>
+                      </TouchableOpacity>
                       {showTipoMovimientoDropdown && (
                         <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
                           <ScrollView style={styles.dropdownScroll}>
+                            <TextInput
+                              style={[styles.dropdownSearch, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                              placeholderTextColor={colors.outline}
+                              placeholder="Buscar o escribir nuevo..."
+                              value={tipoMovimientoSearchText}
+                              onChangeText={setTipoMovimientoSearchText}
+                              autoFocus={true}
+                            />
                             {[...predefinedMovimientoTypes, ...customMovimientoTypes]
                               .filter(t => t.toLowerCase().includes(tipoMovimientoSearchText.toLowerCase()))
                               .map((type, index) => (
@@ -526,10 +557,23 @@ const MovimientoFormContent = () => {
                                   <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{type}</Text>
                                 </TouchableOpacity>
                               ))}
+                            {tipoMovimientoSearchText && ![...predefinedMovimientoTypes, ...customMovimientoTypes].includes(tipoMovimientoSearchText) && (
+                              <TouchableOpacity
+                                style={[styles.dropdownItem, styles.dropdownItemLast]}
+                                onPress={() => {
+                                  setFormData(prev => ({ ...prev, tipo_movimiento: tipoMovimientoSearchText }));
+                                  saveCustomMovimientoType(tipoMovimientoSearchText);
+                                  setShowTipoMovimientoDropdown(false);
+                                  setTipoMovimientoSearchText('');
+                                }}
+                              >
+                                <Text style={[styles.dropdownItemText, { color: colors.primary }]}>Crear "{tipoMovimientoSearchText}"</Text>
+                              </TouchableOpacity>
+                            )}
                           </ScrollView>
                         </View>
                       )}
-                    </>
+                    </View>
                   )}
                 </View>
                 <View style={styles.formGroup}>
@@ -629,11 +673,17 @@ const MovimientoFormContent = () => {
                               </TouchableOpacity>
                               {productosOrigen
                                 .filter(p => p.servicio?.nombre?.toLowerCase().includes(productoSearchText.toLowerCase()))
-                                .filter(p => !formData.movimientos.some(m => m.id_servicio_tienda === p.id_servicio_tienda))
+                                .filter(p => !formData.movimientos.some(m => 
+                                  m.id_servicio_tienda === p.id_servicio_tienda || 
+                                  m.servicio_tienda?.servicio?.id_servicio === p.servicio?.id_servicio
+                                ))
                                 .length > 0 ? (
                                 productosOrigen
                                   .filter(p => p.servicio?.nombre?.toLowerCase().includes(productoSearchText.toLowerCase()))
-                                  .filter(p => !formData.movimientos.some(m => m.id_servicio_tienda === p.id_servicio_tienda))
+                                  .filter(p => !formData.movimientos.some(m => 
+                                    m.id_servicio_tienda === p.id_servicio_tienda || 
+                                    m.servicio_tienda?.servicio?.id_servicio === p.servicio?.id_servicio
+                                  ))
                                   .map((producto, index, filtered) => (
                                   <TouchableOpacity
                                     key={producto.id_servicio_tienda}

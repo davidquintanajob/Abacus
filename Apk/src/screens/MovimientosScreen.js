@@ -75,8 +75,8 @@ const MovimientosContent = () => {
     estado: '', 
     fecha_desde: today, 
     fecha_hasta: today, 
-    id_servicio_tienda_origen: '', 
-    id_servicio_tienda_destino: '',
+    id_tienda_origen: '', 
+    id_tienda_destino: '',
     id_usuario: ''
   });
   
@@ -206,15 +206,12 @@ const MovimientosContent = () => {
             if (savedFilters) {
               const parsedFilters = JSON.parse(savedFilters);
               setFilters(parsedFilters);
-              hasRestoredFilters.current = true;
               fetchMovimientos(null, parsedFilters);
             } else {
-              hasRestoredFilters.current = false;
               fetchMovimientos();
             }
           } catch (error) {
             console.error('Error restoring filters:', error);
-            hasRestoredFilters.current = false;
             fetchMovimientos();
           }
         };
@@ -338,6 +335,11 @@ const MovimientosContent = () => {
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
     fetchMovimientos();
+    
+    // Save filters when user explicitly searches
+    AsyncStorage.setItem('movimientos_filters', JSON.stringify(filters)).catch(err => {
+      console.error('Error saving filters:', err);
+    });
   };
 
   const handleClearFilters = () => {
@@ -346,8 +348,8 @@ const MovimientosContent = () => {
       estado: '', 
       fecha_desde: '', 
       fecha_hasta: '', 
-      id_servicio_tienda_origen: '', 
-      id_servicio_tienda_destino: '',
+      id_tienda_origen: '', 
+      id_tienda_destino: '',
       id_usuario: ''
     };
     
@@ -355,6 +357,11 @@ const MovimientosContent = () => {
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
     fetchMovimientos(null, clearedFilters);
+    
+    // Clear saved filters
+    AsyncStorage.removeItem('movimientos_filters').catch(err => {
+      console.error('Error clearing filters:', err);
+    });
   };
 
   const handleDelete = (movimiento) => {
@@ -408,9 +415,13 @@ const MovimientosContent = () => {
                 id_usuario: idUsuario,
                 tipo_movimiento: movimiento.tipo_movimiento,
                 nota: movimiento.nota || '',
-                id_servicio_tienda_origen: movimiento.id_servicio_tienda_origen || movimiento.movimientos?.[0]?.id_servicio_tienda_origen,
-                id_servicio_tienda_destino: movimiento.id_servicio_tienda_destino || movimiento.movimientos?.[0]?.id_servicio_tienda_destino,
-                movimientos: movimiento.movimientos || [],
+                id_tienda_origen: movimiento.id_tienda_origen || movimiento.movimientos?.[0]?.servicioTiendaOrigen?.tienda?.id_tienda,
+                id_tienda_destino: movimiento.id_tienda_destino || movimiento.movimientos?.[0]?.servicioTiendaDestino?.tienda?.id_tienda,
+                movimientos: (movimiento.movimientos || []).map(mov => ({
+                  id_servicio: mov.servicio?.id_servicio || mov.id_servicio,
+                  cantidad: mov.cantidad,
+                  nota: mov.nota || '',
+                })),
               };
               
               await updateMovimiento(movimiento.id_movimiento_lista, updateData);
@@ -522,11 +533,6 @@ const MovimientosContent = () => {
       return;
     }
     
-    // Save current filters before navigating
-    AsyncStorage.setItem('movimientos_filters', JSON.stringify(filters)).catch(err => {
-      console.error('Error saving filters:', err);
-    });
-    
     // Navigate to edit mode if user has permissions, otherwise view mode
     const canEdit = canShowEditDeleteButtons(movimiento);
     const mode = canEdit ? 'edit' : 'view';
@@ -539,11 +545,6 @@ const MovimientosContent = () => {
       return;
     }
     
-    // Save current filters before navigating
-    AsyncStorage.setItem('movimientos_filters', JSON.stringify(filters)).catch(err => {
-      console.error('Error saving filters:', err);
-    });
-    
     navigation.navigate('MovimientoForm', { movimiento, mode: 'edit' });
   };
 
@@ -552,11 +553,6 @@ const MovimientosContent = () => {
       showToast({ type: 'warning', message: 'No disponible en modo offline' });
       return;
     }
-    
-    // Save current filters before navigating
-    AsyncStorage.setItem('movimientos_filters', JSON.stringify(filters)).catch(err => {
-      console.error('Error saving filters:', err);
-    });
     
     navigation.navigate('MovimientoForm', { mode: 'add' });
   };
@@ -585,19 +581,31 @@ const MovimientosContent = () => {
     }
   };
 
+  // Format a Date object to YYYY-MM-DD using local timezone (avoids UTC offset issues)
+  const formatLocalDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Parse a YYYY-MM-DD string to a Date object using local timezone
+  const parseLocalDate = (dateString) => {
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  };
+
   const handleFechaDesdeChange = (event, selectedDate) => {
     setShowFechaDesdePicker(false);
-    if (event.type === 'set' && selectedDate) {
-      const formattedDate = selectedDate.toISOString().split('T')[0];
-      setFilters(prev => ({ ...prev, fecha_desde: formattedDate }));
+    if (selectedDate) {
+      setFilters(prev => ({ ...prev, fecha_desde: formatLocalDate(selectedDate) }));
     }
   };
 
   const handleFechaHastaChange = (event, selectedDate) => {
     setShowFechaHastaPicker(false);
-    if (event.type === 'set' && selectedDate) {
-      const formattedDate = selectedDate.toISOString().split('T')[0];
-      setFilters(prev => ({ ...prev, fecha_hasta: formattedDate }));
+    if (selectedDate) {
+      setFilters(prev => ({ ...prev, fecha_hasta: formatLocalDate(selectedDate) }));
     }
   };
 
@@ -831,8 +839,8 @@ const MovimientosContent = () => {
                     }
                   }}
                 >
-                  <Text style={[styles.dropdownText, { color: filters.id_servicio_tienda_origen ? colors.onSurface : colors.outline }]}>
-                    {tiendas.find(t => t.id_tienda === parseInt(filters.id_servicio_tienda_origen))?.nombre || 'Todas las tiendas'}
+                  <Text style={[styles.dropdownText, { color: filters.id_tienda_origen ? colors.onSurface : colors.outline }]}>
+                    {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda_origen))?.nombre || 'Todas las tiendas'}
                   </Text>
                   <Ionicons 
                     name={showTiendaOrigenDropdown ? "chevron-up" : "chevron-down"} 
@@ -869,7 +877,7 @@ const MovimientosContent = () => {
                         <TouchableOpacity
                           style={styles.dropdownItem}
                           onPress={() => {
-                            const newFilters = { ...filters, id_servicio_tienda_origen: '' };
+                            const newFilters = { ...filters, id_tienda_origen: '' };
                             setFilters(newFilters);
                             setShowTiendaOrigenDropdown(false);
                             setTiendaOrigenSearchText('');
@@ -885,7 +893,7 @@ const MovimientosContent = () => {
                               key={tienda.id_tienda}
                               style={[styles.dropdownItem, index === filteredTiendasOrigen.length - 1 && styles.dropdownItemLast]}
                               onPress={() => {
-                                const newFilters = { ...filters, id_servicio_tienda_origen: tienda.id_tienda.toString() };
+                                const newFilters = { ...filters, id_tienda_origen: tienda.id_tienda.toString() };
                                 setFilters(newFilters);
                                 setShowTiendaOrigenDropdown(false);
                                 setTiendaOrigenSearchText('');
@@ -920,8 +928,8 @@ const MovimientosContent = () => {
                     }
                   }}
                 >
-                  <Text style={[styles.dropdownText, { color: filters.id_servicio_tienda_destino ? colors.onSurface : colors.outline }]}>
-                    {tiendas.find(t => t.id_tienda === parseInt(filters.id_servicio_tienda_destino))?.nombre || 'Todas las tiendas'}
+                  <Text style={[styles.dropdownText, { color: filters.id_tienda_destino ? colors.onSurface : colors.outline }]}>
+                    {tiendas.find(t => t.id_tienda === parseInt(filters.id_tienda_destino))?.nombre || 'Todas las tiendas'}
                   </Text>
                   <Ionicons 
                     name={showTiendaDestinoDropdown ? "chevron-up" : "chevron-down"} 
@@ -958,7 +966,7 @@ const MovimientosContent = () => {
                         <TouchableOpacity
                           style={styles.dropdownItem}
                           onPress={() => {
-                            const newFilters = { ...filters, id_servicio_tienda_destino: '' };
+                            const newFilters = { ...filters, id_tienda_destino: '' };
                             setFilters(newFilters);
                             setShowTiendaDestinoDropdown(false);
                             setTiendaDestinoSearchText('');
@@ -974,7 +982,7 @@ const MovimientosContent = () => {
                               key={tienda.id_tienda}
                               style={[styles.dropdownItem, index === filteredTiendasDestino.length - 1 && styles.dropdownItemLast]}
                               onPress={() => {
-                                const newFilters = { ...filters, id_servicio_tienda_destino: tienda.id_tienda.toString() };
+                                const newFilters = { ...filters, id_tienda_destino: tienda.id_tienda.toString() };
                                 setFilters(newFilters);
                                 setShowTiendaDestinoDropdown(false);
                                 setTiendaDestinoSearchText('');
@@ -1097,7 +1105,7 @@ const MovimientosContent = () => {
                   </TouchableOpacity>
                   {showFechaDesdePicker && (
                     <DateTimePicker
-                      value={filters.fecha_desde ? new Date(filters.fecha_desde) : new Date()}
+                      value={filters.fecha_desde ? parseLocalDate(filters.fecha_desde) : new Date()}
                       mode="date"
                       display="default"
                       onChange={handleFechaDesdeChange}
@@ -1117,7 +1125,7 @@ const MovimientosContent = () => {
                   </TouchableOpacity>
                   {showFechaHastaPicker && (
                     <DateTimePicker
-                      value={filters.fecha_hasta ? new Date(filters.fecha_hasta) : new Date()}
+                      value={filters.fecha_hasta ? parseLocalDate(filters.fecha_hasta) : new Date()}
                       mode="date"
                       display="default"
                       onChange={handleFechaHastaChange}
@@ -1221,13 +1229,19 @@ const MovimientosContent = () => {
                         <View style={styles.movimientoTiendasContainer}>
                           <View style={[styles.tiendaBadge, { backgroundColor: isDarkMode ? 'rgba(33, 150, 243, 0.2)' : '#E3F2FD', borderColor: '#2196F3' }]}>
                             <Text style={[styles.tiendaBadgeText, { color: '#2196F3' }]}>
-                              {movimiento.tienda_origen?.nombre || movimiento.movimientos?.[0]?.servicioTiendaOrigen?.tienda?.nombre || 'N/A'}
+                              {movimiento.tienda_origen?.nombre || 
+                               movimiento.movimientos?.[0]?.servicioTiendaOrigen?.tienda?.nombre || 
+                               movimiento.movimientos?.[0]?.tiendaOrigen?.nombre || 
+                               'N/A'}
                             </Text>
                           </View>
                           <Ionicons name="arrow-forward" size={responsive.responsiveWidth(16)} color={colors.outline} />
                           <View style={[styles.tiendaBadge, { backgroundColor: isDarkMode ? 'rgba(255, 152, 0, 0.2)' : '#FFF3E0', borderColor: '#FF9800' }]}>
                             <Text style={[styles.tiendaBadgeText, { color: '#FF9800' }]}>
-                              {movimiento.tienda_destino?.nombre || movimiento.movimientos?.[0]?.servicioTiendaDestino?.tienda?.nombre || 'N/A'}
+                              {movimiento.tienda_destino?.nombre || 
+                               movimiento.movimientos?.[0]?.servicioTiendaDestino?.tienda?.nombre || 
+                               movimiento.movimientos?.[0]?.tiendaDestino?.nombre || 
+                               'N/A'}
                             </Text>
                           </View>
                         </View>
@@ -1308,14 +1322,20 @@ const MovimientosContent = () => {
                         <View style={[styles.tableCell, { width: responsive.responsiveWidth(140) }]}>
                           <View style={[styles.tableTiendaBadge, { backgroundColor: isDarkMode ? 'rgba(33, 150, 243, 0.2)' : '#E3F2FD', borderColor: '#2196F3' }]}>
                             <Text style={[styles.tableTiendaBadgeText, { color: '#2196F3' }]}>
-                              {movimiento.tienda_origen?.nombre || movimiento.movimientos?.[0]?.servicioTiendaOrigen?.tienda?.nombre || 'N/A'}
+                              {movimiento.tienda_origen?.nombre || 
+                               movimiento.movimientos?.[0]?.servicioTiendaOrigen?.tienda?.nombre || 
+                               movimiento.movimientos?.[0]?.tiendaOrigen?.nombre || 
+                               'N/A'}
                             </Text>
                           </View>
                         </View>
                         <View style={[styles.tableCell, { width: responsive.responsiveWidth(140) }]}>
                           <View style={[styles.tableTiendaBadge, { backgroundColor: isDarkMode ? 'rgba(255, 152, 0, 0.2)' : '#FFF3E0', borderColor: '#FF9800' }]}>
                             <Text style={[styles.tableTiendaBadgeText, { color: '#FF9800' }]}>
-                              {movimiento.tienda_destino?.nombre || movimiento.movimientos?.[0]?.servicioTiendaDestino?.tienda?.nombre || 'N/A'}
+                              {movimiento.tienda_destino?.nombre || 
+                               movimiento.movimientos?.[0]?.servicioTiendaDestino?.tienda?.nombre || 
+                               movimiento.movimientos?.[0]?.tiendaDestino?.nombre || 
+                               'N/A'}
                             </Text>
                           </View>
                         </View>

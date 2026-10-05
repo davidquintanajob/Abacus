@@ -47,7 +47,53 @@ const ProductoFormContent = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isEditingProducto, setIsEditingProducto] = useState(false);
   const [isFetchingProducto, setIsFetchingProducto] = useState(false);
+  const [showCategoriaDropdown, setShowCategoriaDropdown] = useState(false);
+  const [categoriaSearchText, setCategoriaSearchText] = useState('');
+
+  const predefinedCategories = ['Alimentos', 'Bebidas', 'Limpieza', 'Higiene', 'Electrónicos', 'Ropa', 'Medicamentos', 'Otros'];
+  const [customCategories, setCustomCategories] = useState([]);
+
+  const saveCustomCategory = async (newCategory) => {
+    if (!newCategory || newCategory.trim() === '') return;
+    
+    // Check if already exists
+    const allCategories = [...predefinedCategories, ...customCategories];
+    if (allCategories.includes(newCategory.trim())) return;
+    
+    const updatedCategories = [...customCategories, newCategory.trim()];
+    setCustomCategories(updatedCategories);
+    
+    try {
+      // Save to AsyncStorage
+      await AsyncStorage.setItem('customCategories', JSON.stringify(updatedCategories));
+      
+      // Save to config
+      const config = await configService.getConfig();
+      const updatedConfig = {
+        ...config,
+        customCategories: updatedCategories,
+      };
+      await configService.updateConfig(updatedConfig);
+    } catch (error) {
+      console.error('Error saving custom category:', error);
+    }
+  };
+
+  useEffect(() => {
+    const loadCustomCategories = async () => {
+      try {
+        const savedCategories = await AsyncStorage.getItem('customCategories');
+        if (savedCategories) {
+          setCustomCategories(JSON.parse(savedCategories));
+        }
+      } catch (error) {
+        console.error('Error loading custom categories:', error);
+      }
+    };
+    loadCustomCategories();
+  }, []);
   const [tiendas, setTiendas] = useState([]);
   const [showTiendaDropdown, setShowTiendaDropdown] = useState(false);
   const [editingTiendaIndex, setEditingTiendaIndex] = useState(null);
@@ -71,7 +117,7 @@ const ProductoFormContent = () => {
 
   const [formData, setFormData] = useState({
     nombre: producto?.nombre || '',
-    categoria: producto?.categoria || '',
+    categoria: isEditMode ? (producto?.categoria || '') : '',
     esvendible: producto?.esvendible !== undefined ? producto.esvendible : true,
     nota: producto?.nota || '',
     imagen: producto?.producto?.imagen || '',
@@ -469,14 +515,19 @@ const ProductoFormContent = () => {
 
           let productoTiendaList = completeProducto.tiendas_servicio || [];
           
+          console.log('[ProductoForm] productoTiendaList length:', productoTiendaList.length);
+          
           if (!canViewAllStores && user?.id_tienda) {
             productoTiendaList = productoTiendaList.filter(ts => ts.id_tienda === user.id_tienda);
+            console.log('[ProductoForm] Filtered productoTiendaList length:', productoTiendaList.length);
           }
           
           // Extract cost from first tienda (all tiendas should have the same cost now)
           const firstTienda = productoTiendaList[0];
           const costoCupGeneral = firstTienda?.costo_cup || null;
           const costoUsdGeneral = firstTienda?.costo_usd || null;
+          
+          console.log('[ProductoForm] Setting formData with categoria:', completeProducto.categoria || '');
           
           setFormData({
             nombre: completeProducto.nombre || '',
@@ -495,6 +546,7 @@ const ProductoFormContent = () => {
             costo_usd_general: costoUsdGeneral,
           });
         } catch (err) {
+          console.error('[ProductoForm] Error loading product data:', err);
           showToast({ type: 'error', message: 'Error al cargar datos del producto' });
         } finally {
           setIsFetchingProducto(false);
@@ -1510,18 +1562,64 @@ const ProductoFormContent = () => {
           <View style={styles.formRow}>
             <View style={[styles.formColumn, styles.formGroup]}>
               <Text style={[styles.label, { color: colors.outline }]}>Categoría *</Text>
-              <TextInput
-                style={[
-                  styles.input, 
-                  { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                  isReadOnly && styles.inputDisabled
-                ]}
-                placeholderTextColor={colors.outline}
-                placeholder="Categoría"
-                value={formData.categoria}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, categoria: text }))}
-                editable={!isReadOnly}
-              />
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={[
+                    styles.input,
+                    styles.inputFixedWidth,
+                    { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                    isReadOnly && styles.inputDisabled
+                  ]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Seleccionar o escribir categoría..."
+                  value={formData.categoria}
+                  onChangeText={(text) => {
+                    setFormData(prev => ({ ...prev, categoria: text }));
+                    setCategoriaSearchText(text);
+                  }}
+                  onFocus={() => !isReadOnly && setShowCategoriaDropdown(true)}
+                  onBlur={() => {
+                    setShowCategoriaDropdown(false);
+                    // Save custom category if it doesn't exist in predefined or custom categories
+                    if (formData.categoria && formData.categoria.trim() !== '') {
+                      const allCategories = [...predefinedCategories, ...customCategories];
+                      if (!allCategories.includes(formData.categoria.trim())) {
+                        saveCustomCategory(formData.categoria);
+                      }
+                    }
+                  }}
+                  editable={!isReadOnly}
+                />
+                {!isReadOnly && (
+                  <TouchableOpacity
+                    style={styles.dropdownIcon}
+                    onPress={() => setShowCategoriaDropdown(!showCategoriaDropdown)}
+                  >
+                    <Ionicons name={showCategoriaDropdown ? "chevron-up" : "chevron-down"} size={20} color={colors.outline} />
+                  </TouchableOpacity>
+                )}
+              </View>
+              {showCategoriaDropdown && !isReadOnly && (
+                <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                  <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                    {[...predefinedCategories, ...customCategories]
+                      .filter(cat => cat.toLowerCase().includes(categoriaSearchText.toLowerCase()))
+                      .map((category, index, filteredArray) => (
+                        <TouchableOpacity
+                          key={category}
+                          style={[styles.dropdownItem, index === filteredArray.length - 1 && styles.dropdownItemLast]}
+                          onPress={() => {
+                            setFormData(prev => ({ ...prev, categoria: category }));
+                            setShowCategoriaDropdown(false);
+                            setCategoriaSearchText('');
+                          }}
+                        >
+                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{category}</Text>
+                        </TouchableOpacity>
+                      ))}
+                  </ScrollView>
+                </View>
+              )}
             </View>
 
             <View style={[styles.formColumn, styles.formGroup]}>
@@ -2621,6 +2719,9 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
   },
+  inputFixedWidth: {
+    width: '100%',
+  },
   inputDisabled: {
     opacity: 0.7,
   },
@@ -2828,11 +2929,16 @@ const createStyles = (responsive) => StyleSheet.create({
     flex: 1,
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
-    marginLeft: responsive.responsiveMargin(8),
-    paddingVertical: 0,
   },
-  searchIcon: {
-    marginRight: responsive.responsiveMargin(4),
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  dropdownIcon: {
+    position: 'absolute',
+    right: responsive.responsiveWidth(12),
+    padding: responsive.responsivePadding(4),
   },
   dropdownScroll: {
     maxHeight: responsive.responsiveHeight(200),

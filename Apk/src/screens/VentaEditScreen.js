@@ -32,7 +32,8 @@ const VentaEditContent = () => {
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
 
-  const { venta, mode } = route.params || {};
+  const { venta: ventaFromRoute, mode } = route.params || {};
+  const [venta, setVenta] = useState(ventaFromRoute);
 
   const isViewMode = mode === 'view';
   const isEditMode = mode === 'edit' || !mode;
@@ -325,6 +326,24 @@ const VentaEditContent = () => {
 
       // Set nota
       setVentaNota(ventaData.nota || '');
+
+      // Set deuda information if exists
+      if (ventaData.is_deuda && ventaData.deuda) {
+        console.log('[VentaEdit] Deuda data:', ventaData.deuda);
+        // Load cliente information separately if not included or if nombre is missing
+        if (ventaData.deuda.id_cliente && (!ventaData.deuda.cliente || !ventaData.deuda.cliente.nombre)) {
+          try {
+            const { getClienteById } = await import('../services/clienteService');
+            const clienteData = await getClienteById(ventaData.deuda.id_cliente);
+            console.log('[VentaEdit] Cliente loaded:', clienteData);
+            ventaData.deuda.cliente = clienteData;
+            // Update the venta state with the updated deuda information
+            setVenta(prev => ({ ...prev, deuda: ventaData.deuda }));
+          } catch (error) {
+            console.error('Error loading cliente for deuda:', error);
+          }
+        }
+      }
 
       // Set original form data for additional fields
       setFormData({
@@ -1094,23 +1113,8 @@ const VentaEditContent = () => {
 
           {/* Payment Section */}
           <Card style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
-            <View style={styles.sectionHeaderWithSwitch}>
+            <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Pago</Text>
-              <View style={styles.decimalSwitchContainer}>
-                <Text style={[styles.decimalLabel, { color: colors.outline }]}>
-                  {show5Decimals ? '5 decimales' : '2 decimales'}
-                </Text>
-                <TouchableOpacity
-                  style={[styles.decimalSwitch, { backgroundColor: show5Decimals ? colors.primary : colors.outlineVariant }]}
-                  onPress={() => setShow5Decimals(!show5Decimals)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.decimalSwitchThumb, {
-                    backgroundColor: show5Decimals ? '#fff' : colors.outline,
-                    transform: [{ translateX: show5Decimals ? 20 : 0 }]
-                  }]} />
-                </TouchableOpacity>
-              </View>
             </View>
 
             {['efectivo_cup', 'efectivo_usd', 'transferencia_cup', 'transferencia_usd']
@@ -1223,57 +1227,126 @@ const VentaEditContent = () => {
           {/* Additional Fields Card - Usuario, Cambio de Moneda, Fecha */}
           <Card style={[styles.sectionCardCompact, { backgroundColor: colors.surface }]}>
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Información Adicional</Text>
-            </View>
-
-            {/* Usuario */}
-            <View style={styles.formGroup}>
-              <Text style={[styles.label, { color: colors.outline }]}>Usuario *</Text>
-              <View
-                style={[styles.dropdown, { backgroundColor: colors.surfaceVariant, borderColor: colors.outlineVariant }]}
-              >
-                <Text style={[styles.dropdownText, { color: formData.id_usuario ? colors.onSurface : colors.outline }]}>
-                  {usuarios.find(u => u.id_usuario === formData.id_usuario)?.nombre_natural || user?.nombre_natural || 'Usuario actual'}
-                </Text>
-              </View>
-            </View>
-
-            {/* Cambio de Moneda y Fecha */}
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: responsive.responsiveWidth(8) }]}>
-                <Text style={[styles.label, { color: colors.outline }]}>Cambio de Moneda *</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.surfaceVariant, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                  placeholderTextColor={colors.outline}
-                  placeholder="Tasa de cambio..."
-                  value={formData.cambio_moneda}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, cambio_moneda: text }))}
-                  keyboardType="numeric"
-                  editable={false}
-                />
-              </View>
-
-              <View style={[styles.formGroup, { flex: 1 }]}>
-                <Text style={[styles.label, { color: colors.outline }]}>Fecha *</Text>
+              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                {venta?.is_deuda ? 'Información de Deuda' : 'Información Adicional'}
+              </Text>
+              {venta?.is_deuda && venta?.deuda && (
                 <TouchableOpacity
-                  style={[styles.input, { backgroundColor: isReadOnly ? colors.surfaceVariant : colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                  onPress={() => !isReadOnly && setShowFechaPicker(true)}
-                  disabled={isReadOnly}
+                  style={[styles.navigateButton, { backgroundColor: colors.primary }]}
+                  onPress={() => {
+                    console.log('[VentaEdit] Navigating to DeudaForm with deuda:', venta.deuda);
+                    navigation.navigate('DeudaForm', { deuda: venta.deuda, mode: 'edit' });
+                  }}
                 >
-                  <Text style={[styles.inputText, { color: colors.onSurface }]}>
-                    {new Date(formData.fecha_hora).toLocaleDateString('es-ES')}
-                  </Text>
+                  <Ionicons name="arrow-forward" size={responsive.responsiveWidth(16)} color="#fff" />
                 </TouchableOpacity>
-                {showFechaPicker && !isReadOnly && (
-                  <DateTimePicker
-                    value={new Date(formData.fecha_hora)}
-                    mode="date"
-                    display="default"
-                    onChange={handleFechaChange}
-                  />
-                )}
-              </View>
+              )}
             </View>
+
+            {/* Deuda Information - Only show if venta has deuda */}
+            {venta?.is_deuda && venta?.deuda && (
+              <>
+                <View style={styles.deudaInfoCard}>
+                  <View style={styles.deudaInfoRow}>
+                    <View style={styles.deudaInfoItem}>
+                      <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Fecha de creación</Text>
+                      <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
+                        {new Date(venta.deuda.fecha_hora).toLocaleDateString()}
+                      </Text>
+                    </View>
+                    <View style={styles.deudaInfoItem}>
+                      <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Cliente</Text>
+                      <Text style={[styles.deudaInfoValue, { color: colors.primary }]}>
+                        {venta.deuda.cliente?.nombre || 'N/A'}
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.deudaInfoRow}>
+                    <View style={styles.deudaInfoItem}>
+                      <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Monto total</Text>
+                      <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
+                        {venta.deuda.monto_cup > 0 ? `$${venta.deuda.monto_cup} CUP` : ''}
+                        {venta.deuda.monto_usd > 0 ? `$${venta.deuda.monto_usd} USD` : ''}
+                      </Text>
+                    </View>
+                    <View style={styles.deudaInfoItem}>
+                      <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Cantidad pagada</Text>
+                      <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
+                        {venta.deuda.monto_restante_cup !== undefined ? 
+                          `$${(venta.deuda.monto_cup - venta.deuda.monto_restante_cup).toFixed(2)} CUP` : ''}
+                        {venta.deuda.monto_restante_usd !== undefined ? 
+                          `$${(venta.deuda.monto_usd - venta.deuda.monto_restante_usd).toFixed(2)} USD` : ''}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.deudaInfoRow}>
+                    <View style={styles.deudaInfoItem}>
+                      <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Restante</Text>
+                      <Text style={[
+                        styles.deudaInfoValue, 
+                        { 
+                          color: (venta.deuda.monto_restante_cup > 0 || venta.deuda.monto_restante_usd > 0) 
+                            ? colors.error 
+                            : '#4CAF50',
+                          fontWeight: '700'
+                        }
+                      ]}>
+                        {venta.deuda.monto_restante_cup > 0 ? `$${venta.deuda.monto_restante_cup.toFixed(2)} CUP` : ''}
+                        {venta.deuda.monto_restante_usd > 0 ? `$${venta.deuda.monto_restante_usd.toFixed(2)} USD` : ''}
+                        {(venta.deuda.monto_restante_cup === 0 || venta.deuda.monto_restante_cup === undefined) &&
+                         (venta.deuda.monto_restante_usd === 0 || venta.deuda.monto_restante_usd === undefined) ? 'Saldada' : ''}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </>
+            )}
+
+            {/* Usuario - Only show if NOT a deuda */}
+            {!venta?.is_deuda && (
+              <View style={styles.formGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Usuario *</Text>
+                <View
+                  style={[styles.dropdown, { backgroundColor: colors.surfaceVariant, borderColor: colors.outlineVariant }]}
+                >
+                  <Text style={[styles.dropdownText, { color: formData.id_usuario ? colors.onSurface : colors.outline }]}>
+                    {usuarios.find(u => u.id_usuario === formData.id_usuario)?.nombre_natural || user?.nombre_natural || 'Usuario actual'}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Cambio de Moneda y Fecha - Only show if NOT a deuda */}
+            {!venta?.is_deuda && (
+              <View style={styles.formRow}>
+                <View style={[styles.formGroup, { flex: 1, marginRight: responsive.responsiveWidth(8) }]}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Cambio de Moneda *</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.surfaceVariant, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Tasa de cambio..."
+                    value={formData.cambio_moneda}
+                    onChangeText={(text) => setFormData(prev => ({ ...prev, cambio_moneda: text }))}
+                    keyboardType="numeric"
+                    editable={false}
+                  />
+                </View>
+                <View style={[styles.formGroup, { flex: 1, marginLeft: responsive.responsiveWidth(8) }]}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Fecha *</Text>
+                  <TouchableOpacity
+                    style={[styles.dropdown, { backgroundColor: colors.surfaceVariant, borderColor: colors.outlineVariant }]}
+                    onPress={() => setShowDatePicker(true)}
+                  >
+                    <Text style={[styles.dropdownText, { color: formData.fecha_hora ? colors.onSurface : colors.outline }]}>
+                      {formData.fecha_hora ? new Date(formData.fecha_hora).toLocaleString() : 'Seleccionar fecha'}
+                    </Text>
+                    <Ionicons name="calendar-outline" size={responsive.responsiveWidth(20)} color={colors.outline} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
           </Card>
 
           {/* Submit Button */}
@@ -2047,6 +2120,35 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(16),
     fontWeight: '600',
     fontFamily: 'Inter',
+  },
+  deudaInfoCard: {
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+    borderRadius: responsive.responsiveWidth(8),
+    padding: responsive.responsivePadding(16),
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  deudaInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  deudaInfoItem: {
+    flex: 1,
+  },
+  deudaInfoLabel: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontWeight: '500',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  deudaInfoValue: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '600',
+  },
+  navigateButton: {
+    padding: responsive.responsivePadding(8),
+    borderRadius: responsive.responsiveWidth(20),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   safeArea: {
     flex: 1,

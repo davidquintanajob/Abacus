@@ -106,7 +106,35 @@ const DeudaScreen = () => {
     // Cargar cuentas disponibles
     try {
       const cuentasData = await getCuentas({}, 1, 1000);
-      setCuentas(cuentasData.data || []);
+      let allCuentas = cuentasData.data || [];
+      
+      // Filtrar cuentas por tienda del usuario si tiene permisos de gestión
+      if (user?.id_tienda) {
+        try {
+          const config = await configService.getConfig();
+          const tiendaCuentasConfig = config.tiendaCuentasConfig || {};
+          const tiendaConfig = tiendaCuentasConfig[user.id_tienda];
+          
+          if (tiendaConfig) {
+            // Obtener todas las cuentas permitidas para esta tienda
+            const cuentasPermitidas = [
+              ...(tiendaConfig.efectivo_cup || []),
+              ...(tiendaConfig.efectivo_usd || []),
+              ...(tiendaConfig.transferencia_cup || []),
+              ...(tiendaConfig.transferencia_usd || []),
+            ];
+            
+            // Filtrar cuentas para mostrar solo las permitidas
+            const cuentaIdsPermitidos = new Set(cuentasPermitidas.map(c => c.id_cuenta));
+            allCuentas = allCuentas.filter(cuenta => cuentaIdsPermitidos.has(cuenta.id_cuenta));
+          }
+        } catch (error) {
+          console.error('Error al cargar configuración de cuentas por tienda:', error);
+          // Si falla, mostrar todas las cuentas
+        }
+      }
+      
+      setCuentas(allCuentas);
     } catch (error) {
       console.error('Error al cargar cuentas:', error);
       setCuentas([]);
@@ -592,10 +620,14 @@ const DeudaScreen = () => {
                 style={[
                   styles.deudaCard, 
                   { 
-                    backgroundColor: deuda.saldada 
-                      ? isDarkMode ? 'rgba(76, 175, 80, 0.1)' : '#E8F5E9' 
-                      : isDarkMode ? 'rgba(33, 150, 243, 0.1)' : '#F0F4FF',
-                    borderColor: deuda.saldada ? '#4CAF50' : '#2196F3'
+                    backgroundColor: deuda.id_lista_venta
+                      ? isDarkMode ? 'rgba(156, 39, 176, 0.1)' : '#F3E5F5'
+                      : deuda.saldada 
+                        ? isDarkMode ? 'rgba(76, 175, 80, 0.1)' : '#E8F5E9' 
+                        : isDarkMode ? 'rgba(33, 150, 243, 0.1)' : '#F0F4FF',
+                    borderColor: deuda.id_lista_venta
+                      ? '#9C27B0'
+                      : deuda.saldada ? '#4CAF50' : '#2196F3'
                   }
                 ]}
               >
@@ -631,8 +663,8 @@ const DeudaScreen = () => {
                         />
                       </View>
                       <View style={styles.deudaInfo}>
-                        <Text style={[styles.deudaCliente, { color: colors.onSurface }]}>
-                          {deuda.cliente?.nombre || 'Cliente desconocido'}
+                        <Text style={[styles.deudaClienteName, { color: colors.onSurface }]}>
+                          {deuda.cliente?.nombre || 'Cliente'}
                         </Text>
                         <Text style={[styles.deudaFecha, { color: colors.outline }]}>
                           {new Date(deuda.fecha_hora).toLocaleDateString()}
@@ -735,6 +767,7 @@ const DeudaScreen = () => {
                       <Text style={[styles.pagosTitle, { color: colors.onSurface }]}>
                         {`Pagos Realizados (${deuda.pagos.length})`}
                       </Text>
+                      {console.log('[DeudaScreen] Pagos:', deuda.pagos)}
                       {deuda.pagos.map((pago) => (
                         <View key={pago.id_pago_deuda} style={[styles.pagoItem, { backgroundColor: colors.surface }]}>
                           <View style={styles.pagoHeader}>
@@ -749,11 +782,11 @@ const DeudaScreen = () => {
                             <Text style={[styles.pagoForma, { color: colors.onSurface }]}>
                               {`Forma: ${pago.forma_pago || 'No especificada'}`}
                             </Text>
-                            {pago.nota ? (
+                            {(pago.nota || pago.operacion?.motivo) && (
                               <Text style={[styles.pagoNota, { color: colors.outline }]}>
-                                {`Nota: ${pago.nota}`}
+                                {pago.nota || pago.operacion?.motivo}
                               </Text>
-                            ) : null}
+                            )}
                           </View>
                         </View>
                       ))}
@@ -880,7 +913,10 @@ const DeudaScreen = () => {
                   placeholderTextColor={colors.outline}
                   placeholder="Notas sobre el pago"
                   value={pagoFormData.nota}
-                  onChangeText={(text) => setPagoFormData(prev => ({ ...prev, nota: text }))}
+                  onChangeText={(text) => {
+                    console.log('[DeudaScreen] Nota input changed:', text);
+                    setPagoFormData(prev => ({ ...prev, nota: text }));
+                  }}
                   multiline
                   numberOfLines={4}
                 />
@@ -1261,6 +1297,19 @@ const createStyles = (responsive) => StyleSheet.create({
     padding: responsive.responsivePadding(12),
     borderRadius: 8,
     marginBottom: responsive.responsiveMargin(8),
+  },
+  ventaRelatedFlag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: responsive.responsivePadding(8),
+    paddingVertical: responsive.responsivePadding(4),
+    borderRadius: responsive.responsiveWidth(12),
+    marginTop: responsive.responsiveMargin(4),
+  },
+  ventaRelatedFlagText: {
+    fontSize: responsive.responsiveFontSize(10),
+    fontWeight: '600',
+    marginLeft: responsive.responsiveMargin(4),
   },
   pagoHeader: {
     flexDirection: 'row',

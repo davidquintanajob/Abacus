@@ -37,7 +37,7 @@ const SalesContent = () => {
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
   const { toast, showToast, hideToast } = useToast();
-  const { user, ventaAccessLevels, cuentaChangePermissions, entradaAccessLevels, entradaManagePermissions } = useAuth();
+  const { user, ventaAccessLevels, cuentaChangePermissions, entradaAccessLevels, entradaManagePermissions, deudaManagePermissions, clienteManagePermissions } = useAuth();
   const [permission, setPermission] = useState(null);
 
   // Get pre-selected product from route params
@@ -598,6 +598,24 @@ const SalesContent = () => {
            (userRole === 'dependiente' && entradaManagePermissions?.dependiente) ||
            (userRole === 'almacenero' && entradaManagePermissions?.almacenero) ||
            (userRole === 'económico' && entradaManagePermissions?.economico);
+  };
+
+  // Check if user has deuda permissions (Gestión de Deudas)
+  const hasDeudaPermissions = () => {
+    const userRole = user?.rol?.toLowerCase();
+    return userRole === 'administrador' ||
+           (userRole === 'dependiente' && deudaManagePermissions?.dependiente) ||
+           (userRole === 'almacenero' && deudaManagePermissions?.almacenero) ||
+           (userRole === 'económico' && deudaManagePermissions?.economico);
+  };
+
+  // Check if user has cliente permissions (Gestión de Clientes)
+  const hasClientePermissions = () => {
+    const userRole = user?.rol?.toLowerCase();
+    return userRole === 'administrador' ||
+           (userRole === 'dependiente' && clienteManagePermissions?.dependiente) ||
+           (userRole === 'almacenero' && clienteManagePermissions?.almacenero) ||
+           (userRole === 'económico' && clienteManagePermissions?.economico);
   };
 
   // Toggle deuda mode
@@ -2133,21 +2151,23 @@ const SalesContent = () => {
           {/* Header: Pago + Generar Deuda toggle */}
           <View style={styles.sectionHeaderWithSwitch}>
             <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Pago</Text>
-            <View style={styles.decimalSwitchContainer}>
-              <Text style={[styles.decimalLabel, { color: isDeudaMode ? colors.primary : colors.outline }]}>
-                Generar Deuda
-              </Text>
-              <TouchableOpacity
-                style={[styles.decimalSwitch, { backgroundColor: isDeudaMode ? colors.primary : colors.outlineVariant }]}
-                onPress={handleDeudaModeToggle}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.decimalSwitchThumb, {
-                  backgroundColor: isDeudaMode ? '#fff' : colors.outline,
-                  transform: [{ translateX: isDeudaMode ? 20 : 0 }]
-                }]} />
-              </TouchableOpacity>
-            </View>
+            {hasDeudaPermissions() && (
+              <View style={styles.decimalSwitchContainer}>
+                <Text style={[styles.decimalLabel, { color: isDeudaMode ? colors.primary : colors.outline }]}>
+                  Generar Deuda
+                </Text>
+                <TouchableOpacity
+                  style={[styles.decimalSwitch, { backgroundColor: isDeudaMode ? colors.primary : colors.outlineVariant }]}
+                  onPress={handleDeudaModeToggle}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.decimalSwitchThumb, {
+                    backgroundColor: isDeudaMode ? '#fff' : colors.outline,
+                    transform: [{ translateX: isDeudaMode ? 20 : 0 }]
+                  }]} />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
           {isDeudaMode ? (
@@ -2258,15 +2278,17 @@ const SalesContent = () => {
                   </Text>
                   <Ionicons name="chevron-down" size={responsive.responsiveWidth(16)} color={colors.outline} />
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.deudaAddBtn, { backgroundColor: colors.primary }]}
-                  onPress={() => {
-                    setNuevoClienteForm({ nombre: '', telefono: '', direccion: '' });
-                    setShowNuevoClienteModal(true);
-                  }}
-                >
-                  <Ionicons name="add" size={responsive.responsiveWidth(20)} color="#fff" />
-                </TouchableOpacity>
+                {hasClientePermissions() && (
+                  <TouchableOpacity
+                    style={[styles.deudaAddBtn, { backgroundColor: colors.primary }]}
+                    onPress={() => {
+                      setNuevoClienteForm({ nombre: '', telefono: '', direccion: '' });
+                      setShowNuevoClienteModal(true);
+                    }}
+                  >
+                    <Ionicons name="add" size={responsive.responsiveWidth(20)} color="#fff" />
+                  </TouchableOpacity>
+                )}
               </View>
 
               {showClienteDropdown && (

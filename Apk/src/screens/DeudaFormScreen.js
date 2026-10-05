@@ -13,7 +13,7 @@ import { useOffline } from '../context/OfflineContext';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { createDeuda, saldarDeuda, updateDeuda } from '../services/deudaService';
+import { createDeuda, saldarDeuda, updateDeuda, getDeudaById } from '../services/deudaService';
 import { getClientes } from '../services/clienteService';
 import { getCuentas } from '../services/cuentaService';
 
@@ -94,17 +94,37 @@ const DeudaFormScreen = () => {
     fetchCuentas();
   }, [isAddMode, isEditMode, isOfflineMode]);
 
+  const fetchDeudaPagos = async (deudaId) => {
+    try {
+      const deudaData = await getDeudaById(deudaId);
+      console.log('[DeudaForm] Fetched deuda with pagos:', deudaData);
+      setPagosList(deudaData.pagos || []);
+    } catch (error) {
+      console.error('[DeudaForm] Error fetching deuda pagos:', error);
+    }
+  };
+
   useEffect(() => {
     if (isEditMode && deuda) {
+      console.log('[DeudaForm] Loading deuda in edit mode:', deuda);
+      console.log('[DeudaForm] Deuda id_lista_venta:', deuda.id_lista_venta);
+      console.log('[DeudaForm] Deuda pagos:', deuda.pagos);
       setFormData({
-        id_cliente: deuda.id_cliente || '',
+        id_cliente: deuda.id_cliente?.toString() || '',
         monto_cup: deuda.monto_cup?.toString() || '',
         monto_usd: deuda.monto_usd?.toString() || '',
         nota: deuda.nota || '',
         fecha_hora: deuda.fecha_hora ? new Date(deuda.fecha_hora) : new Date(),
         cambio_moneda: deuda.cambio_moneda?.toString() || '1',
       });
-      setPagosList(deuda.pagos || []);
+      
+      // If pagos are not loaded, fetch them
+      if (!deuda.pagos || deuda.pagos.length === 0) {
+        console.log('[DeudaForm] Pagos not loaded, fetching them...');
+        fetchDeudaPagos(deuda.id_deuda);
+      } else {
+        setPagosList(deuda.pagos || []);
+      }
     }
   }, [isEditMode, deuda]);
 
@@ -282,7 +302,17 @@ const DeudaFormScreen = () => {
       >
         {cliente && (
           <Card style={[styles.clienteInfoCard, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.clienteInfoTitle, { color: colors.onSurface }]}>Cliente</Text>
+            <View style={styles.clienteInfoHeader}>
+              <Text style={[styles.clienteInfoTitle, { color: colors.onSurface }]}>Cliente</Text>
+              {isEditMode && deuda?.id_lista_venta && (
+                <TouchableOpacity
+                  style={[styles.navigateButton, { backgroundColor: colors.primary }]}
+                  onPress={() => navigation.navigate('VentaEdit', { venta: { id_lista_venta: deuda.id_lista_venta } })}
+                >
+                  <Ionicons name="arrow-forward" size={responsive.responsiveWidth(16)} color="#fff" />
+                </TouchableOpacity>
+              )}
+            </View>
             <Text style={[styles.clienteInfoName, { color: colors.primary }]}>
               {cliente.nombre}
             </Text>
@@ -481,9 +511,9 @@ const DeudaFormScreen = () => {
                     <Text style={[styles.pagoForma, { color: colors.onSurface }]}>
                       Forma: {pago.forma_pago || 'No especificada'}
                     </Text>
-                    {pago.nota && (
+                    {(pago.nota || pago.operacion?.motivo) && (
                       <Text style={[styles.pagoNota, { color: colors.outline }]}>
-                        Nota: {pago.nota}
+                        {pago.nota || pago.operacion?.motivo}
                       </Text>
                     )}
                   </View>
@@ -897,6 +927,26 @@ const createStyles = (responsive) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: responsive.responsiveMargin(16),
+  },
+  clienteInfoCard: {
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  clienteInfoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  navigateButton: {
+    padding: responsive.responsivePadding(8),
+    borderRadius: responsive.responsiveWidth(20),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clienteInfoTitle: {
+    fontSize: responsive.fontSizes.h3,
+    fontWeight: '600',
+    fontFamily: 'Inter',
   },
   modalTitle: {
     fontSize: responsive.fontSizes.bodyLarge,

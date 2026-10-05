@@ -470,7 +470,7 @@ const ClienteFormScreen = () => {
                   <TextInput
                     style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
                     placeholderTextColor={colors.outline}
-                    placeholder="Número de teléfono"
+                    placeholder="Número..."
                     value={formData.telefono}
                     onChangeText={(text) => setFormData(prev => ({ ...prev, telefono: text }))}
                     keyboardType="phone-pad"
@@ -482,7 +482,7 @@ const ClienteFormScreen = () => {
                   <TextInput
                     style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
                     placeholderTextColor={colors.outline}
-                    placeholder="Tipo de cliente (ej: VIP, Regular, etc.)"
+                    placeholder="Tipo de..."
                     value={formData.tipo_cliente}
                     onChangeText={(text) => setFormData(prev => ({ ...prev, tipo_cliente: text }))}
                     editable={!isReadOnly}
@@ -510,7 +510,7 @@ const ClienteFormScreen = () => {
                   <TextInput
                     style={[styles.input, styles.gpsInput, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
                     placeholderTextColor={colors.outline}
-                    placeholder="Coordenadas GPS (latitud, longitud)"
+                    placeholder="Coordenadas GPS..."
                     value={formData.localizacion_coordenadas_gps}
                     onChangeText={(text) => setFormData(prev => ({ ...prev, localizacion_coordenadas_gps: text }))}
                     editable={!isReadOnly}
@@ -894,11 +894,18 @@ const ClienteFormScreen = () => {
                                         ${pago.cantidad_pagada || 0}
                                       </Text>
                                     </View>
-                                    {pago.forma_pago ? (
-                                      <Text style={[styles.pagoForma, { color: colors.onSurface }]}>
-                                        Forma: {pago.forma_pago}
-                                      </Text>
-                                    ) : null}
+                                    <View style={styles.pagoDetails}>
+                                      {pago.forma_pago ? (
+                                        <Text style={[styles.pagoForma, { color: colors.onSurface }]}>
+                                          Forma: {pago.forma_pago}
+                                        </Text>
+                                      ) : null}
+                                      {(pago.nota || pago.operacion?.motivo) && (
+                                        <Text style={[styles.pagoNota, { color: colors.outline }]}>
+                                          {pago.nota || pago.operacion?.motivo}
+                                        </Text>
+                                      )}
+                                    </View>
                                   </View>
                                 ))
                               ) : (
