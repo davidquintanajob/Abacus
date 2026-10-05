@@ -42,8 +42,40 @@ const AccessLevelSwitch = ({ value, onChange, colors, responsive }) => {
         >
           <Ionicons 
             name={level.icon} 
-            size={18} 
-            color={value === level.key ? '#fff' : colors.onSurface} 
+            size={responsive.responsiveWidth(20)} 
+            color={value === level.key ? '#fff' : colors.outline} 
+          />
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
+
+const DeudaClienteAccessLevelSwitch = ({ value, onChange, colors, responsive }) => {
+  const levels = [
+    { key: 'none', label: 'No ver', icon: 'lock-closed' },
+    { key: 'clientes', label: 'Ver clientes', icon: 'person' },
+    { key: 'ambos', label: 'Ver ambos', icon: 'people' },
+  ];
+
+  return (
+    <View style={accessLevelSwitchStyles.container}>
+      {levels.map((level, index) => (
+        <TouchableOpacity
+          key={level.key}
+          style={[
+            accessLevelSwitchStyles.iconButton,
+            { 
+              backgroundColor: value === level.key ? colors.primary : 'transparent',
+              borderColor: value === level.key ? colors.primary : colors.outlineVariant,
+            },
+          ]}
+          onPress={() => onChange(level.key)}
+        >
+          <Ionicons 
+            name={level.icon} 
+            size={responsive.responsiveWidth(20)} 
+            color={value === level.key ? '#fff' : colors.outline} 
           />
         </TouchableOpacity>
       ))}
@@ -132,6 +164,11 @@ const CurrencyExchangeContent = () => {
     almacenero: false,
     economico: false,
   });
+  const [clienteManagePermissions, setClienteManagePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
   const [deudaConfigPermissions, setDeudaConfigPermissions] = useState({
     dependiente: false,
     almacenero: false,
@@ -140,6 +177,7 @@ const CurrencyExchangeContent = () => {
   const [showDeudaPermissions, setShowDeudaPermissions] = useState(false);
   const [showDeudaManage, setShowDeudaManage] = useState(false);
   const [showDeudaConfig, setShowDeudaConfig] = useState(false);
+  const [showClienteManage, setShowClienteManage] = useState(false);
   const [movimientoAccessLevels, setMovimientoAccessLevels] = useState({
     dependiente: 'none',
     almacenero: 'none',
@@ -321,6 +359,9 @@ const CurrencyExchangeContent = () => {
       if (data.deudaManagePermissions) {
         setDeudaManagePermissions(data.deudaManagePermissions);
       }
+      if (data.clienteManagePermissions) {
+        setClienteManagePermissions(data.clienteManagePermissions);
+      }
       if (data.deudaConfigPermissions) {
         setDeudaConfigPermissions(data.deudaConfigPermissions);
       }
@@ -350,6 +391,12 @@ const CurrencyExchangeContent = () => {
       }
       if (data.prioritizeWifiConnection !== undefined) {
         setPrioritizeWifiConnection(data.prioritizeWifiConnection);
+      }
+      if (data.movimientoAccessLevels) {
+        setMovimientoAccessLevels(data.movimientoAccessLevels);
+      }
+      if (data.movimientoManagePermissions) {
+        setMovimientoManagePermissions(data.movimientoManagePermissions);
       }
     } catch (error) {
       showToast({ type: 'error', message: 'Error al cargar configuración' });
@@ -649,6 +696,7 @@ const CurrencyExchangeContent = () => {
         ventaManagePermissions: ventaManagePermissions,
         deudaAccessLevels: deudaAccessLevels,
         deudaManagePermissions: deudaManagePermissions,
+        clienteManagePermissions: clienteManagePermissions,
         deudaConfigPermissions: deudaConfigPermissions,
         autoApplySuggestedCost: autoApplySuggestedCost,
         customSalidaTypes: customSalidaTypes,
@@ -866,6 +914,25 @@ const CurrencyExchangeContent = () => {
       showToast({ type: 'success', message: 'Permiso de gestión de deudas actualizado correctamente' });
     } catch (error) {
       showToast({ type: 'error', message: 'Error al actualizar permiso de gestión de deudas' });
+    }
+  };
+
+  const toggleClienteManagePermission = async (role) => {
+    const newClienteManagePermissions = { ...clienteManagePermissions, [role]: !clienteManagePermissions[role] };
+    setClienteManagePermissions(newClienteManagePermissions);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        clienteManagePermissions: newClienteManagePermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      
+      await fetchConfig();
+      
+      showToast({ type: 'success', message: 'Permiso de gestión de clientes actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de gestión de clientes' });
     }
   };
 
@@ -2635,7 +2702,7 @@ const CurrencyExchangeContent = () => {
           <View style={styles.permissionsHeader}>
             <View style={styles.permissionsHeaderLeft}>
               <Image source={require('../../assets/customer-search.png')} style={[styles.permissionsIcon, { tintColor: colors.primary }]} resizeMode="contain" />
-              <Text style={[styles.permissionsTitle, { color: colors.onSurface }]}>
+              <Text style={[styles.cardTitle, { color: colors.onSurface }]}>
                 Permisos de Deudas y Clientes
               </Text>
             </View>
@@ -2654,7 +2721,7 @@ const CurrencyExchangeContent = () => {
           {showDeudaPermissions && (
             <>
               <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
-                Configura el nivel de acceso a las deudas y clientes para cada rol
+                Configura el nivel de acceso a deudas y clientes para cada rol (No ver, Ver clientes, Ver ambos)
               </Text>
               
               <View style={styles.permissionItem}>
@@ -2666,13 +2733,13 @@ const CurrencyExchangeContent = () => {
                     style={[styles.infoButton, { backgroundColor: colors.primary }]}
                     onPress={() => showInfoModal(
                       'Acceso Deudas - Dependiente',
-                      'Sin acceso: No puede ver deudas ni clientes. Mi tienda: Solo puede ver deudas y clientes de su tienda. Todas: Puede ver deudas y clientes de todas las tiendas.'
+                      'No ver: No puede ver deudas ni clientes. Ver clientes: Solo puede ver clientes. Ver ambos: Puede ver deudas y clientes.'
                     )}
                   >
                     <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
                   </TouchableOpacity>
                 </View>
-                <AccessLevelSwitch
+                <DeudaClienteAccessLevelSwitch
                   value={deudaAccessLevels.dependiente}
                   onChange={(newLevel) => updateDeudaAccessLevel('dependiente', newLevel)}
                   colors={colors}
@@ -2689,13 +2756,13 @@ const CurrencyExchangeContent = () => {
                     style={[styles.infoButton, { backgroundColor: colors.primary }]}
                     onPress={() => showInfoModal(
                       'Acceso Deudas - Almacenero',
-                      'Sin acceso: No puede ver deudas ni clientes. Mi tienda: Solo puede ver deudas y clientes de su tienda. Todas: Puede ver deudas y clientes de todas las tiendas.'
+                      'No ver: No puede ver deudas ni clientes. Ver clientes: Solo puede ver clientes. Ver ambos: Puede ver deudas y clientes.'
                     )}
                   >
                     <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
                   </TouchableOpacity>
                 </View>
-                <AccessLevelSwitch
+                <DeudaClienteAccessLevelSwitch
                   value={deudaAccessLevels.almacenero}
                   onChange={(newLevel) => updateDeudaAccessLevel('almacenero', newLevel)}
                   colors={colors}
@@ -2712,13 +2779,13 @@ const CurrencyExchangeContent = () => {
                     style={[styles.infoButton, { backgroundColor: colors.primary }]}
                     onPress={() => showInfoModal(
                       'Acceso Deudas - Económico',
-                      'Sin acceso: No puede ver deudas ni clientes. Mi tienda: Solo puede ver deudas y clientes de su tienda. Todas: Puede ver deudas y clientes de todas las tiendas.'
+                      'No ver: No puede ver deudas ni clientes. Ver clientes: Solo puede ver clientes. Ver ambos: Puede ver deudas y clientes.'
                     )}
                   >
                     <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
                   </TouchableOpacity>
                 </View>
-                <AccessLevelSwitch
+                <DeudaClienteAccessLevelSwitch
                   value={deudaAccessLevels.economico}
                   onChange={(newLevel) => updateDeudaAccessLevel('economico', newLevel)}
                   colors={colors}
@@ -2746,9 +2813,9 @@ const CurrencyExchangeContent = () => {
               {showDeudaManage && (
                 <>
                   <Text style={[styles.permissionSectionSubtitle, { color: colors.outline }]}>
-                    Configura qué roles pueden crear, editar y eliminar deudas y pagos (solo visible para roles con acceso)
+                    Configura qué roles pueden crear, editar y eliminar deudas y pagos (solo visible para roles con acceso a deudas)
                   </Text>
-                  {deudaAccessLevels.dependiente !== 'none' && (
+                  {deudaAccessLevels.dependiente === 'ambos' && (
                     <View style={styles.permissionItem}>
                       <View style={styles.permissionInfo}>
                         <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
@@ -2772,7 +2839,7 @@ const CurrencyExchangeContent = () => {
                       />
                     </View>
                   )}
-                  {deudaAccessLevels.almacenero !== 'none' && (
+                  {deudaAccessLevels.almacenero === 'ambos' && (
                     <View style={styles.permissionItem}>
                       <View style={styles.permissionInfo}>
                         <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
@@ -2796,7 +2863,7 @@ const CurrencyExchangeContent = () => {
                       />
                     </View>
                   )}
-                  {deudaAccessLevels.economico !== 'none' && (
+                  {deudaAccessLevels.economico === 'ambos' && (
                     <View style={styles.permissionItem}>
                       <View style={styles.permissionInfo}>
                         <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
@@ -2825,96 +2892,106 @@ const CurrencyExchangeContent = () => {
             </View>
           )}
 
-          <View style={styles.permissionSection}>
-            <View style={styles.permissionSectionHeader}>
-              <Text style={[styles.permissionSectionTitle, { color: colors.onSurface }]}>
-                Configuración de Deudas
-              </Text>
-              <TouchableOpacity 
-                style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
-                onPress={() => setShowDeudaConfig(!showDeudaConfig)}
-              >
-                <Ionicons 
-                  name={showDeudaConfig ? "chevron-up" : "chevron-down"} 
-                  size={responsive.responsiveWidth(20)} 
-                  color={isDarkMode ? colors.primary : '#1976D2'} 
-                />
-              </TouchableOpacity>
-            </View>
-            {showDeudaConfig && (
-              <>
-                <Text style={[styles.permissionSectionSubtitle, { color: colors.outline }]}>
-                  Configura qué roles pueden acceder a la configuración de deudas y clientes
+          {(deudaAccessLevels.dependiente === 'clientes' || deudaAccessLevels.dependiente === 'ambos' ||
+            deudaAccessLevels.almacenero === 'clientes' || deudaAccessLevels.almacenero === 'ambos' ||
+            deudaAccessLevels.economico === 'clientes' || deudaAccessLevels.economico === 'ambos') && (
+            <View style={styles.permissionSection}>
+              <View style={styles.permissionSectionHeader}>
+                <Text style={[styles.permissionSectionTitle, { color: colors.onSurface }]}>
+                  Gestión de Clientes
                 </Text>
-                <View style={styles.permissionItem}>
-                  <View style={styles.permissionInfo}>
-                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
-                      Dependiente
-                    </Text>
-                    <TouchableOpacity 
-                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
-                      onPress={() => showInfoModal(
-                        'Configuración Deudas - Dependiente',
-                        'Cuando está activo, los usuarios con rol Dependiente pueden acceder a la configuración de deudas y clientes.'
-                      )}
-                    >
-                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Switch
-                    value={deudaConfigPermissions.dependiente}
-                    onValueChange={() => toggleDeudaConfigPermission('dependiente')}
-                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-                    thumbColor={deudaConfigPermissions.dependiente ? '#fff' : colors.outline}
+                <TouchableOpacity 
+                  style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+                  onPress={() => setShowClienteManage(!showClienteManage)}
+                >
+                  <Ionicons 
+                    name={showClienteManage ? "chevron-up" : "chevron-down"} 
+                    size={responsive.responsiveWidth(20)} 
+                    color={isDarkMode ? colors.primary : '#1976D2'} 
                   />
-                </View>
-                <View style={styles.permissionItem}>
-                  <View style={styles.permissionInfo}>
-                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
-                      Almacenero
-                    </Text>
-                    <TouchableOpacity 
-                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
-                      onPress={() => showInfoModal(
-                        'Configuración Deudas - Almacenero',
-                        'Cuando está activo, los usuarios con rol Almacenero pueden acceder a la configuración de deudas y clientes.'
-                      )}
-                    >
-                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Switch
-                    value={deudaConfigPermissions.almacenero}
-                    onValueChange={() => toggleDeudaConfigPermission('almacenero')}
-                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-                    thumbColor={deudaConfigPermissions.almacenero ? '#fff' : colors.outline}
-                  />
-                </View>
-                <View style={styles.permissionItem}>
-                  <View style={styles.permissionInfo}>
-                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
-                      Económico
-                    </Text>
-                    <TouchableOpacity 
-                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
-                      onPress={() => showInfoModal(
-                        'Configuración Deudas - Económico',
-                        'Cuando está activo, los usuarios con rol Económico pueden acceder a la configuración de deudas y clientes.'
-                      )}
-                    >
-                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Switch
-                    value={deudaConfigPermissions.economico}
-                    onValueChange={() => toggleDeudaConfigPermission('economico')}
-                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-                    thumbColor={deudaConfigPermissions.economico ? '#fff' : colors.outline}
-                  />
-                </View>
-              </>
-            )}
-          </View>
+                </TouchableOpacity>
+              </View>
+              {showClienteManage && (
+                <>
+                  <Text style={[styles.permissionSectionSubtitle, { color: colors.outline }]}>
+                    Configura qué roles pueden crear, editar y eliminar clientes (solo visible para roles con acceso a clientes)
+                  </Text>
+                  {(deudaAccessLevels.dependiente === 'clientes' || deudaAccessLevels.dependiente === 'ambos') && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Dependiente
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Clientes - Dependiente',
+                            'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar clientes. Cuando está desactivado, solo pueden ver la información sin poder gestionar clientes.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={clienteManagePermissions.dependiente}
+                        onValueChange={() => toggleClienteManagePermission('dependiente')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={clienteManagePermissions.dependiente ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                  {(deudaAccessLevels.almacenero === 'clientes' || deudaAccessLevels.almacenero === 'ambos') && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Almacenero
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Clientes - Almacenero',
+                            'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar clientes. Cuando está desactivado, solo pueden ver la información sin poder gestionar clientes.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={clienteManagePermissions.almacenero}
+                        onValueChange={() => toggleClienteManagePermission('almacenero')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={clienteManagePermissions.almacenero ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                  {(deudaAccessLevels.economico === 'clientes' || deudaAccessLevels.economico === 'ambos') && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Económico
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Clientes - Económico',
+                            'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar clientes. Cuando está desactivado, solo pueden ver la información sin poder gestionar clientes.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={clienteManagePermissions.economico}
+                        onValueChange={() => toggleClienteManagePermission('economico')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={clienteManagePermissions.economico ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+          )}
 
             </>
           )}

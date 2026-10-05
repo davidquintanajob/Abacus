@@ -14,6 +14,7 @@ import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import { getClienteById, createCliente, updateCliente, deleteCliente } from '../services/clienteService';
 import { getCuentas } from '../services/cuentaService';
+import { getDeudas, saldarDeuda } from '../services/deudaService';
 import configService from '../services/configService';
 
 const ClienteFormScreen = () => {
@@ -48,23 +49,44 @@ const ClienteFormScreen = () => {
 
   // Estado para crear deuda asociada al cliente (cuando el backend esté listo)
   const [createWithDeuda, setCreateWithDeuda] = useState(false);
-  const [showInstructionsModal, setShowInstructionsModal] = useState(false);
+  
+  // Estado para agregar primer pago al crear deuda
+  const [createWithPago, setCreateWithPago] = useState(false);
+  
+  // Estado para datos de deuda
   const [deudaData, setDeudaData] = useState({
     monto_cup: '',
     monto_usd: '',
-    nota: '',
+    nota: ''
   });
-  const [createWithPago, setCreateWithPago] = useState(false);
+  
+  // Estado para datos de pago
   const [pagoData, setPagoData] = useState({
     cantidad: '',
     forma_pago: '',
     id_cuenta_operacion: '',
-    nota: '',
+    cambio_moneda: '1',
+    nota: ''
+  });
+  
+  // Estado para deudas del cliente
+  const [deudas, setDeudas] = useState([]);
+  const [isLoadingDeudas, setIsLoadingDeudas] = useState(false);
+  const [expandedDeudas, setExpandedDeudas] = useState({});
+  const [showPagoModal, setShowPagoModal] = useState(false);
+  const [selectedDeuda, setSelectedDeuda] = useState(null);
+  const [pagoFormData, setPagoFormData] = useState({
+    cantidad_pagada: '',
+    forma_pago: '',
+    id_cuenta_operacion: '',
+    cambio_moneda: '1',
+    nota: ''
   });
   const [showFormaPagoDropdown, setShowFormaPagoDropdown] = useState(false);
   const [showCuentaDropdown, setShowCuentaDropdown] = useState(false);
   const [cuentas, setCuentas] = useState([]);
-  const formasPago = ['Efectivo CUP', 'Transferencia CUP', 'Efectivo USD', 'Transferencia USD'];
+  const [formasPago] = useState(['Efectivo CUP', 'Transferencia CUP', 'Efectivo USD', 'Transferencia USD']);
+  const [showInstructionsModal, setShowInstructionsModal] = useState(false);
 
   const handleOpenGoogleMaps = async () => {
     setShowInstructionsModal(true);
@@ -144,6 +166,104 @@ const ClienteFormScreen = () => {
 
     fetchCuentas();
   }, [createWithPago, isOfflineMode]);
+
+  useEffect(() => {
+    const fetchDeudas = async () => {
+      if (cliente?.id_cliente && !isOfflineMode && (isEditMode || isViewMode)) {
+        try {
+          setIsLoadingDeudas(true);
+          const deudasData = await getDeudas({ id_cliente: cliente.id_cliente }, 1, 1000);
+          setDeudas(deudasData.data || []);
+        } catch (error) {
+          console.error('Error al cargar deudas:', error);
+          setDeudas([]);
+        } finally {
+          setIsLoadingDeudas(false);
+        }
+      }
+    };
+
+    fetchDeudas();
+  }, [cliente?.id_cliente, isOfflineMode, isEditMode, isViewMode]);
+
+  const toggleDeudaExpansion = (deudaId) => {
+    setExpandedDeudas(prev => ({
+      ...prev,
+      [deudaId]: !prev[deudaId]
+    }));
+  };
+
+  const handleOpenPagoModal = async (deuda) => {
+    setSelectedDeuda(deuda);
+    setPagoFormData({
+      cantidad_pagada: '',
+      forma_pago: '',
+      id_cuenta_operacion: '',
+      cambio_moneda: '1',
+      nota: ''
+    });
+    
+    // Cargar cuentas cuando se abre el modal
+    if (!isOfflineMode) {
+      try {
+        const cuentasData = await getCuentas({}, 1, 1000);
+        setCuentas(cuentasData.data || []);
+      } catch (error) {
+        console.error('Error al cargar cuentas:', error);
+        setCuentas([]);
+      }
+    }
+    
+    setShowPagoModal(true);
+  };
+
+  const handleClosePagoModal = () => {
+    setShowPagoModal(false);
+    setSelectedDeuda(null);
+    setPagoFormData({
+      cantidad_pagada: '',
+      forma_pago: '',
+      id_cuenta_operacion: '',
+      cambio_moneda: '1',
+      nota: ''
+    });
+  };
+
+  const handleSavePago = async () => {
+    if (!pagoFormData.cantidad_pagada || pagoFormData.cantidad_pagada.trim() === '') {
+      showToast({ type: 'warning', message: 'La cantidad es obligatoria' });
+      return;
+    }
+    if (!pagoFormData.forma_pago || pagoFormData.forma_pago.trim() === '') {
+      showToast({ type: 'warning', message: 'La forma de pago es obligatoria' });
+      return;
+    }
+    if (!pagoFormData.id_cuenta_operacion || pagoFormData.id_cuenta_operacion.trim() === '') {
+      showToast({ type: 'warning', message: 'Debe seleccionar una cuenta de operación' });
+      return;
+    }
+
+    try {
+      const pago = {
+        cantidad_pagada: parseFloat(pagoFormData.cantidad_pagada),
+        forma_pago: pagoFormData.forma_pago,
+        cambio_moneda: parseFloat(pagoFormData.cambio_moneda) || 1,
+        id_cuenta_operacion: parseInt(pagoFormData.id_cuenta_operacion),
+        fecha_hora: new Date(),
+        nota: pagoFormData.nota || null
+      };
+      
+      await saldarDeuda(selectedDeuda.id_deuda, [pago]);
+      showToast({ type: 'success', message: 'Pago agregado correctamente' });
+      handleClosePagoModal();
+      
+      // Recargar deudas
+      const deudasData = await getDeudas({ id_cliente: cliente.id_cliente }, 1, 1000);
+      setDeudas(deudasData.data || []);
+    } catch (error) {
+      showToast({ type: 'error', message: error.message || 'Error al agregar pago' });
+    }
+  };
 
   const handleSave = async () => {
     // Validaciones
@@ -343,31 +463,31 @@ const ClienteFormScreen = () => {
                 />
               </View>
 
-              {/* Teléfono */}
-              <View style={styles.formGroup}>
-                <Text style={[styles.label, { color: colors.outline }]}>Teléfono</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                  placeholderTextColor={colors.outline}
-                  placeholder="Número de teléfono"
-                  value={formData.telefono}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, telefono: text }))}
-                  keyboardType="phone-pad"
-                  editable={!isReadOnly}
-                />
-              </View>
-
-              {/* Tipo de Cliente */}
-              <View style={styles.formGroup}>
-                <Text style={[styles.label, { color: colors.outline }]}>Tipo de Cliente</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                  placeholderTextColor={colors.outline}
-                  placeholder="Tipo de cliente (ej: VIP, Regular, etc.)"
-                  value={formData.tipo_cliente}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, tipo_cliente: text }))}
-                  editable={!isReadOnly}
-                />
+              {/* Teléfono y Tipo de Cliente */}
+              <View style={styles.formRow}>
+                <View style={[styles.formGroup, { flex: 1, marginRight: 10 }]}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Teléfono</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Número de teléfono"
+                    value={formData.telefono}
+                    onChangeText={(text) => setFormData(prev => ({ ...prev, telefono: text }))}
+                    keyboardType="phone-pad"
+                    editable={!isReadOnly}
+                  />
+                </View>
+                <View style={[styles.formGroup, { flex: 1, marginLeft: 10 }]}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Tipo de Cliente</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Tipo de cliente (ej: VIP, Regular, etc.)"
+                    value={formData.tipo_cliente}
+                    onChangeText={(text) => setFormData(prev => ({ ...prev, tipo_cliente: text }))}
+                    editable={!isReadOnly}
+                  />
+                </View>
               </View>
 
               {/* Dirección */}
@@ -549,7 +669,11 @@ const ClienteFormScreen = () => {
                                     key={forma}
                                     style={[styles.dropdownItem, index === formasPago.length - 1 && styles.dropdownItemLast]}
                                     onPress={() => {
-                                      setPagoData(prev => ({ ...prev, forma_pago: forma }));
+                                      setPagoData(prev => ({ 
+                                        ...prev, 
+                                        forma_pago: forma,
+                                        id_cuenta_operacion: '' // Limpiar cuenta al cambiar forma de pago
+                                      }));
                                       setShowFormaPagoDropdown(false);
                                     }}
                                   >
@@ -623,7 +747,7 @@ const ClienteFormScreen = () => {
               {!isReadOnly && canManageClientes && (
                 <View style={styles.actionButtons}>
                   <TouchableOpacity
-                    style={[styles.actionButton, styles.cancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
+                    style={[styles.actionButton, styles.cancelButton, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.outlineVariant }]}
                     onPress={() => navigation.goBack()}
                     disabled={isSaving}
                   >
@@ -654,6 +778,140 @@ const ClienteFormScreen = () => {
                   <Text style={[styles.deleteButtonText, { color: colors.error }]}>Eliminar Cliente</Text>
                 </TouchableOpacity>
               )}
+
+              {/* Sección de Deudas del Cliente */}
+              {(isEditMode || isViewMode) && (
+                <View style={styles.deudasSection}>
+                  <Text style={[styles.sectionTitle, { color: colors.onSurface, marginTop: 20 }]}>Deudas del Cliente</Text>
+                  
+                  {isLoadingDeudas ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : deudas.length === 0 ? (
+                    <Text style={[styles.noDeudasText, { color: colors.outline }]}>No hay deudas registradas para este cliente</Text>
+                  ) : (
+                    deudas.map((deuda) => {
+                      const isExpanded = expandedDeudas[deuda.id_deuda];
+                      const montoRestanteCup = (deuda.monto_cup || 0) - (deuda.pagos?.reduce((sum, pago) => sum + (pago.cantidad_pagada || 0), 0) || 0);
+                      const montoRestanteUsd = (deuda.monto_usd || 0) - (deuda.pagos?.reduce((sum, pago) => sum + (pago.cantidad_pagada || 0), 0) || 0);
+                      const isSaldada = deuda.estado === true || (montoRestanteCup <= 0 && montoRestanteUsd <= 0);
+                      
+                      return (
+                        <View key={deuda.id_deuda} style={[
+                          styles.deudaCard,
+                          { 
+                            backgroundColor: isSaldada ? (isDarkMode ? 'rgba(76, 175, 80, 0.1)' : '#E8F5E9') : (isDarkMode ? 'rgba(33, 150, 243, 0.1)' : '#E3F2FD'),
+                            borderColor: isSaldada ? '#4CAF50' : '#2196F3',
+                            borderWidth: 1
+                          }
+                        ]}>
+                          <TouchableOpacity
+                            style={styles.deudaHeader}
+                            onPress={() => toggleDeudaExpansion(deuda.id_deuda)}
+                          >
+                            <View style={styles.deudaHeaderLeft}>
+                              <Ionicons 
+                                name={isExpanded ? "chevron-down" : "chevron-forward"} 
+                                size={20} 
+                                color={isSaldada ? '#4CAF50' : '#2196F3'} 
+                              />
+                              <View style={styles.deudaInfo}>
+                                <Text style={[styles.deudaDate, { color: colors.onSurface }]}>
+                                  {new Date(deuda.fecha_hora).toLocaleDateString()}
+                                </Text>
+                                <Text style={[styles.deudaStatus, { color: isSaldada ? '#4CAF50' : '#F44336' }]}>
+                                  {isSaldada ? 'Saldada' : 'Pendiente'}
+                                </Text>
+                              </View>
+                            </View>
+                            <View style={styles.deudaHeaderRight}>
+                              <TouchableOpacity
+                                style={styles.addPagoButton}
+                                onPress={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenPagoModal(deuda);
+                                }}
+                              >
+                                <Ionicons name="add-circle" size={24} color={colors.primary} />
+                              </TouchableOpacity>
+                            </View>
+                          </TouchableOpacity>
+                          
+                          <View style={styles.deudaDetails}>
+                            <Text style={[styles.deudaLabel, { color: colors.outline }]}>Monto deuda:</Text>
+                            {(deuda.monto_cup && parseFloat(deuda.monto_cup) > 0) ? (
+                              <Text style={[styles.deudaValue, { color: colors.onSurface }]}>
+                                CUP = ${deuda.monto_cup}
+                              </Text>
+                            ) : null}
+                            {(deuda.monto_usd && parseFloat(deuda.monto_usd) > 0) ? (
+                              <Text style={[styles.deudaValue, { color: colors.onSurface }]}>
+                                USD = ${deuda.monto_usd}
+                              </Text>
+                            ) : null}
+                            
+                            {(!isSaldada && (montoRestanteCup > 0 || montoRestanteUsd > 0)) && (
+                              <>
+                                <Text style={[styles.deudaLabel, { color: colors.outline, marginTop: 8 }]}>Restante:</Text>
+                                {montoRestanteCup > 0 ? (
+                                  <Text style={[
+                                    styles.deudaValue,
+                                    { color: '#F44336', fontWeight: '700' }
+                                  ]}>
+                                    CUP = ${montoRestanteCup.toFixed(2)}
+                                  </Text>
+                                ) : null}
+                                {montoRestanteUsd > 0 ? (
+                                  <Text style={[
+                                    styles.deudaValue,
+                                    { color: '#F44336', fontWeight: '700' }
+                                  ]}>
+                                    USD = ${montoRestanteUsd.toFixed(2)}
+                                  </Text>
+                                ) : null}
+                              </>
+                            )}
+                            
+                            {deuda.nota ? (
+                              <Text style={[styles.deudaNota, { color: colors.outline, marginTop: 8 }]}>
+                                {deuda.nota}
+                              </Text>
+                            ) : null}
+                          </View>
+                          
+                          {isExpanded && (
+                            <View style={styles.pagosContainer}>
+                              <Text style={[styles.pagosTitle, { color: colors.onSurface }]}>
+                                Pagos realizados ({deuda.pagos?.length || 0})
+                              </Text>
+                              {deuda.pagos && deuda.pagos.length > 0 ? (
+                                deuda.pagos.map((pago, index) => (
+                                  <View key={index} style={[styles.pagoItem, { backgroundColor: colors.surface }]}>
+                                    <View style={styles.pagoHeader}>
+                                      <Text style={[styles.pagoDate, { color: colors.outline }]}>
+                                        {new Date(pago.fecha_hora).toLocaleString()}
+                                      </Text>
+                                      <Text style={[styles.pagoAmount, { color: colors.primary }]}>
+                                        ${pago.cantidad_pagada || 0}
+                                      </Text>
+                                    </View>
+                                    {pago.forma_pago ? (
+                                      <Text style={[styles.pagoForma, { color: colors.onSurface }]}>
+                                        Forma: {pago.forma_pago}
+                                      </Text>
+                                    ) : null}
+                                  </View>
+                                ))
+                              ) : (
+                                <Text style={[styles.noPagosText, { color: colors.outline }]}>No hay pagos registrados</Text>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })
+                  )}
+                </View>
+              )}
             </Card>
           )}
         </ScrollView>
@@ -668,43 +926,201 @@ const ClienteFormScreen = () => {
       >
         <View style={styles.modalOverlay}>
           <Card style={[styles.instructionsModal, { backgroundColor: colors.surface }]}>
-            <View style={styles.modalHeader}>
+            <View style={styles.instructionsModalHeader}>
               <Ionicons name="information-circle" size={responsive.responsiveWidth(28)} color={colors.primary} />
               <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Instrucciones</Text>
             </View>
             <View style={styles.instructionsContent}>
               <Text style={[styles.instructionsText, { color: colors.onSurface }]}>
-                1. Se abrirá Google Maps en tu navegador.
+                1. Se abrirá Google Maps.
               </Text>
               <Text style={[styles.instructionsText, { color: colors.onSurface }]}>
                 2. Busca la ubicación del cliente en el mapa.
               </Text>
               <Text style={[styles.instructionsText, { color: colors.onSurface }]}>
-                3. Haz clic derecho en la ubicación y selecciona "Copiar coordenadas".
+                3. Mantén presionado sobre la ubicación para obtener las coordenadas.
               </Text>
               <Text style={[styles.instructionsText, { color: colors.onSurface }]}>
-                4. Pega las coordenadas en el campo de Localización GPS.
+                4. Copia las coordenadas que aparecen en pantalla y pégalas en el campo de Localización GPS.
               </Text>
             </View>
             <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: colors.primary }]}
+              style={[styles.instructionsModalButton, { backgroundColor: colors.primary }]}
               onPress={handleConfirmOpenGoogleMaps}
             >
-              <Text style={[styles.modalButtonText, { color: '#fff' }]}>ENTENDIDO</Text>
+              <Text style={[styles.instructionsModalButtonText, { color: '#fff' }]}>ENTENDIDO</Text>
             </TouchableOpacity>
           </Card>
         </View>
       </Modal>
 
-      <Toast
-        visible={toast.visible}
-        type={toast.type}
-        message={toast.message}
-        code={toast.code}
-        duration={toast.duration}
-        onHide={hideToast}
-        toastKey={toast.key}
-      />
+      {/* Modal para agregar pago de deuda */}
+      <Modal
+        visible={showPagoModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={handleClosePagoModal}
+      >
+        <View style={styles.modalOverlay}>
+          <Card style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                Agregar Pago
+              </Text>
+              <TouchableOpacity onPress={handleClosePagoModal}>
+                <Ionicons name="close" size={responsive.responsiveWidth(24)} color={colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.formGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Cantidad a Pagar *</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Cantidad"
+                  value={pagoFormData.cantidad_pagada}
+                  onChangeText={(text) => setPagoFormData(prev => ({ ...prev, cantidad_pagada: text }))}
+                  keyboardType="numeric"
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Forma de Pago *</Text>
+                <TouchableOpacity
+                  style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                  onPress={() => setShowFormaPagoDropdown(!showFormaPagoDropdown)}
+                >
+                  <Text style={[styles.dropdownText, { color: pagoFormData.forma_pago ? colors.onSurface : colors.outline }]}>
+                    {pagoFormData.forma_pago || 'Seleccionar forma de pago'}
+                  </Text>
+                  <Ionicons 
+                    name={showFormaPagoDropdown ? "chevron-up" : "chevron-down"} 
+                    size={responsive.responsiveWidth(20)} 
+                    color={colors.outline} 
+                  />
+                </TouchableOpacity>
+                
+                {showFormaPagoDropdown ? (
+                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                    {formasPago.map((forma, index) => (
+                      <TouchableOpacity
+                        key={forma}
+                        style={[styles.dropdownItem, index === formasPago.length - 1 && styles.dropdownItemLast]}
+                        onPress={() => {
+                          setPagoFormData(prev => ({ 
+                            ...prev, 
+                            forma_pago: forma,
+                            id_cuenta_operacion: '' // Limpiar cuenta al cambiar forma de pago
+                          }));
+                          setShowFormaPagoDropdown(false);
+                        }}
+                      >
+                        <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{forma}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Cuenta de Operación *</Text>
+                <TouchableOpacity
+                  style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                  onPress={() => setShowCuentaDropdown(!showCuentaDropdown)}
+                >
+                  <Text style={[styles.dropdownText, { color: pagoFormData.id_cuenta_operacion ? colors.onSurface : colors.outline }]}>
+                    {pagoFormData.id_cuenta_operacion
+                      ? String(cuentas.find(c => c.id_cuenta === parseInt(pagoFormData.id_cuenta_operacion))?.nombre || 'Cuenta seleccionada')
+                      : 'Seleccionar cuenta'}
+                  </Text>
+                  <Ionicons 
+                    name={showCuentaDropdown ? "chevron-up" : "chevron-down"} 
+                    size={responsive.responsiveWidth(20)} 
+                    color={colors.outline} 
+                  />
+                </TouchableOpacity>
+                
+                {showCuentaDropdown ? (
+                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                    {cuentas
+                      .filter(cuenta => !pagoFormData.forma_pago || cuenta.tipo_cuenta === pagoFormData.forma_pago)
+                      .map((cuenta, index, filtered) => (
+                        <TouchableOpacity
+                          key={cuenta.id_cuenta}
+                          style={[styles.dropdownItem, index === filtered.length - 1 && styles.dropdownItemLast]}
+                          onPress={() => {
+                            setPagoFormData(prev => ({ 
+                              ...prev, 
+                              id_cuenta_operacion: cuenta.id_cuenta.toString(),
+                              forma_pago: cuenta.tipo_cuenta || prev.forma_pago
+                            }));
+                            setShowCuentaDropdown(false);
+                          }}
+                        >
+                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{`${cuenta.nombre || ''} (${cuenta.tipo_cuenta || 'Sin tipo'})`}</Text>
+                        </TouchableOpacity>
+                      ))}
+                  </View>
+                ) : null}
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Nota</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Notas sobre el pago"
+                  value={pagoFormData.nota}
+                  onChangeText={(text) => setPagoFormData(prev => ({ ...prev, nota: text }))}
+                  multiline
+                  numberOfLines={4}
+                />
+              </View>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
+                  onPress={handleClosePagoModal}
+                >
+                  <Text style={[styles.modalButtonText, { color: colors.onSurface }]}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.saveButton, { backgroundColor: colors.primary }]}
+                  onPress={handleSavePago}
+                >
+                  <Text style={[styles.modalButtonText, { color: '#fff' }]}>Guardar</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+            
+            {/* Toast dentro del modal para mostrar sobre el modal */}
+            {showPagoModal && (
+              <Toast
+                visible={toast.visible}
+                type={toast.type}
+                message={toast.message}
+                code={toast.code}
+                duration={toast.duration}
+                onHide={hideToast}
+                toastKey={toast.key}
+              />
+            )}
+          </Card>
+        </View>
+      </Modal>
+
+      {!showPagoModal && (
+        <Toast
+          visible={toast.visible}
+          type={toast.type}
+          message={toast.message}
+          code={toast.code}
+          duration={toast.duration}
+          onHide={hideToast}
+          toastKey={toast.key}
+        />
+      )}
     </SafeAreaView>
   </>
   );
@@ -822,6 +1238,7 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   cancelButton: {
     borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
   },
   saveButton: {
     shadowColor: '#000',
@@ -912,8 +1329,16 @@ const createStyles = (responsive) => StyleSheet.create({
     borderRadius: 16,
     padding: responsive.responsivePadding(24),
   },
+  instructionsModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(12),
+    marginBottom: responsive.responsiveMargin(20),
+  },
   modalHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     gap: responsive.responsiveMargin(12),
     marginBottom: responsive.responsiveMargin(20),
@@ -932,10 +1357,223 @@ const createStyles = (responsive) => StyleSheet.create({
     marginBottom: responsive.responsiveMargin(12),
     lineHeight: responsive.responsiveHeight(24),
   },
-  modalButton: {
-    paddingVertical: responsive.responsivePadding(14),
+  instructionsModalButton: {
+    paddingVertical: responsive.responsivePadding(16),
+    paddingHorizontal: responsive.responsivePadding(24),
     borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: responsive.responsiveHeight(48),
+  },
+  instructionsModalButtonText: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: 'bold',
+    fontFamily: 'Inter',
+    color: '#fff',
+  },
+  modalButton: {
+    paddingVertical: responsive.responsivePadding(22),
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  deudasSection: {
+    marginTop: responsive.responsiveMargin(24),
+  },
+  noDeudasText: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: responsive.responsivePadding(20),
+  },
+  deudaCard: {
+    marginBottom: responsive.responsiveMargin(12),
+    borderRadius: 8,
+    overflow: 'hidden',
+    padding: responsive.responsivePadding(12),
+  },
+  deudaHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  deudaHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+    flex: 1,
+  },
+  deudaHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deudaInfo: {
+    flexDirection: 'column',
+  },
+  deudaDate: {
+    fontSize: responsive.fontSizes.small,
+    fontFamily: 'Inter',
+  },
+  deudaStatus: {
+    fontSize: responsive.fontSizes.small,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  deudaDetails: {
+    marginTop: responsive.responsiveMargin(12),
+  },
+  deudaLabel: {
+    fontSize: responsive.fontSizes.small,
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  deudaValue: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  deudaNota: {
+    fontSize: responsive.fontSizes.small,
+    fontFamily: 'Inter',
+    fontStyle: 'italic',
+  },
+  pagosContainer: {
+    marginTop: responsive.responsiveMargin(12),
+    paddingTop: responsive.responsivePadding(12),
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  pagosTitle: {
+    fontSize: responsive.fontSizes.small,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  pagoItem: {
+    padding: responsive.responsivePadding(8),
+    marginBottom: responsive.responsiveMargin(8),
+    borderRadius: 4,
+  },
+  pagoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  pagoDate: {
+    fontSize: responsive.fontSizes.small,
+    fontFamily: 'Inter',
+  },
+  pagoAmount: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  pagoForma: {
+    fontSize: responsive.fontSizes.small,
+    fontFamily: 'Inter',
+  },
+  noPagosText: {
+    fontSize: responsive.fontSizes.small,
+    fontFamily: 'Inter',
+    fontStyle: 'italic',
+  },
+  addPagoButton: {
+    padding: responsive.responsivePadding(4),
+  },
+  pagoModal: {
+    width: '100%',
+    maxWidth: responsive.responsiveWidth(400),
+    borderRadius: 16,
+    padding: responsive.responsivePadding(24),
+  },
+  pagoForm: {
+    marginBottom: responsive.responsiveMargin(20),
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(12),
+  },
+  formRow: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(10),
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: responsive.responsivePadding(20),
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: responsive.responsiveWidth(400),
+    borderRadius: 16,
+    padding: responsive.responsivePadding(24),
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(20),
+  },
+  modalTitle: {
+    fontSize: responsive.fontSizes.h3,
+    fontWeight: '700',
+    fontFamily: 'Inter',
+  },
+  dropdown: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: responsive.responsivePadding(12),
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  dropdownText: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+  },
+  dropdownMenu: {
+    marginTop: responsive.responsiveMargin(4),
+    borderRadius: 8,
+    borderWidth: 1,
+    maxHeight: responsive.responsiveHeight(200),
+  },
+  dropdownItem: {
+    padding: responsive.responsivePadding(12),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  dropdownItemText: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(12),
+    marginTop: responsive.responsiveMargin(20),
+  },
+  modalButton: {
+    flex: 1,
+    padding: responsive.responsivePadding(12),
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  cancelButton: {
+    backgroundColor: 'transparent',
+  },
+  saveButton: {
+    borderWidth: 0,
   },
   modalButtonText: {
     fontSize: responsive.fontSizes.body,

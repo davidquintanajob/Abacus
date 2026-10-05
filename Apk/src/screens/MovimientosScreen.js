@@ -39,6 +39,7 @@ const MovimientosContent = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const hasDoneInitialFetch = useRef(false);
   const isFirstFocus = useRef(true);
+  const hasRestoredFilters = useRef(false);
   const isInitializedRef = useRef(false);
   const filtersRef = useRef(filters);
 
@@ -52,7 +53,23 @@ const MovimientosContent = () => {
   }, [filters]);
 
   // Filter states
-  const today = new Date().toISOString().split('T')[0];
+  const getCubaDate = () => {
+    const now = new Date();
+    // Use local date directly (system should already be in Cuba time UTC-4)
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
+  const toCubaDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    // Use local date directly
+    return date.toLocaleDateString();
+  };
+  
+  const today = getCubaDate();
   const [filters, setFilters] = useState({ 
     tipo_movimiento: '', 
     estado: '', 
@@ -62,6 +79,20 @@ const MovimientosContent = () => {
     id_servicio_tienda_destino: '',
     id_usuario: ''
   });
+  
+  // Preseleccionar tienda del usuario en filtros si tiene permiso all_stores
+  // Deshabilitado porque el backend espera id_servicio_tienda, no id_tienda
+  // const hasPreselectedTienda = useRef(false);
+  // useEffect(() => {
+  //   if (canManageAllTiendas && userTiendaId && !shouldHideTiendaFilters && !hasPreselectedTienda.current) {
+  //     setFilters(prev => ({
+  //       ...prev,
+  //       id_servicio_tienda_origen: userTiendaId.toString(),
+  //       id_servicio_tienda_destino: userTiendaId.toString()
+  //     }));
+  //     hasPreselectedTienda.current = true;
+  //   }
+  // }, [canManageAllTiendas, userTiendaId, shouldHideTiendaFilters]);
   const [tiendas, setTiendas] = useState([]);
   const [users, setUsers] = useState([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -82,12 +113,25 @@ const MovimientosContent = () => {
   const [showFechaDesdePicker, setShowFechaDesdePicker] = useState(false);
   const [showFechaHastaPicker, setShowFechaHastaPicker] = useState(false);
   const [hasShownOfflineToast, setHasShownOfflineToast] = useState(false);
+  const [isCompletingMovimiento, setIsCompletingMovimiento] = useState(false);
 
   const predefinedMovimientoTypes = ['Transferencia', 'Ajuste', 'Devolucion'];
   const [customMovimientoTypes, setCustomMovimientoTypes] = useState([]);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
+  const userRole = user?.rol?.toLowerCase();
+  const userTiendaId = user?.id_tienda;
+  
+  // Verificar nivel de acceso a movimientos
+  const movimientoAccessLevel = 
+    userRole === 'dependiente' ? movimientoAccessLevels?.dependiente :
+    userRole === 'almacenero' ? movimientoAccessLevels?.almacenero :
+    userRole === 'económico' ? movimientoAccessLevels?.economico : 'all_stores';
+  
+  const canManageAllTiendas = isAdmin || movimientoAccessLevel === 'all_stores';
+  const canManageOwnTienda = movimientoAccessLevel === 'own_store';
+  const shouldHideTiendaFilters = canManageOwnTienda && !canManageAllTiendas;
 
   // Load custom movimiento types
   useEffect(() => {
@@ -120,7 +164,7 @@ const MovimientosContent = () => {
 
   // Single API call when all data is ready
   useEffect(() => {
-    if (isInitialized && !hasDoneInitialFetch.current) {
+    if (isInitialized && !hasDoneInitialFetch.current && !hasRestoredFilters.current) {
       fetchMovimientos();
       hasDoneInitialFetch.current = true;
     }
@@ -162,12 +206,15 @@ const MovimientosContent = () => {
             if (savedFilters) {
               const parsedFilters = JSON.parse(savedFilters);
               setFilters(parsedFilters);
+              hasRestoredFilters.current = true;
               fetchMovimientos(null, parsedFilters);
             } else {
+              hasRestoredFilters.current = false;
               fetchMovimientos();
             }
           } catch (error) {
             console.error('Error restoring filters:', error);
+            hasRestoredFilters.current = false;
             fetchMovimientos();
           }
         };
@@ -245,11 +292,8 @@ const MovimientosContent = () => {
           userRole === 'almacenero' ? movimientoAccessLevels.almacenero :
           userRole === 'económico' ? movimientoAccessLevels.economico : 'none';
 
-        if (accessLevel === 'mi_tienda' && userTiendaId) {
-          // Filter movements where user's tienda is origin or destination
-          // This will be handled by the backend, but we can add the filter here
-          apiFilters.id_tienda_origen_destino = userTiendaId;
-        }
+        // No enviamos filtro al backend porque no lo soporta
+        // Filtraremos en el cliente
       }
 
       // Remove estado filter if empty to avoid backend validation error
@@ -270,11 +314,13 @@ const MovimientosContent = () => {
           userRole === 'almacenero' ? movimientoAccessLevels.almacenero :
           userRole === 'económico' ? movimientoAccessLevels.economico : 'none';
 
-        if (accessLevel === 'mi_tienda') {
-          movimientosList = movimientosList.filter(movimiento => 
-            movimiento.id_tienda_origen === userTiendaId || 
-            movimiento.id_tienda_destino === userTiendaId
-          );
+        if (accessLevel === 'own_store') {
+          movimientosList = movimientosList.filter(movimiento => {
+            // Check if user's tienda is in origen or destino
+            const origenTiendaId = movimiento.movimientos?.[0]?.servicioTiendaOrigen?.tienda?.id_tienda;
+            const destinoTiendaId = movimiento.movimientos?.[0]?.servicioTiendaDestino?.tienda?.id_tienda;
+            return origenTiendaId === userTiendaId || destinoTiendaId === userTiendaId;
+          });
         }
       }
 
@@ -353,6 +399,7 @@ const MovimientosContent = () => {
           style: 'default',
           onPress: async () => {
             try {
+              setIsCompletingMovimiento(true);
               const { updateMovimiento } = await import('../services/movimientoService');
               const idUsuario = parseInt(user?.id_usuario);
               
@@ -371,6 +418,8 @@ const MovimientosContent = () => {
               fetchMovimientos();
             } catch (err) {
               showToast({ type: 'error', message: err.message, code: err.code });
+            } finally {
+              setIsCompletingMovimiento(false);
             }
           },
         },
@@ -406,13 +455,14 @@ const MovimientosContent = () => {
       userRole === 'almacenero' ? movimientoAccessLevels.almacenero :
       userRole === 'económico' ? movimientoAccessLevels.economico : 'none';
 
-    // If user has "mi_tienda" access, only show edit/delete if their tienda is origen
-    if (accessLevel === 'mi_tienda' && userTiendaId) {
-      return movimiento.id_tienda_origen === userTiendaId;
+    // If user has "own_store" access, only show edit/delete if their tienda is origen
+    if (accessLevel === 'own_store' && userTiendaId) {
+      const origenTiendaId = movimiento.movimientos?.[0]?.servicioTiendaOrigen?.tienda?.id_tienda;
+      return origenTiendaId === userTiendaId;
     }
 
-    // If user has "todas" access, show edit/delete
-    if (accessLevel === 'todas') {
+    // If user has "all_stores" access, show edit/delete
+    if (accessLevel === 'all_stores') {
       return true;
     }
 
@@ -423,15 +473,6 @@ const MovimientosContent = () => {
     const userRole = user?.rol?.toLowerCase();
     const isAdmin = userRole === 'administrador';
     const userTiendaId = user?.id_tienda;
-
-    console.log('[MovimientosScreen] canShowCompleteButton check:', {
-      movimientoId: movimiento.id_movimiento_lista,
-      estado: movimiento.estado,
-      estadoType: typeof movimiento.estado,
-      userRole,
-      isAdmin,
-      userTiendaId,
-    });
 
     // Only show complete button if movement is pending
     if (movimiento.estado === true || movimiento.estado === 1) {
@@ -461,13 +502,14 @@ const MovimientosContent = () => {
       userRole === 'almacenero' ? movimientoAccessLevels.almacenero :
       userRole === 'económico' ? movimientoAccessLevels.economico : 'none';
 
-    // If user has "mi_tienda" access, only show complete button if their tienda is destino
-    if (accessLevel === 'mi_tienda' && userTiendaId) {
-      return movimiento.id_tienda_destino === userTiendaId;
+    // If user has "own_store" access, only show complete button if their tienda is destino
+    if (accessLevel === 'own_store' && userTiendaId) {
+      const destinoTiendaId = movimiento.movimientos?.[0]?.servicioTiendaDestino?.tienda?.id_tienda;
+      return destinoTiendaId === userTiendaId;
     }
 
-    // If user has "todas" access, show complete button
-    if (accessLevel === 'todas') {
+    // If user has "all_stores" access, show complete button
+    if (accessLevel === 'all_stores') {
       return true;
     }
 
@@ -485,7 +527,10 @@ const MovimientosContent = () => {
       console.error('Error saving filters:', err);
     });
     
-    navigation.navigate('MovimientoForm', { movimiento, mode: 'view' });
+    // Navigate to edit mode if user has permissions, otherwise view mode
+    const canEdit = canShowEditDeleteButtons(movimiento);
+    const mode = canEdit ? 'edit' : 'view';
+    navigation.navigate('MovimientoForm', { movimiento, mode });
   };
 
   const handleEdit = (movimiento) => {
@@ -667,24 +712,18 @@ const MovimientosContent = () => {
 
           <View style={styles.filterGroup}>
             <Text style={[styles.label, { color: colors.outline }]}>Tipo de Movimiento</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-              placeholderTextColor={colors.outline}
-              placeholder="Todos"
-              value={filters.tipo_movimiento}
-              onChangeText={(text) => {
-                const newFilters = { ...filters, tipo_movimiento: text };
-                setFilters(newFilters);
-                setTipoMovimientoSearchText(text);
-              }}
-              onFocus={() => setShowTipoMovimientoDropdown(true)}
-              onBlur={() => {
-                setTimeout(() => setShowTipoMovimientoDropdown(false), 200);
-              }}
-            />
+            <TouchableOpacity
+              style={[styles.input, { backgroundColor: colors.background, borderColor: colors.outlineVariant, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+              onPress={() => setShowTipoMovimientoDropdown(true)}
+            >
+              <Text style={[styles.inputText, { color: filters.tipo_movimiento ? colors.onSurface : colors.outline, flex: 1 }]}>
+                {filters.tipo_movimiento || 'Todos'}
+              </Text>
+              <Ionicons name={showTipoMovimientoDropdown ? "chevron-up" : "chevron-down"} size={20} color={colors.primary} />
+            </TouchableOpacity>
             {showTipoMovimientoDropdown && (
               <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                <ScrollView style={styles.dropdownScroll}>
+                <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
                   <TouchableOpacity
                     style={styles.dropdownItem}
                     onPress={() => {
@@ -755,7 +794,7 @@ const MovimientosContent = () => {
                     <TouchableOpacity
                       style={styles.dropdownItem}
                       onPress={() => {
-                        const newFilters = { ...filters, estado: 'true' };
+                        const newFilters = { ...filters, estado: true };
                         setFilters(newFilters);
                         setShowEstadoDropdown(false);
                         setPagination(prev => ({ ...prev, currentPage: 1 }));
@@ -767,7 +806,7 @@ const MovimientosContent = () => {
                     <TouchableOpacity
                       style={[styles.dropdownItem, styles.dropdownItemLast]}
                       onPress={() => {
-                        const newFilters = { ...filters, estado: 'false' };
+                        const newFilters = { ...filters, estado: false };
                         setFilters(newFilters);
                         setShowEstadoDropdown(false);
                         setPagination(prev => ({ ...prev, currentPage: 1 }));
@@ -780,9 +819,10 @@ const MovimientosContent = () => {
                 )}
               </View>
 
-              <View style={styles.filterGroup}>
-                <Text style={[styles.label, { color: colors.outline }]}>Tienda Origen</Text>
-                <TouchableOpacity
+              {!shouldHideTiendaFilters && (
+                <View style={styles.filterGroup}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Tienda Origen</Text>
+                  <TouchableOpacity
                   style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
                   onPress={() => {
                     setShowTiendaOrigenDropdown(!showTiendaOrigenDropdown);
@@ -865,11 +905,13 @@ const MovimientosContent = () => {
                     )}
                   </View>
                 )}
-              </View>
+                </View>
+              )}
 
-              <View style={styles.filterGroup}>
-                <Text style={[styles.label, { color: colors.outline }]}>Tienda Destino</Text>
-                <TouchableOpacity
+              {!shouldHideTiendaFilters && (
+                <View style={styles.filterGroup}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Tienda Destino</Text>
+                  <TouchableOpacity
                   style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
                   onPress={() => {
                     setShowTiendaDestinoDropdown(!showTiendaDestinoDropdown);
@@ -952,7 +994,8 @@ const MovimientosContent = () => {
                     )}
                   </View>
                 )}
-              </View>
+                </View>
+              )}
 
               <View style={styles.filterGroup}>
                 <Text style={[styles.label, { color: colors.outline }]}>Usuario</Text>
@@ -1112,7 +1155,11 @@ const MovimientosContent = () => {
 
         {/* Action Buttons */}
         <View style={styles.actionButtonsContainer}>
-          {!isOfflineMode && isAdmin && (
+          {!isOfflineMode && (isAdmin || (movimientoManagePermissions && (
+            (userRole === 'dependiente' && movimientoManagePermissions.dependiente) ||
+            (userRole === 'almacenero' && movimientoManagePermissions.almacenero) ||
+            (userRole === 'económico' && movimientoManagePermissions.economico)
+          ))) && (
             <TouchableOpacity
               style={[styles.addButton, { backgroundColor: colors.primary }]}
               onPress={handleAdd}
@@ -1186,7 +1233,7 @@ const MovimientosContent = () => {
                         </View>
                       </View>
                       <Text style={[styles.movimientoFecha, { color: colors.outline }]}>
-                        Fecha: {new Date(movimiento.fecha_hora).toLocaleDateString()}
+                        Fecha: {toCubaDate(movimiento.fecha_hora)}
                       </Text>
                       <Text style={[styles.movimientoUsuario, { color: colors.outline }]}>
                         Usuario: {movimiento.usuario?.nombre_natural || 'N/A'}
@@ -1225,8 +1272,13 @@ const MovimientosContent = () => {
                             e.stopPropagation();
                             handleCompleteMovimiento(movimiento);
                           }}
+                          disabled={isCompletingMovimiento}
                         >
-                          <Image source={require('../../assets/success.png')} style={[styles.completeIcon, { tintColor: isDarkMode ? '#fff' : undefined }]} />
+                          {isCompletingMovimiento ? (
+                            <ActivityIndicator size="small" color="#4CAF50" />
+                          ) : (
+                            <Image source={require('../../assets/success.png')} style={[styles.completeIcon, { tintColor: isDarkMode ? '#fff' : undefined }]} />
+                          )}
                         </TouchableOpacity>
                       )}
                     </View>
@@ -1283,7 +1335,7 @@ const MovimientosContent = () => {
                           {movimiento.usuario?.nombre_natural || 'N/A'}
                         </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(120) }]}>
-                          {new Date(movimiento.fecha_hora).toLocaleDateString()}
+                          {toCubaDate(movimiento.fecha_hora)}
                         </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(80), textAlign: 'center' }]}>
                           {movimiento.movimientos?.length || 0}
@@ -1319,8 +1371,13 @@ const MovimientosContent = () => {
                                   e.stopPropagation();
                                   handleCompleteMovimiento(movimiento);
                                 }}
+                                disabled={isCompletingMovimiento}
                               >
-                                <Image source={require('../../assets/success.png')} style={[styles.tableCompleteIcon, { tintColor: isDarkMode ? '#fff' : undefined }]} />
+                                {isCompletingMovimiento ? (
+                                  <ActivityIndicator size="small" color="#4CAF50" />
+                                ) : (
+                                  <Image source={require('../../assets/success.png')} style={[styles.tableCompleteIcon, { tintColor: isDarkMode ? '#fff' : undefined }]} />
+                                )}
                               </TouchableOpacity>
                             )}
                           </View>

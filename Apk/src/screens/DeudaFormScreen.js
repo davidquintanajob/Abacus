@@ -143,24 +143,29 @@ const DeudaFormScreen = () => {
   const handleSavePagoEdit = () => {
     if (!editingPago) return;
     
-    const updatedPagos = pagosList.map(p => 
-      p.id_pago_deuda === editingPago.id_pago_deuda 
-        ? { 
-            ...p, 
-            cantidad_pagada: parseFloat(pagoFormData.cantidad_pagada),
-            forma_pago: pagoFormData.forma_pago,
-            cambio_moneda: parseFloat(pagoFormData.cambio_moneda),
-            id_cuenta_operacion: parseInt(pagoFormData.id_cuenta_operacion),
-            fecha_hora: new Date(pagoFormData.fecha),
-            nota: pagoFormData.nota
-          }
-        : p
-    );
-    
-    setPagosList(updatedPagos);
-    setEditingPago(null);
-    setShowPagoModal(false);
-    showToast({ type: 'success', message: 'Pago actualizado (guarda los cambios para aplicar)' });
+    try {
+      const updatedPagos = pagosList.map(p => 
+        p.id_pago_deuda === editingPago.id_pago_deuda 
+          ? { 
+              ...p, 
+              cantidad_pagada: parseFloat(pagoFormData.cantidad_pagada),
+              forma_pago: pagoFormData.forma_pago,
+              cambio_moneda: parseFloat(pagoFormData.cambio_moneda),
+              id_cuenta_operacion: parseInt(pagoFormData.id_cuenta_operacion),
+              fecha_hora: new Date(pagoFormData.fecha),
+              nota: pagoFormData.nota
+            }
+          : p
+      );
+      
+      setPagosList(updatedPagos);
+      setEditingPago(null);
+      setShowPagoModal(false);
+      showToast({ type: 'success', message: 'Pago actualizado (guarda los cambios para aplicar)' });
+    } catch (err) {
+      setShowPagoModal(false);
+      showToast({ type: 'error', message: err.message || 'Error al actualizar pago' });
+    }
   };
 
   const handleSave = async () => {
@@ -194,11 +199,8 @@ const DeudaFormScreen = () => {
 
       try {
         setIsSaving(true);
-        // Combinar fecha y hora
-        const fechaHora = new Date(pagoFormData.fecha);
-        fechaHora.setHours(pagoFormData.hora.getHours());
-        fechaHora.setMinutes(pagoFormData.hora.getMinutes());
-        fechaHora.setSeconds(0);
+        // Usar fecha y hora actual del dispositivo
+        const fechaHora = new Date();
 
         const pago = {
           cantidad_pagada: parseFloat(pagoFormData.cantidad_pagada),
@@ -247,7 +249,7 @@ const DeudaFormScreen = () => {
         };
 
         if (isEditMode) {
-          await updateDeuda(deuda.id_deuda, deudaData, pagosList);
+          await updateDeuda(deuda.id_deuda, deudaData);
           showToast({ type: 'success', message: 'Deuda actualizada correctamente' });
         } else {
           await createDeuda(deudaData);
@@ -341,66 +343,6 @@ const DeudaFormScreen = () => {
                   onChangeText={(text) => setPagoFormData(prev => ({ ...prev, cambio_moneda: text }))}
                   keyboardType="numeric"
                 />
-              </View>
-
-              <View style={styles.formRow}>
-                <View style={[styles.formGroup, { flex: 1, marginRight: responsive.responsiveMargin(8) }]}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Fecha</Text>
-                  <TouchableOpacity
-                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    onPress={() => setShowDatePicker(true)}
-                  >
-                    <Text style={{ color: colors.onSurface }}>
-                      {pagoFormData.fecha.toLocaleDateString()}
-                    </Text>
-                  </TouchableOpacity>
-                  {showDatePicker && (
-                    <DateTimePicker
-                      value={pagoFormData.fecha}
-                      mode="date"
-                      display="default"
-                      onChange={(event, selectedDate) => {
-                        if (event.type === 'dismissed') {
-                          setShowDatePicker(false);
-                          return;
-                        }
-                        setShowDatePicker(false);
-                        if (selectedDate) {
-                          setPagoFormData(prev => ({ ...prev, fecha: selectedDate }));
-                        }
-                      }}
-                    />
-                  )}
-                </View>
-
-                <View style={[styles.formGroup, { flex: 1, marginLeft: responsive.responsiveMargin(8) }]}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Hora</Text>
-                  <TouchableOpacity
-                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    onPress={() => setShowTimePicker(true)}
-                  >
-                    <Text style={{ color: colors.onSurface }}>
-                      {pagoFormData.hora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                  </TouchableOpacity>
-                  {showTimePicker && (
-                    <DateTimePicker
-                      value={pagoFormData.hora}
-                      mode="time"
-                      display="default"
-                      onChange={(event, selectedTime) => {
-                        if (event.type === 'dismissed') {
-                          setShowTimePicker(false);
-                          return;
-                        }
-                        setShowTimePicker(false);
-                        if (selectedTime) {
-                          setPagoFormData(prev => ({ ...prev, hora: selectedTime }));
-                        }
-                      }}
-                    />
-                  )}
-                </View>
               </View>
 
               <View style={styles.formGroup}>
@@ -503,66 +445,6 @@ const DeudaFormScreen = () => {
                     onChangeText={(text) => setFormData(prev => ({ ...prev, monto_usd: text }))}
                     keyboardType="numeric"
                   />
-                </View>
-              </View>
-
-              <View style={styles.formRow}>
-                <View style={[styles.formGroup, { flex: 1, marginRight: responsive.responsiveMargin(8) }]}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Fecha</Text>
-                  <TouchableOpacity
-                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    onPress={() => setShowDatePicker(true)}
-                  >
-                    <Text style={{ color: colors.onSurface }}>
-                      {new Date(formData.fecha_hora).toLocaleDateString()}
-                    </Text>
-                  </TouchableOpacity>
-                  {showDatePicker && (
-                    <DateTimePicker
-                      value={formData.fecha_hora}
-                      mode="date"
-                      display="default"
-                      onChange={(event, selectedDate) => {
-                        if (event.type === 'dismissed') {
-                          setShowDatePicker(false);
-                          return;
-                        }
-                        setShowDatePicker(false);
-                        if (selectedDate) {
-                          setFormData(prev => ({ ...prev, fecha_hora: selectedDate }));
-                        }
-                      }}
-                    />
-                  )}
-                </View>
-
-                <View style={[styles.formGroup, { flex: 1, marginLeft: responsive.responsiveMargin(8) }]}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Hora</Text>
-                  <TouchableOpacity
-                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    onPress={() => setShowTimePicker(true)}
-                  >
-                    <Text style={{ color: colors.onSurface }}>
-                      {new Date(formData.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                  </TouchableOpacity>
-                  {showTimePicker && (
-                    <DateTimePicker
-                      value={formData.fecha_hora}
-                      mode="time"
-                      display="default"
-                      onChange={(event, selectedTime) => {
-                        if (event.type === 'dismissed') {
-                          setShowTimePicker(false);
-                          return;
-                        }
-                        setShowTimePicker(false);
-                        if (selectedTime) {
-                          setFormData(prev => ({ ...prev, fecha_hora: selectedTime }));
-                        }
-                      }}
-                    />
-                  )}
                 </View>
               </View>
 

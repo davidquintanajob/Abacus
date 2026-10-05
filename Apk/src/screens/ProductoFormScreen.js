@@ -29,7 +29,7 @@ const ProductoFormContent = () => {
   const route = useRoute();
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
-  const { token, user, permissions, entradaManagePermissions, salidaManagePermissions } = useAuth();
+  const { token, user, permissions, entradaManagePermissions, salidaManagePermissions, movimientoManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
   
@@ -1381,17 +1381,49 @@ const ProductoFormContent = () => {
                   </TouchableOpacity>
                 );
               })()}
-              <TouchableOpacity
-                style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#0D47A1' : '#E3F2FD', opacity: 0.5 }]}
-                onPress={() => {}}
-                disabled={true}
-              >
-                <Image
-                  source={require('../../assets/moving.png')}
-                  style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
-                  resizeMode="contain"
-                />
-              </TouchableOpacity>
+              {(() => {
+                const userRole = user?.rol?.toLowerCase();
+                const canManageMovimientos = 
+                  userRole === 'administrador' ||
+                  (userRole === 'dependiente' && movimientoManagePermissions?.dependiente) ||
+                  (userRole === 'almacenero' && movimientoManagePermissions?.almacenero) ||
+                  (userRole === 'económico' && movimientoManagePermissions?.economico);
+                
+                if (!canManageMovimientos) return null;
+                
+                return (
+                  <TouchableOpacity
+                    style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#0D47A1' : '#E3F2FD' }]}
+                    onPress={() => {
+                      if (isOfflineMode) {
+                        showToast({ type: 'warning', message: 'No disponible en modo offline' });
+                        return;
+                      }
+                      if (!producto) {
+                        showToast({ type: 'warning', message: 'No hay producto seleccionado' });
+                        return;
+                      }
+                      // Encontrar la tienda del producto (usar la primera tienda con stock)
+                      const tiendaProducto = producto?.tiendas_servicio?.[0]?.tienda;
+                      if (!tiendaProducto) {
+                        showToast({ type: 'warning', message: 'El producto no tiene tienda asignada' });
+                        return;
+                      }
+                      navigation.navigate('MovimientoForm', { 
+                        mode: 'add', 
+                        productoPreseleccionado: producto,
+                        tiendaPreseleccionada: tiendaProducto
+                      });
+                    }}
+                  >
+                    <Image
+                      source={require('../../assets/moving.png')}
+                      style={{ width: responsive.responsiveWidth(24), height: responsive.responsiveWidth(24), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
+                      resizeMode="contain"
+                    />
+                  </TouchableOpacity>
+                );
+              })()}
               {(() => {
                 const userRole = user?.rol?.toLowerCase();
                 const canManageSalidas = 
@@ -2371,6 +2403,12 @@ const ProductoFormContent = () => {
                   (userRole === 'dependiente' && salidaManagePermissions?.dependiente) ||
                   (userRole === 'almacenero' && salidaManagePermissions?.almacenero) ||
                   (userRole === 'económico' && salidaManagePermissions?.economico);
+                
+                const canManageMovimientos = 
+                  userRole === 'administrador' ||
+                  (userRole === 'dependiente' && movimientoManagePermissions?.dependiente) ||
+                  (userRole === 'almacenero' && movimientoManagePermissions?.almacenero) ||
+                  (userRole === 'económico' && movimientoManagePermissions?.economico);
                 
                 return (
                   <>

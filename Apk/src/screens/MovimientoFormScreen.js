@@ -27,7 +27,7 @@ const MovimientoFormContent = () => {
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
 
-  const { movimiento, mode } = route.params || { mode: 'add' };
+  const { movimiento, mode, productoPreseleccionado, tiendaPreseleccionada } = route.params || { mode: 'add' };
   const isViewMode = mode === 'view';
   const isEditMode = mode === 'edit';
   const isAddMode = mode === 'add';
@@ -65,6 +65,19 @@ const MovimientoFormContent = () => {
     servicio_tienda: null,
   });
 
+  const isAdmin = user?.rol === 'Administrador';
+  const userRole = user?.rol?.toLowerCase();
+  
+  // Verificar nivel de acceso a movimientos
+  const movimientoAccessLevel = 
+    userRole === 'dependiente' ? movimientoAccessLevels?.dependiente :
+    userRole === 'almacenero' ? movimientoAccessLevels?.almacenero :
+    userRole === 'económico' ? movimientoAccessLevels?.economico : 'all_stores';
+  
+  const canManageAllTiendas = isAdmin || movimientoAccessLevel === 'all_stores';
+  const canManageOwnTienda = movimientoAccessLevel === 'own_store';
+  const isTiendaOrigenReadOnly = canManageOwnTienda && !canManageAllTiendas;
+  
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
 
   // Load custom movimiento types
@@ -126,8 +139,6 @@ const MovimientoFormContent = () => {
           setIsFetchingMovimiento(true);
           const completeMovimiento = isOfflineMode ? movimiento : await getMovimientoById(movimiento.id_movimiento_lista);
           
-          console.log('[MovimientoFormScreen] completeMovimiento raw data:', completeMovimiento);
-          
           // Extraer tiendas de los movimientos si no están en el nivel raíz
           const tiendaOrigen = completeMovimiento.tienda_origen || 
                              completeMovimiento.movimientos?.[0]?.servicioTiendaOrigen?.tienda ||
@@ -165,16 +176,6 @@ const MovimientoFormContent = () => {
             tienda_origen: tiendaOrigen,
             tienda_destino: tiendaDestino,
             movimientos: movimientosConServicio,
-          });
-
-          console.log('[MovimientoFormScreen] Datos cargados para edición:', {
-            tipo_movimiento: completeMovimiento.tipo_movimiento,
-            estado: completeMovimiento.estado,
-            notaFromRoot: completeMovimiento.nota,
-            notaFromMovimientos: completeMovimiento.movimientos?.[0]?.nota,
-            finalNota: completeMovimiento.nota || completeMovimiento.movimientos?.[0]?.nota || '',
-            notaLength: (completeMovimiento.nota || completeMovimiento.movimientos?.[0]?.nota || '').length,
-            notaType: typeof (completeMovimiento.nota || completeMovimiento.movimientos?.[0]?.nota || ''),
           });
         } catch (err) {
           console.error('[fetchCompleteMovimiento] Error:', err);
@@ -306,6 +307,44 @@ const MovimientoFormContent = () => {
     fetchProductosOrigen();
   }, [formData.id_tienda_origen, isOfflineMode]);
 
+  // Handle tienda preseleccionada
+  useEffect(() => {
+    if (tiendaPreseleccionada && isAddMode) {
+      setFormData(prev => ({
+        ...prev,
+        id_tienda_origen: tiendaPreseleccionada.id_tienda,
+        tienda_origen: tiendaPreseleccionada
+      }));
+    } else if (canManageOwnTienda && !canManageAllTiendas && user?.id_tienda && isAddMode && tiendas.length > 0) {
+      // Si el usuario solo puede gestionar su tienda, preseleccionar su tienda
+      const tiendaUsuario = tiendas.find(t => t.id_tienda === user?.id_tienda);
+      if (tiendaUsuario) {
+        setFormData(prev => ({
+          ...prev,
+          id_tienda_origen: tiendaUsuario.id_tienda,
+          tienda_origen: tiendaUsuario
+        }));
+      }
+    }
+  }, [tiendaPreseleccionada, isAddMode, canManageOwnTienda, canManageAllTiendas, user?.id_tienda, tiendas]);
+
+  // Handle producto preseleccionado
+  useEffect(() => {
+    if (productoPreseleccionado && productosOrigen.length > 0) {
+      const productoEncontrado = productosOrigen.find(
+        p => p.servicio?.id_servicio === productoPreseleccionado.id_servicio ||
+             p.servicio?.producto?.id_producto === productoPreseleccionado.id_producto
+      );
+      if (productoEncontrado) {
+        setMovimientoItem({
+          cantidad: '',
+          nota: '',
+          id_servicio_tienda: productoEncontrado.id_servicio_tienda,
+          servicio_tienda: productoEncontrado,
+        });
+      }
+    }
+  }, [productoPreseleccionado, productosOrigen]);
 
   const handleAddMovimientoItem = () => {
     if (!movimientoItem.cantidad || parseFloat(movimientoItem.cantidad) <= 0) {
@@ -316,6 +355,22 @@ const MovimientoFormContent = () => {
       showToast({ type: 'warning', message: 'Debe seleccionar un servicio' });
       return;
     }
+    
+    // Validar stock disponible
+    const productoSeleccionado = productosOrigen.find(p => p.id_servicio_tienda === movimientoItem.id_servicio_tienda);
+    if (productoSeleccionado) {
+      const stockActual = productoSeleccionado.cantidad || 0;
+      const cantidadSolicitada = parseFloat(movimientoItem.cantidad);
+      
+      if (cantidadSolicitada > stockActual) {
+        showToast({ 
+          type: 'error', 
+          message: `El stock actual es ${stockActual}. No puede solicitar ${cantidadSolicitada}` 
+        });
+        return;
+      }
+    }
+    
     const newItem = {
       cantidad: parseFloat(movimientoItem.cantidad),
       nota: movimientoItem.nota,
@@ -350,36 +405,22 @@ const MovimientoFormContent = () => {
 
     setIsSaving(true);
     try {
-      // Para cada movimiento, encontrar el servicio_tienda en la tienda de destino
-      const movimientosConDestino = await Promise.all(
-        formData.movimientos.map(async (item) => {
-          // Obtener el servicio completo usando el id_servicio del servicio_tienda
-          const servicio = await getServicioById(item.servicio_tienda.servicio.id_servicio);
-          // Buscar el servicio_tienda en la tienda de destino
-          const tiendaServicioDestino = servicio.tiendas_servicio?.find(ts => ts.id_tienda === formData.id_tienda_destino);
-          
-          if (!tiendaServicioDestino) {
-            throw new Error(`El producto "${servicio.nombre}" no existe en la tienda de destino`);
-          }
+      // Para cada movimiento, preparar los datos sin verificar si el producto existe en la tienda de destino
+      // El backend se encargará de esta validación
+      const movimientosConDestino = formData.movimientos.map((item) => {
+        const idOrigen = parseInt(item.id_servicio_tienda);
+        
+        if (isNaN(idOrigen)) {
+          throw new Error(`id_servicio_tienda_origen no es válido`);
+        }
 
-          const idOrigen = parseInt(item.id_servicio_tienda);
-          const idDestino = parseInt(tiendaServicioDestino.id_servicio_tienda);
-
-          if (isNaN(idOrigen)) {
-            throw new Error(`id_servicio_tienda_origen no es válido para el producto "${servicio.nombre}"`);
-          }
-          if (isNaN(idDestino)) {
-            throw new Error(`id_servicio_tienda_destino no es válido para el producto "${servicio.nombre}"`);
-          }
-
-          return {
-            id_servicio_tienda_origen: idOrigen,
-            id_servicio_tienda_destino: idDestino,
-            cantidad: item.cantidad,
-            nota: item.nota,
-          };
-        })
-      );
+        return {
+          id_servicio_tienda_origen: idOrigen,
+          id_servicio_tienda_destino: parseInt(item.id_servicio_tienda_destino),
+          cantidad: item.cantidad,
+          nota: item.nota,
+        };
+      });
 
       const idUsuario = parseInt(user.id_usuario);
       
@@ -396,16 +437,6 @@ const MovimientoFormContent = () => {
         movimientos: movimientosConDestino,
         id_usuario: idUsuario,
       };
-
-      console.log('[MovimientoFormScreen] Guardando movimiento:', {
-        isEditMode,
-        tipo_movimiento: formData.tipo_movimiento,
-        estado: formData.estado,
-        nota: formData.nota,
-        notaLength: formData.nota?.length,
-        notaType: typeof formData.nota,
-        idUsuario,
-      });
 
       if (isEditMode) {
         await updateMovimiento(movimiento.id_movimiento_lista, movimientoData);
@@ -504,7 +535,10 @@ const MovimientoFormContent = () => {
                 <View style={styles.formGroup}>
                   <Text style={[styles.label, { color: colors.outline }]}>Estado</Text>
                   <View style={styles.switchRow}>
-                    <TouchableOpacity onPress={() => setFormData(prev => ({ ...prev, estado: !prev.estado }))}>
+                    <TouchableOpacity 
+                      onPress={() => !isReadOnly && setFormData(prev => ({ ...prev, estado: !prev.estado }))}
+                      disabled={isReadOnly}
+                    >
                       <View style={[styles.switchTrackSimple, { backgroundColor: formData.estado ? '#4CAF50' : colors.outlineVariant }]}>
                         <View style={[styles.switchThumbSimple, { transform: [{ translateX: formData.estado ? 20 : 0 }] }]} />
                       </View>
@@ -514,7 +548,7 @@ const MovimientoFormContent = () => {
                 </View>
                 <View style={styles.formGroup}>
                   <Text style={[styles.label, { color: colors.outline }]}>Tienda Origen *</Text>
-                  {isReadOnly ? (
+                  {isReadOnly || isTiendaOrigenReadOnly ? (
                     <View style={[styles.input, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
                       <Text style={[styles.inputText, { color: colors.onSurface }]}>{formData.tienda_origen?.nombre || 'N/A'}</Text>
                     </View>
@@ -524,7 +558,7 @@ const MovimientoFormContent = () => {
                       <Ionicons name={showTiendaOrigenDropdown ? "chevron-up" : "chevron-down"} size={20} color={colors.primary} />
                     </TouchableOpacity>
                   )}
-                  {showTiendaOrigenDropdown && (
+                  {showTiendaOrigenDropdown && !isTiendaOrigenReadOnly && (
                     <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
                       <ScrollView style={styles.dropdownScroll}>
                         {getFilteredTiendas('origen').map((tienda) => (
@@ -593,11 +627,17 @@ const MovimientoFormContent = () => {
                               >
                                 <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Ninguno</Text>
                               </TouchableOpacity>
-                              {productosOrigen.filter(p => p.servicio?.nombre?.toLowerCase().includes(productoSearchText.toLowerCase())).length > 0 ? (
-                                productosOrigen.filter(p => p.servicio?.nombre?.toLowerCase().includes(productoSearchText.toLowerCase())).map((producto, index) => (
+                              {productosOrigen
+                                .filter(p => p.servicio?.nombre?.toLowerCase().includes(productoSearchText.toLowerCase()))
+                                .filter(p => !formData.movimientos.some(m => m.id_servicio_tienda === p.id_servicio_tienda))
+                                .length > 0 ? (
+                                productosOrigen
+                                  .filter(p => p.servicio?.nombre?.toLowerCase().includes(productoSearchText.toLowerCase()))
+                                  .filter(p => !formData.movimientos.some(m => m.id_servicio_tienda === p.id_servicio_tienda))
+                                  .map((producto, index, filtered) => (
                                   <TouchableOpacity
                                     key={producto.id_servicio_tienda}
-                                    style={[styles.dropdownItem, index === productosOrigen.filter(p => p.servicio?.nombre?.toLowerCase().includes(productoSearchText.toLowerCase())).length - 1 && styles.dropdownItemLast]}
+                                    style={[styles.dropdownItem, index === filtered.length - 1 && styles.dropdownItemLast]}
                                     onPress={() => { setMovimientoItem(prev => ({ ...prev, id_servicio_tienda: producto.id_servicio_tienda, servicio_tienda: producto })); setShowProductoDropdown(false); setProductoSearchText(''); }}
                                   >
                                     <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{producto.servicio?.nombre}</Text>

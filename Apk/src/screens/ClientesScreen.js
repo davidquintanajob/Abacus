@@ -105,11 +105,11 @@ const ClientesScreen = () => {
       }
 
       const userRole = user?.rol?.toLowerCase();
-      const canViewAllClientes =
+      const canViewClientes =
         userRole === 'administrador' ||
-        (userRole === 'dependiente' && deudaAccessLevels?.dependiente === 'all_stores') ||
-        (userRole === 'almacenero' && deudaAccessLevels?.almacenero === 'all_stores') ||
-        (userRole === 'económico' && deudaAccessLevels?.economico === 'all_stores');
+        (userRole === 'dependiente' && (deudaAccessLevels?.dependiente === 'clientes' || deudaAccessLevels?.dependiente === 'ambos')) ||
+        (userRole === 'almacenero' && (deudaAccessLevels?.almacenero === 'clientes' || deudaAccessLevels?.almacenero === 'ambos')) ||
+        (userRole === 'económico' && (deudaAccessLevels?.economico === 'clientes' || deudaAccessLevels?.economico === 'ambos'));
 
       const filtersToUse = overrideFilters || filters;
 
@@ -161,6 +161,14 @@ const ClientesScreen = () => {
       fetchClientes();
     }
   }, [pagination.currentPage]);
+
+  useEffect(() => {
+    if (hasDoneInitialFetch.current) {
+      setPagination(prev => ({ ...prev, currentPage: 1 }));
+      setIsSearching(true);
+      fetchClientes();
+    }
+  }, [filters.tiene_deuda]);
 
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, currentPage: 1 }));
@@ -267,17 +275,17 @@ const ClientesScreen = () => {
   };
 
   const userRole = user?.rol?.toLowerCase();
-  const canViewAllClientes = 
+  const canViewClientes = 
     userRole === 'administrador' ||
-    (userRole === 'dependiente' && deudaAccessLevels?.dependiente === 'all_stores') ||
-    (userRole === 'almacenero' && deudaAccessLevels?.almacenero === 'all_stores') ||
-    (userRole === 'económico' && deudaAccessLevels?.economico === 'all_stores');
+    (userRole === 'dependiente' && (deudaAccessLevels?.dependiente === 'clientes' || deudaAccessLevels?.dependiente === 'ambos')) ||
+    (userRole === 'almacenero' && (deudaAccessLevels?.almacenero === 'clientes' || deudaAccessLevels?.almacenero === 'ambos')) ||
+    (userRole === 'económico' && (deudaAccessLevels?.economico === 'clientes' || deudaAccessLevels?.economico === 'ambos'));
 
   const canManageClientes = 
     userRole === 'administrador' ||
-    (userRole === 'dependiente' && deudaManagePermissions?.dependiente) ||
-    (userRole === 'almacenero' && deudaManagePermissions?.almacenero) ||
-    (userRole === 'económico' && deudaManagePermissions?.economico);
+    (userRole === 'dependiente' && deudaManagePermissions?.dependiente && (deudaAccessLevels?.dependiente === 'clientes' || deudaAccessLevels?.dependiente === 'ambos')) ||
+    (userRole === 'almacenero' && deudaManagePermissions?.almacenero && (deudaAccessLevels?.almacenero === 'clientes' || deudaAccessLevels?.almacenero === 'ambos')) ||
+    (userRole === 'económico' && deudaManagePermissions?.economico && (deudaAccessLevels?.economico === 'clientes' || deudaAccessLevels?.economico === 'ambos'));
 
   const styles = createStyles(responsive);
 
@@ -379,51 +387,71 @@ const ClientesScreen = () => {
 
               <View style={styles.filterGroup}>
                 <Text style={[styles.label, { color: colors.outline }]}>Estado de Deuda</Text>
-                <TouchableOpacity
-                  style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={() => setShowEstadoDeudaDropdown(!showEstadoDeudaDropdown)}
-                >
-                  <Text style={[styles.dropdownText, { color: filters.tiene_deuda ? colors.onSurface : colors.outline }]}>
-                    {filters.tiene_deuda === 'true' ? 'Con deuda pendiente' : filters.tiene_deuda === 'false' ? 'Sin deuda' : 'Todos'}
-                  </Text>
-                  <Ionicons 
-                    name={showEstadoDeudaDropdown ? "chevron-up" : "chevron-down"} 
-                    size={responsive.responsiveWidth(20)} 
-                    color={colors.outline} 
-                  />
-                </TouchableOpacity>
-                
-                {showEstadoDeudaDropdown && (
-                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    <TouchableOpacity
-                      style={styles.dropdownItem}
-                      onPress={() => {
-                        setFilters(prev => ({ ...prev, tiene_deuda: '' }));
-                        setShowEstadoDeudaDropdown(false);
-                      }}
-                    >
-                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todos</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.dropdownItem}
-                      onPress={() => {
-                        setFilters(prev => ({ ...prev, tiene_deuda: 'true' }));
-                        setShowEstadoDeudaDropdown(false);
-                      }}
-                    >
-                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Con deuda pendiente</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.dropdownItem, styles.dropdownItemLast]}
-                      onPress={() => {
-                        setFilters(prev => ({ ...prev, tiene_deuda: 'false' }));
-                        setShowEstadoDeudaDropdown(false);
-                      }}
-                    >
-                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Sin deuda</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                <View style={styles.statusFilterSwitches}>
+                  <TouchableOpacity
+                    style={styles.statusFilterItem}
+                    onPress={() => setFilters(prev => ({ ...prev, tiene_deuda: '' }))}
+                  >
+                    <View style={[
+                      styles.statusFilterSwitch,
+                      { backgroundColor: filters.tiene_deuda === '' ? '#9E9E9E' : '#E0E0E0' }
+                    ]}>
+                      <View style={[
+                        styles.statusFilterKnob,
+                        { transform: [{ translateX: filters.tiene_deuda === '' ? responsive.responsiveWidth(40) : 0 }] }
+                      ]}>
+                        <Text style={[
+                          styles.statusFilterText,
+                          { color: filters.tiene_deuda === '' ? '#9E9E9E' : '#9E9E9E' }
+                        ]}>
+                          Todos
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.statusFilterItem}
+                    onPress={() => setFilters(prev => ({ ...prev, tiene_deuda: 'true' }))}
+                  >
+                    <View style={[
+                      styles.statusFilterSwitch,
+                      { backgroundColor: filters.tiene_deuda === 'true' ? '#4CAF50' : '#E0E0E0' }
+                    ]}>
+                      <View style={[
+                        styles.statusFilterKnob,
+                        { transform: [{ translateX: filters.tiene_deuda === 'true' ? responsive.responsiveWidth(40) : 0 }] }
+                      ]}>
+                        <Text style={[
+                          styles.statusFilterText,
+                          { color: filters.tiene_deuda === 'true' ? '#4CAF50' : '#9E9E9E' }
+                        ]}>
+                          Con deuda
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.statusFilterItem}
+                    onPress={() => setFilters(prev => ({ ...prev, tiene_deuda: 'false' }))}
+                  >
+                    <View style={[
+                      styles.statusFilterSwitch,
+                      { backgroundColor: filters.tiene_deuda === 'false' ? '#2196F3' : '#E0E0E0' }
+                    ]}>
+                      <View style={[
+                        styles.statusFilterKnob,
+                        { transform: [{ translateX: filters.tiene_deuda === 'false' ? responsive.responsiveWidth(40) : 0 }] }
+                      ]}>
+                        <Text style={[
+                          styles.statusFilterText,
+                          { color: filters.tiene_deuda === 'false' ? '#2196F3' : '#9E9E9E' }
+                        ]}>
+                          Sin deuda
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                </View>
               </View>
             </>
           )}
@@ -1143,6 +1171,37 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   paginationText: {
     fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+  },
+  statusFilterSwitches: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(8),
+  },
+  statusFilterItem: {
+    flex: 1,
+  },
+  statusFilterSwitch: {
+    height: responsive.responsiveHeight(36),
+    borderRadius: 18,
+    padding: 3,
+    width: '100%',
+  },
+  statusFilterKnob: {
+    width: responsive.responsiveWidth(55),
+    height: responsive.responsiveHeight(30),
+    borderRadius: 15,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusFilterText: {
+    fontSize: responsive.responsiveFontSize(10),
+    fontWeight: '600',
     fontFamily: 'Inter',
   },
 });

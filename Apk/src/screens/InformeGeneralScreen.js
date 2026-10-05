@@ -182,9 +182,17 @@ const InformeGeneralContent = () => {
       const gananciaNetaCUP = ingresosTotalesCUP - costosVentasCUP - perdidasSalidasCUP;
       const gananciaNetaUSD = (ingresosVentasUSD - costosVentasUSD - perdidasSalidasUSD);
 
-      // Get top 5 products by profit
+      // Ganancia neta total en CUP (base para calcular % por producto)
+      const ingresosTotalesCUPCalc = ingresosVentasCUP + (ingresosVentasUSD * cambioMoneda);
+      const gananciaNetaTotalCUP = ingresosTotalesCUPCalc - costosVentasCUP - perdidasSalidasCUP;
+
+      // Get top 5 products by profit, including their % of net profit
       const topProductos = Array.from(productosGanancia.entries())
-        .map(([nombre, ganancia]) => ({ nombre, ganancia }))
+        .map(([nombre, ganancia]) => ({
+          nombre,
+          ganancia,
+          porcentajeGanancia: gananciaNetaTotalCUP > 0 ? ((ganancia / gananciaNetaTotalCUP) * 100) : 0,
+        }))
         .sort((a, b) => b.ganancia - a.ganancia)
         .slice(0, 5);
 
@@ -462,10 +470,17 @@ const InformeGeneralContent = () => {
               <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Top 5 Productos por Ganancia</Text>
               {reportData.topProductos.map((producto, index) => (
                 <View key={index} style={styles.productRow}>
-                  <Text style={[styles.productName, { color: colors.onSurface }]}>{producto.nombre}</Text>
-                  <Text style={[styles.productGanancia, { color: colors.primary }]}>
-                    {formatNumber(producto.ganancia)} CUP
+                  <Text style={[styles.productName, { color: colors.onSurface }]} numberOfLines={1}>
+                    {producto.nombre}
                   </Text>
+                  <View style={styles.productStatsContainer}>
+                    <Text style={[styles.productGanancia, { color: colors.primary }]}>
+                      {formatNumber(producto.ganancia)} CUP
+                    </Text>
+                    <Text style={[styles.productPorcentaje, { color: colors.outline }]}>
+                      {producto.porcentajeGanancia.toFixed(1)}% de ganancia neta
+                    </Text>
+                  </View>
                 </View>
               ))}
             </Card>
@@ -686,6 +701,7 @@ const createStyles = (responsive) => StyleSheet.create({
   productRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: responsive.responsivePadding(12),
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.05)',
@@ -693,11 +709,21 @@ const createStyles = (responsive) => StyleSheet.create({
   productName: {
     fontSize: responsive.responsiveFontSize(14),
     fontFamily: 'Inter',
+    flex: 1,
+    marginRight: responsive.responsiveMargin(8),
+  },
+  productStatsContainer: {
+    alignItems: 'flex-end',
   },
   productGanancia: {
     fontSize: responsive.responsiveFontSize(14),
     fontWeight: '600',
     fontFamily: 'Inter',
+  },
+  productPorcentaje: {
+    fontSize: responsive.responsiveFontSize(11),
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(2),
   },
   loadingModalOverlay: {
     flex: 1,

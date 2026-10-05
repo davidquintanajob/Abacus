@@ -17,6 +17,8 @@ import { getServicios, getServicioByCodigo } from '../services/servicioService';
 import { createVenta } from '../services/ventaService';
 import { getTiendas } from '../services/tiendaService';
 import { getCuentas, getCuentaById } from '../services/cuentaService';
+import { getClientes, createCliente } from '../services/clienteService';
+import { createDeuda } from '../services/deudaService';
 import { getApiBaseUrl } from '../services/api';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
@@ -86,10 +88,27 @@ const SalesContent = () => {
     transferencia_cup: '',
     transferencia_usd: '',
   });
-  // Toggle for decimal precision in payment section (default: 2 decimals)
-  const [show5Decimals, setShow5Decimals] = useState(false);
   const [ventaNota, setVentaNota] = useState('');
-  // Track which payment field is focused to prevent formatting while typing
+
+  // Deuda mode
+  const [isDeudaMode, setIsDeudaMode] = useState(false);
+  const [deudaCliente, setDeudaCliente] = useState(null);
+  const [clientes, setClientes] = useState([]);
+  const [clienteSearchText, setClienteSearchText] = useState('');
+  const [showClienteDropdown, setShowClienteDropdown] = useState(false);
+  const [deudaMonedaCUP, setDeudaMonedaCUP] = useState(true); // true = CUP, false = USD
+  const [deudaPagoInicial, setDeudaPagoInicial] = useState({
+    activo: false,
+    cantidad_pagada: '',
+    forma_pago: '',
+    id_cuenta_operacion: null,
+    cuentaNombre: '',
+  });
+  const [showDeudaCuentaSelector, setShowDeudaCuentaSelector] = useState(false);
+  const [showNuevoClienteModal, setShowNuevoClienteModal] = useState(false);
+  const [nuevoClienteForm, setNuevoClienteForm] = useState({ nombre: '', telefono: '', direccion: '' });
+  const [isSavingCliente, setIsSavingCliente] = useState(false);
+
   const [focusedPaymentField, setFocusedPaymentField] = useState(null);
   const [showCuentaSelector, setShowCuentaSelector] = useState(false);
   // State for pending product without stock
@@ -348,6 +367,14 @@ const SalesContent = () => {
   const handleConfirmSale = async () => {
     if (!pendingSaleData) return;
 
+    // Deuda mode confirm
+    if (pendingSaleData.isDeuda) {
+      setShowConfirmSaleModal(false);
+      setPendingSaleData(null);
+      await processSale(0, 0, 0, 0, pendingSaleData.totalOriginalCUP, 0);
+      return;
+    }
+
     const {
       cantidad_cobrada_efectivo_cup,
       cantidad_cobrada_efectivo_usd,
@@ -542,6 +569,12 @@ const SalesContent = () => {
       // Load cuentas
       const cuentasData = await getCuentas({}, 1, 1000);
       setAvailableCuentas(cuentasData.data || []);
+
+      // Load clientes for deuda mode
+      try {
+        const clientesData = await getClientes({}, 1, 1000);
+        setClientes(clientesData.data || []);
+      } catch (_) {}
     } catch (error) {
       showToast({ type: 'error', message: 'Error al cargar datos iniciales' });
     } finally {
@@ -565,6 +598,48 @@ const SalesContent = () => {
            (userRole === 'dependiente' && entradaManagePermissions?.dependiente) ||
            (userRole === 'almacenero' && entradaManagePermissions?.almacenero) ||
            (userRole === 'económico' && entradaManagePermissions?.economico);
+  };
+
+  // Toggle deuda mode
+  const handleDeudaModeToggle = () => {
+    setIsDeudaMode(prev => {
+      if (prev) {
+        // Turning off: reset deuda state
+        setDeudaCliente(null);
+        setClienteSearchText('');
+        setDeudaMonedaCUP(true);
+        setDeudaPagoInicial({ activo: false, cantidad_pagada: '', forma_pago: '', id_cuenta_operacion: null, cuentaNombre: '' });
+      }
+      return !prev;
+    });
+  };
+
+  // Create new client from modal
+  const handleCrearNuevoCliente = async () => {
+    if (!nuevoClienteForm.nombre.trim()) {
+      showToast({ type: 'warning', message: 'El nombre del cliente es obligatorio' });
+      return;
+    }
+    try {
+      setIsSavingCliente(true);
+      const data = await createCliente({
+        nombre: nuevoClienteForm.nombre.trim(),
+        telefono: nuevoClienteForm.telefono.trim() || null,
+        direccion: nuevoClienteForm.direccion.trim() || null,
+      });
+      const nuevoCliente = data.data || data;
+      // Refresh list and auto-select
+      const clientesData = await getClientes({}, 1, 1000);
+      setClientes(clientesData.data || []);
+      setDeudaCliente(nuevoCliente);
+      setShowNuevoClienteModal(false);
+      setNuevoClienteForm({ nombre: '', telefono: '', direccion: '' });
+      showToast({ type: 'success', message: `Cliente "${nuevoCliente.nombre}" creado` });
+    } catch (err) {
+      showToast({ type: 'error', message: err.message || 'Error al crear cliente' });
+    } finally {
+      setIsSavingCliente(false);
+    }
   };
 
   // Handle navigation to entrada form for product without stock
@@ -1086,32 +1161,16 @@ const SalesContent = () => {
     return num.toFixed(2);
   };
 
-  // Helper function to format number with 5 decimal places (when toggle is active)
-  const formatNumber5Decimals = (value) => {
-    if (value === null || value === undefined || value === '') return '';
-    const num = parseFloat(value);
-    if (isNaN(num)) return '';
-    return num.toFixed(5);
-  };
-
-  // Get the display value for a payment field based on toggle state
+  // Get the display value for a payment field
   const getPaymentDisplayValue = (tipo) => {
     const value = paymentAmounts[tipo];
-    // Return empty string to show placeholder when value is empty or zero
-    if (!value || value === '' || value === '0' || value === '0.00' || value === '0.00000') {
+    if (!value || value === '' || value === '0' || value === '0.00') {
       return '';
     }
-    // Don't format if this field is currently focused (allows user to type freely)
     if (focusedPaymentField === tipo) {
       return value;
     }
-    if (show5Decimals) {
-      // When toggle is active, show 5 decimals
-      return formatNumber5Decimals(value);
-    } else {
-      // When toggle is inactive (default), show 2 decimals
-      return formatNumber2Decimals(value);
-    }
+    return formatNumber2Decimals(value);
   };
 
   const handleSelectCuenta = (cuenta, tipoCuenta) => {
@@ -1157,6 +1216,47 @@ const SalesContent = () => {
 
     if (!user || !user.id_usuario) {
       showToast({ type: 'warning', message: 'Usuario no disponible, por favor recarga la página' });
+      return;
+    }
+
+    // Deuda mode validations
+    if (isDeudaMode) {
+      if (!deudaCliente) {
+        showToast({ type: 'warning', message: 'Selecciona un cliente para la deuda' });
+        return;
+      }
+      if (deudaPagoInicial.activo) {
+        if (!deudaPagoInicial.cantidad_pagada || parseFloat(deudaPagoInicial.cantidad_pagada) <= 0) {
+          showToast({ type: 'warning', message: 'Ingresa un monto válido para el pago inicial' });
+          return;
+        }
+        if (!deudaPagoInicial.forma_pago) {
+          showToast({ type: 'warning', message: 'Selecciona la forma de pago del pago inicial' });
+          return;
+        }
+        if (!deudaPagoInicial.id_cuenta_operacion) {
+          showToast({ type: 'warning', message: 'Selecciona la cuenta para el pago inicial' });
+          return;
+        }
+      }
+      // Always show deuda confirm modal (never the normal underpayment modal)
+      const totalCUP = saleItems.reduce((s, i) => s + i.precio_cup * i.cantidad, 0);
+      const totalUSD = saleItems.reduce((s, i) => s + i.precio_usd * i.cantidad, 0);
+      const montoDeuda = deudaMonedaCUP ? totalCUP : totalUSD;
+      const monedaDeuda = deudaMonedaCUP ? 'CUP' : 'USD';
+      const pagoInicial = deudaPagoInicial.activo ? parseFloat(deudaPagoInicial.cantidad_pagada || 0) : 0;
+      const restante = Math.max(0, montoDeuda - pagoInicial);
+      setPendingSaleData({
+        isDeuda: true,
+        clienteNombre: deudaCliente.nombre,
+        totalOriginalCUP: totalCUP,
+        montoDeuda,
+        monedaDeuda,
+        pagoInicial,
+        restante,
+      });
+      setConfirmSaleCountdown(3);
+      setShowConfirmSaleModal(true);
       return;
     }
 
@@ -1308,6 +1408,74 @@ const SalesContent = () => {
       }
 
       setIsSubmitting(true);
+
+      // ── DEUDA MODE ────────────────────────────────────────────────────────
+      if (isDeudaMode) {
+        const cambio = parseFloat(config.cupToUsdRate || 1);
+        const totalCUP = saleItems.reduce((s, i) => s + i.precio_cup * i.cantidad, 0);
+        const totalUSD = saleItems.reduce((s, i) => s + i.precio_usd * i.cantidad, 0);
+
+        const ventasDeuda = saleItems.map(item => ({
+          id_servicio_tienda: item.id_servicio_tienda,
+          cantidad: item.cantidad,
+          precio_cobrado_cup: item.precio_cup,
+          precio_cobrado_usd: item.precio_usd,
+        }));
+
+        const ventaDeudaData = {
+          fecha_hora: new Date().toISOString(),
+          nota: ventaNota,
+          cantidad_cobrada_efectivo_cup: 0,
+          cantidad_cobrada_efectivo_usd: 0,
+          cantidad_cobrada_transferencia_cup: 0,
+          cantidad_cobrada_transferencia_usd: 0,
+          id_usuario: user.id_usuario,
+          cambio_moneda: cambio,
+          ventas: ventasDeuda,
+          is_deuda: true,
+        };
+
+        const ventaResult = await createVenta(ventaDeudaData);
+        const id_lista_venta = ventaResult?.data?.id_lista_venta || ventaResult?.id_lista_venta;
+
+        // Build optional initial payment
+        let pago_deuda = undefined;
+        if (deudaPagoInicial.activo && deudaPagoInicial.cantidad_pagada && parseFloat(deudaPagoInicial.cantidad_pagada) > 0) {
+          pago_deuda = {
+            cantidad_pagada: parseFloat(deudaPagoInicial.cantidad_pagada),
+            forma_pago: deudaPagoInicial.forma_pago,
+            id_cuenta_operacion: deudaPagoInicial.id_cuenta_operacion,
+            id_usuario: user.id_usuario,
+          };
+        }
+
+        await createDeuda({
+          fecha_hora: new Date().toISOString(),
+          // Solo se acredita en la moneda seleccionada por el switch CUP/USD
+          monto_cup: deudaMonedaCUP ? totalCUP : 0,
+          monto_usd: deudaMonedaCUP ? 0 : totalUSD,
+          cambio_moneda: cambio,
+          id_cliente: deudaCliente.id_cliente,
+          id_lista_venta: id_lista_venta || null,
+          ...(pago_deuda ? { pago_deuda } : {}),
+        });
+
+        showToast({ type: 'success', message: 'Venta registrada como deuda correctamente' });
+        setComprobanteSaleItems([...saleItems]);
+        setShowComprobanteModal(true);
+
+        // Reset
+        setSaleItems([]);
+        setPaymentAmounts({ efectivo_cup: '', efectivo_usd: '', transferencia_cup: '', transferencia_usd: '' });
+        setDeudaCliente(null);
+        setClienteSearchText('');
+        setDeudaMonedaCUP(true);
+        setDeudaPagoInicial({ activo: false, cantidad_pagada: '', forma_pago: '', id_cuenta_operacion: null, cuentaNombre: '' });
+        setIsDeudaMode(false);
+        setIsSubmitting(false);
+        return;
+      }
+      // ─────────────────────────────────────────────────────────────────────
 
       // Round all values to 5 decimals to match backend precision and handle rounding discrepancies
       const roundTo5Decimals = (value) => Math.round(value * 100000) / 100000;
@@ -1891,10 +2059,10 @@ const SalesContent = () => {
                   <Text style={[styles.itemName, { color: colors.onSurface }]}>{item.nombre}</Text>
                   <Text style={[styles.itemPrice, { color: colors.outline }]}>
                     <Text style={{ fontWeight: 'bold' }}>
-                      ${show5Decimals ? formatNumber5Decimals(item.precio_cup) : formatNumber2Decimals(item.precio_cup)} CUP
+                      ${formatNumber2Decimals(item.precio_cup)} CUP
                     </Text>
                     {' / '}
-                    ${show5Decimals ? formatNumber5Decimals(item.precio_usd) : formatNumber2Decimals(item.precio_usd)} USD
+                    ${formatNumber2Decimals(item.precio_usd)} USD
                   </Text>
                   {item.esOferta && (
                     <Text style={[styles.offerBadge, { color: colors.primary }]}>Contenido total</Text>
@@ -1962,118 +2130,324 @@ const SalesContent = () => {
 
         {/* Payment Section */}
         <Card style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
+          {/* Header: Pago + Generar Deuda toggle */}
           <View style={styles.sectionHeaderWithSwitch}>
             <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Pago</Text>
             <View style={styles.decimalSwitchContainer}>
-              <Text style={[styles.decimalLabel, { color: colors.outline }]}>
-                {show5Decimals ? '5 decimales' : '2 decimales'}
+              <Text style={[styles.decimalLabel, { color: isDeudaMode ? colors.primary : colors.outline }]}>
+                Generar Deuda
               </Text>
               <TouchableOpacity
-                style={[styles.decimalSwitch, { backgroundColor: show5Decimals ? colors.primary : colors.outlineVariant }]}
-                onPress={() => setShow5Decimals(!show5Decimals)}
+                style={[styles.decimalSwitch, { backgroundColor: isDeudaMode ? colors.primary : colors.outlineVariant }]}
+                onPress={handleDeudaModeToggle}
                 activeOpacity={0.7}
               >
                 <View style={[styles.decimalSwitchThumb, {
-                  backgroundColor: show5Decimals ? '#fff' : colors.outline,
-                  transform: [{ translateX: show5Decimals ? 20 : 0 }]
+                  backgroundColor: isDeudaMode ? '#fff' : colors.outline,
+                  transform: [{ translateX: isDeudaMode ? 20 : 0 }]
                 }]} />
               </TouchableOpacity>
             </View>
           </View>
 
-          {['efectivo_cup', 'efectivo_usd', 'transferencia_cup', 'transferencia_usd']
-            .filter(tipo => cuentaConfig[tipo]?.length > 0)
-            .map((tipo) => {
-            const label = tipo.replace('_', ' ').toUpperCase();
-            const hasCuentas = cuentaConfig[tipo]?.length > 0;
-            const selectedCuenta = selectedCuentas[tipo];
-            
-            return (
-              <View key={tipo} style={styles.paymentRow}>
-                <View style={styles.paymentLabel}>
-                  <Text style={[styles.paymentLabelText, { color: colors.onSurface }]}>{label}</Text>
-                </View>
-                
-                <View style={styles.paymentInputRow}>
+          {isDeudaMode ? (
+            /* ── DEUDA MODE FORM ── */
+            <>
+              {/* Moneda de la deuda: CUP / USD (mutuamente excluyentes) */}
+              <View style={[styles.deudaPagoInicialHeader, { marginBottom: responsive.responsiveMargin(12) }]}>
+                <Text style={[styles.paymentLabelText, { color: colors.onSurface }]}>Moneda de la deuda</Text>
+                <View style={{ flexDirection: 'row', gap: responsive.responsiveMargin(12), alignItems: 'center' }}>
+                  {/* CUP switch */}
                   <TouchableOpacity
-                    style={[styles.cuentaSelector, { backgroundColor: colors.background, borderColor: colors.outlineVariant, flex: 0.6 }]}
-                    onPress={() => {
-                      setSelectorTipoCuenta(tipo);
-                      setShowCuentaSelector(true);
-                    }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: responsive.responsiveMargin(6) }}
+                    onPress={() => setDeudaMonedaCUP(true)}
+                    activeOpacity={0.7}
                   >
-                    <Text style={[styles.cuentaSelectorText, { color: selectedCuenta ? colors.onSurface : colors.outline }]} numberOfLines={1}>
-                      {selectedCuenta?.nombre || 'Seleccionar cuenta...'}
+                    <Text style={[{ fontSize: responsive.responsiveWidth(13), fontWeight: deudaMonedaCUP ? '700' : '400', color: deudaMonedaCUP ? colors.primary : colors.outline }]}>
+                      CUP
                     </Text>
-                    <Ionicons name="chevron-down" size={responsive.responsiveWidth(16)} color={colors.outline} />
+                    <TouchableOpacity
+                      style={[styles.decimalSwitch, { backgroundColor: deudaMonedaCUP ? colors.primary : colors.outlineVariant }]}
+                      onPress={() => setDeudaMonedaCUP(true)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.decimalSwitchThumb, {
+                        backgroundColor: deudaMonedaCUP ? '#fff' : colors.outline,
+                        transform: [{ translateX: deudaMonedaCUP ? 20 : 0 }]
+                      }]} />
+                    </TouchableOpacity>
                   </TouchableOpacity>
-                  
-                  <View style={{ flex: 0.4, marginTop: (tipo === 'efectivo_usd' || tipo === 'transferencia_usd') ? responsive.responsiveHeight(8) : 0 }}>
-                    <TextInput
-                      style={[
-                        styles.paymentInput, 
-                        { 
-                          backgroundColor: colors.background, 
-                          color: colors.onSurface, 
-                          borderColor: colors.outlineVariant,
-                          fontSize: responsive.responsiveWidth(14)
-                        }
-                      ]}
-                      placeholder={show5Decimals ? "0.00000" : "0.00"}
-                      placeholderTextColor={colors.outline}
-                      value={getPaymentDisplayValue(tipo)}
-                      onChangeText={(text) => {
-                        // Remove any minus signs
-                        const sanitizedText = text.replace(/-/g, '');
-                        setPaymentAmounts(prev => ({ ...prev, [tipo]: sanitizedText }));
-                      }}
-                      onFocus={() => setFocusedPaymentField(tipo)}
-                      onBlur={() => {
-                        setFocusedPaymentField(null);
-                        // Format the value when field loses focus
-                        const value = paymentAmounts[tipo];
-                        if (value && value !== '') {
-                          const num = parseFloat(value);
-                          if (!isNaN(num)) {
-                            const formatted = show5Decimals ? num.toFixed(5) : num.toFixed(2);
-                            setPaymentAmounts(prev => ({ ...prev, [tipo]: formatted }));
-                          }
-                        }
-                      }}
-                      keyboardType="decimal-pad"
-                    />
-                    {(tipo === 'efectivo_usd' || tipo === 'transferencia_usd') && (
-                      <Text style={[styles.conversionText, { color: colors.outline, fontSize: responsive.responsiveWidth(8) }]}>
-                        {(() => {
-                          const remainingCUP = getRemainingAmount();
-                          const cambio = parseFloat(config.cupToUsdRate || 1);
-                          const remainingUSD = remainingCUP > 0 ? (remainingCUP / cambio).toFixed(2) : '0.00';
-                          return `(${show5Decimals ? formatNumber5Decimals(remainingCUP) : formatNumber2Decimals(remainingCUP)}) / (${cambio}) = (${remainingUSD})`;
-                        })()}
-                      </Text>
-                    )}
-                  </View>
+                  {/* USD switch */}
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: responsive.responsiveMargin(6) }}
+                    onPress={() => setDeudaMonedaCUP(false)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[{ fontSize: responsive.responsiveWidth(13), fontWeight: !deudaMonedaCUP ? '700' : '400', color: !deudaMonedaCUP ? colors.primary : colors.outline }]}>
+                      USD
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.decimalSwitch, { backgroundColor: !deudaMonedaCUP ? colors.primary : colors.outlineVariant }]}
+                      onPress={() => setDeudaMonedaCUP(false)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.decimalSwitchThumb, {
+                        backgroundColor: !deudaMonedaCUP ? '#fff' : colors.outline,
+                        transform: [{ translateX: !deudaMonedaCUP ? 20 : 0 }]
+                      }]} />
+                    </TouchableOpacity>
+                  </TouchableOpacity>
                 </View>
               </View>
-            );
-          })}
 
-          <View style={[styles.totalSection, { backgroundColor: colors.primary }]}>
-            <Text style={[styles.totalLabel, { color: '#fff' }]}>Total a pagar:</Text>
-            <Text style={[styles.totalAmount, { color: '#fff' }]}>
-              ${show5Decimals ? formatNumber5Decimals(calculateTotal()) : formatNumber2Decimals(calculateTotal())} CUP
-            </Text>
-          </View>
+              {/* Total de la deuda */}
+              {(() => {
+                const totalCUP = saleItems.reduce((s, i) => s + i.precio_cup * i.cantidad, 0);
+                const totalUSD = saleItems.reduce((s, i) => s + i.precio_usd * i.cantidad, 0);
+                const montoDeuda = deudaMonedaCUP ? totalCUP : totalUSD;
+                const moneda = deudaMonedaCUP ? 'CUP' : 'USD';
+                const pagoInicial = deudaPagoInicial.activo ? parseFloat(deudaPagoInicial.cantidad_pagada || 0) : 0;
+                const restante = Math.max(0, montoDeuda - pagoInicial);
+                return (
+                  <>
+                    <View style={[styles.totalSection, { backgroundColor: colors.primary }]}>
+                      <Text style={[styles.totalLabel, { color: '#fff' }]}>Total venta:</Text>
+                      <Text style={[styles.totalAmount, { color: '#fff' }]}>
+                        ${formatNumber2Decimals(montoDeuda)} {moneda}
+                      </Text>
+                    </View>
+                    {deudaPagoInicial.activo && pagoInicial > 0 && (
+                      <>
+                        <View style={[styles.remainingSection, { backgroundColor: colors.secondaryContainer, marginTop: responsive.responsiveMargin(4) }]}>
+                          <Text style={[styles.remainingLabel, { color: colors.onSecondaryContainer }]}>Pago inicial:</Text>
+                          <Text style={[styles.remainingAmount, { color: colors.onSecondaryContainer }]}>
+                            ${formatNumber2Decimals(pagoInicial)} {moneda}
+                          </Text>
+                        </View>
+                        <View style={[styles.remainingSection, { backgroundColor: colors.errorContainer, marginTop: responsive.responsiveMargin(4), marginBottom: responsive.responsiveMargin(4) }]}>
+                          <Text style={[styles.remainingLabel, { color: colors.error }]}>Queda debiendo:</Text>
+                          <Text style={[styles.remainingAmount, { color: colors.error }]}>
+                            ${formatNumber2Decimals(restante)} {moneda}
+                          </Text>
+                        </View>
+                      </>
+                    )}
+                    {(!deudaPagoInicial.activo || pagoInicial === 0) && (
+                      <View style={[styles.remainingSection, { backgroundColor: colors.errorContainer, marginTop: responsive.responsiveMargin(4), marginBottom: responsive.responsiveMargin(4) }]}>
+                        <Text style={[styles.remainingLabel, { color: colors.error }]}>Queda debiendo:</Text>
+                        <Text style={[styles.remainingAmount, { color: colors.error }]}>
+                          ${formatNumber2Decimals(montoDeuda)} {moneda}
+                        </Text>
+                      </View>
+                    )}
+                  </>
+                );
+              })()}
 
-          {Math.abs(getRemainingAmount()) > 0.01 && (
-            <View style={[styles.remainingSection, { backgroundColor: getRemainingAmount() > 0 ? colors.errorContainer : colors.secondaryContainer }]}>
-              <Text style={[styles.remainingLabel, { color: getRemainingAmount() > 0 ? colors.error : colors.onSecondaryContainer }]}>
-                {getRemainingAmount() > 0 ? 'Falta por pagar:' : 'Cambio a devolver:'}
+              {/* Cliente selector */}
+              <Text style={[styles.paymentLabelText, { color: colors.outline, marginBottom: responsive.responsiveMargin(6), marginTop: responsive.responsiveMargin(8) }]}>
+                Cliente *
               </Text>
-              <Text style={[styles.remainingAmount, { color: getRemainingAmount() > 0 ? colors.error : colors.onSecondaryContainer }]}>
-                ${show5Decimals ? formatNumber5Decimals(Math.abs(getRemainingAmount())) : formatNumber2Decimals(Math.abs(getRemainingAmount()))} CUP
-              </Text>
-            </View>
+              <View style={{ flexDirection: 'row', gap: responsive.responsiveMargin(8), marginBottom: responsive.responsiveMargin(4) }}>
+                <TouchableOpacity
+                  style={[styles.cuentaSelector, { flex: 1, backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                  onPress={() => setShowClienteDropdown(v => !v)}
+                >
+                  <Text style={[styles.cuentaSelectorText, { color: deudaCliente ? colors.onSurface : colors.outline }]} numberOfLines={1}>
+                    {deudaCliente ? deudaCliente.nombre : 'Seleccionar cliente...'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={responsive.responsiveWidth(16)} color={colors.outline} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.deudaAddBtn, { backgroundColor: colors.primary }]}
+                  onPress={() => {
+                    setNuevoClienteForm({ nombre: '', telefono: '', direccion: '' });
+                    setShowNuevoClienteModal(true);
+                  }}
+                >
+                  <Ionicons name="add" size={responsive.responsiveWidth(20)} color="#fff" />
+                </TouchableOpacity>
+              </View>
+
+              {showClienteDropdown && (
+                <View style={[styles.deudaDropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                  <View style={[styles.deudaSearchRow, { backgroundColor: colors.background }]}>
+                    <Ionicons name="search" size={responsive.responsiveWidth(16)} color={colors.outline} />
+                    <TextInput
+                      style={[{ flex: 1, marginLeft: 6, color: colors.onSurface, fontSize: responsive.responsiveWidth(13) }]}
+                      placeholder="Buscar cliente..."
+                      placeholderTextColor={colors.outline}
+                      value={clienteSearchText}
+                      onChangeText={setClienteSearchText}
+                    />
+                  </View>
+                  <ScrollView style={{ maxHeight: responsive.responsiveHeight(150) }} nestedScrollEnabled>
+                    {clientes
+                      .filter(c => c.nombre.toLowerCase().includes(clienteSearchText.toLowerCase()))
+                      .map((c, idx, arr) => (
+                        <TouchableOpacity
+                          key={c.id_cliente}
+                          style={[styles.deudaDropdownItem, idx === arr.length - 1 && { borderBottomWidth: 0 }]}
+                          onPress={() => {
+                            setDeudaCliente(c);
+                            setShowClienteDropdown(false);
+                            setClienteSearchText('');
+                          }}
+                        >
+                          <Text style={[{ color: colors.onSurface, fontSize: responsive.responsiveWidth(13) }]}>{c.nombre}</Text>
+                          {c.telefono ? <Text style={[{ color: colors.outline, fontSize: responsive.responsiveWidth(11) }]}>{c.telefono}</Text> : null}
+                        </TouchableOpacity>
+                      ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              {/* Pago inicial opcional */}
+              <View style={[styles.deudaPagoInicialHeader, { marginTop: responsive.responsiveMargin(16) }]}>
+                <Text style={[styles.paymentLabelText, { color: colors.onSurface }]}>Pago inicial (opcional)</Text>
+                <TouchableOpacity
+                  style={[styles.decimalSwitch, { backgroundColor: deudaPagoInicial.activo ? colors.primary : colors.outlineVariant }]}
+                  onPress={() => setDeudaPagoInicial(p => ({ ...p, activo: !p.activo, cantidad_pagada: '', id_cuenta_operacion: null, forma_pago: '', cuentaNombre: '' }))}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.decimalSwitchThumb, {
+                    backgroundColor: deudaPagoInicial.activo ? '#fff' : colors.outline,
+                    transform: [{ translateX: deudaPagoInicial.activo ? 20 : 0 }]
+                  }]} />
+                </TouchableOpacity>
+              </View>
+
+              {deudaPagoInicial.activo && (
+                <View style={{ marginTop: responsive.responsiveMargin(10), flexDirection: 'row', gap: responsive.responsiveMargin(8), alignItems: 'flex-end' }}>
+                  {/* Cuenta - 70% */}
+                  <View style={{ flex: 0.7 }}>
+                    <Text style={[styles.paymentLabelText, { color: colors.outline, marginBottom: responsive.responsiveMargin(4), fontSize: responsive.responsiveWidth(11) }]}>
+                      Cuenta *
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.cuentaSelector, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                      onPress={() => setShowDeudaCuentaSelector(true)}
+                    >
+                      <Text style={[styles.cuentaSelectorText, { color: deudaPagoInicial.id_cuenta_operacion ? colors.onSurface : colors.outline, fontSize: responsive.responsiveWidth(12) }]} numberOfLines={1}>
+                        {deudaPagoInicial.cuentaNombre
+                          ? `${deudaPagoInicial.cuentaNombre}${deudaPagoInicial.forma_pago ? ` (${deudaPagoInicial.forma_pago})` : ''}`
+                          : 'Seleccionar...'}
+                      </Text>
+                      <Ionicons name="chevron-down" size={responsive.responsiveWidth(14)} color={colors.outline} />
+                    </TouchableOpacity>
+                  </View>
+                  {/* Monto - 30%, mismo alto que cuentaSelector */}
+                  <View style={{ flex: 0.3 }}>
+                    <Text style={[styles.paymentLabelText, { color: colors.outline, marginBottom: responsive.responsiveMargin(4), fontSize: responsive.responsiveWidth(11) }]}>
+                      Monto *
+                    </Text>
+                    <TextInput
+                      style={[styles.cuentaSelector, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant, fontSize: responsive.responsiveWidth(13) }]}
+                      placeholder="0.00"
+                      placeholderTextColor={colors.outline}
+                      value={deudaPagoInicial.cantidad_pagada}
+                      onChangeText={t => setDeudaPagoInicial(p => ({ ...p, cantidad_pagada: t.replace(/-/g, '') }))}
+                      keyboardType="decimal-pad"
+                      textAlignVertical="center"
+                    />
+                  </View>
+                </View>
+              )}
+            </>
+          ) : (
+            /* ── NORMAL PAYMENT FORM ── */
+            <>
+              {['efectivo_cup', 'efectivo_usd', 'transferencia_cup', 'transferencia_usd']
+                .filter(tipo => cuentaConfig[tipo]?.length > 0)
+                .map((tipo) => {
+                const label = tipo.replace('_', ' ').toUpperCase();
+                const selectedCuenta = selectedCuentas[tipo];
+                
+                return (
+                  <View key={tipo} style={styles.paymentRow}>
+                    <View style={styles.paymentLabel}>
+                      <Text style={[styles.paymentLabelText, { color: colors.onSurface }]}>{label}</Text>
+                    </View>
+                    
+                    <View style={styles.paymentInputRow}>
+                      <TouchableOpacity
+                        style={[styles.cuentaSelector, { backgroundColor: colors.background, borderColor: colors.outlineVariant, flex: 0.6 }]}
+                        onPress={() => {
+                          setSelectorTipoCuenta(tipo);
+                          setShowCuentaSelector(true);
+                        }}
+                      >
+                        <Text style={[styles.cuentaSelectorText, { color: selectedCuenta ? colors.onSurface : colors.outline }]} numberOfLines={1}>
+                          {selectedCuenta?.nombre || 'Seleccionar cuenta...'}
+                        </Text>
+                        <Ionicons name="chevron-down" size={responsive.responsiveWidth(16)} color={colors.outline} />
+                      </TouchableOpacity>
+                      
+                      <View style={{ flex: 0.4, marginTop: (tipo === 'efectivo_usd' || tipo === 'transferencia_usd') ? responsive.responsiveHeight(8) : 0 }}>
+                        <TextInput
+                          style={[
+                            styles.paymentInput, 
+                            { 
+                              backgroundColor: colors.background, 
+                              color: colors.onSurface, 
+                              borderColor: colors.outlineVariant,
+                              fontSize: responsive.responsiveWidth(14)
+                            }
+                          ]}
+                          placeholder="0.00"
+                          placeholderTextColor={colors.outline}
+                          value={getPaymentDisplayValue(tipo)}
+                          onChangeText={(text) => {
+                            const sanitizedText = text.replace(/-/g, '');
+                            setPaymentAmounts(prev => ({ ...prev, [tipo]: sanitizedText }));
+                          }}
+                          onFocus={() => setFocusedPaymentField(tipo)}
+                          onBlur={() => {
+                            setFocusedPaymentField(null);
+                            const value = paymentAmounts[tipo];
+                            if (value && value !== '') {
+                              const num = parseFloat(value);
+                              if (!isNaN(num)) {
+                                setPaymentAmounts(prev => ({ ...prev, [tipo]: num.toFixed(2) }));
+                              }
+                            }
+                          }}
+                          keyboardType="decimal-pad"
+                        />
+                        {(tipo === 'efectivo_usd' || tipo === 'transferencia_usd') && (
+                          <Text style={[styles.conversionText, { color: colors.outline, fontSize: responsive.responsiveWidth(8) }]}>
+                            {(() => {
+                              const remainingCUP = getRemainingAmount();
+                              const cambio = parseFloat(config.cupToUsdRate || 1);
+                              const remainingUSD = remainingCUP > 0 ? (remainingCUP / cambio).toFixed(2) : '0.00';
+                              return `(${formatNumber2Decimals(remainingCUP)}) / (${cambio}) = (${remainingUSD})`;
+                            })()}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+
+              <View style={[styles.totalSection, { backgroundColor: colors.primary }]}>
+                <Text style={[styles.totalLabel, { color: '#fff' }]}>Total a pagar:</Text>
+                <Text style={[styles.totalAmount, { color: '#fff' }]}>
+                  ${formatNumber2Decimals(calculateTotal())} CUP
+                </Text>
+              </View>
+
+              {Math.abs(getRemainingAmount()) > 0.01 && (
+                <View style={[styles.remainingSection, { backgroundColor: getRemainingAmount() > 0 ? colors.errorContainer : colors.secondaryContainer }]}>
+                  <Text style={[styles.remainingLabel, { color: getRemainingAmount() > 0 ? colors.error : colors.onSecondaryContainer }]}>
+                    {getRemainingAmount() > 0 ? 'Falta por pagar:' : 'Cambio a devolver:'}
+                  </Text>
+                  <Text style={[styles.remainingAmount, { color: getRemainingAmount() > 0 ? colors.error : colors.onSecondaryContainer }]}>
+                    ${formatNumber2Decimals(Math.abs(getRemainingAmount()))} CUP
+                  </Text>
+                </View>
+              )}
+            </>
           )}
 
           <View style={styles.sectionHeader}>
@@ -2152,20 +2526,53 @@ const SalesContent = () => {
             <View style={[styles.confirmSaleModal, { backgroundColor: colors.surface }]}>
               <View style={styles.confirmSaleHeader}>
                 <Ionicons name="alert-circle" size={responsive.responsiveWidth(32)} color={colors.error} />
-                <Text style={[styles.confirmSaleTitle, { color: colors.onSurface }]}>Confirmar Venta</Text>
+                <Text style={[styles.confirmSaleTitle, { color: colors.onSurface, fontSize: pendingSaleData.isDeuda ? responsive.responsiveFontSize(17) : responsive.responsiveFontSize(20) }]}>
+                  {pendingSaleData.isDeuda ? 'Confirmar Venta en Deuda' : 'Confirmar Venta'}
+                </Text>
               </View>
               
-              <Text style={[styles.confirmSaleMessage, { color: colors.onSurface }]}>
-                ¿Estás seguro que deseas vender por el precio de{' '}
-                <Text style={[styles.confirmSaleAmount, { color: colors.primary }]}>
-                  ${pendingSaleData.totalPaidCUP.toFixed(2)} CUP
+              {pendingSaleData.isDeuda ? (
+                <Text style={[styles.confirmSaleMessage, { color: colors.onSurface }]}>
+                  ¿Confirmas registrar esta venta como deuda para{' '}
+                  <Text style={[styles.confirmSaleAmount, { color: colors.primary }]}>
+                    {pendingSaleData.clienteNombre}
+                  </Text>
+                  {'? '}
+                  {pendingSaleData.pagoInicial > 0 ? (
+                    <>
+                      Paga{' '}
+                      <Text style={[styles.confirmSaleAmount, { color: colors.primary }]}>
+                        ${pendingSaleData.pagoInicial.toFixed(2)} {pendingSaleData.monedaDeuda}
+                      </Text>
+                      {' '}ahora y quedará debiendo{' '}
+                      <Text style={[styles.confirmSaleAmount, { color: colors.error }]}>
+                        ${pendingSaleData.restante.toFixed(2)} {pendingSaleData.monedaDeuda}
+                      </Text>
+                      .
+                    </>
+                  ) : (
+                    <>
+                      Quedará debiendo{' '}
+                      <Text style={[styles.confirmSaleAmount, { color: colors.error }]}>
+                        ${pendingSaleData.montoDeuda.toFixed(2)} {pendingSaleData.monedaDeuda}
+                      </Text>
+                      {' '}en su totalidad.
+                    </>
+                  )}
                 </Text>
-                {' '}cuando el precio real de la suma de los artículos suma{' '}
-                <Text style={[styles.confirmSaleAmount, { color: colors.primary }]}>
-                  ${pendingSaleData.totalOriginalCUP.toFixed(2)} CUP
+              ) : (
+                <Text style={[styles.confirmSaleMessage, { color: colors.onSurface }]}>
+                  ¿Estás seguro que deseas vender por el precio de{' '}
+                  <Text style={[styles.confirmSaleAmount, { color: colors.primary }]}>
+                    ${pendingSaleData.totalPaidCUP.toFixed(2)} CUP
+                  </Text>
+                  {' '}cuando el precio real de la suma de los artículos suma{' '}
+                  <Text style={[styles.confirmSaleAmount, { color: colors.primary }]}>
+                    ${pendingSaleData.totalOriginalCUP.toFixed(2)} CUP
+                  </Text>
+                  ?
                 </Text>
-                ?
-              </Text>
+              )}
 
               <View style={styles.confirmSaleButtons}>
                 <TouchableOpacity
@@ -2370,6 +2777,123 @@ const SalesContent = () => {
         onHide={hideToast}
         toastKey={toast.key}
       />
+
+      {/* Deuda: Cuenta selector modal — solo cuentas configuradas para la tienda */}
+      <Modal
+        visible={showDeudaCuentaSelector}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowDeudaCuentaSelector(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface, padding: responsive.responsiveWidth(20) }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Seleccionar Cuenta</Text>
+              <TouchableOpacity onPress={() => setShowDeudaCuentaSelector(false)}>
+                <Ionicons name="close" size={24} color={colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              {/* Flatten all tienda-configured accounts filtered by debt currency */}
+              {(deudaMonedaCUP 
+                ? ['efectivo_cup', 'transferencia_cup'] 
+                : ['efectivo_usd', 'transferencia_usd'])
+                .flatMap(tipo => (cuentaConfig[tipo] || []).map(c => ({ ...c, _tipo: tipo })))
+                .filter((cuenta, idx, arr) => arr.findIndex(c => c.id_cuenta === cuenta.id_cuenta) === idx)
+                .map((cuenta) => (
+                  <TouchableOpacity
+                    key={cuenta.id_cuenta}
+                    style={[styles.modalItem, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                    onPress={() => {
+                      setDeudaPagoInicial(p => ({
+                        ...p,
+                        id_cuenta_operacion: cuenta.id_cuenta,
+                        forma_pago: cuenta.tipo_cuenta,
+                        cuentaNombre: cuenta.nombre,
+                      }));
+                      setShowDeudaCuentaSelector(false);
+                    }}
+                  >
+                    <Text style={[styles.modalItemText, { color: colors.onSurface }]}>{cuenta.nombre}</Text>
+                    <Text style={[{ color: colors.outline, fontSize: responsive.responsiveWidth(11) }]}>{cuenta.tipo_cuenta}</Text>
+                  </TouchableOpacity>
+                ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Deuda: Nuevo Cliente modal */}
+      <Modal
+        visible={showNuevoClienteModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowNuevoClienteModal(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+          <View style={[styles.nuevoClienteModal, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Nuevo Cliente</Text>
+              <TouchableOpacity onPress={() => setShowNuevoClienteModal(false)}>
+                <Ionicons name="close" size={24} color={colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[{ color: colors.outline, fontSize: responsive.responsiveWidth(11), marginBottom: responsive.responsiveMargin(3) }]}>
+              Nombre *
+            </Text>
+            <TextInput
+              style={[styles.nuevoClienteInput, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+              placeholder="Nombre del cliente"
+              placeholderTextColor={colors.outline}
+              value={nuevoClienteForm.nombre}
+              onChangeText={t => setNuevoClienteForm(p => ({ ...p, nombre: t }))}
+            />
+
+            <Text style={[{ color: colors.outline, fontSize: responsive.responsiveWidth(11), marginBottom: responsive.responsiveMargin(3), marginTop: responsive.responsiveMargin(8) }]}>
+              Teléfono
+            </Text>
+            <TextInput
+              style={[styles.nuevoClienteInput, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+              placeholder="Teléfono (opcional)"
+              placeholderTextColor={colors.outline}
+              value={nuevoClienteForm.telefono}
+              onChangeText={t => setNuevoClienteForm(p => ({ ...p, telefono: t }))}
+              keyboardType="phone-pad"
+            />
+
+            <Text style={[{ color: colors.outline, fontSize: responsive.responsiveWidth(11), marginBottom: responsive.responsiveMargin(3), marginTop: responsive.responsiveMargin(8) }]}>
+              Dirección
+            </Text>
+            <TextInput
+              style={[styles.nuevoClienteInput, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+              placeholder="Dirección (opcional)"
+              placeholderTextColor={colors.outline}
+              value={nuevoClienteForm.direccion}
+              onChangeText={t => setNuevoClienteForm(p => ({ ...p, direccion: t }))}
+            />
+
+            <View style={[styles.modalFooter, { marginTop: responsive.responsiveMargin(14) }]}>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: colors.outlineVariant }]}
+                onPress={() => setShowNuevoClienteModal(false)}
+              >
+                <Text style={[styles.modalButtonText, { color: colors.onSurface }]}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: colors.primary }]}
+                onPress={handleCrearNuevoCliente}
+                disabled={isSavingCliente}
+              >
+                {isSavingCliente
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={[styles.modalButtonText, { color: '#fff' }]}>Crear</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -3115,6 +3639,51 @@ const createStyles = (responsive) => StyleSheet.create({
     fontWeight: '600',
     marginLeft: responsive.responsiveWidth(8),
     color: '#fff',
+  },
+  // Deuda mode styles
+  deudaAddBtn: {
+    width: responsive.responsiveWidth(44),
+    height: responsive.responsiveWidth(44),
+    borderRadius: responsive.responsiveWidth(8),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deudaDropdownMenu: {
+    borderWidth: 1,
+    borderRadius: responsive.responsiveWidth(8),
+    marginTop: responsive.responsiveMargin(4),
+    marginBottom: responsive.responsiveMargin(8),
+    overflow: 'hidden',
+  },
+  deudaSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: responsive.responsivePadding(10),
+    paddingVertical: responsive.responsivePadding(8),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
+  },
+  deudaDropdownItem: {
+    padding: responsive.responsivePadding(12),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+  },
+  deudaPagoInicialHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  nuevoClienteModal: {
+    width: '88%',
+    borderRadius: responsive.responsiveWidth(16),
+    padding: responsive.responsiveWidth(20),
+  },
+  nuevoClienteInput: {
+    borderWidth: 1,
+    borderRadius: responsive.responsiveWidth(8),
+    paddingHorizontal: responsive.responsivePadding(12),
+    paddingVertical: responsive.responsivePadding(8),
+    fontSize: responsive.responsiveWidth(13),
   },
 });
 

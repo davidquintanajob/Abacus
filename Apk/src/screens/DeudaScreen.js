@@ -166,18 +166,16 @@ const DeudaScreen = () => {
     }
 
     try {
-      // Combinar fecha y hora
-      const fechaHora = new Date(pagoFormData.fecha);
-      fechaHora.setHours(pagoFormData.hora.getHours());
-      fechaHora.setMinutes(pagoFormData.hora.getMinutes());
-      fechaHora.setSeconds(0);
+      // Usar fecha y hora actual del dispositivo
+      const fechaHora = new Date();
 
       const pago = {
         cantidad_pagada: parseFloat(pagoFormData.cantidad_pagada),
         forma_pago: pagoFormData.forma_pago,
-        cambio_moneda: parseFloat(pagoFormData.cambio_moneda) || 1,
+        cambio_moneda: 1,
         id_cuenta_operacion: parseInt(pagoFormData.id_cuenta_operacion),
         fecha_hora: fechaHora,
+        nota: pagoFormData.nota || null
       };
 
       await saldarDeuda(selectedDeuda.id_deuda, [pago]);
@@ -255,6 +253,12 @@ const DeudaScreen = () => {
     }
   }, [pagination.currentPage]);
 
+  useEffect(() => {
+    setPagination(prev => ({ ...prev, currentPage: 1 }));
+    setIsSearching(true);
+    fetchDeudas();
+  }, [filters.tiene_deuda]);
+
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
@@ -307,17 +311,17 @@ const DeudaScreen = () => {
   };
 
   const userRole = user?.rol?.toLowerCase();
-  const canViewAllDeudas = 
+  const canViewDeudas = 
     userRole === 'administrador' ||
-    (userRole === 'dependiente' && deudaAccessLevels?.dependiente === 'all_stores') ||
-    (userRole === 'almacenero' && deudaAccessLevels?.almacenero === 'all_stores') ||
-    (userRole === 'económico' && deudaAccessLevels?.economico === 'all_stores');
+    (userRole === 'dependiente' && deudaAccessLevels?.dependiente === 'ambos') ||
+    (userRole === 'almacenero' && deudaAccessLevels?.almacenero === 'ambos') ||
+    (userRole === 'económico' && deudaAccessLevels?.economico === 'ambos');
 
   const canManageDeudas = 
     userRole === 'administrador' ||
-    (userRole === 'dependiente' && deudaManagePermissions?.dependiente) ||
-    (userRole === 'almacenero' && deudaManagePermissions?.almacenero) ||
-    (userRole === 'económico' && deudaManagePermissions?.economico);
+    (userRole === 'dependiente' && deudaManagePermissions?.dependiente && deudaAccessLevels?.dependiente === 'ambos') ||
+    (userRole === 'almacenero' && deudaManagePermissions?.almacenero && deudaAccessLevels?.almacenero === 'ambos') ||
+    (userRole === 'económico' && deudaManagePermissions?.economico && deudaAccessLevels?.economico === 'ambos');
 
   const styles = createStyles(responsive);
 
@@ -449,51 +453,71 @@ const DeudaScreen = () => {
 
               <View style={styles.filterGroup}>
                 <Text style={[styles.label, { color: colors.outline }]}>Estado de Deuda</Text>
-                <TouchableOpacity
-                  style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={() => setShowEstadoDeudaDropdown(!showEstadoDeudaDropdown)}
-                >
-                  <Text style={[styles.dropdownText, { color: filters.tiene_deuda ? colors.onSurface : colors.outline }]}>
-                    {filters.tiene_deuda === 'true' ? 'Con deuda pendiente' : filters.tiene_deuda === 'false' ? 'Saldada' : 'Todas'}
-                  </Text>
-                  <Ionicons 
-                    name={showEstadoDeudaDropdown ? "chevron-up" : "chevron-down"} 
-                    size={responsive.responsiveWidth(20)} 
-                    color={colors.outline} 
-                  />
-                </TouchableOpacity>
-                
-                {showEstadoDeudaDropdown ? (
-                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    <TouchableOpacity
-                      style={styles.dropdownItem}
-                      onPress={() => {
-                        setFilters(prev => ({ ...prev, tiene_deuda: '' }));
-                        setShowEstadoDeudaDropdown(false);
-                      }}
-                    >
-                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todas</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.dropdownItem}
-                      onPress={() => {
-                        setFilters(prev => ({ ...prev, tiene_deuda: 'true' }));
-                        setShowEstadoDeudaDropdown(false);
-                      }}
-                    >
-                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Con deuda pendiente</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.dropdownItem, styles.dropdownItemLast]}
-                      onPress={() => {
-                        setFilters(prev => ({ ...prev, tiene_deuda: 'false' }));
-                        setShowEstadoDeudaDropdown(false);
-                      }}
-                    >
-                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Saldada</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
+                <View style={styles.statusFilterSwitches}>
+                  <TouchableOpacity
+                    style={styles.statusFilterItem}
+                    onPress={() => setFilters(prev => ({ ...prev, tiene_deuda: '' }))}
+                  >
+                    <View style={[
+                      styles.statusFilterSwitch,
+                      { backgroundColor: filters.tiene_deuda === '' ? '#9E9E9E' : '#E0E0E0' }
+                    ]}>
+                      <View style={[
+                        styles.statusFilterKnob,
+                        { transform: [{ translateX: filters.tiene_deuda === '' ? responsive.responsiveWidth(40) : 0 }] }
+                      ]}>
+                        <Text style={[
+                          styles.statusFilterText,
+                          { color: filters.tiene_deuda === '' ? '#9E9E9E' : '#9E9E9E' }
+                        ]}>
+                          Todas
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.statusFilterItem}
+                    onPress={() => setFilters(prev => ({ ...prev, tiene_deuda: 'true' }))}
+                  >
+                    <View style={[
+                      styles.statusFilterSwitch,
+                      { backgroundColor: filters.tiene_deuda === 'true' ? '#4CAF50' : '#E0E0E0' }
+                    ]}>
+                      <View style={[
+                        styles.statusFilterKnob,
+                        { transform: [{ translateX: filters.tiene_deuda === 'true' ? responsive.responsiveWidth(40) : 0 }] }
+                      ]}>
+                        <Text style={[
+                          styles.statusFilterText,
+                          { color: filters.tiene_deuda === 'true' ? '#4CAF50' : '#9E9E9E' }
+                        ]}>
+                          Pendiente
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.statusFilterItem}
+                    onPress={() => setFilters(prev => ({ ...prev, tiene_deuda: 'false' }))}
+                  >
+                    <View style={[
+                      styles.statusFilterSwitch,
+                      { backgroundColor: filters.tiene_deuda === 'false' ? '#2196F3' : '#E0E0E0' }
+                    ]}>
+                      <View style={[
+                        styles.statusFilterKnob,
+                        { transform: [{ translateX: filters.tiene_deuda === 'false' ? responsive.responsiveWidth(40) : 0 }] }
+                      ]}>
+                        <Text style={[
+                          styles.statusFilterText,
+                          { color: filters.tiene_deuda === 'false' ? '#2196F3' : '#9E9E9E' }
+                        ]}>
+                          Saldada
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                </View>
               </View>
             </>
           ) : null}
@@ -575,173 +599,167 @@ const DeudaScreen = () => {
                   }
                 ]}
               >
-                {/* Flags container */}
-                <View style={styles.deudaFlags}>
-                  {!deuda.saldada ? (
-                    <View style={[styles.deudaPendingFlag, { backgroundColor: colors.error }]}>
-                      <Ionicons name="alert-circle" size={responsive.responsiveWidth(14)} color="#fff" />
-                    </View>
-                  ) : null}
-                  {deuda.nota ? (
-                    <View style={[styles.deudaNoteFlag, { backgroundColor: '#2196F3' }]}>
-                      <Ionicons name="document-text-outline" size={responsive.responsiveWidth(14)} color="#fff" />
-                    </View>
-                  ) : null}
-                </View>
-
-                {/* Deuda Header */}
                 <TouchableOpacity 
-                  style={styles.deudaHeader}
                   onPress={() => toggleDeudaExpand(deuda.id_deuda)}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.deudaHeaderLeft}>
-                    <View style={[
-                      styles.deudaStatusBadge,
-                      { backgroundColor: deuda.saldada ? '#4CAF50' : '#2196F3' }
-                    ]}>
-                      <Ionicons 
-                        name={deuda.saldada ? "checkmark-circle" : "time-outline"} 
-                        size={responsive.responsiveWidth(16)} 
-                        color="#fff" 
-                      />
-                    </View>
-                    <View style={styles.deudaInfo}>
-                      <Text style={[styles.deudaCliente, { color: colors.onSurface }]}>
-                        {deuda.cliente?.nombre || 'Cliente desconocido'}
-                      </Text>
-                      <Text style={[styles.deudaFecha, { color: colors.outline }]}>
-                        {new Date(deuda.fecha_hora).toLocaleDateString()}
-                      </Text>
-                    </View>
+                  {/* Flags container */}
+                  <View style={styles.deudaFlags}>
+                    {!deuda.saldada ? (
+                      <View style={[styles.deudaPendingFlag, { backgroundColor: colors.error }]}>
+                        <Ionicons name="alert-circle" size={responsive.responsiveWidth(14)} color="#fff" />
+                      </View>
+                    ) : null}
+                    {deuda.nota ? (
+                      <View style={[styles.deudaNoteFlag, { backgroundColor: '#2196F3' }]}>
+                        <Ionicons name="document-text-outline" size={responsive.responsiveWidth(14)} color="#fff" />
+                      </View>
+                    ) : null}
                   </View>
-                  <View style={styles.deudaHeaderActions}>
-                    {canManageDeudas ? (
-                      <TouchableOpacity
-                        style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          navigation.navigate('DeudaForm', { deuda, mode: 'edit' });
-                        }}
-                      >
-                        <Ionicons name="create-outline" size={responsive.responsiveWidth(18)} color={colors.primary} />
-                      </TouchableOpacity>
-                    ) : null}
-                    {canManageDeudas ? (
-                      <TouchableOpacity
-                        style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleDelete(deuda);
-                        }}
-                      >
-                        <Ionicons name="trash-outline" size={responsive.responsiveWidth(18)} color={colors.error} />
-                      </TouchableOpacity>
-                    ) : null}
-                    {(!deuda.saldada && canManageDeudas) ? (
-                      <TouchableOpacity
-                        style={[styles.actionButtonSmall, { backgroundColor: colors.primary }]}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleAddPago(deuda);
-                        }}
-                        disabled={loadingDeudaId !== null}
-                      >
-                        {loadingDeudaId === deuda.id_deuda ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Ionicons name="add-circle-outline" size={responsive.responsiveWidth(20)} color="#fff" />
-                        )}
-                      </TouchableOpacity>
-                    ) : null}
-                    <TouchableOpacity onPress={() => toggleDeudaExpand(deuda.id_deuda)}>
+
+                  {/* Deuda Header */}
+                  <View style={styles.deudaHeader}>
+                    <View style={styles.deudaHeaderLeft}>
+                      <View style={[
+                        styles.deudaStatusBadge,
+                        { backgroundColor: deuda.saldada ? '#4CAF50' : '#2196F3' }
+                      ]}>
+                        <Ionicons 
+                          name={deuda.saldada ? "checkmark-circle" : "time-outline"} 
+                          size={responsive.responsiveWidth(16)} 
+                          color="#fff" 
+                        />
+                      </View>
+                      <View style={styles.deudaInfo}>
+                        <Text style={[styles.deudaCliente, { color: colors.onSurface }]}>
+                          {deuda.cliente?.nombre || 'Cliente desconocido'}
+                        </Text>
+                        <Text style={[styles.deudaFecha, { color: colors.outline }]}>
+                          {new Date(deuda.fecha_hora).toLocaleDateString()}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.deudaHeaderActions}>
+                      {canManageDeudas ? (
+                        <TouchableOpacity
+                          style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            navigation.navigate('DeudaForm', { deuda, mode: 'edit' });
+                          }}
+                        >
+                          <Ionicons name="create-outline" size={responsive.responsiveWidth(18)} color={colors.primary} />
+                        </TouchableOpacity>
+                      ) : null}
+                      {canManageDeudas ? (
+                        <TouchableOpacity
+                          style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleDelete(deuda);
+                          }}
+                        >
+                          <Ionicons name="trash-outline" size={responsive.responsiveWidth(18)} color={colors.error} />
+                        </TouchableOpacity>
+                      ) : null}
+                      {(!deuda.saldada && canManageDeudas) ? (
+                        <TouchableOpacity
+                          style={[styles.actionButtonSmall, { backgroundColor: colors.primary }]}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleAddPago(deuda);
+                          }}
+                          disabled={loadingDeudaId !== null}
+                        >
+                          {loadingDeudaId === deuda.id_deuda ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Ionicons name="add-circle-outline" size={responsive.responsiveWidth(20)} color="#fff" />
+                          )}
+                        </TouchableOpacity>
+                      ) : null}
                       <Ionicons 
                         name={expandedDeudas[deuda.id_deuda] ? "chevron-up" : "chevron-down"} 
                         size={responsive.responsiveWidth(24)} 
                         color={colors.outline} 
                       />
-                    </TouchableOpacity>
+                    </View>
                   </View>
-                </TouchableOpacity>
 
-                {/* Deuda Details */}
-                <View style={styles.deudaDetails}>
-                  {(deuda.monto_cup && parseFloat(deuda.monto_cup) > 0) ? (
-                    <View style={styles.deudaAmountRow}>
-                      <Text style={[styles.deudaAmountLabel, { color: colors.outline }]}>Monto CUP:</Text>
+                  {/* Deuda Details */}
+                  <View style={styles.deudaDetails}>
+                    <Text style={[styles.deudaAmountLabel, { color: colors.outline }]}>Monto deuda:</Text>
+                    {(deuda.monto_cup && parseFloat(deuda.monto_cup) > 0) ? (
                       <Text style={[styles.deudaAmountValue, { color: colors.onSurface }]}>
-                        {`$${formatNumber(deuda.monto_cup)}`}
+                        CUP = ${formatNumber(deuda.monto_cup)}
                       </Text>
-                    </View>
-                  ) : null}
-                  {(deuda.monto_usd && parseFloat(deuda.monto_usd) > 0) ? (
-                    <View style={styles.deudaAmountRow}>
-                      <Text style={[styles.deudaAmountLabel, { color: colors.outline }]}>Monto USD:</Text>
+                    ) : null}
+                    {(deuda.monto_usd && parseFloat(deuda.monto_usd) > 0) ? (
                       <Text style={[styles.deudaAmountValue, { color: colors.onSurface }]}>
-                        {`$${formatNumber(deuda.monto_usd)}`}
+                        USD = ${formatNumber(deuda.monto_usd)}
                       </Text>
-                    </View>
-                  ) : null}
-                  {(deuda.monto_restante_cup && parseFloat(deuda.monto_restante_cup) > 0) ? (
-                    <View style={styles.deudaAmountRow}>
-                      <Text style={[styles.deudaAmountLabel, { color: colors.outline }]}>Restante CUP:</Text>
-                      <Text style={[
-                        styles.deudaAmountValue, 
-                        { 
-                          color: (deuda.monto_restante_cup || 0) > 0 ? colors.error : '#4CAF50',
-                          fontWeight: '700'
-                        }
-                      ]}>
-                        {`$${formatNumber(deuda.monto_restante_cup)}`}
-                      </Text>
-                    </View>
-                  ) : null}
-                  {(deuda.monto_restante_usd && parseFloat(deuda.monto_restante_usd) > 0) ? (
-                    <View style={styles.deudaAmountRow}>
-                      <Text style={[styles.deudaAmountLabel, { color: colors.outline }]}>Restante USD:</Text>
-                      <Text style={[
-                        styles.deudaAmountValue, 
-                        { 
-                          color: (deuda.monto_restante_usd || 0) > 0 ? colors.error : '#4CAF50',
-                          fontWeight: '700'
-                        }
-                      ]}>
-                        {`$${formatNumber(deuda.monto_restante_usd)}`}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
+                    ) : null}
+                    
+                    {!deuda.saldada && (
+                      <>
+                        <Text style={[styles.deudaAmountLabel, { color: colors.outline, marginTop: 8 }]}>Restante:</Text>
+                        {(deuda.monto_restante_cup && parseFloat(deuda.monto_restante_cup) > 0) ? (
+                          <Text style={[
+                            styles.deudaAmountValue,
+                            {
+                              color: (deuda.monto_restante_cup || 0) > 0 ? colors.error : '#4CAF50',
+                              fontWeight: '700'
+                            }
+                          ]}>
+                            CUP = ${formatNumber(deuda.monto_restante_cup)}
+                          </Text>
+                        ) : null}
+                        {(deuda.monto_restante_usd && parseFloat(deuda.monto_restante_usd) > 0) ? (
+                          <Text style={[
+                            styles.deudaAmountValue,
+                            {
+                              color: (deuda.monto_restante_usd || 0) > 0 ? colors.error : '#4CAF50',
+                              fontWeight: '700'
+                            }
+                          ]}>
+                            USD = ${formatNumber(deuda.monto_restante_usd)}
+                          </Text>
+                        ) : null}
+                      </>
+                    )}
+                  </View>
 
-                {/* Pagos List (Expanded) */}
-                {(expandedDeudas[deuda.id_deuda] && deuda.pagos && deuda.pagos.length > 0) ? (
-                  <View style={styles.pagosContainer}>
-                    <Text style={[styles.pagosTitle, { color: colors.onSurface }]}>
-                      {`Pagos Realizados (${deuda.pagos.length})`}
-                    </Text>
-                    {deuda.pagos.map((pago) => (
-                      <View key={pago.id_pago_deuda} style={[styles.pagoItem, { backgroundColor: colors.surface }]}>
-                        <View style={styles.pagoHeader}>
-                          <Text style={[styles.pagoFecha, { color: colors.outline }]}>
-                            {new Date(pago.fecha_hora).toLocaleString()}
-                          </Text>
-                          <Text style={[styles.pagoCantidad, { color: colors.primary }]}>
-                            {`$${formatNumber(pago.cantidad_pagada)}`}
-                          </Text>
-                        </View>
-                        <View style={styles.pagoDetails}>
-                          <Text style={[styles.pagoForma, { color: colors.onSurface }]}>
-                            {`Forma: ${pago.forma_pago || 'No especificada'}`}
-                          </Text>
-                          {pago.nota ? (
-                            <Text style={[styles.pagoNota, { color: colors.outline }]}>
-                              {`Nota: ${pago.nota}`}
+                  {/* Pagos List (Expanded) */}
+                  {(expandedDeudas[deuda.id_deuda] && deuda.pagos && deuda.pagos.length > 0) ? (
+                    <View style={styles.pagosContainer}>
+                      <Text style={[styles.pagosTitle, { color: colors.onSurface }]}>
+                        {`Pagos Realizados (${deuda.pagos.length})`}
+                      </Text>
+                      {deuda.pagos.map((pago) => (
+                        <View key={pago.id_pago_deuda} style={[styles.pagoItem, { backgroundColor: colors.surface }]}>
+                          <View style={styles.pagoHeader}>
+                            <Text style={[styles.pagoFecha, { color: colors.outline }]}>
+                              {new Date(pago.fecha_hora).toLocaleString()}
                             </Text>
-                          ) : null}
+                            <Text style={[styles.pagoCantidad, { color: colors.primary }]}>
+                              ${formatNumber(pago.cantidad_pagada)}
+                            </Text>
+                          </View>
+                          <View style={styles.pagoDetails}>
+                            <Text style={[styles.pagoForma, { color: colors.onSurface }]}>
+                              {`Forma: ${pago.forma_pago || 'No especificada'}`}
+                            </Text>
+                            {pago.nota ? (
+                              <Text style={[styles.pagoNota, { color: colors.outline }]}>
+                                {`Nota: ${pago.nota}`}
+                              </Text>
+                            ) : null}
+                          </View>
                         </View>
-                      </View>
-                    ))}
-                  </View>
-                ) : null}
+                      ))}
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
               </Card>
             ))}
           </>
@@ -856,75 +874,16 @@ const DeudaScreen = () => {
               </View>
 
               <View style={styles.formGroup}>
-                <Text style={[styles.label, { color: colors.outline }]}>Cambio de Moneda</Text>
+                <Text style={[styles.label, { color: colors.outline }]}>Nota</Text>
                 <TextInput
-                  style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                  style={[styles.input, styles.textArea, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
                   placeholderTextColor={colors.outline}
-                  placeholder="1.0"
-                  value={pagoFormData.cambio_moneda}
-                  onChangeText={(text) => setPagoFormData(prev => ({ ...prev, cambio_moneda: text }))}
-                  keyboardType="numeric"
+                  placeholder="Notas sobre el pago"
+                  value={pagoFormData.nota}
+                  onChangeText={(text) => setPagoFormData(prev => ({ ...prev, nota: text }))}
+                  multiline
+                  numberOfLines={4}
                 />
-              </View>
-
-              <View style={styles.formRow}>
-                <View style={[styles.formGroup, { flex: 1, marginRight: responsive.responsiveMargin(8) }]}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Fecha</Text>
-                  <TouchableOpacity
-                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    onPress={() => setShowDatePicker(true)}
-                  >
-                    <Text style={{ color: colors.onSurface }}>
-                      {pagoFormData.fecha.toLocaleDateString()}
-                    </Text>
-                  </TouchableOpacity>
-                  {showDatePicker ? (
-                    <DateTimePicker
-                      value={pagoFormData.fecha}
-                      mode="date"
-                      display="default"
-                      onChange={(event, selectedDate) => {
-                        if (event.type === 'dismissed') {
-                          setShowDatePicker(false);
-                          return;
-                        }
-                        setShowDatePicker(false);
-                        if (selectedDate) {
-                          setPagoFormData(prev => ({ ...prev, fecha: selectedDate }));
-                        }
-                      }}
-                    />
-                  ) : null}
-                </View>
-
-                <View style={[styles.formGroup, { flex: 1, marginLeft: responsive.responsiveMargin(8) }]}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Hora</Text>
-                  <TouchableOpacity
-                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    onPress={() => setShowTimePicker(true)}
-                  >
-                    <Text style={{ color: colors.onSurface }}>
-                      {pagoFormData.hora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                  </TouchableOpacity>
-                  {showTimePicker ? (
-                    <DateTimePicker
-                      value={pagoFormData.hora}
-                      mode="time"
-                      display="default"
-                      onChange={(event, selectedTime) => {
-                        if (event.type === 'dismissed') {
-                          setShowTimePicker(false);
-                          return;
-                        }
-                        setShowTimePicker(false);
-                        if (selectedTime) {
-                          setPagoFormData(prev => ({ ...prev, hora: selectedTime }));
-                        }
-                      }}
-                    />
-                  ) : null}
-                </View>
               </View>
 
               <View style={styles.modalActions}>
@@ -942,19 +901,34 @@ const DeudaScreen = () => {
                 </TouchableOpacity>
               </View>
             </ScrollView>
+            
+            {/* Toast dentro del modal para mostrar sobre el modal */}
+            {showPagoModal && (
+              <Toast
+                visible={toast.visible}
+                type={toast.type}
+                message={toast.message}
+                code={toast.code}
+                duration={toast.duration}
+                onHide={hideToast}
+                toastKey={toast.key}
+              />
+            )}
           </Card>
         </View>
       </Modal>
 
-      <Toast
-        visible={toast.visible}
-        type={toast.type}
-        message={toast.message}
-        code={toast.code}
-        duration={toast.duration}
-        onHide={hideToast}
-        toastKey={toast.key}
-      />
+      {!showPagoModal && (
+        <Toast
+          visible={toast.visible}
+          type={toast.type}
+          message={toast.message}
+          code={toast.code}
+          duration={toast.duration}
+          onHide={hideToast}
+          toastKey={toast.key}
+        />
+      )}
     </SafeAreaView>
   </>
   );
@@ -1499,6 +1473,37 @@ const createStyles = (responsive) => StyleSheet.create({
   tableAddButton: {
     borderWidth: 1,
     borderColor: 'transparent',
+  },
+  statusFilterSwitches: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(8),
+  },
+  statusFilterItem: {
+    flex: 1,
+  },
+  statusFilterSwitch: {
+    height: responsive.responsiveHeight(36),
+    borderRadius: 18,
+    padding: 3,
+    width: '100%',
+  },
+  statusFilterKnob: {
+    width: responsive.responsiveWidth(55),
+    height: responsive.responsiveHeight(30),
+    borderRadius: 15,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusFilterText: {
+    fontSize: responsive.responsiveFontSize(10),
+    fontWeight: '600',
+    fontFamily: 'Inter',
   },
 });
 
