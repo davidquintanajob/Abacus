@@ -59,7 +59,7 @@ const authenticate = require("../helpers/authenticate");
  * /movimiento/filter:
  *   get:
  *     summary: Filtrar movimientos con paginación
- *     description: Si se envían id_servicio_tienda_origen e id_servicio_tienda_destino, se buscan movimientos que coincidan con el origen o el destino; los demás filtros se mantienen como condiciones adicionales.
+ *     description: Si se envían id_tienda_origen e id_tienda_destino, se buscan movimientos que coincidan con el origen o el destino; id_servicio y los demás filtros se mantienen como condiciones adicionales.
  *     tags: [Movimientos]
  *     security:
  *       - bearerAuth: []
@@ -97,11 +97,15 @@ const authenticate = require("../helpers/authenticate");
  *           type: string
  *           format: date
  *       - in: query
- *         name: id_servicio_tienda_origen
+ *         name: id_tienda_origen
  *         schema:
  *           type: integer
  *       - in: query
- *         name: id_servicio_tienda_destino
+ *         name: id_tienda_destino
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: id_servicio
  *         schema:
  *           type: integer
  *     responses:
@@ -146,14 +150,14 @@ router.get("/movimiento/:id", authenticate(), movimientoController.getMovimiento
  *
  *       **1. Datos esperados:**
  *       - Datos de la lista: `id_usuario`, `fecha_hora`, `tipo_movimiento`, `estado`, `nota` (opcional).
- *       - `id_servicio_tienda_origen` e `id_servicio_tienda_destino` se reciben **una sola vez a nivel raíz** y se aplican a todos los items del arreglo `movimientos` (ya que normalmente el origen y el destino no cambian entre movimientos de la misma lista).
- *       - Lista `movimientos`: cada item debe tener `cantidad` y opcionalmente `nota`. Los IDs de origen/destino se toman del nivel raíz.
+ *       - `id_tienda_origen` e `id_tienda_destino` se reciben **una sola vez a nivel raíz** y se aplican a todos los items del arreglo `movimientos`.
+ *       - Cada item de `movimientos` debe indicar su propio `id_servicio`, `cantidad` y opcionalmente `nota`.
  *
  *       **2. Validaciones:**
  *       - El usuario debe existir.
- *       - El origen y el destino deben existir y estar asociados a un producto (herencia Servicio → Producto).
- *       - Origen y destino deben corresponder al **mismo producto** (mismo `id_servicio`).
- *       - Origen y destino no pueden ser el mismo `id_servicio_tienda`.
+ *       - El servicio debe existir como producto y debe estar asociado a la tienda origen.
+ *       - El `servicio_tienda` de destino se crea automáticamente si no existe, copiando precios, costos y cantidad_alerta del origen e iniciando cantidad en cero.
+ *       - Origen y destino no pueden ser la misma tienda.
  *       - Cada `cantidad` debe ser mayor que cero.
  *       - Si `estado` es `true`, el origen debe tener stock suficiente para cada movimiento.
  *
@@ -171,8 +175,8 @@ router.get("/movimiento/:id", authenticate(), movimientoController.getMovimiento
  *             required:
  *               - id_usuario
  *               - tipo_movimiento
- *               - id_servicio_tienda_origen
- *               - id_servicio_tienda_destino
+ *               - id_tienda_origen
+ *               - id_tienda_destino
  *               - movimientos
  *             properties:
  *               id_usuario:
@@ -188,19 +192,23 @@ router.get("/movimiento/:id", authenticate(), movimientoController.getMovimiento
  *               nota:
  *                 type: string
  *                 description: Nota general de la lista de movimientos
- *               id_servicio_tienda_origen:
+ *               id_tienda_origen:
  *                 type: integer
- *                 description: ID del servicio-tienda de origen. Se aplica a todos los items de `movimientos`.
- *               id_servicio_tienda_destino:
+ *                 description: ID de la tienda origen.
+ *               id_tienda_destino:
  *                 type: integer
- *                 description: ID del servicio-tienda de destino. Se aplica a todos los items de `movimientos`.
+ *                 description: ID de la tienda destino.
  *               movimientos:
  *                 type: array
  *                 items:
  *                   type: object
  *                   required:
+ *                     - id_servicio
  *                     - cantidad
  *                   properties:
+ *                     id_servicio:
+ *                       type: integer
+ *                       description: ID del servicio/producto de este movimiento
  *                     cantidad:
  *                       type: number
  *                       description: Cantidad a mover en este item. Debe ser mayor que cero.
@@ -236,7 +244,8 @@ router.post("/movimiento", authenticate(), movimientoController.createMovimiento
  *       **Lógica de actualización:**
  *       - Si el `estado` anterior era `true`, se revierten todos los efectos (stock y entradas) antes de aplicar los nuevos.
  *       - Luego se aplican los nuevos datos respetando la lógica del `estado`.
- *       - El `id_servicio_tienda_origen` e `id_servicio_tienda_destino` se reciben **una sola vez a nivel raíz** y se aplican a todos los items del arreglo `movimientos`.
+ *       - `id_tienda_origen` e `id_tienda_destino` se reciben **una sola vez a nivel raíz** y se aplican a todos los items del arreglo `movimientos`.
+ *       - Cada item de `movimientos` debe indicar su propio `id_servicio`, `cantidad` y opcionalmente `nota`.
  *       - Todo dentro de una transacción.
  *     requestBody:
  *       required: true
@@ -247,8 +256,8 @@ router.post("/movimiento", authenticate(), movimientoController.createMovimiento
  *             required:
  *               - id_usuario
  *               - tipo_movimiento
- *               - id_servicio_tienda_origen
- *               - id_servicio_tienda_destino
+ *               - id_tienda_origen
+ *               - id_tienda_destino
  *               - movimientos
  *             properties:
  *               id_usuario:
@@ -262,19 +271,23 @@ router.post("/movimiento", authenticate(), movimientoController.createMovimiento
  *                 type: boolean
  *               nota:
  *                 type: string
- *               id_servicio_tienda_origen:
+ *               id_tienda_origen:
  *                 type: integer
- *                 description: ID del servicio-tienda de origen. Se aplica a todos los items de `movimientos`.
- *               id_servicio_tienda_destino:
+ *                 description: ID de la tienda origen.
+ *               id_tienda_destino:
  *                 type: integer
- *                 description: ID del servicio-tienda de destino. Se aplica a todos los items de `movimientos`.
+ *                 description: ID de la tienda destino.
  *               movimientos:
  *                 type: array
  *                 items:
  *                   type: object
  *                   required:
+ *                     - id_servicio
  *                     - cantidad
  *                   properties:
+ *                     id_servicio:
+ *                       type: integer
+ *                       description: ID del servicio/producto de este movimiento
  *                     cantidad:
  *                       type: number
  *                     nota:

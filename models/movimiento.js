@@ -29,27 +29,35 @@ const Movimiento = sequelize.define(
         },
       },
     },
-    // FK hacia ServicioTienda (origen)
-    id_servicio_tienda_origen: {
+    id_tienda_origen: {
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: "servicio_tiendas",
-        key: "id_servicio_tienda",
+        model: "tiendas",
+        key: "id_tienda",
       },
       onUpdate: "CASCADE",
-      onDelete: "RESTRICT", // No permitir eliminar un servicio_tienda con movimientos como origen
+      onDelete: "RESTRICT",
     },
-    // FK hacia ServicioTienda (destino)
-    id_servicio_tienda_destino: {
+    id_tienda_destino: {
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: "servicio_tiendas",
-        key: "id_servicio_tienda",
+        model: "tiendas",
+        key: "id_tienda",
       },
       onUpdate: "CASCADE",
-      onDelete: "RESTRICT", // No permitir eliminar un servicio_tienda con movimientos como destino
+      onDelete: "RESTRICT",
+    },
+    id_servicio: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: "servicios",
+        key: "id_servicio",
+      },
+      onUpdate: "CASCADE",
+      onDelete: "RESTRICT",
     },
     // FK hacia MovimientoLista (obligatoria)
     id_movimiento_lista: {
@@ -67,8 +75,9 @@ const Movimiento = sequelize.define(
     timestamps: true,
     tableName: "movimientos",
     indexes: [
-      { fields: ["id_servicio_tienda_origen"] },
-      { fields: ["id_servicio_tienda_destino"] },
+      { fields: ["id_tienda_origen"] },
+      { fields: ["id_tienda_destino"] },
+      { fields: ["id_servicio"] },
       { fields: ["id_movimiento_lista"] },
     ],
   }
@@ -76,13 +85,17 @@ const Movimiento = sequelize.define(
 
 // Asociaciones
 Movimiento.associate = function (models) {
-  Movimiento.belongsTo(models.ServicioTienda, {
-    foreignKey: "id_servicio_tienda_origen",
-    as: "servicioTiendaOrigen",
+  Movimiento.belongsTo(models.Tienda, {
+    foreignKey: "id_tienda_origen",
+    as: "tiendaOrigen",
   });
-  Movimiento.belongsTo(models.ServicioTienda, {
-    foreignKey: "id_servicio_tienda_destino",
-    as: "servicioTiendaDestino",
+  Movimiento.belongsTo(models.Tienda, {
+    foreignKey: "id_tienda_destino",
+    as: "tiendaDestino",
+  });
+  Movimiento.belongsTo(models.Servicio, {
+    foreignKey: "id_servicio",
+    as: "servicio",
   });
   Movimiento.belongsTo(models.MovimientoLista, {
     foreignKey: "id_movimiento_lista",

@@ -11,6 +11,7 @@ const path = require("path");
 const fs = require("fs");
 const jwt = require("jsonwebtoken");
 const { throwError } = require("./helpers/errorLauncher"); // <-- Importar throwError
+const { DataTypes } = require("sequelize");
 
 // <-- NUEVO: Importar el gestor de licencias
 const { SecureLicenseManager } = require("./helpers/SecureLicenseManager");

@@ -45,8 +45,9 @@ const filterMovimientos = async (req, res) => {
       estado,
       fecha_desde,
       fecha_hasta,
-      id_servicio_tienda_origen,
-      id_servicio_tienda_destino,
+      id_tienda_origen,
+      id_tienda_destino,
+      id_servicio,
     } = req.query;
 
     let limitNum = parseInt(limit, 10) || 10;
@@ -80,15 +81,20 @@ const filterMovimientos = async (req, res) => {
       if (isNaN(date.getTime())) throwError("Fecha hasta inválida.", 400);
       filters.fecha_hasta = date;
     }
-    if (id_servicio_tienda_origen) {
-      const val = parseInt(id_servicio_tienda_origen, 10);
-      if (isNaN(val) || val < 1) throwError("id_servicio_tienda_origen debe ser un entero positivo.", 400);
-      filters.id_servicio_tienda_origen = val;
+    if (id_tienda_origen) {
+      const val = parseInt(id_tienda_origen, 10);
+      if (isNaN(val) || val < 1) throwError("id_tienda_origen debe ser un entero positivo.", 400);
+      filters.id_tienda_origen = val;
     }
-    if (id_servicio_tienda_destino) {
-      const val = parseInt(id_servicio_tienda_destino, 10);
-      if (isNaN(val) || val < 1) throwError("id_servicio_tienda_destino debe ser un entero positivo.", 400);
-      filters.id_servicio_tienda_destino = val;
+    if (id_tienda_destino) {
+      const val = parseInt(id_tienda_destino, 10);
+      if (isNaN(val) || val < 1) throwError("id_tienda_destino debe ser un entero positivo.", 400);
+      filters.id_tienda_destino = val;
+    }
+    if (id_servicio) {
+      const val = parseInt(id_servicio, 10);
+      if (isNaN(val) || val < 1) throwError("id_servicio debe ser un entero positivo.", 400);
+      filters.id_servicio = val;
     }
 
     const offset = (pageNum - 1) * limitNum;
@@ -111,8 +117,9 @@ const filterMovimientos = async (req, res) => {
 // ---------- Helper: combinar IDs raíz con items de movimientos ----------
 const buildMovimientosItems = (idOrigen, idDestino, movimientos) => {
   return movimientos.map((item) => ({
-    id_servicio_tienda_origen: idOrigen,
-    id_servicio_tienda_destino: idDestino,
+    id_servicio: Number(item.id_servicio),
+    id_tienda_origen: idOrigen,
+    id_tienda_destino: idDestino,
     cantidad: item.cantidad,
     nota: item.nota || null,
   }));
@@ -127,18 +134,24 @@ const createMovimiento = async (req, res) => {
       tipo_movimiento,
       estado,
       nota,
-      id_servicio_tienda_origen,
-      id_servicio_tienda_destino,
+      id_tienda_origen,
+      id_tienda_destino,
       movimientos,
     } = req.body;
 
     const errors = [];
     if (!id_usuario) errors.push("id_usuario es obligatorio.");
     if (!tipo_movimiento || tipo_movimiento.trim() === "") errors.push("tipo_movimiento es obligatorio.");
-    if (!id_servicio_tienda_origen) errors.push("id_servicio_tienda_origen es obligatorio.");
-    if (!id_servicio_tienda_destino) errors.push("id_servicio_tienda_destino es obligatorio.");
+    if (!id_tienda_origen) errors.push("id_tienda_origen es obligatorio.");
+    if (!id_tienda_destino) errors.push("id_tienda_destino es obligatorio.");
     if (!movimientos || !Array.isArray(movimientos) || movimientos.length === 0) {
       errors.push("movimientos debe ser un arreglo no vacío.");
+    } else {
+      movimientos.forEach((item, index) => {
+        if (!item || !Number.isInteger(Number(item.id_servicio)) || Number(item.id_servicio) < 1) {
+          errors.push(`movimientos[${index}].id_servicio debe ser un entero positivo.`);
+        }
+      });
     }
     if (estado !== undefined && typeof estado !== "boolean") {
       errors.push("estado debe ser booleano (true/false).");
@@ -157,8 +170,8 @@ const createMovimiento = async (req, res) => {
 
     // Construir los items aplicando los IDs raíz a cada uno
     const movimientosFull = buildMovimientosItems(
-      id_servicio_tienda_origen,
-      id_servicio_tienda_destino,
+      id_tienda_origen,
+      id_tienda_destino,
       movimientos
     );
 
@@ -191,18 +204,24 @@ const updateMovimiento = async (req, res) => {
       tipo_movimiento,
       estado,
       nota,
-      id_servicio_tienda_origen,
-      id_servicio_tienda_destino,
+      id_tienda_origen,
+      id_tienda_destino,
       movimientos,
     } = req.body;
 
     const errors = [];
     if (!id_usuario) errors.push("id_usuario es obligatorio.");
     if (!tipo_movimiento || tipo_movimiento.trim() === "") errors.push("tipo_movimiento es obligatorio.");
-    if (!id_servicio_tienda_origen) errors.push("id_servicio_tienda_origen es obligatorio.");
-    if (!id_servicio_tienda_destino) errors.push("id_servicio_tienda_destino es obligatorio.");
+    if (!id_tienda_origen) errors.push("id_tienda_origen es obligatorio.");
+    if (!id_tienda_destino) errors.push("id_tienda_destino es obligatorio.");
     if (!movimientos || !Array.isArray(movimientos) || movimientos.length === 0) {
       errors.push("movimientos debe ser un arreglo no vacío.");
+    } else {
+      movimientos.forEach((item, index) => {
+        if (!item || !Number.isInteger(Number(item.id_servicio)) || Number(item.id_servicio) < 1) {
+          errors.push(`movimientos[${index}].id_servicio debe ser un entero positivo.`);
+        }
+      });
     }
     if (estado !== undefined && typeof estado !== "boolean") {
       errors.push("estado debe ser booleano (true/false).");
@@ -221,8 +240,8 @@ const updateMovimiento = async (req, res) => {
 
     // Construir los items aplicando los IDs raíz a cada uno
     const movimientosFull = buildMovimientosItems(
-      id_servicio_tienda_origen,
-      id_servicio_tienda_destino,
+      id_tienda_origen,
+      id_tienda_destino,
       movimientos
     );
 

@@ -127,5 +127,31 @@
     "dependiente": false,
     "almacenero": false,
     "economico": false
+  },
+  "autoWithdrawOnEntry": true,
+  "movimientoAccessLevels": {
+    "dependiente": "own_store",
+    "almacenero": "all_stores",
+    "economico": "none"
+  },
+  "movimientoManagePermissions": {
+    "dependiente": true,
+    "almacenero": false,
+    "economico": false
+  },
+  "deudaAccessLevels": {
+    "dependiente": "none",
+    "almacenero": "none",
+    "economico": "none"
+  },
+  "deudaManagePermissions": {
+    "dependiente": false,
+    "almacenero": false,
+    "economico": false
+  },
+  "clienteManagePermissions": {
+    "dependiente": false,
+    "almacenero": false,
+    "economico": false
   }
 }

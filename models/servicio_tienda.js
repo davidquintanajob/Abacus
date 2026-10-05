@@ -86,14 +86,6 @@ ServicioTienda.associate = function(models) {
     foreignKey: "id_servicio_tienda",
     as: "ventas",
   });
-  ServicioTienda.hasMany(models.Movimiento, {
-    foreignKey: "id_servicio_tienda_origen",
-    as: "movimientos_origen",
-  });
-  ServicioTienda.hasMany(models.Movimiento, {
-    foreignKey: "id_servicio_tienda_destino",
-    as: "movimientos_destino",
-  });
 };
 
 module.exports = { ServicioTienda };

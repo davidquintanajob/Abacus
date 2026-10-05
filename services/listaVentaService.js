@@ -1,4 +1,6 @@
 const { ListaVenta } = require("../models/lista_venta");
+const { Cliente } = require("../models/cliente");
+const { Deuda } = require("../models/deuda");
 const { Venta } = require("../models/venta");
 const { VentaEntrada } = require("../models/venta_entrada");
 const { Entrada } = require("../models/entrada");
@@ -19,6 +21,8 @@ const { throwError } = require("../helpers/errorLauncher");
 const getListaVentaWithRelations = async (id) => {
   const lista = await ListaVenta.findByPk(id, {
     include: [
+      { model: Cliente, as: "cliente" },
+      { model: Deuda, as: "deuda" },
       {
         model: Venta,
         as: "ventas",
@@ -505,7 +509,12 @@ const filterListaVentas = async (filters, limit, offset) => {
 
   const queryOptions = {
     where,
-    include: [ventasInclude, operacionesInclude],
+    include: [
+      { model: Cliente, as: "cliente" },
+      { model: Deuda, as: "deuda" },
+      ventasInclude,
+      operacionesInclude,
+    ],
     order: [["fecha_hora", "DESC"]],
     distinct: true,
   };
