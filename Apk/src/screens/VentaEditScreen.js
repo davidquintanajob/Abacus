@@ -707,6 +707,7 @@ const VentaEditContent = () => {
         id_usuario: user?.id_usuario || formData.id_usuario,
         cambio_moneda: cambio,
         ventas: ventasConAjuste,
+        is_deuda: venta?.is_deuda || false, // Maintain deuda status
       };
 
       await updateVenta(venta.id_lista_venta, ventaData);
@@ -968,20 +969,29 @@ const VentaEditContent = () => {
               </ScrollView>
             )}
 
-            <View style={{ marginTop: responsive.responsiveHeight(12) }}>
-              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Buscar producto</Text>
-            </View>
+            {!venta?.is_deuda && (
+              <>
+                <View style={{ marginTop: responsive.responsiveHeight(12) }}>
+                  <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Buscar producto</Text>
+                </View>
 
-            <View style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-              <Ionicons name="search" size={responsive.responsiveWidth(20)} color={colors.outline} />
-              <TextInput
-                style={[styles.searchInput, { color: colors.onSurface }]}
-                placeholder="Buscar producto o servicio..."
-                placeholderTextColor={colors.outline}
-                value={searchText}
-                onChangeText={setSearchText}
-              />
-            </View>
+                <View style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                  <Ionicons name="search" size={responsive.responsiveWidth(20)} color={colors.outline} />
+                  <TextInput
+                    style={[styles.searchInput, { color: colors.onSurface }]}
+                    placeholder="Buscar producto o servicio..."
+                    placeholderTextColor={colors.outline}
+                    value={searchText}
+                    onChangeText={setSearchText}
+                  />
+                </View>
+              </>
+            )}
+            {venta?.is_deuda && (
+              <View style={{ marginTop: responsive.responsiveHeight(12), padding: responsive.responsivePadding(16), backgroundColor: colors.errorContainer, borderRadius: responsive.responsiveWidth(8) }}>
+                <Text style={[{ color: colors.error, fontWeight: '600' }]}>No se pueden modificar los productos de una venta de deuda. Para cambiar los productos, elimine la deuda y vuelva a crear la venta.</Text>
+              </View>
+            )}
 
             {showSearchDropdown && (
               <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
@@ -1030,9 +1040,10 @@ const VentaEditContent = () => {
               saleItems.map((item, index) => (
                 <TouchableOpacity
                   key={index}
-                  style={[styles.itemCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-                  onPress={() => handleOpenPriceEditModal(index)}
-                  activeOpacity={0.7}
+                  style={[styles.itemCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant, opacity: venta?.is_deuda ? 0.7 : 1 }]}
+                  onPress={() => !venta?.is_deuda && handleOpenPriceEditModal(index)}
+                  activeOpacity={venta?.is_deuda ? 1 : 0.7}
+                  disabled={venta?.is_deuda}
                 >
                   {item.imagen && (
                     <Image
@@ -1067,8 +1078,9 @@ const VentaEditContent = () => {
                   </View>
                   <View style={styles.itemActions}>
                     <TouchableOpacity
-                      style={[styles.quantityButton, { backgroundColor: colors.primaryContainer }]}
-                      onPress={() => updateItemQuantity(index, item.cantidad - 1)}
+                      style={[styles.quantityButton, { backgroundColor: venta?.is_deuda ? colors.outlineVariant : colors.primaryContainer }]}
+                      onPress={() => !venta?.is_deuda && updateItemQuantity(index, item.cantidad - 1)}
+                      disabled={venta?.is_deuda}
                     >
                       <Ionicons name="remove" size={responsive.responsiveWidth(16)} color={isDark ? colors.primary : '#fff'} />
                     </TouchableOpacity>
@@ -1076,6 +1088,7 @@ const VentaEditContent = () => {
                       style={[styles.quantityInput, { color: colors.onSurface }]}
                       value={item.cantidad === 0 ? '' : item.cantidad.toString()}
                       onChangeText={(text) => {
+                        if (venta?.is_deuda) return;
                         if (text === '') {
                           updateItemQuantity(index, 0);
                           return;
@@ -1086,143 +1099,164 @@ const VentaEditContent = () => {
                         }
                       }}
                       onBlur={() => {
+                        if (venta?.is_deuda) return;
                         if (item.cantidad === 0) {
                           updateItemQuantity(index, 1);
                         }
                       }}
                       keyboardType="number-pad"
                       textAlign="center"
+                      editable={!venta?.is_deuda}
                     />
                     <TouchableOpacity
-                      style={[styles.quantityButton, { backgroundColor: colors.primaryContainer }]}
-                      onPress={() => updateItemQuantity(index, item.cantidad + 1)}
+                      style={[styles.quantityButton, { backgroundColor: venta?.is_deuda ? colors.outlineVariant : colors.primary }]}
+                      onPress={() => !venta?.is_deuda && updateItemQuantity(index, item.cantidad + 1)}
+                      disabled={venta?.is_deuda}
                     >
-                      <Ionicons name="add" size={responsive.responsiveWidth(16)} color={isDark ? colors.primary : '#fff'} />
+                      <Ionicons name="add" size={responsive.responsiveWidth(16)} color="#fff" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.deleteButton, { backgroundColor: venta?.is_deuda ? colors.outlineVariant : colors.errorContainer }]}
+                      onPress={() => !venta?.is_deuda && confirmDeleteItem(index)}
+                      disabled={venta?.is_deuda}
+                    >
+                      <Ionicons name="close" size={responsive.responsiveWidth(16)} color={venta?.is_deuda ? colors.outline : colors.error} />
                     </TouchableOpacity>
                   </View>
-                  <TouchableOpacity
-                    style={[styles.deleteButton, { backgroundColor: colors.errorContainer }]}
-                    onPress={() => removeItem(index)}
-                  >
-                    <Ionicons name="close" size={responsive.responsiveWidth(16)} color={colors.error} />
-                  </TouchableOpacity>
                 </TouchableOpacity>
               ))
             )}
           </Card>
 
-          {/* Payment Section */}
-          <Card style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Pago</Text>
-            </View>
+          {/* Payment Section - Hide if venta has deuda, only show Nota */}
+          {!venta?.is_deuda ? (
+            <Card style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Pago</Text>
+              </View>
 
-            {['efectivo_cup', 'efectivo_usd', 'transferencia_cup', 'transferencia_usd']
-              .filter(tipo => cuentaConfig[tipo]?.length > 0)
-              .map((tipo) => {
-              const label = tipo.replace('_', ' ').toUpperCase();
-              const selectedCuenta = selectedCuentas[tipo];
+              {['efectivo_cup', 'efectivo_usd', 'transferencia_cup', 'transferencia_usd']
+                .filter(tipo => cuentaConfig[tipo]?.length > 0)
+                .map((tipo) => {
+                const label = tipo.replace('_', ' ').toUpperCase();
+                const selectedCuenta = selectedCuentas[tipo];
 
-              return (
-                <View key={tipo} style={styles.paymentRow}>
-                  <View style={styles.paymentLabel}>
-                    <Text style={[styles.paymentLabelText, { color: colors.onSurface }]}>{label}</Text>
-                  </View>
+                return (
+                  <View key={tipo} style={styles.paymentRow}>
+                    <View style={styles.paymentLabel}>
+                      <Text style={[styles.paymentLabelText, { color: colors.onSurface }]}>{label}</Text>
+                    </View>
 
-                  <View style={styles.paymentInputRow}>
-                    <TouchableOpacity
-                      style={[styles.cuentaSelector, { backgroundColor: colors.background, borderColor: colors.outlineVariant, flex: 0.6 }]}
-                      onPress={() => {
-                        setSelectorTipoCuenta(tipo);
-                        setShowCuentaSelector(true);
-                      }}
-                    >
-                      <Text style={[styles.cuentaSelectorText, { color: selectedCuenta ? colors.onSurface : colors.outline }]} numberOfLines={1}>
-                        {selectedCuenta?.nombre || 'Seleccionar cuenta...'}
-                      </Text>
-                      <Ionicons name="chevron-down" size={responsive.responsiveWidth(16)} color={colors.outline} />
-                    </TouchableOpacity>
-
-                    <View style={{ flex: 0.4, marginTop: (tipo === 'efectivo_usd' || tipo === 'transferencia_usd') ? responsive.responsiveHeight(8) : 0 }}>
-                      <TextInput
-                        style={[
-                          styles.paymentInput, 
-                          { 
-                            backgroundColor: colors.background, 
-                            color: colors.onSurface, 
-                            borderColor: colors.outlineVariant,
-                            fontSize: responsive.responsiveWidth(14)
-                          }
-                        ]}
-                        placeholder={show5Decimals ? "0.00000" : "0.00"}
-                        placeholderTextColor={colors.outline}
-                        value={getPaymentDisplayValue(tipo)}
-                        onChangeText={(text) => {
-                          const sanitizedText = text.replace(/-/g, '');
-                          setPaymentAmounts(prev => ({ ...prev, [tipo]: sanitizedText }));
+                    <View style={styles.paymentInputRow}>
+                      <TouchableOpacity
+                        style={[styles.cuentaSelector, { backgroundColor: colors.background, borderColor: colors.outlineVariant, flex: 0.6 }]}
+                        onPress={() => {
+                          setSelectorTipoCuenta(tipo);
+                          setShowCuentaSelector(true);
                         }}
-                        onFocus={() => setFocusedPaymentField(tipo)}
-                        onBlur={() => {
-                          setFocusedPaymentField(null);
-                          // Format the value when field loses focus
-                          const value = paymentAmounts[tipo];
-                          if (value && value !== '') {
-                            const num = parseFloat(value);
-                            if (!isNaN(num)) {
-                              const formatted = show5Decimals ? num.toFixed(5) : num.toFixed(2);
-                              setPaymentAmounts(prev => ({ ...prev, [tipo]: formatted }));
-                            }
-                          }
-                        }}
-                        keyboardType="decimal-pad"
-                      />
-                      {(tipo === 'efectivo_usd' || tipo === 'transferencia_usd') && (
-                        <Text style={[styles.conversionText, { color: colors.outline, fontSize: responsive.responsiveWidth(8) }]}>
-                          {(() => {
-                            const remainingCUP = getRemainingAmount();
-                            const cambio = parseFloat(formData.cambio_moneda || cupToUsdRate);
-                            const remainingUSD = remainingCUP > 0 ? (remainingCUP / cambio).toFixed(2) : '0.00';
-                            return `(${show5Decimals ? formatNumber5Decimals(remainingCUP) : formatNumber2Decimals(remainingCUP)}) / (${cambio}) = (${remainingUSD})`;
-                          })()}
+                      >
+                        <Text style={[styles.cuentaSelectorText, { color: selectedCuenta ? colors.onSurface : colors.outline }]} numberOfLines={1}>
+                          {selectedCuenta?.nombre || 'Seleccionar cuenta...'}
                         </Text>
-                      )}
+                        <Ionicons name="chevron-down" size={responsive.responsiveWidth(16)} color={colors.outline} />
+                      </TouchableOpacity>
+
+                      <View style={{ flex: 0.4, marginTop: (tipo === 'efectivo_usd' || tipo === 'transferencia_usd') ? responsive.responsiveHeight(8) : 0 }}>
+                        <TextInput
+                          style={[
+                            styles.paymentInput, 
+                            { 
+                              backgroundColor: colors.background, 
+                              color: colors.onSurface, 
+                              borderColor: colors.outlineVariant,
+                              fontSize: responsive.responsiveWidth(14)
+                            }
+                          ]}
+                          placeholder={show5Decimals ? "0.00000" : "0.00"}
+                          placeholderTextColor={colors.outline}
+                          value={getPaymentDisplayValue(tipo)}
+                          onChangeText={(text) => {
+                            const sanitizedText = text.replace(/-/g, '');
+                            setPaymentAmounts(prev => ({ ...prev, [tipo]: sanitizedText }));
+                          }}
+                          onFocus={() => setFocusedPaymentField(tipo)}
+                          onBlur={() => {
+                            setFocusedPaymentField(null);
+                            // Format the value when field loses focus
+                            const value = paymentAmounts[tipo];
+                            if (value && value !== '') {
+                              const num = parseFloat(value);
+                              if (!isNaN(num)) {
+                                const formatted = show5Decimals ? num.toFixed(5) : num.toFixed(2);
+                                setPaymentAmounts(prev => ({ ...prev, [tipo]: formatted }));
+                              }
+                            }
+                          }}
+                          keyboardType="decimal-pad"
+                        />
+                        {(tipo === 'efectivo_usd' || tipo === 'transferencia_usd') && (
+                          <Text style={[styles.conversionText, { color: colors.outline, fontSize: responsive.responsiveWidth(8) }]}>
+                            {(() => {
+                              const remainingCUP = getRemainingAmount();
+                              const cambio = parseFloat(formData.cambio_moneda || cupToUsdRate);
+                              const remainingUSD = remainingCUP > 0 ? (remainingCUP / cambio).toFixed(2) : '0.00';
+                              return `(${show5Decimals ? formatNumber5Decimals(remainingCUP) : formatNumber2Decimals(remainingCUP)}) / (${cambio}) = (${remainingUSD})`;
+                            })()}
+                          </Text>
+                        )}
+                      </View>
                     </View>
                   </View>
-                </View>
-              );
-            })}
+                );
+              })}
 
-            <View style={[styles.totalSection, { backgroundColor: colors.primary }]}>
-              <Text style={[styles.totalLabel, { color: '#fff' }]}>Total a pagar:</Text>
-              <Text style={[styles.totalAmount, { color: '#fff' }]}>
-                ${show5Decimals ? formatNumber5Decimals(calculateTotal()) : formatNumber2Decimals(calculateTotal())} CUP
-              </Text>
-            </View>
-
-            {Math.abs(getRemainingAmount()) > 0.01 && (
-              <View style={[styles.remainingSection, { backgroundColor: getRemainingAmount() > 0 ? colors.errorContainer : colors.secondaryContainer }]}>
-                <Text style={[styles.remainingLabel, { color: getRemainingAmount() > 0 ? colors.error : colors.onSecondaryContainer }]}>
-                  {getRemainingAmount() > 0 ? 'Falta por pagar:' : 'Cambio a devolver:'}
-                </Text>
-                <Text style={[styles.remainingAmount, { color: getRemainingAmount() > 0 ? colors.error : colors.onSecondaryContainer }]}>
-                  ${show5Decimals ? formatNumber5Decimals(Math.abs(getRemainingAmount())) : formatNumber2Decimals(Math.abs(getRemainingAmount()))} CUP
+              <View style={[styles.totalSection, { backgroundColor: colors.primary }]}>
+                <Text style={[styles.totalLabel, { color: '#fff' }]}>Total a pagar:</Text>
+                <Text style={[styles.totalAmount, { color: '#fff' }]}>
+                  ${show5Decimals ? formatNumber5Decimals(calculateTotal()) : formatNumber2Decimals(calculateTotal())} CUP
                 </Text>
               </View>
-            )}
 
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Nota</Text>
-            </View>
-            <TextInput
-              style={[styles.notaInput, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-              placeholder="Agregar nota a la venta (opcional)..."
-              placeholderTextColor={colors.outline}
-              value={ventaNota}
-              onChangeText={setVentaNota}
-              multiline
-              numberOfLines={3}
-            />
-          </Card>
+              {Math.abs(getRemainingAmount()) > 0.01 && (
+                <View style={[styles.remainingSection, { backgroundColor: getRemainingAmount() > 0 ? colors.errorContainer : colors.secondaryContainer }]}>
+                  <Text style={[styles.remainingLabel, { color: getRemainingAmount() > 0 ? colors.error : colors.onSecondaryContainer }]}>
+                    {getRemainingAmount() > 0 ? 'Falta por pagar:' : 'Cambio a devolver:'}
+                  </Text>
+                  <Text style={[styles.remainingAmount, { color: getRemainingAmount() > 0 ? colors.error : colors.onSecondaryContainer }]}>
+                    ${show5Decimals ? formatNumber5Decimals(Math.abs(getRemainingAmount())) : formatNumber2Decimals(Math.abs(getRemainingAmount()))} CUP
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Nota</Text>
+              </View>
+              <TextInput
+                style={[styles.notaInput, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                placeholder="Agregar nota a la venta (opcional)..."
+                placeholderTextColor={colors.outline}
+                value={ventaNota}
+                onChangeText={setVentaNota}
+                multiline
+                numberOfLines={3}
+              />
+            </Card>
+          ) : (
+            <Card style={[styles.sectionCard, { backgroundColor: colors.surface }]}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Nota</Text>
+              </View>
+              <TextInput
+                style={[styles.notaInput, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                placeholder="Agregar nota a la venta (opcional)..."
+                placeholderTextColor={colors.outline}
+                value={ventaNota}
+                onChangeText={setVentaNota}
+                multiline
+                numberOfLines={3}
+              />
+            </Card>
+          )}
 
           {/* Additional Fields Card - Usuario, Cambio de Moneda, Fecha */}
           <Card style={[styles.sectionCardCompact, { backgroundColor: colors.surface }]}>
@@ -1273,10 +1307,20 @@ const VentaEditContent = () => {
                     <View style={styles.deudaInfoItem}>
                       <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Cantidad pagada</Text>
                       <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
-                        {venta.deuda.monto_restante_cup !== undefined ? 
-                          `$${(venta.deuda.monto_cup - venta.deuda.monto_restante_cup).toFixed(2)} CUP` : ''}
-                        {venta.deuda.monto_restante_usd !== undefined ? 
-                          `$${(venta.deuda.monto_usd - venta.deuda.monto_restante_usd).toFixed(2)} USD` : ''}
+                        {(() => {
+                          const pagadoCup = venta.deuda.monto_restante_cup !== undefined 
+                            ? venta.deuda.monto_cup - venta.deuda.monto_restante_cup 
+                            : 0;
+                          const pagadoUsd = venta.deuda.monto_restante_usd !== undefined 
+                            ? venta.deuda.monto_usd - venta.deuda.monto_restante_usd 
+                            : 0;
+                          
+                          let parts = [];
+                          if (pagadoCup > 0) parts.push(`(${pagadoCup.toFixed(2)}) CUP`);
+                          if (pagadoUsd > 0) parts.push(`(${pagadoUsd.toFixed(2)}) USD`);
+                          
+                          return parts.join(' ');
+                        })()}
                       </Text>
                     </View>
                   </View>

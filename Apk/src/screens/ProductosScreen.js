@@ -50,31 +50,12 @@ const ProductosContent = () => {
   const isInitializedRef = useRef(false);
   const filtersRef = useRef(filters);
   const userTiendaRef = useRef(user?.id_tienda);
+  const savedPaginationRef = useRef(null);
 
   // Keep refs in sync with state
   useEffect(() => {
     isInitializedRef.current = isInitialized;
   }, [isInitialized]);
-
-  // Restore pagination state when screen gains focus
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', async () => {
-      if (!isFirstFocus.current) {
-        try {
-          const savedState = await AsyncStorage.getItem('productos_state');
-          if (savedState) {
-            const parsedState = JSON.parse(savedState);
-            console.log('[ProductosScreen] Restoring pagination state:', parsedState.pagination);
-            setPagination(prev => ({ ...prev, currentPage: parsedState.pagination.currentPage }));
-          }
-        } catch (error) {
-          console.error('Error restoring pagination state:', error);
-        }
-      }
-    });
-
-    return unsubscribe;
-  }, [navigation]);
 
   useEffect(() => {
     filtersRef.current = filters;
@@ -85,7 +66,7 @@ const ProductosContent = () => {
   }, [user?.id_tienda]);
 
   // Filter states
-  const [filters, setFilters] = useState({ nombre: '', codigo: '', categoria: '', esvendible: '', id_tienda: '', cantidad_min: '0.01', cantidad_max: '' });
+  const [filters, setFilters] = useState({ nombre: '', codigo: '', categoria: '', esvendible: '', id_tienda: '', cantidad_min: '', cantidad_max: '' });
   const [tiendas, setTiendas] = useState([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -94,6 +75,8 @@ const ProductosContent = () => {
   const [showCategoriaDropdown, setShowCategoriaDropdown] = useState(false);
   const [categoriaSearchText, setCategoriaSearchText] = useState('');
   
+  const isFirstLoadRef = useRef(true);
+
   const predefinedCategories = ['Alimentos', 'Bebidas', 'Limpieza', 'Higiene', 'Electrónicos', 'Ropa', 'Medicamentos', 'Otros'];
   const [customCategories, setCustomCategories] = useState([]);
 
@@ -173,7 +156,8 @@ const ProductosContent = () => {
         nombre: user.tienda?.nombre || `Tienda ${user.id_tienda}`
       };
       setTiendas([userTienda]);
-      setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
+      // Set both tienda filter and cantidad_min=0.01 on first load
+      setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString(), cantidad_min: '0.01' }));
       setUserTiendaReady(true);
       setIsInitialized(true);
     }
@@ -213,50 +197,24 @@ const ProductosContent = () => {
     }
   }, [isOfflineMode]);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      // Only fetch on screen focus after initial load
-      if (isFirstFocus.current) {
-        isFirstFocus.current = false;
-        return;
+  // Restore saved state only on initial load
+  useEffect(() => {
+    const restoreState = async () => {
+      try {
+        const savedState = await AsyncStorage.getItem('productos_state');
+        if (savedState) {
+          const parsedState = JSON.parse(savedState);
+          setFilters(parsedState.filters);
+          setPagination(prev => ({ ...prev, currentPage: parsedState.pagination.currentPage }));
+          // Clear the saved state after restoring to avoid issues
+          await AsyncStorage.removeItem('productos_state');
+        }
+      } catch (error) {
+        console.error('Error restoring state:', error);
       }
-      if (isInitializedRef.current) {
-        // Restore saved state from AsyncStorage
-        const restoreState = async () => {
-          try {
-            const savedState = await AsyncStorage.getItem('productos_state');
-            if (savedState) {
-              const parsedState = JSON.parse(savedState);
-              setFilters(parsedState.filters);
-              setPagination(prev => ({ ...prev, currentPage: parsedState.pagination.currentPage }));
-              fetchProductos(null, parsedState.filters);
-            } else {
-              // Fallback to old filters key for backwards compatibility
-              const savedFilters = await AsyncStorage.getItem('productos_filters');
-              if (savedFilters) {
-                const parsedFilters = JSON.parse(savedFilters);
-                setFilters(parsedFilters);
-                fetchProductos(null, parsedFilters);
-              } else {
-                // Restore user's tienda filter if it's empty and user has a tienda
-                const shouldRestore = !filtersRef.current.id_tienda && userTiendaRef.current;
-                if (shouldRestore) {
-                  setFilters(prev => ({ ...prev, id_tienda: userTiendaRef.current.toString() }));
-                  fetchProductos(userTiendaRef.current.toString());
-                } else {
-                  fetchProductos();
-                }
-              }
-            }
-          } catch (error) {
-            console.error('Error restoring state:', error);
-            fetchProductos();
-          }
-        };
-        restoreState();
-      }
-    }, [])
-  );
+    };
+    restoreState();
+  }, []);
 
   const fetchAllTiendas = async () => {
     try {
@@ -452,7 +410,7 @@ const ProductosContent = () => {
       categoria: '', 
       esvendible: '', 
       id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : '',
-      cantidad_min: '0.01',
+      cantidad_min: '',
       cantidad_max: ''
     };
     
@@ -584,7 +542,7 @@ const ProductosContent = () => {
       categoria: '', 
       esvendible: '', 
       id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : filters.id_tienda,
-      cantidad_min: '0.01',
+      cantidad_min: '',
       cantidad_max: ''
     };
     

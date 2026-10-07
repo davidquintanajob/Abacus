@@ -50,7 +50,7 @@ const MovimientoFormContent = () => {
 
   const [formData, setFormData] = useState({
     tipo_movimiento: 'Transferencia',
-    estado: false,
+    estado: isAdmin ? false : false, // Always start as Pendiente
     nota: '',
     id_tienda_origen: null,
     id_tienda_destino: null,
@@ -580,10 +580,10 @@ const MovimientoFormContent = () => {
                   <Text style={[styles.label, { color: colors.outline }]}>Estado</Text>
                   <View style={styles.switchRow}>
                     <TouchableOpacity 
-                      onPress={() => !isReadOnly && setFormData(prev => ({ ...prev, estado: !prev.estado }))}
-                      disabled={isReadOnly}
+                      onPress={() => (!isReadOnly && isAdmin) && setFormData(prev => ({ ...prev, estado: !prev.estado }))}
+                      disabled={isReadOnly || !isAdmin}
                     >
-                      <View style={[styles.switchTrackSimple, { backgroundColor: formData.estado ? '#4CAF50' : colors.outlineVariant }]}>
+                      <View style={[styles.switchTrackSimple, { backgroundColor: formData.estado ? '#4CAF50' : colors.outlineVariant, opacity: (!isAdmin || isReadOnly) ? 0.6 : 1 }]}>
                         <View style={[styles.switchThumbSimple, { transform: [{ translateX: formData.estado ? 20 : 0 }] }]} />
                       </View>
                     </TouchableOpacity>

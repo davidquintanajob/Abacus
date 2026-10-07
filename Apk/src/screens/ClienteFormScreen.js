@@ -824,15 +824,17 @@ const ClienteFormScreen = () => {
                               </View>
                             </View>
                             <View style={styles.deudaHeaderRight}>
-                              <TouchableOpacity
-                                style={styles.addPagoButton}
-                                onPress={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenPagoModal(deuda);
-                                }}
-                              >
-                                <Ionicons name="add-circle" size={24} color={colors.primary} />
-                              </TouchableOpacity>
+                              {!isSaldada && (
+                                <TouchableOpacity
+                                  style={styles.addPagoButton}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenPagoModal(deuda);
+                                  }}
+                                >
+                                  <Ionicons name="add-circle" size={24} color={colors.primary} />
+                                </TouchableOpacity>
+                              )}
                             </View>
                           </TouchableOpacity>
                           

@@ -42,6 +42,7 @@ const MovimientosContent = () => {
   const hasRestoredFilters = useRef(false);
   const isInitializedRef = useRef(false);
   const filtersRef = useRef(filters);
+  const savedPaginationRef = useRef(null);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -62,6 +63,15 @@ const MovimientosContent = () => {
     return `${year}-${month}-${day}`;
   };
   
+  const getCubaDateDaysAgo = (daysAgo) => {
+    const now = new Date();
+    now.setDate(now.getDate() - daysAgo);
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
   const toCubaDate = (dateString) => {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -70,10 +80,11 @@ const MovimientosContent = () => {
   };
   
   const today = getCubaDate();
+  const sevenDaysAgo = getCubaDateDaysAgo(6); // 6 days ago + today = 7 days total
   const [filters, setFilters] = useState({ 
     tipo_movimiento: '', 
     estado: '', 
-    fecha_desde: today, 
+    fecha_desde: sevenDaysAgo, 
     fecha_hasta: today, 
     id_tienda_origen: '', 
     id_tienda_destino: '',
@@ -191,34 +202,24 @@ const MovimientosContent = () => {
     }
   }, [isOfflineMode]);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      // Only fetch on screen focus after initial load
-      if (isFirstFocus.current) {
-        isFirstFocus.current = false;
-        return;
+  // Restore saved state only on initial load
+  useEffect(() => {
+    const restoreState = async () => {
+      try {
+        const savedState = await AsyncStorage.getItem('movimientos_state');
+        if (savedState) {
+          const parsedState = JSON.parse(savedState);
+          setFilters(parsedState.filters);
+          setPagination(prev => ({ ...prev, currentPage: parsedState.pagination.currentPage }));
+          // Clear the saved state after restoring to avoid issues
+          await AsyncStorage.removeItem('movimientos_state');
+        }
+      } catch (error) {
+        console.error('Error restoring state:', error);
       }
-      if (isInitializedRef.current) {
-        // Restore saved filters from AsyncStorage
-        const restoreFilters = async () => {
-          try {
-            const savedFilters = await AsyncStorage.getItem('movimientos_filters');
-            if (savedFilters) {
-              const parsedFilters = JSON.parse(savedFilters);
-              setFilters(parsedFilters);
-              fetchMovimientos(null, parsedFilters);
-            } else {
-              fetchMovimientos();
-            }
-          } catch (error) {
-            console.error('Error restoring filters:', error);
-            fetchMovimientos();
-          }
-        };
-        restoreFilters();
-      }
-    }, [])
-  );
+    };
+    restoreState();
+  }, []);
 
   const fetchAllTiendas = async () => {
     try {
@@ -533,6 +534,15 @@ const MovimientosContent = () => {
       return;
     }
     
+    // Save current filters and pagination before navigating
+    const stateToSave = {
+      filters,
+      pagination: { currentPage: pagination.currentPage }
+    };
+    AsyncStorage.setItem('movimientos_state', JSON.stringify(stateToSave)).catch(err => {
+      console.error('Error saving state:', err);
+    });
+    
     // Navigate to edit mode if user has permissions, otherwise view mode
     const canEdit = canShowEditDeleteButtons(movimiento);
     const mode = canEdit ? 'edit' : 'view';
@@ -545,6 +555,15 @@ const MovimientosContent = () => {
       return;
     }
     
+    // Save current filters and pagination before navigating
+    const stateToSave = {
+      filters,
+      pagination: { currentPage: pagination.currentPage }
+    };
+    AsyncStorage.setItem('movimientos_state', JSON.stringify(stateToSave)).catch(err => {
+      console.error('Error saving state:', err);
+    });
+    
     navigation.navigate('MovimientoForm', { movimiento, mode: 'edit' });
   };
 
@@ -553,6 +572,15 @@ const MovimientosContent = () => {
       showToast({ type: 'warning', message: 'No disponible en modo offline' });
       return;
     }
+    
+    // Save current filters and pagination before navigating
+    const stateToSave = {
+      filters,
+      pagination: { currentPage: pagination.currentPage }
+    };
+    AsyncStorage.setItem('movimientos_state', JSON.stringify(stateToSave)).catch(err => {
+      console.error('Error saving state:', err);
+    });
     
     navigation.navigate('MovimientoForm', { mode: 'add' });
   };

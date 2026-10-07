@@ -164,6 +164,11 @@ export const AuthProvider = ({ children }) => {
       almacenero: false,
       economico: false,
     },
+    clienteManagePermissions: config?.clienteManagePermissions || {
+      dependiente: false,
+      almacenero: false,
+      economico: false,
+    },
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

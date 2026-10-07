@@ -575,6 +575,25 @@ const DeudaScreen = () => {
           </View>
         </Card>
 
+        {/* Leyenda de colores de deuda */}
+        <View style={[styles.legendContainer, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+          <Text style={[styles.legendTitle, { color: colors.onSurface }]}>Leyenda de colores:</Text>
+          <View style={styles.legendItems}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: isDarkMode ? 'rgba(156, 39, 176, 0.3)' : '#F3E5F5' }]} />
+              <Text style={[styles.legendText, { color: colors.onSurface }]}>Deuda con venta asociada</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: isDarkMode ? 'rgba(76, 175, 80, 0.3)' : '#E8F5E9' }]} />
+              <Text style={[styles.legendText, { color: colors.onSurface }]}>Deuda saldada</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: isDarkMode ? 'rgba(33, 150, 243, 0.3)' : '#F0F4FF' }]} />
+              <Text style={[styles.legendText, { color: colors.onSurface }]}>Deuda pendiente</Text>
+            </View>
+          </View>
+        </View>
+
         {/* Action Buttons */}
         <View style={styles.actionButtonsContainer}>
           <TouchableOpacity
@@ -996,6 +1015,39 @@ const createStyles = (responsive) => StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 4,
+  },
+  legendContainer: {
+    borderRadius: 12,
+    padding: responsive.responsivePadding(16),
+    marginBottom: responsive.responsiveMargin(16),
+    borderWidth: 1,
+  },
+  legendTitle: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  legendItems: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: responsive.responsiveMargin(16),
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legendColor: {
+    width: responsive.responsiveWidth(20),
+    height: responsive.responsiveHeight(20),
+    borderRadius: 4,
+    marginRight: responsive.responsiveMargin(8),
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  legendText: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
   },
   filterHeader: {
     flexDirection: 'row',

@@ -3,19 +3,20 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Activi
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useTheme } from '../theme/ThemeContext';
-import { Header } from '../components/layout/Header';
-import { Card } from '../components/common/Card';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../theme/ThemeContext';
 import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
-import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
+import { Header } from '../components/layout/Header';
+import { Card } from '../components/common/Card';
+import { Toast } from '../components/common/Toast';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { createDeuda, saldarDeuda, updateDeuda, getDeudaById } from '../services/deudaService';
 import { getClientes } from '../services/clienteService';
 import { getCuentas } from '../services/cuentaService';
+import configService from '../services/configService';
 
 const DeudaFormScreen = () => {
   const navigation = useNavigation();
@@ -56,6 +57,7 @@ const DeudaFormScreen = () => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showPagoModal, setShowPagoModal] = useState(false);
+  const [showFormaPagoDropdown, setShowFormaPagoDropdown] = useState(false);
   const [showCuentaDropdown, setShowCuentaDropdown] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingPago, setEditingPago] = useState(null);
@@ -64,6 +66,9 @@ const DeudaFormScreen = () => {
   const [cuentas, setCuentas] = useState([]);
   const [showClienteDropdown, setShowClienteDropdown] = useState(false);
   const [clienteSearchText, setClienteSearchText] = useState('');
+
+  // Formas de pago disponibles
+  const formasPago = ['Efectivo CUP', 'Transferencia CUP', 'Efectivo USD', 'Transferencia USD'];
 
   useEffect(() => {
     const fetchClientes = async () => {
@@ -81,8 +86,37 @@ const DeudaFormScreen = () => {
     const fetchCuentas = async () => {
       if (!isOfflineMode) {
         try {
-          const data = await getCuentas({}, 1, 1000);
-          setCuentas(data.data || []);
+          const cuentasData = await getCuentas({}, 1, 1000);
+          let allCuentas = cuentasData.data || [];
+          
+          // Filtrar cuentas por tienda del usuario si tiene permisos de gestión
+          if (user?.id_tienda) {
+            try {
+              const config = await configService.getConfig();
+              const tiendaCuentasConfig = config.tiendaCuentasConfig || {};
+              const tiendaConfig = tiendaCuentasConfig[user.id_tienda];
+              
+              if (tiendaConfig) {
+                // Obtener todas las cuentas permitidas para esta tienda
+                const cuentasPermitidas = [
+                  ...(tiendaConfig.efectivo_cup || []),
+                  ...(tiendaConfig.efectivo_usd || []),
+                  ...(tiendaConfig.transferencia_cup || []),
+                  ...(tiendaConfig.transferencia_usd || []),
+                ];
+                
+                // Filtrar cuentas para mostrar solo las permitidas
+                const cuentaIdsPermitidos = new Set(cuentasPermitidas.map(c => c.id_cuenta));
+                allCuentas = allCuentas.filter(cuenta => cuentaIdsPermitidos.has(cuenta.id_cuenta));
+              }
+            } catch (error) {
+              console.error('Error al cargar configuración de cuentas por tienda:', error);
+              // Si falla, mostrar todas las cuentas (no filtrar)
+            }
+          }
+          
+          console.log('[DeudaForm] Cuentas cargadas:', allCuentas.length);
+          setCuentas(allCuentas);
         } catch (error) {
           console.error('Error al cargar cuentas:', error);
           setCuentas([]);
@@ -92,7 +126,7 @@ const DeudaFormScreen = () => {
 
     fetchClientes();
     fetchCuentas();
-  }, [isAddMode, isEditMode, isOfflineMode]);
+  }, [isAddMode, isEditMode, isOfflineMode, user?.id_tienda]);
 
   const fetchDeudaPagos = async (deudaId) => {
     try {
@@ -161,23 +195,44 @@ const DeudaFormScreen = () => {
   };
 
   const handleSavePagoEdit = () => {
-    if (!editingPago) return;
-    
+    // Validaciones
+    if (!pagoFormData.cantidad_pagada || pagoFormData.cantidad_pagada.trim() === '') {
+      showToast({ type: 'warning', message: 'La cantidad es obligatoria' });
+      return;
+    }
+    if (isNaN(pagoFormData.cantidad_pagada) || parseFloat(pagoFormData.cantidad_pagada) <= 0) {
+      showToast({ type: 'warning', message: 'La cantidad debe ser mayor que cero' });
+      return;
+    }
+    if (!pagoFormData.forma_pago || pagoFormData.forma_pago.trim() === '') {
+      showToast({ type: 'warning', message: 'La forma de pago es obligatoria' });
+      return;
+    }
+    if (!['Efectivo CUP', 'Transferencia CUP', 'Efectivo USD', 'Transferencia USD'].includes(pagoFormData.forma_pago)) {
+      showToast({ type: 'warning', message: 'Forma de pago inválida' });
+      return;
+    }
+    if (!pagoFormData.id_cuenta_operacion || pagoFormData.id_cuenta_operacion.trim() === '') {
+      showToast({ type: 'warning', message: 'Debe seleccionar una cuenta de operación' });
+      return;
+    }
+
     try {
-      const updatedPagos = pagosList.map(p => 
-        p.id_pago_deuda === editingPago.id_pago_deuda 
-          ? { 
-              ...p, 
-              cantidad_pagada: parseFloat(pagoFormData.cantidad_pagada),
-              forma_pago: pagoFormData.forma_pago,
-              cambio_moneda: parseFloat(pagoFormData.cambio_moneda),
-              id_cuenta_operacion: parseInt(pagoFormData.id_cuenta_operacion),
-              fecha_hora: new Date(pagoFormData.fecha),
-              nota: pagoFormData.nota
-            }
-          : p
-      );
-      
+      const updatedPagos = pagosList.map(pago => {
+        if (pago.id_pago_deuda === editingPago.id_pago_deuda) {
+          return {
+            ...pago,
+            cantidad_pagada: parseFloat(pagoFormData.cantidad_pagada),
+            forma_pago: pagoFormData.forma_pago,
+            cambio_moneda: parseFloat(pagoFormData.cambio_moneda) || 1,
+            id_cuenta_operacion: parseInt(pagoFormData.id_cuenta_operacion),
+            fecha_hora: pagoFormData.fecha,
+            nota: pagoFormData.nota || pago.nota,
+          };
+        }
+        return pago;
+      });
+
       setPagosList(updatedPagos);
       setEditingPago(null);
       setShowPagoModal(false);
@@ -188,99 +243,87 @@ const DeudaFormScreen = () => {
     }
   };
 
-  const handleSave = async () => {
-    if (isOfflineMode) {
-      showToast({ type: 'warning', message: 'No disponible en modo offline' });
-      return;
-    }
-
-    if (isPagoMode) {
-      // Validaciones para pago de deuda
-      if (!pagoFormData.cantidad_pagada || pagoFormData.cantidad_pagada.trim() === '') {
-        showToast({ type: 'warning', message: 'La cantidad es obligatoria' });
-        return;
-      }
-      if (isNaN(pagoFormData.cantidad_pagada) || parseFloat(pagoFormData.cantidad_pagada) <= 0) {
-        showToast({ type: 'warning', message: 'La cantidad debe ser mayor que cero' });
-        return;
-      }
-      if (!pagoFormData.forma_pago || pagoFormData.forma_pago.trim() === '') {
-        showToast({ type: 'warning', message: 'La forma de pago es obligatoria' });
-        return;
-      }
-      if (!['Efectivo CUP', 'Transferencia CUP', 'Efectivo USD', 'Transferencia USD'].includes(pagoFormData.forma_pago)) {
-        showToast({ type: 'warning', message: 'Forma de pago inválida' });
-        return;
-      }
-      if (!pagoFormData.id_cuenta_operacion || pagoFormData.id_cuenta_operacion.trim() === '') {
-        showToast({ type: 'warning', message: 'Debe seleccionar una cuenta de operación' });
-        return;
-      }
-
-      try {
-        setIsSaving(true);
+  const handleAddPago = async () => {
+    try {
+      if (!isOfflineMode && deuda?.id_deuda) {
         // Usar fecha y hora actual del dispositivo
         const fechaHora = new Date();
 
         const pago = {
           cantidad_pagada: parseFloat(pagoFormData.cantidad_pagada),
           forma_pago: pagoFormData.forma_pago,
-          cambio_moneda: parseFloat(pagoFormData.cambio_moneda) || 1,
+          cambio_moneda: 1,
           id_cuenta_operacion: parseInt(pagoFormData.id_cuenta_operacion),
           fecha_hora: fechaHora,
+          nota: pagoFormData.nota || null
         };
 
         await saldarDeuda(deuda.id_deuda, [pago]);
         showToast({ type: 'success', message: 'Pago registrado correctamente' });
-        navigation.goBack();
-      } catch (err) {
-        showToast({ type: 'error', message: err.message, code: err.code });
-      } finally {
-        setIsSaving(false);
-      }
-    } else {
-      // Validaciones para deuda
-      if (!formData.monto_cup && !formData.monto_usd) {
-        showToast({ type: 'warning', message: 'Debe ingresar al menos un monto (CUP o USD)' });
-        return;
-      }
-      if (formData.monto_cup && (isNaN(formData.monto_cup) || parseFloat(formData.monto_cup) < 0)) {
-        showToast({ type: 'warning', message: 'El monto CUP debe ser un número no negativo' });
-        return;
-      }
-      if (formData.monto_usd && (isNaN(formData.monto_usd) || parseFloat(formData.monto_usd) < 0)) {
-        showToast({ type: 'warning', message: 'El monto USD debe ser un número no negativo' });
-        return;
-      }
-      if (!cliente && !formData.id_cliente) {
-        showToast({ type: 'warning', message: 'Debe seleccionar un cliente para la deuda' });
-        return;
-      }
-
-      try {
-        setIsSaving(true);
-        const deudaData = {
-          monto_cup: formData.monto_cup ? parseFloat(formData.monto_cup) : 0,
-          monto_usd: formData.monto_usd ? parseFloat(formData.monto_usd) : 0,
-          cambio_moneda: parseFloat(formData.cambio_moneda) || 1,
-          id_cliente: cliente ? cliente.id_cliente : formData.id_cliente,
-          fecha_hora: formData.fecha_hora,
-          nota: formData.nota || null,
+        // Recargar pagos
+        fetchDeudaPagos(deuda.id_deuda);
+      } else {
+        // En modo offline o sin deuda, agregar temporalmente a la lista
+        const nuevoPago = {
+          id_pago_deuda: Date.now(), // ID temporal
+          cantidad_pagada: parseFloat(pagoFormData.cantidad_pagada),
+          forma_pago: pagoFormData.forma_pago,
+          cambio_moneda: 1,
+          id_cuenta_operacion: parseInt(pagoFormData.id_cuenta_operacion),
+          fecha_hora: new Date(),
+          nota: pagoFormData.nota || null,
+          temp: true // Marcador para pagos temporales
         };
-
-        if (isEditMode) {
-          await updateDeuda(deuda.id_deuda, deudaData);
-          showToast({ type: 'success', message: 'Deuda actualizada correctamente' });
-        } else {
-          await createDeuda(deudaData);
-          showToast({ type: 'success', message: 'Deuda creada correctamente' });
-        }
-        navigation.goBack();
-      } catch (err) {
-        showToast({ type: 'error', message: err.message, code: err.code });
-      } finally {
-        setIsSaving(false);
+        setPagosList(prev => [...prev, nuevoPago]);
+        showToast({ type: 'success', message: 'Pago agregado temporalmente (guarda los cambios para aplicar)' });
       }
+      setShowPagoModal(false);
+    } catch (err) {
+      showToast({ type: 'error', message: err.message || 'Error al agregar pago' });
+    }
+  };
+
+  const handleSave = async () => {
+    if (!formData.monto_cup && !formData.monto_usd) {
+      showToast({ type: 'warning', message: 'Debe ingresar al menos un monto (CUP o USD)' });
+      return;
+    }
+    if (formData.monto_cup && (isNaN(formData.monto_cup) || parseFloat(formData.monto_cup) < 0)) {
+      showToast({ type: 'warning', message: 'El monto CUP debe ser un número no negativo' });
+      return;
+    }
+    if (formData.monto_usd && (isNaN(formData.monto_usd) || parseFloat(formData.monto_usd) < 0)) {
+      showToast({ type: 'warning', message: 'El monto USD debe ser un número no negativo' });
+      return;
+    }
+    if (!cliente && !formData.id_cliente) {
+      showToast({ type: 'warning', message: 'Debe seleccionar un cliente para la deuda' });
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const deudaData = {
+        monto_cup: formData.monto_cup ? parseFloat(formData.monto_cup) : 0,
+        monto_usd: formData.monto_usd ? parseFloat(formData.monto_usd) : 0,
+        cambio_moneda: parseFloat(formData.cambio_moneda) || 1,
+        id_cliente: cliente ? cliente.id_cliente : formData.id_cliente,
+        fecha_hora: formData.fecha_hora,
+        nota: formData.nota || null,
+      };
+
+      if (isEditMode) {
+        await updateDeuda(deuda.id_deuda, deudaData);
+        showToast({ type: 'success', message: 'Deuda actualizada correctamente' });
+      } else {
+        await createDeuda(deudaData);
+        showToast({ type: 'success', message: 'Deuda creada correctamente' });
+      }
+      navigation.goBack();
+    } catch (err) {
+      showToast({ type: 'error', message: err.message, code: err.code });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -494,10 +537,28 @@ const DeudaFormScreen = () => {
           )}
 
           {/* Pagos Realizados (Solo en modo edición) */}
-          {isEditMode && pagosList && pagosList.length > 0 && (
+          {isEditMode && (
             <Card style={[styles.card, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.cardTitle, { color: colors.onSurface }]}>Pagos Realizados ({pagosList.length})</Text>
-              {pagosList.map((pago) => (
+              <View style={styles.cardHeaderRow}>
+                <Text style={[styles.cardTitle, { color: colors.onSurface }]}>Pagos Realizados ({pagosList.length})</Text>
+                <TouchableOpacity
+                  style={[styles.addPagoButton, { backgroundColor: colors.primary }]}
+                  onPress={() => {
+                    setEditingPago(null);
+                    setPagoFormData({
+                      cantidad_pagada: '',
+                      forma_pago: '',
+                      cambio_moneda: '1',
+                      id_cuenta_operacion: '',
+                      nota: '',
+                    });
+                    setShowPagoModal(true);
+                  }}
+                >
+                  <Ionicons name="add" size={responsive.responsiveWidth(20)} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              {pagosList.length > 0 ? pagosList.map((pago) => (
                 <View key={pago.id_pago_deuda} style={[styles.pagoItem, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
                   <View style={styles.pagoHeader}>
                     <Text style={[styles.pagoFecha, { color: colors.outline }]}>
@@ -532,7 +593,9 @@ const DeudaFormScreen = () => {
                     </TouchableOpacity>
                   </View>
                 </View>
-              ))}
+              )) : (
+                <Text style={[styles.emptyText, { color: colors.outline }]}>No hay pagos realizados</Text>
+              )}
             </Card>
           )}
 
@@ -601,13 +664,36 @@ const DeudaFormScreen = () => {
 
               <View style={styles.formGroup}>
                 <Text style={[styles.label, { color: colors.outline }]}>Forma de Pago *</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                  placeholderTextColor={colors.outline}
-                  placeholder="Efectivo CUP, Transferencia CUP, etc."
-                  value={pagoFormData.forma_pago}
-                  onChangeText={(text) => setPagoFormData(prev => ({ ...prev, forma_pago: text }))}
-                />
+                <TouchableOpacity
+                  style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                  onPress={() => setShowFormaPagoDropdown(!showFormaPagoDropdown)}
+                >
+                  <Text style={[styles.dropdownText, { color: pagoFormData.forma_pago ? colors.onSurface : colors.outline }]}>
+                    {pagoFormData.forma_pago || 'Seleccionar forma de pago'}
+                  </Text>
+                  <Ionicons 
+                    name={showFormaPagoDropdown ? "chevron-up" : "chevron-down"} 
+                    size={responsive.responsiveWidth(20)} 
+                    color={colors.outline} 
+                  />
+                </TouchableOpacity>
+                
+                {showFormaPagoDropdown ? (
+                  <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                    {formasPago.map((forma, index) => (
+                      <TouchableOpacity
+                        key={forma}
+                        style={[styles.dropdownItem, index === formasPago.length - 1 && styles.dropdownItemLast]}
+                        onPress={() => {
+                          setPagoFormData(prev => ({ ...prev, forma_pago: forma }));
+                          setShowFormaPagoDropdown(false);
+                        }}
+                      >
+                        <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{forma}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
               </View>
 
               <View style={styles.formGroup}>
@@ -626,9 +712,9 @@ const DeudaFormScreen = () => {
                   />
                 </TouchableOpacity>
                 
-                {showCuentaDropdown && (
+                {showCuentaDropdown ? (
                   <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    {(cuentas || [])
+                    {cuentas
                       .filter(cuenta => !pagoFormData.forma_pago || cuenta.tipo_cuenta === pagoFormData.forma_pago)
                       .map((cuenta, index, filtered) => (
                         <TouchableOpacity
@@ -643,11 +729,11 @@ const DeudaFormScreen = () => {
                             setShowCuentaDropdown(false);
                           }}
                         >
-                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{cuenta.nombre} ({cuenta.tipo_cuenta})</Text>
+                          <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{`${cuenta.nombre || ''} (${cuenta.tipo_cuenta || 'Sin tipo'})`}</Text>
                         </TouchableOpacity>
                       ))}
                   </View>
-                )}
+                ) : null}
               </View>
 
               <View style={styles.formGroup}>
@@ -676,7 +762,7 @@ const DeudaFormScreen = () => {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSaveButton, { backgroundColor: colors.primary }]}
-                onPress={editingPago ? handleSavePagoEdit : () => setShowPagoModal(false)}
+                onPress={editingPago ? handleSavePagoEdit : handleAddPago}
               >
                 <Text style={[styles.modalButtonText, { color: '#fff' }]}>
                   {editingPago ? 'Guardar' : 'Agregar'}
@@ -910,6 +996,24 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   pagoDeleteButton: {
     marginRight: responsive.responsiveMargin(4),
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  addPagoButton: {
+    width: responsive.responsiveWidth(28),
+    height: responsive.responsiveHeight(28),
+    borderRadius: responsive.responsiveWidth(14),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontSize: responsive.fontSizes.body,
+    textAlign: 'center',
+    paddingVertical: responsive.responsivePadding(16),
+    fontFamily: 'Inter',
   },
   modalOverlay: {
     flex: 1,
