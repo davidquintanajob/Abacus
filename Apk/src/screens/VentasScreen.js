@@ -19,6 +19,7 @@ import { getUsuarios } from '../services/usuarioService';
 import { getServicios } from '../services/servicioService';
 import { getCuentas } from '../services/cuentaService';
 import { getUsuarioById } from '../services/usuarioService';
+import { getDeudaById } from '../services/deudaService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import { storageService } from '../services/storageService';
@@ -690,7 +691,23 @@ const VentasContent = () => {
         data = await getVentas(adjustedFilters, pagination.currentPage, pagination.limit);
       }
 
-      setVentas(data.data || []);
+      // Cargar información de deuda para las ventas que son deudas
+      const ventasWithDeudaInfo = await Promise.all(
+        (data.data || []).map(async (venta) => {
+          if (venta.is_deuda && venta.id_deuda) {
+            try {
+              const deudaData = await getDeudaById(venta.id_deuda);
+              return { ...venta, deuda: deudaData };
+            } catch (error) {
+              console.error('Error fetching deuda for venta:', venta.id_lista_venta, error);
+              return { ...venta, deuda: null };
+            }
+          }
+          return venta;
+        })
+      );
+
+      setVentas(ventasWithDeudaInfo);
       setPagination(prev => ({
         ...prev,
         totalPages: data.pagination?.totalPages || 1,
@@ -1625,6 +1642,76 @@ const VentasContent = () => {
                           Usuario: {venta.operaciones?.[0]?.usuario?.nombre_natural || 'N/A'}
                         </Text>
                       )}
+                      {venta.is_deuda && venta.deuda && (
+                        <>
+                          <Text style={[styles.ventaUsuario, { color: colors.outline }]}>
+                            Cliente: {venta.deuda.cliente?.nombre || 'N/A'}
+                          </Text>
+                          <View style={styles.deudaInfoContainer}>
+                            {(venta.deuda.monto_restante_cup > 0 || venta.deuda.monto_cup > 0) && (
+                              <View style={styles.deudaAmountRow}>
+                                <Text style={[styles.deudaLabel, { color: colors.outline }]}>Restante CUP:</Text>
+                                <Text style={[styles.deudaAmount, { color: venta.deuda.monto_restante_cup > 0 ? colors.error : '#4CAF50' }]}>
+                                  ${venta.deuda.monto_restante_cup.toFixed(2)}
+                                </Text>
+                              </View>
+                            )}
+                            {(venta.deuda.monto_restante_usd > 0 || venta.deuda.monto_usd > 0) && (
+                              <View style={styles.deudaAmountRow}>
+                                <Text style={[styles.deudaLabel, { color: colors.outline }]}>Restante USD:</Text>
+                                <Text style={[styles.deudaAmount, { color: venta.deuda.monto_restante_usd > 0 ? colors.error : '#4CAF50' }]}>
+                                  ${venta.deuda.monto_restante_usd.toFixed(2)}
+                                </Text>
+                              </View>
+                            )}
+                            {(venta.deuda.monto_cup > 0) && (
+                              <View style={styles.deudaAmountRow}>
+                                <Text style={[styles.deudaLabel, { color: colors.outline }]}>Total CUP:</Text>
+                                <Text style={[styles.deudaAmount, { color: colors.onSurface }]}>
+                                  ${venta.deuda.monto_cup.toFixed(2)}
+                                </Text>
+                              </View>
+                            )}
+                            {(venta.deuda.monto_usd > 0) && (
+                              <View style={styles.deudaAmountRow}>
+                                <Text style={[styles.deudaLabel, { color: colors.outline }]}>Total USD:</Text>
+                                <Text style={[styles.deudaAmount, { color: colors.onSurface }]}>
+                                  ${venta.deuda.monto_usd.toFixed(2)}
+                                </Text>
+                              </View>
+                            )}
+                            {(() => {
+                              const pagadoCup = venta.deuda.monto_restante_cup !== undefined 
+                                ? venta.deuda.monto_cup - venta.deuda.monto_restante_cup 
+                                : 0;
+                              const pagadoUsd = venta.deuda.monto_restante_usd !== undefined 
+                                ? venta.deuda.monto_usd - venta.deuda.monto_restante_usd 
+                                : 0;
+                              
+                              return (
+                                <>
+                                  {pagadoCup > 0 && (
+                                    <View style={styles.deudaAmountRow}>
+                                      <Text style={[styles.deudaLabel, { color: colors.outline }]}>Pagado CUP:</Text>
+                                      <Text style={[styles.deudaAmount, { color: '#4CAF50' }]}>
+                                        ${pagadoCup.toFixed(2)}
+                                      </Text>
+                                    </View>
+                                  )}
+                                  {pagadoUsd > 0 && (
+                                    <View style={styles.deudaAmountRow}>
+                                      <Text style={[styles.deudaLabel, { color: colors.outline }]}>Pagado USD:</Text>
+                                      <Text style={[styles.deudaAmount, { color: '#4CAF50' }]}>
+                                        ${pagadoUsd.toFixed(2)}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </View>
+                        </>
+                      )}
                       <View style={styles.cantidadRow}>
                         {(() => {
                           const totalCUP = venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_cup || 0) * (v.cantidad || 0)), 0) || 0;
@@ -1747,6 +1834,23 @@ const VentasContent = () => {
                           <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
                             {venta.operaciones?.[0]?.usuario?.nombre_natural || 'N/A'}
                           </Text>
+                        )}
+                        {venta.is_deuda && (
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
+                            -
+                          </Text>
+                        )}
+                        {venta.is_deuda && venta.deuda && (
+                          <View style={[styles.tableCellText, { width: responsive.responsiveWidth(150) }]}>
+                            <Text style={{ color: colors.onSurface }}>
+                              {venta.deuda.cliente?.nombre || 'N/A'}
+                            </Text>
+                            {(venta.deuda.monto_restante_cup > 0 || venta.deuda.monto_restante_usd > 0) && (
+                              <Text style={{ color: (venta.deuda.monto_restante_cup > 0 || venta.deuda.monto_restante_usd > 0) ? colors.error : '#4CAF50', fontSize: responsive.responsiveFontSize(10) }}>
+                                Restante: ${((venta.deuda.monto_restante_cup || 0) + (venta.deuda.monto_restante_usd || 0)).toFixed(2)}
+                              </Text>
+                            )}
+                          </View>
                         )}
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
                           {(() => {
@@ -2242,6 +2346,24 @@ const createStyles = (responsive) => StyleSheet.create({
     fontWeight: '600',
     fontFamily: 'Inter',
     marginTop: responsive.responsiveMargin(2),
+  },
+  deudaInfoContainer: {
+    marginTop: responsive.responsiveMargin(4),
+  },
+  deudaAmountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: responsive.responsiveMargin(2),
+  },
+  deudaLabel: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+  },
+  deudaAmount: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '600',
+    fontFamily: 'Inter',
   },
   cantidadRow: {
     flexDirection: 'row',

@@ -592,6 +592,21 @@ const DeudaScreen = () => {
               <Text style={[styles.legendText, { color: colors.onSurface }]}>Deuda pendiente</Text>
             </View>
           </View>
+          <Text style={[styles.legendTitle, { color: colors.onSurface, marginTop: 12 }]}>Alertas:</Text>
+          <View style={styles.legendItems}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendFlag, { backgroundColor: colors.error }]}>
+                <Ionicons name="alert-circle" size={responsive.responsiveWidth(14)} color="#fff" />
+              </View>
+              <Text style={[styles.legendText, { color: colors.onSurface }]}>Deuda pendiente de pago</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendFlag, { backgroundColor: '#2196F3' }]}>
+                <Ionicons name="document-text-outline" size={responsive.responsiveWidth(14)} color="#fff" />
+              </View>
+              <Text style={[styles.legendText, { color: colors.onSurface }]}>Deuda con nota</Text>
+            </View>
+          </View>
         </View>
 
         {/* Action Buttons */}
@@ -1048,6 +1063,14 @@ const createStyles = (responsive) => StyleSheet.create({
   legendText: {
     fontSize: responsive.responsiveFontSize(12),
     fontFamily: 'Inter',
+  },
+  legendFlag: {
+    width: responsive.responsiveWidth(20),
+    height: responsive.responsiveHeight(20),
+    borderRadius: 10,
+    marginRight: responsive.responsiveMargin(8),
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   filterHeader: {
     flexDirection: 'row',

@@ -202,9 +202,9 @@ const ProductosContent = () => {
     const restoreState = async () => {
       try {
         const savedState = await AsyncStorage.getItem('productos_state');
-        if (savedState) {
+        if (savedState && !isInitialized) {
           const parsedState = JSON.parse(savedState);
-          setFilters(parsedState.filters);
+          // Only restore pagination, not filters (filters are set by user's store)
           setPagination(prev => ({ ...prev, currentPage: parsedState.pagination.currentPage }));
           // Clear the saved state after restoring to avoid issues
           await AsyncStorage.removeItem('productos_state');
@@ -214,7 +214,7 @@ const ProductosContent = () => {
       }
     };
     restoreState();
-  }, []);
+  }, [isInitialized]);
 
   const fetchAllTiendas = async () => {
     try {

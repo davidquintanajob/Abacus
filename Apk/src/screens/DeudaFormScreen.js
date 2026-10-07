@@ -541,22 +541,25 @@ const DeudaFormScreen = () => {
             <Card style={[styles.card, { backgroundColor: colors.surface }]}>
               <View style={styles.cardHeaderRow}>
                 <Text style={[styles.cardTitle, { color: colors.onSurface }]}>Pagos Realizados ({pagosList.length})</Text>
-                <TouchableOpacity
-                  style={[styles.addPagoButton, { backgroundColor: colors.primary }]}
-                  onPress={() => {
-                    setEditingPago(null);
-                    setPagoFormData({
-                      cantidad_pagada: '',
-                      forma_pago: '',
-                      cambio_moneda: '1',
-                      id_cuenta_operacion: '',
-                      nota: '',
-                    });
-                    setShowPagoModal(true);
-                  }}
-                >
-                  <Ionicons name="add" size={responsive.responsiveWidth(20)} color="#fff" />
-                </TouchableOpacity>
+                {/* Solo mostrar botón de agregar si la deuda no está saldada */}
+                {!(deuda?.monto_restante_cup === 0 && deuda?.monto_restante_usd === 0) && (
+                  <TouchableOpacity
+                    style={[styles.addPagoButton, { backgroundColor: colors.primary }]}
+                    onPress={() => {
+                      setEditingPago(null);
+                      setPagoFormData({
+                        cantidad_pagada: '',
+                        forma_pago: '',
+                        cambio_moneda: '1',
+                        id_cuenta_operacion: '',
+                        nota: '',
+                      });
+                      setShowPagoModal(true);
+                    }}
+                  >
+                    <Ionicons name="add" size={responsive.responsiveWidth(20)} color="#fff" />
+                  </TouchableOpacity>
+                )}
               </View>
               {pagosList.length > 0 ? pagosList.map((pago) => (
                 <View key={pago.id_pago_deuda} style={[styles.pagoItem, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
