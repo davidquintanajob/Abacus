@@ -128,6 +128,10 @@ const InformeGeneralContent = () => {
           totalPrecioCobradoUSD += precioCobradoUSD * cantidad;
         }
 
+        // Determine the currency of this sale based on actual income
+        const isCUPSale = totalIngresoCUP > 0;
+        const isUSDSale = totalIngresoUSD > 0;
+
         // Distribute actual income proportionally among products
         for (const venta of listaVenta.ventas || []) {
           const cantidad = parseFloat(venta.cantidad || 0);
@@ -136,8 +140,13 @@ const InformeGeneralContent = () => {
           const precioCobradoCUP = parseFloat(venta.precio_cobrado_cup || 0);
           const precioCobradoUSD = parseFloat(venta.precio_cobrado_usd || 0);
 
-          costosVentasCUP += costoOriginalCUP * cantidad;
-          costosVentasUSD += costoOriginalUSD * cantidad;
+          // Only add cost in the currency of the actual payment
+          if (isCUPSale) {
+            costosVentasCUP += costoOriginalCUP * cantidad;
+          }
+          if (isUSDSale) {
+            costosVentasUSD += costoOriginalUSD * cantidad;
+          }
 
           // Calculate profit per product using actual distributed income
           const productoNombre = venta.servicioTienda?.servicio?.nombre || 'Producto desconocido';
@@ -153,12 +162,18 @@ const InformeGeneralContent = () => {
           const ingresoVentaCUP = totalIngresoCUP * proporcionCUP;
           const ingresoVentaUSD = totalIngresoUSD * proporcionUSD;
 
-          const costoVentaCUP = costoOriginalCUP * cantidad;
-          const costoVentaUSD = costoOriginalUSD * cantidad;
-
-          // Calculate profit in CUP (convert only USD income to CUP, costs stay in their currency)
-          const ingresoVentaCUPTotal = ingresoVentaCUP + (ingresoVentaUSD * cambioMoneda);
-          const gananciaVenta = ingresoVentaCUPTotal - costoVentaCUP;
+          // Calculate profit using the same logic as "Ganancia Neta"
+          let gananciaVenta = 0;
+          if (isCUPSale) {
+            const costoVentaCUP = costoOriginalCUP * cantidad;
+            gananciaVenta = ingresoVentaCUP - costoVentaCUP;
+          }
+          if (isUSDSale) {
+            const costoVentaUSD = costoOriginalUSD * cantidad;
+            const gananciaVentaUSD = ingresoVentaUSD - costoVentaUSD;
+            // Convert USD profit to CUP for total calculation
+            gananciaVenta = gananciaVentaUSD * cambioMoneda;
+          }
 
           const currentGanancia = productosGanancia.get(productoNombre) || 0;
           productosGanancia.set(productoNombre, currentGanancia + gananciaVenta);
@@ -180,13 +195,36 @@ const InformeGeneralContent = () => {
       // Convert only USD income to CUP for total calculation (costs stay in their currency)
       const ingresosTotalesCUP = ingresosVentasCUP + (ingresosVentasUSD * cambioMoneda);
       const gananciaNetaCUP = ingresosTotalesCUP - costosVentasCUP - perdidasSalidasCUP;
-      const gananciaNetaUSD = (ingresosVentasUSD - costosVentasUSD - perdidasSalidasUSD);
+      
+      // Ganancia USD should be only from USD sales (not conversion of CUP profit)
+      const gananciaNetaUSD = ingresosVentasUSD - costosVentasUSD - perdidasSalidasUSD;
 
-      // Get top 5 products by profit
-      const topProductos = Array.from(productosGanancia.entries())
-        .map(([nombre, ganancia]) => ({ nombre, ganancia }))
-        .sort((a, b) => b.ganancia - a.ganancia)
-        .slice(0, 5);
+      // Ganancia neta total en CUP (base para calcular % por producto)
+      const ingresosTotalesCUPCalc = ingresosVentasCUP + (ingresosVentasUSD * cambioMoneda);
+      const gananciaNetaTotalCUP = ingresosTotalesCUPCalc - costosVentasCUP - perdidasSalidasCUP;
+
+      // Get top 5 products by profit, including their % of net profit
+      const allProductos = Array.from(productosGanancia.entries())
+        .map(([nombre, ganancia]) => ({
+          nombre,
+          ganancia,
+          porcentajeGanancia: gananciaNetaTotalCUP > 0 ? ((ganancia / gananciaNetaTotalCUP) * 100) : 0,
+        }))
+        .sort((a, b) => b.ganancia - a.ganancia);
+
+      const topProductos = allProductos.slice(0, 5);
+      
+      // Calculate percentage of top 5 products
+      const topProductosPercentage = topProductos.reduce((sum, p) => sum + p.porcentajeGanancia, 0);
+      
+      // Add "Otros" category with remaining percentage if less than 100%
+      if (topProductosPercentage < 100 && topProductosPercentage > 0) {
+        topProductos.push({
+          nombre: 'Otros',
+          ganancia: gananciaNetaTotalCUP - topProductos.reduce((sum, p) => sum + p.ganancia, 0),
+          porcentajeGanancia: 100 - topProductosPercentage,
+        });
+      }
 
       setLoadingProgress(100);
       setLoadingMessage('Generando informe...');
@@ -216,11 +254,10 @@ const InformeGeneralContent = () => {
 
   const calculateGananciaNeta = () => {
     if (!reportData) return { cup: 0, usd: 0 };
-    // Ganancia Neta = Ingresos Ventas - Pérdidas Salidas - Costos Ventas
-    // Convert only USD income to CUP, calculate total in CUP, then convert to USD
-    const ingresosTotalesCUP = reportData.ingresosVentasCUP + (reportData.ingresosVentasUSD * reportData.cambioMoneda);
-    const gananciaCUP = ingresosTotalesCUP - reportData.costosVentasCUP - reportData.perdidasSalidasCUP;
-    const gananciaUSD = gananciaCUP / reportData.cambioMoneda;
+    // Ganancia Neta CUP = Ingresos Ventas CUP - Costos Ventas CUP - Pérdidas Salidas CUP
+    const gananciaCUP = reportData.ingresosVentasCUP - reportData.costosVentasCUP - reportData.perdidasSalidasCUP;
+    // Ganancia Neta USD = Ingresos Ventas USD - Costos Ventas USD - Pérdidas Salidas USD
+    const gananciaUSD = reportData.ingresosVentasUSD - reportData.costosVentasUSD - reportData.perdidasSalidasUSD;
     return { cup: gananciaCUP, usd: gananciaUSD };
   };
 
@@ -391,7 +428,7 @@ const InformeGeneralContent = () => {
                   const ventasCUP = reportData.ingresosVentasCUP;
                   const ventasUSD = reportData.ingresosVentasUSD * reportData.cambioMoneda;
                   const perdidas = reportData.perdidasSalidasCUP + (reportData.perdidasSalidasUSD * reportData.cambioMoneda);
-                  const costos = reportData.costosVentasCUP + (reportData.costosVentasUSD * reportData.cambioMoneda);
+                  const costos = reportData.costosVentasCUP; // Only CUP costs, no USD conversion
                   const total = ventasCUP + ventasUSD + perdidas + costos;
 
                   const pieData = [
@@ -462,10 +499,17 @@ const InformeGeneralContent = () => {
               <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Top 5 Productos por Ganancia</Text>
               {reportData.topProductos.map((producto, index) => (
                 <View key={index} style={styles.productRow}>
-                  <Text style={[styles.productName, { color: colors.onSurface }]}>{producto.nombre}</Text>
-                  <Text style={[styles.productGanancia, { color: colors.primary }]}>
-                    {formatNumber(producto.ganancia)} CUP
+                  <Text style={[styles.productName, { color: colors.onSurface }]} numberOfLines={1}>
+                    {producto.nombre}
                   </Text>
+                  <View style={styles.productStatsContainer}>
+                    <Text style={[styles.productGanancia, { color: colors.primary }]}>
+                      {formatNumber(producto.ganancia)} CUP
+                    </Text>
+                    <Text style={[styles.productPorcentaje, { color: colors.outline }]}>
+                      {producto.porcentajeGanancia.toFixed(1)}% de ganancia neta
+                    </Text>
+                  </View>
                 </View>
               ))}
             </Card>
@@ -686,6 +730,7 @@ const createStyles = (responsive) => StyleSheet.create({
   productRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: responsive.responsivePadding(12),
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.05)',
@@ -693,11 +738,21 @@ const createStyles = (responsive) => StyleSheet.create({
   productName: {
     fontSize: responsive.responsiveFontSize(14),
     fontFamily: 'Inter',
+    flex: 1,
+    marginRight: responsive.responsiveMargin(8),
+  },
+  productStatsContainer: {
+    alignItems: 'flex-end',
   },
   productGanancia: {
     fontSize: responsive.responsiveFontSize(14),
     fontWeight: '600',
     fontFamily: 'Inter',
+  },
+  productPorcentaje: {
+    fontSize: responsive.responsiveFontSize(11),
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(2),
   },
   loadingModalOverlay: {
     flex: 1,

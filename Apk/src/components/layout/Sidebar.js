@@ -16,7 +16,7 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
   const responsive = useResponsive();
   const insets = useSafeAreaInsets() || { top: 0, bottom: 0, left: 0, right: 0 };
   const { toast, showToast, hideToast } = useToast();
-  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels } = useAuth();
+  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels, deudaAccessLevels } = useAuth();
   const { isOfflineMode } = useOffline();
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -51,6 +51,22 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
     (userRole === 'almacenero' && ventaAccessLevels?.almacenero !== 'none') ||
     (userRole === 'económico' && ventaAccessLevels?.economico !== 'none'));
 
+  const canAccessClientes =
+    !isOfflineMode &&
+    (isAdmin ||
+    (userRole === 'dependiente' && (deudaAccessLevels?.dependiente === 'clientes' || deudaAccessLevels?.dependiente === 'ambos')) ||
+    (userRole === 'almacenero' && (deudaAccessLevels?.almacenero === 'clientes' || deudaAccessLevels?.almacenero === 'ambos')) ||
+    (userRole === 'económico' && (deudaAccessLevels?.economico === 'clientes' || deudaAccessLevels?.economico === 'ambos')));
+
+  const canAccessDeudas =
+    !isOfflineMode &&
+    (isAdmin ||
+    (userRole === 'dependiente' && deudaAccessLevels?.dependiente === 'ambos') ||
+    (userRole === 'almacenero' && deudaAccessLevels?.almacenero === 'ambos') ||
+    (userRole === 'económico' && deudaAccessLevels?.economico === 'ambos'));
+
+  const canAccessMovimientos = !isOfflineMode;
+
   const menuItems = [
     { icon: require('../../../assets/bar-chart.png'), label: 'Panel', route: 'Home' },
     { icon: require('../../../assets/lanza-libre.png'), label: 'Servicios y Ofertas', route: 'Servicios' },
@@ -59,11 +75,10 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
     ...(canAccessSalidas ? [{ icon: require('../../../assets/box.png'), label: 'Salidas', route: 'Salidas' }] : []),
     ...(canAccessVentas ? [{ icon: require('../../../assets/sales.png'), label: 'Ventas', route: 'Ventas' }] : []),
     ...(canAccessOperaciones ? [{ icon: require('../../../assets/report.png'), label: 'Operaciones', route: 'Operaciones' }] : []),
-    { icon: require('../../../assets/report (1).png'), label: 'Informes', route: 'Informes' },
-    // Disabled items (coming soon)
-    { icon: require('../../../assets/moving.png'), label: 'Movimientos', disabled: true },
-    { icon: require('../../../assets/customer-search.png'), label: 'Clientes', disabled: true },
-    { icon: require('../../../assets/debt-recovery.png'), label: 'Deudas', disabled: true },
+    ...(isAdmin ? [{ icon: require('../../../assets/report (1).png'), label: 'Informes', route: 'Informes' }] : []),
+    ...(canAccessMovimientos ? [{ icon: require('../../../assets/moving.png'), label: 'Movimientos', route: 'Movimientos' }] : []),
+    ...(canAccessClientes ? [{ icon: require('../../../assets/customer-search.png'), label: 'Clientes', route: 'Clientes' }] : []),
+    ...(canAccessDeudas ? [{ icon: require('../../../assets/debt-recovery.png'), label: 'Deudas', route: 'Deudas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/tienda.png'), label: 'Tiendas', route: 'Tiendas' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/usuarios.png'), label: 'Usuarios', route: 'Usuarios' }] : []),
     ...(isAdmin ? [{ icon: require('../../../assets/Servicios.png'), label: 'Configuraciones del Administrador', route: 'CurrencyExchange' }] : []),

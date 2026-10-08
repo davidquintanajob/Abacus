@@ -112,9 +112,9 @@ export const Toast = ({ visible, type = 'error', message, code, duration = 4000,
         <Text style={styles.message} numberOfLines={3}>
           {message}
         </Text>
-        {code !== undefined && code !== null && (
-          <Text style={styles.code}>Código: {code}</Text>
-        )}
+        {(code !== undefined && code !== null) ? (
+          <Text style={styles.code}>{`Código: ${code}`}</Text>
+        ) : null}
       </View>
 
       {/* Botón cerrar */}

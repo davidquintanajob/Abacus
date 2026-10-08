@@ -50,6 +50,7 @@ const ProductosContent = () => {
   const isInitializedRef = useRef(false);
   const filtersRef = useRef(filters);
   const userTiendaRef = useRef(user?.id_tienda);
+  const savedPaginationRef = useRef(null);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -65,12 +66,52 @@ const ProductosContent = () => {
   }, [user?.id_tienda]);
 
   // Filter states
-  const [filters, setFilters] = useState({ nombre: '', codigo: '', categoria: '', esvendible: '', id_tienda: '', cantidad_min: '0.01', cantidad_max: '' });
+  const [filters, setFilters] = useState({ nombre: '', codigo: '', categoria: '', esvendible: '', id_tienda: '', cantidad_min: '', cantidad_max: '' });
   const [tiendas, setTiendas] = useState([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [showTiendaDropdown, setShowTiendaDropdown] = useState(false);
   const [tiendaSearchText, setTiendaSearchText] = useState('');
+  const [showCategoriaDropdown, setShowCategoriaDropdown] = useState(false);
+  const [categoriaSearchText, setCategoriaSearchText] = useState('');
+  
+  const isFirstLoadRef = useRef(true);
+
+  const predefinedCategories = ['Alimentos', 'Bebidas', 'Limpieza', 'Higiene', 'Electrónicos', 'Ropa', 'Medicamentos', 'Otros'];
+  const [customCategories, setCustomCategories] = useState([]);
+
+  const loadCustomCategories = async () => {
+    try {
+      const savedCategories = await AsyncStorage.getItem('customCategories');
+      if (savedCategories) {
+        setCustomCategories(JSON.parse(savedCategories));
+      }
+    } catch (error) {
+      console.error('Error loading custom categories:', error);
+    }
+  };
+
+  const saveCustomCategory = async (newCategory) => {
+    if (!newCategory || newCategory.trim() === '') return;
+    
+    // Check if already exists
+    const allCategories = [...predefinedCategories, ...customCategories];
+    if (allCategories.includes(newCategory.trim())) return;
+    
+    const updatedCategories = [...customCategories, newCategory.trim()];
+    setCustomCategories(updatedCategories);
+    
+    try {
+      // Save to AsyncStorage
+      await AsyncStorage.setItem('customCategories', JSON.stringify(updatedCategories));
+    } catch (error) {
+      console.error('Error saving custom category:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadCustomCategories();
+  }, []);
   const [isLoadingTiendas, setIsLoadingTiendas] = useState(false);
   const [hasLoadedAllTiendas, setHasLoadedAllTiendas] = useState(false);
   const [showScannerModal, setShowScannerModal] = useState(false);
@@ -107,18 +148,51 @@ const ProductosContent = () => {
     loadApiBaseUrl();
   }, []);
 
-  // Initialize user's store from session data immediately
+  // Restore saved state only on initial load (before setting default filters)
   useEffect(() => {
-    if (user?.id_tienda) {
-      const userTienda = {
-        id_tienda: user.id_tienda,
-        nombre: user.tienda?.nombre || `Tienda ${user.id_tienda}`
-      };
-      setTiendas([userTienda]);
-      setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString() }));
-      setUserTiendaReady(true);
-      setIsInitialized(true);
-    }
+    const restoreState = async () => {
+      try {
+        const fromForm = await AsyncStorage.getItem('productos_from_form');
+        const savedState = await AsyncStorage.getItem('productos_state');
+        
+        if (fromForm === 'true' && savedState && !isInitialized) {
+          // Viniendo de ProductoFormScreen, usar filtros guardados
+          const parsedState = JSON.parse(savedState);
+          setFilters(parsedState.filters);
+          setPagination(prev => ({ ...prev, currentPage: parsedState.pagination.currentPage }));
+          setUserTiendaReady(true);
+          setIsInitialized(true);
+          // Clear the saved state after restoring to avoid issues
+          await AsyncStorage.removeItem('productos_state');
+          await AsyncStorage.removeItem('productos_from_form');
+        } else if (!isInitialized && user?.id_tienda) {
+          // No viene de ProductoFormScreen, limpiar AsyncStorage y usar filtros por defecto
+          await AsyncStorage.removeItem('productos_state');
+          await AsyncStorage.removeItem('productos_from_form');
+          
+          const userTienda = {
+            id_tienda: user.id_tienda,
+            nombre: user.tienda?.nombre || `Tienda ${user.id_tienda}`
+          };
+          setTiendas([userTienda]);
+          // Set both tienda filter and cantidad_min=0.01 on first load
+          setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString(), cantidad_min: '0.01' }));
+          setUserTiendaReady(true);
+          setIsInitialized(true);
+        } else if (!isInitialized) {
+          // No hay usuario, solo inicializar
+          setUserTiendaReady(true);
+          setIsInitialized(true);
+        }
+      } catch (error) {
+        console.error('Error restoring state:', error);
+        await AsyncStorage.removeItem('productos_state');
+        await AsyncStorage.removeItem('productos_from_form');
+        setUserTiendaReady(true);
+        setIsInitialized(true);
+      }
+    };
+    restoreState();
   }, [user?.id_tienda]);
 
   // Single API call when all data is ready
@@ -154,51 +228,6 @@ const ProductosContent = () => {
       setHasShownOfflineToast(false);
     }
   }, [isOfflineMode]);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      // Only fetch on screen focus after initial load
-      if (isFirstFocus.current) {
-        isFirstFocus.current = false;
-        return;
-      }
-      if (isInitializedRef.current) {
-        // Restore saved state from AsyncStorage
-        const restoreState = async () => {
-          try {
-            const savedState = await AsyncStorage.getItem('productos_state');
-            if (savedState) {
-              const parsedState = JSON.parse(savedState);
-              setFilters(parsedState.filters);
-              setPagination(prev => ({ ...prev, currentPage: parsedState.pagination.currentPage }));
-              fetchProductos(null, parsedState.filters);
-            } else {
-              // Fallback to old filters key for backwards compatibility
-              const savedFilters = await AsyncStorage.getItem('productos_filters');
-              if (savedFilters) {
-                const parsedFilters = JSON.parse(savedFilters);
-                setFilters(parsedFilters);
-                fetchProductos(null, parsedFilters);
-              } else {
-                // Restore user's tienda filter if it's empty and user has a tienda
-                const shouldRestore = !filtersRef.current.id_tienda && userTiendaRef.current;
-                if (shouldRestore) {
-                  setFilters(prev => ({ ...prev, id_tienda: userTiendaRef.current.toString() }));
-                  fetchProductos(userTiendaRef.current.toString());
-                } else {
-                  fetchProductos();
-                }
-              }
-            }
-          } catch (error) {
-            console.error('Error restoring state:', error);
-            fetchProductos();
-          }
-        };
-        restoreState();
-      }
-    }, [])
-  );
 
   const fetchAllTiendas = async () => {
     try {
@@ -394,7 +423,7 @@ const ProductosContent = () => {
       categoria: '', 
       esvendible: '', 
       id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : '',
-      cantidad_min: '0.01',
+      cantidad_min: '',
       cantidad_max: ''
     };
     
@@ -526,7 +555,7 @@ const ProductosContent = () => {
       categoria: '', 
       esvendible: '', 
       id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : filters.id_tienda,
-      cantidad_min: '0.01',
+      cantidad_min: '',
       cantidad_max: ''
     };
     
@@ -1219,21 +1248,28 @@ const ProductosContent = () => {
           let imageUri = producto.producto.imagen;
           let pdfImage;
           
+          console.log('[QR Export] Image URI:', imageUri);
+          
           try {
             // If it's a remote URL, download it
             if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
+              console.log('[QR Export] Fetching remote URL:', imageUri);
               const response = await fetch(imageUri);
+              console.log('[QR Export] Response status:', response.status);
               const blob = await response.blob();
               const arrayBuffer = await blob.arrayBuffer();
               
               // Try to embed as PNG first, then JPEG
               try {
                 pdfImage = await pdfDoc.embedPng(arrayBuffer);
+                console.log('[QR Export] Image embedded as PNG');
               } catch (e) {
                 pdfImage = await pdfDoc.embedJpg(arrayBuffer);
+                console.log('[QR Export] Image embedded as JPEG');
               }
             } else if (imageUri.startsWith('data:image')) {
               // Base64 image
+              console.log('[QR Export] Image already base64');
               const base64Data = imageUri.split(',')[1];
               const binaryString = atob(base64Data);
               const arrayBuffer = new ArrayBuffer(binaryString.length);
@@ -1244,18 +1280,22 @@ const ProductosContent = () => {
               
               try {
                 pdfImage = await pdfDoc.embedPng(arrayBuffer);
+                console.log('[QR Export] Base64 image embedded as PNG');
               } catch (e) {
                 pdfImage = await pdfDoc.embedJpg(arrayBuffer);
+                console.log('[QR Export] Base64 image embedded as JPEG');
               }
             } else if (imageUri.startsWith('/')) {
               // Relative path from backend - construct full URL
               const fullImageUrl = `${apiBaseUrl}${imageUri}`;
+              console.log('[QR Export] Constructed full URL:', fullImageUrl);
               
               // Download using FileSystem for React Native compatibility
               const downloadResult = await FileSystem.downloadAsync(
                 fullImageUrl,
                 FileSystem.cacheDirectory + `temp_image_${Date.now()}.webp`
               );
+              console.log('[QR Export] Downloaded to:', downloadResult.uri);
               
               const localFile = await FileSystem.readAsStringAsync(downloadResult.uri, {
                 encoding: FileSystem.EncodingType.Base64,
@@ -1269,11 +1309,14 @@ const ProductosContent = () => {
               
               try {
                 pdfImage = await pdfDoc.embedPng(arrayBuffer);
+                console.log('[QR Export] Local image embedded as PNG');
               } catch (e) {
                 pdfImage = await pdfDoc.embedJpg(arrayBuffer);
+                console.log('[QR Export] Local image embedded as JPEG');
               }
             } else {
               // Local file path
+              console.log('[QR Export] Local file path:', imageUri);
               const localFile = await FileSystem.readAsStringAsync(imageUri, {
                 encoding: FileSystem.EncodingType.Base64,
               });
@@ -1286,8 +1329,10 @@ const ProductosContent = () => {
               
               try {
                 pdfImage = await pdfDoc.embedPng(arrayBuffer);
+                console.log('[QR Export] Local file embedded as PNG');
               } catch (e) {
                 pdfImage = await pdfDoc.embedJpg(arrayBuffer);
+                console.log('[QR Export] Local file embedded as JPEG');
               }
             }
             
@@ -1486,30 +1531,58 @@ const ProductosContent = () => {
         // Prepare product image if selected
         let productImage = '';
         if (selectedFields.imagen && producto.producto?.imagen) {
-          productImage = `<img class="product-image" src="${producto.producto.imagen}" />`;
+          let imageUri = producto.producto.imagen;
+          let imageBase64 = '';
+          
+          console.log('[Barcode Export] Image URI:', imageUri);
+          
+          try {
+            // If it's a remote URL, download it
+            if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
+              console.log('[Barcode Export] Fetching remote URL:', imageUri);
+              const response = await fetch(imageUri);
+              console.log('[Barcode Export] Response status:', response.status);
+              const blob = await response.blob();
+              const arrayBuffer = await blob.arrayBuffer();
+              const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+              imageBase64 = `data:image/jpeg;base64,${base64}`;
+              console.log('[Barcode Export] Image converted to base64, length:', imageBase64.length);
+            } else if (imageUri.startsWith('data:image')) {
+              // Already base64
+              imageBase64 = imageUri;
+              console.log('[Barcode Export] Image already base64');
+            } else if (imageUri.startsWith('/')) {
+              // Relative path from backend - construct full URL
+              const fullImageUrl = `${apiBaseUrl}${imageUri}`;
+              console.log('[Barcode Export] Constructed full URL:', fullImageUrl);
+              const response = await fetch(fullImageUrl);
+              console.log('[Barcode Export] Response status:', response.status);
+              const blob = await response.blob();
+              const arrayBuffer = await blob.arrayBuffer();
+              const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+              imageBase64 = `data:image/jpeg;base64,${base64}`;
+              console.log('[Barcode Export] Image converted to base64, length:', imageBase64.length);
+            }
+            
+            if (imageBase64) {
+              productImage = `<img class="product-image" src="${imageBase64}" />`;
+              console.log('[Barcode Export] Product image HTML generated');
+            }
+          } catch (error) {
+            console.error('[Barcode Export] Error loading product image:', error);
+          }
         }
 
-        // Only include barcode image if field is selected
-        if (selectedFields.codigo_qr_barra) {
-          barcodeContent += `
-            <div class="barcode-item">
-              ${productImage}
-              <img class="barcode-image" src="${barcodeImageBase64}" />
-              <div class="product-info">
-                ${productInfo}
-              </div>
+        // Always include both image and barcode if their respective fields are selected
+        barcodeContent += `
+          <div class="barcode-item">
+            ${productImage}
+            ${selectedFields.codigo_qr_barra ? `<img class="barcode-image" src="${barcodeImageBase64}" />` : ''}
+            <div class="product-info">
+              ${productInfo}
             </div>
-          `;
-        } else {
-          barcodeContent += `
-            <div class="barcode-item">
-              ${productImage}
-              <div class="product-info">
-                ${productInfo}
-              </div>
-            </div>
-          `;
-        }
+          </div>
+        `;
       }
 
       const htmlContent = `
@@ -2125,13 +2198,56 @@ const ProductosContent = () => {
 
               <View style={styles.filterGroup}>
                 <Text style={[styles.label, { color: colors.outline }]}>Categoría</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                  placeholderTextColor={colors.outline}
-                  placeholder="Buscar por categoría..."
-                  value={filters.categoria}
-                  onChangeText={(text) => setFilters(prev => ({ ...prev, categoria: text }))}
-                />
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    style={[styles.input, styles.inputWithDropdown, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Seleccionar o escribir categoría..."
+                    value={filters.categoria}
+                    onChangeText={(text) => {
+                      setFilters(prev => ({ ...prev, categoria: text }));
+                      setCategoriaSearchText(text);
+                    }}
+                    onFocus={() => setShowCategoriaDropdown(true)}
+                    onBlur={() => {
+                      setShowCategoriaDropdown(false);
+                      // Save custom category if it doesn't exist in predefined or custom categories
+                      if (filters.categoria && filters.categoria.trim() !== '') {
+                        const allCategories = [...predefinedCategories, ...customCategories];
+                        if (!allCategories.includes(filters.categoria.trim())) {
+                          saveCustomCategory(filters.categoria);
+                        }
+                      }
+                    }}
+                  />
+                  <TouchableOpacity
+                    style={styles.dropdownIcon}
+                    onPress={() => setShowCategoriaDropdown(!showCategoriaDropdown)}
+                  >
+                    <Ionicons name={showCategoriaDropdown ? "chevron-up" : "chevron-down"} size={20} color={colors.outline} />
+                  </TouchableOpacity>
+                </View>
+                {showCategoriaDropdown && (
+                  <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                      {[...predefinedCategories, ...customCategories]
+                        .filter(cat => cat.toLowerCase().includes(categoriaSearchText.toLowerCase()))
+                        .map((category, index, filteredArray) => (
+                          <TouchableOpacity
+                            key={category}
+                            style={[styles.dropdownItem, index === filteredArray.length - 1 && styles.dropdownItemLast]}
+                            onPress={() => {
+                              setFilters(prev => ({ ...prev, categoria: category }));
+                              setShowCategoriaDropdown(false);
+                              setCategoriaSearchText('');
+                            }}
+                          >
+                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{category}</Text>
+                          </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                  </View>
+                )}
               </View>
 
               <View style={styles.filterGroup}>
@@ -2886,6 +3002,13 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
   },
+  inputFixedWidth: {
+    width: '100%',
+  },
+  inputWithDropdown: {
+    width: '100%',
+    paddingRight: responsive.responsivePadding(48),
+  },
   rowInputs: {
     flexDirection: 'row',
     gap: responsive.responsiveMargin(8),
@@ -3132,6 +3255,21 @@ const createStyles = (responsive) => StyleSheet.create({
   dropdownItemText: {
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+    width: '100%',
+  },
+  dropdownIcon: {
+    position: 'absolute',
+    right: 0,
+    padding: responsive.responsivePadding(12),
+    zIndex: 1,
+  },
+  dropdownScroll: {
+    maxHeight: responsive.responsiveHeight(200),
   },
   dropdownLoadingContainer: {
     flexDirection: 'row',
