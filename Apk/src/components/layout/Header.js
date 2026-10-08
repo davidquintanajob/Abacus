@@ -7,6 +7,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useResponsive } from '../../hooks/useResponsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import Constants from 'expo-constants';
 
 export const Header = ({
   onMenuPress,
@@ -25,7 +26,7 @@ export const Header = ({
   isChangingView = false,
   onLogoPress,
   showVersion = true,
-  version = '1.0.0'
+  version
 }) => {
   const { isOfflineMode } = useOffline();
   const { colors } = useTheme();
@@ -36,6 +37,9 @@ export const Header = ({
   const showBack = showBackButton === true || showBackButton === 'true';
   const navigation = useNavigation();
   const { isAuthenticated } = useAuth();
+
+  // Get version from package.json if not provided
+  const appVersion = version || Constants.expoConfig?.version || Constants.manifest?.version || '1.1.0';
 
   const handleLogoPress = () => {
     if (onLogoPress) {
@@ -85,7 +89,7 @@ export const Header = ({
             </Text>
             {showVersion && (
               <Text style={[styles.version, { color: colors.outline }]}>
-                {`v${version}`}
+                {`v${appVersion}`}
               </Text>
             )}
           </View>
