@@ -148,19 +148,51 @@ const ProductosContent = () => {
     loadApiBaseUrl();
   }, []);
 
-  // Initialize user's store from session data immediately
+  // Restore saved state only on initial load (before setting default filters)
   useEffect(() => {
-    if (user?.id_tienda) {
-      const userTienda = {
-        id_tienda: user.id_tienda,
-        nombre: user.tienda?.nombre || `Tienda ${user.id_tienda}`
-      };
-      setTiendas([userTienda]);
-      // Set both tienda filter and cantidad_min=0.01 on first load
-      setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString(), cantidad_min: '0.01' }));
-      setUserTiendaReady(true);
-      setIsInitialized(true);
-    }
+    const restoreState = async () => {
+      try {
+        const fromForm = await AsyncStorage.getItem('productos_from_form');
+        const savedState = await AsyncStorage.getItem('productos_state');
+        
+        if (fromForm === 'true' && savedState && !isInitialized) {
+          // Viniendo de ProductoFormScreen, usar filtros guardados
+          const parsedState = JSON.parse(savedState);
+          setFilters(parsedState.filters);
+          setPagination(prev => ({ ...prev, currentPage: parsedState.pagination.currentPage }));
+          setUserTiendaReady(true);
+          setIsInitialized(true);
+          // Clear the saved state after restoring to avoid issues
+          await AsyncStorage.removeItem('productos_state');
+          await AsyncStorage.removeItem('productos_from_form');
+        } else if (!isInitialized && user?.id_tienda) {
+          // No viene de ProductoFormScreen, limpiar AsyncStorage y usar filtros por defecto
+          await AsyncStorage.removeItem('productos_state');
+          await AsyncStorage.removeItem('productos_from_form');
+          
+          const userTienda = {
+            id_tienda: user.id_tienda,
+            nombre: user.tienda?.nombre || `Tienda ${user.id_tienda}`
+          };
+          setTiendas([userTienda]);
+          // Set both tienda filter and cantidad_min=0.01 on first load
+          setFilters(prev => ({ ...prev, id_tienda: user.id_tienda.toString(), cantidad_min: '0.01' }));
+          setUserTiendaReady(true);
+          setIsInitialized(true);
+        } else if (!isInitialized) {
+          // No hay usuario, solo inicializar
+          setUserTiendaReady(true);
+          setIsInitialized(true);
+        }
+      } catch (error) {
+        console.error('Error restoring state:', error);
+        await AsyncStorage.removeItem('productos_state');
+        await AsyncStorage.removeItem('productos_from_form');
+        setUserTiendaReady(true);
+        setIsInitialized(true);
+      }
+    };
+    restoreState();
   }, [user?.id_tienda]);
 
   // Single API call when all data is ready
@@ -196,25 +228,6 @@ const ProductosContent = () => {
       setHasShownOfflineToast(false);
     }
   }, [isOfflineMode]);
-
-  // Restore saved state only on initial load
-  useEffect(() => {
-    const restoreState = async () => {
-      try {
-        const savedState = await AsyncStorage.getItem('productos_state');
-        if (savedState && !isInitialized) {
-          const parsedState = JSON.parse(savedState);
-          // Only restore pagination, not filters (filters are set by user's store)
-          setPagination(prev => ({ ...prev, currentPage: parsedState.pagination.currentPage }));
-          // Clear the saved state after restoring to avoid issues
-          await AsyncStorage.removeItem('productos_state');
-        }
-      } catch (error) {
-        console.error('Error restoring state:', error);
-      }
-    };
-    restoreState();
-  }, [isInitialized]);
 
   const fetchAllTiendas = async () => {
     try {

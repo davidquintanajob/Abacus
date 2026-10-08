@@ -114,6 +114,7 @@ const ProductoFormContent = () => {
   const [exchangeRate, setExchangeRate] = useState(null);
   const [priceInputTexts, setPriceInputTexts] = useState({});
   const [generalPriceInputTexts, setGeneralPriceInputTexts] = useState({});
+  const [imagenModificada, setImagenModificada] = useState(false);
 
   const [formData, setFormData] = useState({
     nombre: producto?.nombre || '',
@@ -807,6 +808,7 @@ const ProductoFormContent = () => {
         isVencible: formData.isVencible,
         unidad_medida: formData.unidad_medida || null,
         codigoList: formData.codigoList,
+        ...(isEditMode && !imagenModificada ? {} : { imagen: formData.imagen }),
         productoTiendaList: (() => {
           const toFixed5 = (value) => {
             if (value === null || value === undefined || value === '') return 0;
@@ -867,11 +869,6 @@ const ProductoFormContent = () => {
         })(),
       };
 
-      // Solo incluir imagen si tiene un valor
-      if (formData.imagen && formData.imagen.trim() !== '') {
-        dataToSend.imagen = formData.imagen;
-      }
-
       if (isEditMode) {
         const updatedProduct = await updateProducto(producto.id_servicio, dataToSend);
         showToast({ type: 'success', message: 'Producto actualizado correctamente' });
@@ -887,6 +884,7 @@ const ProductoFormContent = () => {
             entradaData: entradaData
           });
         } else {
+          await AsyncStorage.setItem('productos_from_form', 'true');
           navigation.goBack();
         }
       } else {
@@ -1252,6 +1250,7 @@ const ProductoFormContent = () => {
 
       if (photo && photo.base64) {
         setFormData(prev => ({ ...prev, imagen: `data:image/jpeg;base64,${photo.base64}` }));
+        setImagenModificada(true);
         setCameraModalVisible(false);
         showToast({ type: 'success', message: 'Foto tomada correctamente' });
       }
@@ -1271,6 +1270,7 @@ const ProductoFormContent = () => {
           style: 'destructive',
           onPress: () => {
             setFormData(prev => ({ ...prev, imagen: '' }));
+            setImagenModificada(true);
             showToast({ type: 'success', message: 'Imagen eliminada' });
           },
         },
@@ -1287,12 +1287,14 @@ const ProductoFormContent = () => {
         const compressedResult = await comprimirImagen(asset.uri);
         if (compressedResult && compressedResult.base64) {
           setFormData(prev => ({ ...prev, imagen: `data:image/jpeg;base64,${compressedResult.base64}` }));
+          setImagenModificada(true);
           ToastAndroid.show('Foto agregada', ToastAndroid.SHORT);
         } else {
           // Fallback a uriToBase64 si ImageManipulator no está disponible (Expo Go)
           const b = await uriToBase64(asset.uri);
           if (b) {
             setFormData(prev => ({ ...prev, imagen: `data:image/jpeg;base64,${b}` }));
+            setImagenModificada(true);
             ToastAndroid.show('Foto agregada (sin compresión - Expo Go)', ToastAndroid.SHORT);
           } else {
             Alert.alert('Error', 'No se pudo procesar la imagen');

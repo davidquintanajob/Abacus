@@ -13,13 +13,14 @@ import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
 import { useViewMode } from '../context/ViewModeContext';
-import { getVentas, deleteVenta } from '../services/ventaService';
+import { getVentas, deleteVenta, getVentaById } from '../services/ventaService';
 import { getTiendas } from '../services/tiendaService';
 import { getUsuarios } from '../services/usuarioService';
 import { getServicios } from '../services/servicioService';
 import { getCuentas } from '../services/cuentaService';
 import { getUsuarioById } from '../services/usuarioService';
 import { getDeudaById } from '../services/deudaService';
+import { getClienteById } from '../services/clienteService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import { storageService } from '../services/storageService';
@@ -691,16 +692,46 @@ const VentasContent = () => {
         data = await getVentas(adjustedFilters, pagination.currentPage, pagination.limit);
       }
 
-      // Cargar información de deuda para las ventas que son deudas
+      console.log('[VentasScreen] Total ventas fetched:', (data.data || []).length);
+      console.log('[VentasScreen] Ventas with is_deuda:', (data.data || []).filter(v => v.is_deuda).length);
+
+      // Cargar información completa para ventas que son deudas
       const ventasWithDeudaInfo = await Promise.all(
         (data.data || []).map(async (venta) => {
-          if (venta.is_deuda && venta.id_deuda) {
+          console.log('[VentasScreen] Processing venta:', venta.id_lista_venta, 'is_deuda:', venta.is_deuda, 'id_deuda:', venta.id_deuda);
+          if (venta.is_deuda) {
             try {
-              const deudaData = await getDeudaById(venta.id_deuda);
-              return { ...venta, deuda: deudaData };
+              // Obtener venta completa con getVentaById para obtener id_deuda
+              console.log('[VentasScreen] Fetching full venta data for:', venta.id_lista_venta);
+              const ventaCompleta = await getVentaById(venta.id_lista_venta);
+              console.log('[VentasScreen] Full venta data:', ventaCompleta);
+              console.log('[VentasScreen] Full venta data - is_deuda:', ventaCompleta.is_deuda, 'deuda:', ventaCompleta.deuda, 'id_deuda:', ventaCompleta.id_deuda);
+              
+              if (ventaCompleta.deuda) {
+                console.log('[VentasScreen] Using deuda from ventaCompleta');
+                const deudaData = ventaCompleta.deuda;
+                console.log('[VentasScreen] Deuda data:', deudaData);
+                
+                // Load cliente information separately if not included or if nombre is missing
+                if (deudaData.id_cliente && (!deudaData.cliente || !deudaData.cliente.nombre)) {
+                  try {
+                    const clienteData = await getClienteById(deudaData.id_cliente);
+                    console.log('[VentasScreen] Cliente loaded:', clienteData);
+                    deudaData.cliente = clienteData;
+                  } catch (error) {
+                    console.error('Error loading cliente for deuda:', error);
+                  }
+                }
+                
+                console.log('[VentasScreen] Cliente from deuda:', deudaData?.cliente);
+                return { ...venta, deuda: deudaData };
+              } else {
+                console.log('[VentasScreen] Venta is_deuda but no deuda found');
+                return venta;
+              }
             } catch (error) {
-              console.error('Error fetching deuda for venta:', venta.id_lista_venta, error);
-              return { ...venta, deuda: null };
+              console.error('Error fetching full venta data:', venta.id_lista_venta, error);
+              return venta;
             }
           }
           return venta;
