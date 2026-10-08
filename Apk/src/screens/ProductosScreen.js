@@ -13,20 +13,22 @@ import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
 import { useViewMode } from '../context/ViewModeContext';
 import { getProductos, getProductoByCodigo, deleteProducto } from '../services/productoService';
-import { getTiendas } from '../services/tiendaService';
+import configService from '../services/configService';
 import { getApiBaseUrl } from '../services/api';
 import ExportService from '../services/ExportService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
-import { CameraView, Camera } from 'expo-camera';
 import { storageService } from '../services/storageService';
-import * as XLSX from 'xlsx';
-import * as FileSystem from 'expo-file-system/legacy';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import bwipjs from '@bwip-js/react-native';
 import { PDFDocument, rgb } from 'pdf-lib';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CameraView, Camera } from 'expo-camera';
+import * as XLSX from 'xlsx';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const ProductosContent = () => {
   const navigation = useNavigation();
@@ -1150,147 +1152,60 @@ const ProductosContent = () => {
 
   const exportToQR = async (productos) => {
     try {
-      // Create a new PDF document
-      const pdfDoc = await PDFDocument.create();
-      
-      // Define page size (A4)
-      const pageWidth = 595.28;
-      const pageHeight = 841.89;
-      
-      // Calculate field count for grid configuration
-      let fieldCount = 0;
-      if (selectedFields.nombre) fieldCount++;
-      if (selectedFields.codigo) fieldCount++;
-      if (selectedFields.categoria) fieldCount++;
-      if (selectedFields.precio_cup) fieldCount++;
-      if (selectedFields.costo_cup) fieldCount++;
-      if (selectedFields.precio_usd) fieldCount++;
-      if (selectedFields.costo_usd) fieldCount++;
-      if (selectedFields.nota) fieldCount++;
-      if (selectedFields.cantidad) fieldCount++;
-      if (selectedFields.sufijo) fieldCount++;
-      if (selectedFields.imagen) fieldCount++;
-      
-      // Grid settings (3x3 for 6 or fewer fields, 3x2 for more than 6 fields)
-      const cols = 3;
-      const rows = fieldCount <= 6 ? 3 : 2;
-      const pageMargin = 10;
-      const cellMargin = 5;
-      const cellWidth = (pageWidth - pageMargin * 2 - cellMargin * (cols - 1)) / cols;
-      
-      let currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
-      let colIndex = 0;
-      let rowIndex = 0;
+      // Create HTML with QR codes for each product (similar to barcode export)
+      let qrContent = '';
       
       for (const producto of productos) {
-        // Calculate precise height based on actual content
-        let contentHeight = 10; // Top padding
+        const codigo = producto.codigos?.[0]?.codigo_barras_ean || 'N/A';
         
-        if (selectedFields.codigo_qr_barra) {
-          // QR code takes 55% of cell width
-          const qrSize = cellWidth * 0.55;
-          contentHeight += qrSize + 8; // QR + small gap
-        }
-        
-        if (selectedFields.imagen && producto.producto?.imagen) {
-          // Image takes 40% of cell width
-          const imageSize = cellWidth * 0.4;
-          contentHeight += imageSize + 8; // Image + small gap
-        }
-        
-        // Calculate text height precisely
-        const textLines = [];
-        if (selectedFields.nombre) textLines.push({ text: `Nombre: ${producto.nombre}`, isPrice: false });
-        if (selectedFields.codigo) textLines.push({ text: `Código: ${producto.codigos?.[0]?.codigo_barras_ean || 'N/A'}`, isPrice: false });
-        if (selectedFields.categoria) textLines.push({ text: `Categoría: ${producto.categoria || 'N/A'}`, isPrice: false });
-        if (selectedFields.precio_cup) textLines.push({ text: formatPriceForExport(getProductPrice(producto), 'cup'), isPrice: true });
-        if (selectedFields.costo_cup) textLines.push({ text: `Costo: ${formatPriceForExport(getProductCost(producto), 'cup')}`, isPrice: false });
-        if (selectedFields.precio_usd) textLines.push({ text: formatPriceForExport(getProductPriceUSD(producto), 'usd'), isPrice: true });
-        if (selectedFields.costo_usd) textLines.push({ text: `Costo USD: ${formatPriceForExport(getProductCostUSD(producto), 'usd')}`, isPrice: false });
-        if (selectedFields.nota) textLines.push({ text: `Nota: ${producto.producto?.nota || 'N/A'}`, isPrice: false });
-        if (selectedFields.cantidad) textLines.push({ text: `Cantidad: ${calculateAbsoluteTotalQuantity(producto)}`, isPrice: false });
-        if (selectedFields.sufijo) textLines.push({ text: `Sufijo: ${producto.producto?.sufijo || 'N/A'}`, isPrice: false });
-        
-        const fontSize = 12;
-        for (let i = 0; i < textLines.length; i++) {
-          const line = textLines[i];
-          const lineFontSize = line.isPrice ? 18 : fontSize;
-          if (line.isPrice && i > 0) {
-            contentHeight += 18; // Extra spacing before price
-          }
-          contentHeight += lineFontSize;
-          // Add spacing only if not last line
-          if (i < textLines.length - 1) {
-            contentHeight += line.isPrice ? 4 : 2;
+        // Generate QR code as base64 image using bwip-js only if field is selected
+        let qrImageBase64 = '';
+        if (selectedFields.codigo_qr_barra && codigo !== 'N/A') {
+          try {
+            const qrResult = await bwipjs.toDataURL({
+              bcid: 'qrcode',
+              text: codigo,
+              scale: 3,
+              height: 10,
+              includetext: false,
+              eclevel: 'H',
+              rotate: 'N',
+            });
+            qrImageBase64 = qrResult.uri;
+          } catch (error) {
+            console.error('[QR Export] Error generating QR:', error);
           }
         }
         
-        const cellHeight = contentHeight + 10; // Bottom padding
-        
-        // Calculate position in grid
-        const x = pageMargin + colIndex * (cellWidth + cellMargin);
-        const y = pageHeight - pageMargin - (rowIndex + 1) * cellHeight;
-        
-        // Draw rectangle around the cell
-        currentPage.drawRectangle({
-          x: x,
-          y: y,
-          width: cellWidth,
-          height: cellHeight,
-          borderColor: rgb(0, 0, 0),
-          borderWidth: 1,
-        });
-        
-        let textY;
-        
+        // Prepare product info display with formatted prices
+        let productInfo = '';
+        if (selectedFields.nombre) productInfo += `<p><strong>Nombre:</strong> ${producto.nombre}</p>`;
+        if (selectedFields.codigo) productInfo += `<p><strong>Código:</strong> ${codigo}</p>`;
+        if (selectedFields.categoria) productInfo += `<p><strong>Categoría:</strong> ${producto.categoria || 'N/A'}</p>`;
+        if (selectedFields.precio_cup) productInfo += `<p class="price-text">${formatPriceForExport(getProductPrice(producto), 'cup')}</p>`;
+        if (selectedFields.costo_cup) productInfo += `<p><strong>Costo:</strong> ${formatPriceForExport(getProductCost(producto), 'cup')}</p>`;
+        if (selectedFields.precio_usd) productInfo += `<p class="price-text">${formatPriceForExport(getProductPriceUSD(producto), 'usd')}</p>`;
+        if (selectedFields.costo_usd) productInfo += `<p><strong>Costo USD:</strong> ${formatPriceForExport(getProductCostUSD(producto), 'usd')}</p>`;
+        if (selectedFields.nota) productInfo += `<p><strong>Nota:</strong> ${producto.producto?.nota || 'N/A'}</p>`;
+        if (selectedFields.cantidad) productInfo += `<p><strong>Cantidad:</strong> ${calculateAbsoluteTotalQuantity(producto)}</p>`;
+        if (selectedFields.sufijo) productInfo += `<p><strong>Sufijo:</strong> ${producto.producto?.sufijo || 'N/A'}</p>`;
+
+        // Prepare product image if selected (same as barcode export)
+        let productImage = '';
         if (selectedFields.imagen && producto.producto?.imagen) {
-          // Handle image - could be URL or base64
           let imageUri = producto.producto.imagen;
-          let pdfImage;
+          let imageBase64 = '';
           
           console.log('[QR Export] Image URI:', imageUri);
           
           try {
-            // If it's a remote URL, download it
-            if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
-              console.log('[QR Export] Fetching remote URL:', imageUri);
-              const response = await fetch(imageUri);
-              console.log('[QR Export] Response status:', response.status);
-              const blob = await response.blob();
-              const arrayBuffer = await blob.arrayBuffer();
-              
-              // Try to embed as PNG first, then JPEG
-              try {
-                pdfImage = await pdfDoc.embedPng(arrayBuffer);
-                console.log('[QR Export] Image embedded as PNG');
-              } catch (e) {
-                pdfImage = await pdfDoc.embedJpg(arrayBuffer);
-                console.log('[QR Export] Image embedded as JPEG');
-              }
-            } else if (imageUri.startsWith('data:image')) {
-              // Base64 image
+            if (imageUri.startsWith('data:image')) {
+              imageBase64 = imageUri;
               console.log('[QR Export] Image already base64');
-              const base64Data = imageUri.split(',')[1];
-              const binaryString = atob(base64Data);
-              const arrayBuffer = new ArrayBuffer(binaryString.length);
-              const uint8Array = new Uint8Array(arrayBuffer);
-              for (let i = 0; i < binaryString.length; i++) {
-                uint8Array[i] = binaryString.charCodeAt(i);
-              }
-              
-              try {
-                pdfImage = await pdfDoc.embedPng(arrayBuffer);
-                console.log('[QR Export] Base64 image embedded as PNG');
-              } catch (e) {
-                pdfImage = await pdfDoc.embedJpg(arrayBuffer);
-                console.log('[QR Export] Base64 image embedded as JPEG');
-              }
             } else if (imageUri.startsWith('/')) {
-              // Relative path from backend - construct full URL
               const fullImageUrl = `${apiBaseUrl}${imageUri}`;
               console.log('[QR Export] Constructed full URL:', fullImageUrl);
               
-              // Download using FileSystem for React Native compatibility
               const downloadResult = await FileSystem.downloadAsync(
                 fullImageUrl,
                 FileSystem.cacheDirectory + `temp_image_${Date.now()}.webp`
@@ -1300,149 +1215,120 @@ const ProductosContent = () => {
               const localFile = await FileSystem.readAsStringAsync(downloadResult.uri, {
                 encoding: FileSystem.EncodingType.Base64,
               });
-              const binaryString = atob(localFile);
-              const arrayBuffer = new ArrayBuffer(binaryString.length);
-              const uint8Array = new Uint8Array(arrayBuffer);
-              for (let i = 0; i < binaryString.length; i++) {
-                uint8Array[i] = binaryString.charCodeAt(i);
-              }
+              imageBase64 = `data:image/webp;base64,${localFile}`;
+              console.log('[QR Export] Image converted to base64, length:', imageBase64.length);
+            } else if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
+              console.log('[QR Export] Fetching remote URL:', imageUri);
               
-              try {
-                pdfImage = await pdfDoc.embedPng(arrayBuffer);
-                console.log('[QR Export] Local image embedded as PNG');
-              } catch (e) {
-                pdfImage = await pdfDoc.embedJpg(arrayBuffer);
-                console.log('[QR Export] Local image embedded as JPEG');
-              }
-            } else {
-              // Local file path
-              console.log('[QR Export] Local file path:', imageUri);
-              const localFile = await FileSystem.readAsStringAsync(imageUri, {
+              const downloadResult = await FileSystem.downloadAsync(
+                imageUri,
+                FileSystem.cacheDirectory + `temp_image_${Date.now()}.webp`
+              );
+              console.log('[QR Export] Downloaded to:', downloadResult.uri);
+              
+              const localFile = await FileSystem.readAsStringAsync(downloadResult.uri, {
                 encoding: FileSystem.EncodingType.Base64,
               });
-              const binaryString = atob(localFile);
-              const arrayBuffer = new ArrayBuffer(binaryString.length);
-              const uint8Array = new Uint8Array(arrayBuffer);
-              for (let i = 0; i < binaryString.length; i++) {
-                uint8Array[i] = binaryString.charCodeAt(i);
-              }
-              
-              try {
-                pdfImage = await pdfDoc.embedPng(arrayBuffer);
-                console.log('[QR Export] Local file embedded as PNG');
-              } catch (e) {
-                pdfImage = await pdfDoc.embedJpg(arrayBuffer);
-                console.log('[QR Export] Local file embedded as JPEG');
-              }
+              imageBase64 = `data:image/webp;base64,${localFile}`;
+              console.log('[QR Export] Image converted to base64, length:', imageBase64.length);
             }
             
-            // Draw image
-            const imageSize = cellWidth * 0.4;
-            const imageX = x + (cellWidth - imageSize) / 2;
-            const imageY = y + cellHeight - imageSize - 10;
-            
-            currentPage.drawImage(pdfImage, {
-              x: imageX,
-              y: imageY,
-              width: imageSize,
-              height: imageSize,
-            });
-            
-            textY = imageY - 18;
+            if (imageBase64) {
+              productImage = `<img class="product-image" src="${imageBase64}" />`;
+              console.log('[QR Export] Product image HTML generated');
+            }
           } catch (error) {
-            // If image fails to load, skip it and continue with text
-            textY = y + cellHeight - 20;
-          }
-        } else if (selectedFields.codigo_qr_barra) {
-          // Generate QR code with only the product barcode
-          const qrString = producto.codigos?.[0]?.codigo_barras_ean || 'N/A';
-          
-          // Generate QR code as PNG using bwip-js with adaptive scale
-          const qrResult = await bwipjs.toDataURL({
-            bcid: 'qrcode',
-            text: qrString,
-            scale: 3,
-            height: 10,
-            includetext: false,
-            eclevel: 'H',
-            rotate: 'N',
-          });
-          
-          // Embed QR image in PDF
-          const qrImage = await pdfDoc.embedPng(qrResult.uri);
-          
-          // Draw QR code (compact size based on cell width)
-          const qrSize = cellWidth * 0.55;
-          const qrX = x + (cellWidth - qrSize) / 2;
-          const qrY = y + cellHeight - qrSize - 10;
-          
-          currentPage.drawImage(qrImage, {
-            x: qrX,
-            y: qrY,
-            width: qrSize,
-            height: qrSize,
-          });
-          
-          textY = qrY - 18;
-        } else {
-          // No QR code or image, start text from top
-          textY = y + cellHeight - 20;
-        }
-        
-        // Draw product info text (compact font, bold, centered)
-        const font = await pdfDoc.embedFont('Helvetica-Bold');
-        
-        for (const line of textLines) {
-          const lineFontSize = line.isPrice ? 18 : fontSize;
-          // Add spacing before price to avoid overlapping with text above
-          if (line.isPrice) {
-            textY -= 18;
-          }
-          const textWidth = font.widthOfTextAtSize(line.text, lineFontSize);
-          const textX = x + (cellWidth - textWidth) / 2;
-          currentPage.drawText(line.text, {
-            x: textX,
-            y: textY,
-            size: lineFontSize,
-            font: font,
-            color: rgb(0, 0, 0),
-          });
-          // Only add spacing if this is not the last line
-          const isLastLine = textLines.indexOf(line) === textLines.length - 1;
-          const spacing = isLastLine ? 0 : (line.isPrice ? 4 : 2);
-          textY -= lineFontSize + spacing;
-          // Stop if text would go outside the rectangle
-          if (textY < y + 5) break;
-        }
-        
-        // Move to next grid cell
-        colIndex++;
-        if (colIndex >= cols) {
-          colIndex = 0;
-          rowIndex++;
-          if (rowIndex >= rows) {
-            rowIndex = 0;
-            currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
+            console.error('[QR Export] Error loading product image:', error);
           }
         }
+
+        // Always include both image and QR if their respective fields are selected
+        console.log('[QR Export] selectedFields.imagen:', selectedFields.imagen, 'selectedFields.codigo_qr_barra:', selectedFields.codigo_qr_barra);
+        console.log('[QR Export] productImage length:', productImage.length, 'qrImageBase64 length:', qrImageBase64.length);
+        qrContent += `
+          <div class="qr-item">
+            ${productImage}
+            ${selectedFields.codigo_qr_barra ? `<img class="qr-image" src="${qrImageBase64}" />` : ''}
+            <div class="product-info">
+              ${productInfo}
+            </div>
+          </div>
+        `;
       }
+
+      const htmlContent = `
+        <html>
+          <head>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; margin: 0; }
+              .qr-container { 
+                display: grid; 
+                grid-template-columns: repeat(4, 1fr); 
+                gap: 15px; 
+                width: 100%;
+              }
+              .qr-item {
+                border: 1px solid #ddd; 
+                padding: 10px; 
+                page-break-inside: avoid;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                height: auto;
+                min-height: 150px;
+              }
+              .qr-image {
+                width: 100%;
+                max-width: 150px;
+                height: auto;
+                margin-bottom: 8px;
+              }
+              .product-image {
+                width: 100%;
+                max-width: 100px;
+                height: auto;
+                margin-bottom: 8px;
+                object-fit: contain;
+              }
+              .product-info {
+                font-size: 14px;
+                font-weight: bold;
+                text-align: center;
+                width: 100%;
+              }
+              .product-info p {
+                margin: 4px 0;
+              }
+              .price-text {
+                font-size: 24px;
+                font-weight: bold;
+                margin: 10px 0 6px 0;
+              }
+              @media print {
+                .qr-container { page-break-inside: avoid; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="qr-container">
+              ${qrContent}
+            </div>
+          </body>
+        </html>
+      `;
+
+      // Generate PDF using expo-print
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
       
-      // Save PDF to bytes
-      const pdfBytes = await pdfDoc.save();
-      
-      // Convert to base64 using React Native compatible method
-      const pdfBase64 = btoa(String.fromCharCode.apply(null, new Uint8Array(pdfBytes)));
+      // Rename the file and move to Downloads folder
       const date = new Date();
       const formattedDate = `${date.getDate().toString().padStart(2, '0')}_${(date.getMonth() + 1).toString().padStart(2, '0')}_${date.getFullYear()}`;
       const fileName = sanitizeFileName(`Codigos_QR_${formattedDate}.pdf`);
       const downloadDir = await getSafeDownloadDirectory();
-      const fileUri = `${downloadDir}${fileName}`;
-      
-      await FileSystem.writeAsStringAsync(fileUri, pdfBase64, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      
-      showExportSuccessAlert(fileUri, fileName);
+      const newUri = `${downloadDir}${fileName}`;
+      await FileSystem.moveAsync({ from: uri, to: newUri });
+
+      showExportSuccessAlert(newUri, fileName);
     } catch (error) {
       throw error;
     }
@@ -1537,17 +1423,7 @@ const ProductosContent = () => {
           console.log('[Barcode Export] Image URI:', imageUri);
           
           try {
-            // If it's a remote URL, download it
-            if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
-              console.log('[Barcode Export] Fetching remote URL:', imageUri);
-              const response = await fetch(imageUri);
-              console.log('[Barcode Export] Response status:', response.status);
-              const blob = await response.blob();
-              const arrayBuffer = await blob.arrayBuffer();
-              const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-              imageBase64 = `data:image/jpeg;base64,${base64}`;
-              console.log('[Barcode Export] Image converted to base64, length:', imageBase64.length);
-            } else if (imageUri.startsWith('data:image')) {
+            if (imageUri.startsWith('data:image')) {
               // Already base64
               imageBase64 = imageUri;
               console.log('[Barcode Export] Image already base64');
@@ -1555,12 +1431,33 @@ const ProductosContent = () => {
               // Relative path from backend - construct full URL
               const fullImageUrl = `${apiBaseUrl}${imageUri}`;
               console.log('[Barcode Export] Constructed full URL:', fullImageUrl);
-              const response = await fetch(fullImageUrl);
-              console.log('[Barcode Export] Response status:', response.status);
-              const blob = await response.blob();
-              const arrayBuffer = await blob.arrayBuffer();
-              const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-              imageBase64 = `data:image/jpeg;base64,${base64}`;
+              
+              // Download using FileSystem for React Native compatibility
+              const downloadResult = await FileSystem.downloadAsync(
+                fullImageUrl,
+                FileSystem.cacheDirectory + `temp_image_${Date.now()}.webp`
+              );
+              console.log('[Barcode Export] Downloaded to:', downloadResult.uri);
+              
+              const localFile = await FileSystem.readAsStringAsync(downloadResult.uri, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+              imageBase64 = `data:image/webp;base64,${localFile}`;
+              console.log('[Barcode Export] Image converted to base64, length:', imageBase64.length);
+            } else if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
+              // Remote URL - download using FileSystem
+              console.log('[Barcode Export] Fetching remote URL:', imageUri);
+              
+              const downloadResult = await FileSystem.downloadAsync(
+                imageUri,
+                FileSystem.cacheDirectory + `temp_image_${Date.now()}.webp`
+              );
+              console.log('[Barcode Export] Downloaded to:', downloadResult.uri);
+              
+              const localFile = await FileSystem.readAsStringAsync(downloadResult.uri, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+              imageBase64 = `data:image/webp;base64,${localFile}`;
               console.log('[Barcode Export] Image converted to base64, length:', imageBase64.length);
             }
             
@@ -1574,6 +1471,8 @@ const ProductosContent = () => {
         }
 
         // Always include both image and barcode if their respective fields are selected
+        console.log('[Barcode Export] selectedFields.imagen:', selectedFields.imagen, 'selectedFields.codigo_qr_barra:', selectedFields.codigo_qr_barra);
+        console.log('[Barcode Export] productImage length:', productImage.length, 'barcodeImageBase64 length:', barcodeImageBase64.length);
         barcodeContent += `
           <div class="barcode-item">
             ${productImage}
