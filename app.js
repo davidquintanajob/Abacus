@@ -12,11 +12,77 @@ const fs = require("fs");
 const jwt = require("jsonwebtoken");
 const { throwError } = require("./helpers/errorLauncher"); // <-- Importar throwError
 const { DataTypes } = require("sequelize");
+const notifier = require("node-notifier"); // NUEVO: Notificaciones de escritorio
 
 // <-- NUEVO: Importar el gestor de licencias
 const { SecureLicenseManager } = require("./helpers/SecureLicenseManager");
 
 const app = express();
+
+// ===== NUEVA FUNCIÓN PARA NOTIFICACIONES DE ESCRITORIO =====
+function showDesktopNotification(licenseInfo) {
+  // Solo ejecutar en Windows
+  if (process.platform !== "win32") {
+    console.log("🔔 Notificación de escritorio solo disponible en Windows");
+    return;
+  }
+
+  const daysLeft = licenseInfo.daysLeft;
+  let title = "🔒 Estado de Licencia API";
+  let message = "";
+  let sound = true;
+
+  if (licenseInfo.error) {
+    title = "❌ Error de Licencia";
+    message = licenseInfo.errorMsg || "Error al verificar la licencia";
+    sound = true;
+  } else if (daysLeft != null) {
+    if (daysLeft >= 0) {
+      if (daysLeft <= 3) {
+        title = "⚠️ Licencia por expirar (URGENTE)";
+        message = `¡URGENTE! Quedan solo ${daysLeft} día(s) de licencia`;
+        sound = true;
+      } else if (daysLeft <= 7) {
+        title = "⚠️ Licencia próxima a expirar";
+        message = `Quedan ${daysLeft} día(s) de licencia. Considera renovar.`;
+        sound = true;
+      } else {
+        title = "✅ Licencia Activa";
+        message = `Licencia válida: quedan ${daysLeft} día(s)`;
+        sound = false;
+      }
+    } else {
+      title = "❌ Licencia Expirada";
+      message = `Licencia expirada hace ${Math.abs(daysLeft)} día(s)`;
+      sound = true;
+    }
+  } else {
+    title = "⚠️ Información no disponible";
+    message = "No se pudo obtener información de la licencia";
+    sound = false;
+  }
+
+  // Ruta absoluta al icono (logo.png en la misma carpeta que app.js)
+  const iconPath = path.join(__dirname, "logo.png");
+
+  try {
+    notifier.notify({
+      title: title,
+      message: message,
+      sound: sound,
+      wait: false,
+      timeout: 10,
+      icon: iconPath,
+      appID: "API Licencia",
+    });
+  } catch (err) {
+    console.error("❌ Error al mostrar la notificación:", err.message);
+  }
+
+  // También mostrar en consola
+  console.log(`🔔 ${title}: ${message}`);
+}
+// ===== FIN DE LA NUEVA FUNCIÓN =====
 
 // Middlewares básicos
 app.use(express.json({ limit: "10mb" }));
@@ -346,20 +412,83 @@ const startApp = async () => {
     await sequelize.sync({ alter: true });
     console.log("✅ Tablas sincronizadas correctamente");
 
-    const licenseInfo = SecureLicenseManager.getLicenseInfo();
-    if (licenseInfo) {
+    // ===== SECCIÓN MODIFICADA: VERIFICACIÓN DE LICENCIA AL INICIAR + NOTIFICACIÓN =====
+    try {
+      const licenseInfo = SecureLicenseManager.getLicenseInfo();
       const status = SecureLicenseManager.checkLicense();
-      if (status.isValid) {
-        console.log(`✅ Licencia válida - Días restantes: ${status.remainingDays}`);
-        logger.info(`Licencia válida - Días restantes: ${status.remainingDays}`);
-      } else {
-        console.warn(`⚠️ ${status.message}`);
-        logger.warn(`Licencia inválida: ${status.message}`);
+
+      let daysLeft = null;
+
+      // Prioridad 1: usar remainingDays del checkLicense (más confiable)
+      if (status && typeof status.remainingDays !== "undefined" && status.remainingDays !== null) {
+        daysLeft = Math.floor(Number(status.remainingDays));
+      } else if (licenseInfo) {
+        // Prioridad 2: buscar en distintas posibles claves del objeto licenseInfo
+        const numericKeys = ['daysLeft', 'daysRemaining', 'remainingDays', 'dias_restantes', 'diasRestantes'];
+        for (const k of numericKeys) {
+          if (licenseInfo[k] != null && !isNaN(Number(licenseInfo[k]))) {
+            daysLeft = Math.floor(Number(licenseInfo[k]));
+            break;
+          }
+        }
+
+        // Prioridad 3: calcular a partir de una fecha de expiración
+        if (daysLeft === null) {
+          const dateKeys = ['expiryDate', 'expirationDate', 'expiresAt', 'validUntil', 'valid_through', 'fecha_expiracion', 'vencimiento', 'expiration', 'expiry', 'endDate', 'end_date'];
+          let dateStr = null;
+          for (const k of dateKeys) {
+            if (licenseInfo[k]) {
+              dateStr = licenseInfo[k];
+              break;
+            }
+          }
+          if (!dateStr && licenseInfo.license && (licenseInfo.license.expiresAt || licenseInfo.license.expirationDate)) {
+            dateStr = licenseInfo.license.expiresAt || licenseInfo.license.expirationDate;
+          }
+          if (dateStr) {
+            const exp = new Date(dateStr);
+            if (!isNaN(exp)) {
+              const now = new Date();
+              const diff = exp.getTime() - now.getTime();
+              daysLeft = Math.ceil(diff / (1000 * 60 * 60 * 24));
+            }
+          }
+        }
       }
-    } else {
-      console.warn("⚠️ No se encontró archivo de licencia. La API funcionará pero las peticiones serán denegadas.");
-      logger.warn("No se encontró archivo de licencia.");
+
+      if (licenseInfo) {
+        if (status.isValid) {
+          console.log(`✅ Licencia válida - Días restantes: ${daysLeft}`);
+          logger.info(`Licencia válida - Días restantes: ${daysLeft}`);
+        } else {
+          console.warn(`⚠️ ${status.message}`);
+          logger.warn(`Licencia inválida: ${status.message}`);
+        }
+
+        // Mostrar notificación de escritorio con los días restantes
+        showDesktopNotification({ daysLeft });
+      } else {
+        console.warn("⚠️ No se encontró archivo de licencia. La API funcionará pero las peticiones serán denegadas.");
+        logger.warn("No se encontró archivo de licencia.");
+
+        // Notificar el error de licencia
+        showDesktopNotification({
+          daysLeft: null,
+          error: true,
+          errorMsg: "No se encontró o no se pudo leer el archivo de licencia",
+        });
+      }
+    } catch (err) {
+      console.error("❌ Error al verificar la licencia inicial:", err);
+      logger.error(`Error al verificar la licencia inicial: ${err.message}`);
+
+      showDesktopNotification({
+        daysLeft: null,
+        error: true,
+        errorMsg: err.message,
+      });
     }
+    // ===== FIN DE LA SECCIÓN MODIFICADA =====
 
     const PORT = process.env.PORT || 4000;
     app.listen(PORT, "0.0.0.0", () => {
