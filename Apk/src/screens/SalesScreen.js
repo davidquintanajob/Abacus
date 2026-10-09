@@ -1359,7 +1359,7 @@ const SalesContent = () => {
       const totalCurrentCUPRounded = roundTo5Decimals(totalCurrentCUP);
       const totalCurrentUSDRounded = roundTo5Decimals(totalCurrentUSD);
 
-      // Check if paid amount is less than total (using rounded values and tolerance for rounding discrepancies)
+      // Check if paid amount differs from total (using rounded values and tolerance for rounding discrepancies)
       // Use tolerance of 0.1 to ignore small differences due to rounding
       const tolerance = 0.1;
       const amountDifference = Math.abs(totalPaidCUP - totalCurrentCUPRounded);
@@ -1373,8 +1373,9 @@ const SalesContent = () => {
         return;
       }
       
-      if (totalPaidCUP < totalOriginalCUPRounded - tolerance) {
-        // Show confirmation modal for underpayment (not forcing debt)
+      // Show confirmation modal if paid amount differs significantly from original total
+      if (amountDifference > tolerance) {
+        // Show confirmation modal for amount difference (not forcing debt)
         const ventaData = {
           fecha_hora: new Date().toISOString(),
           nota: ventaNota,
@@ -1392,7 +1393,7 @@ const SalesContent = () => {
           totalOriginalUSD,
           totalPaidCUP,
           totalPaidUSD,
-          isDeuda: false, // Not forcing debt, just confirmation for underpayment
+          isDeuda: false, // Not forcing debt, just confirmation for amount difference
         };
 
         setPendingSaleData(ventaData);
@@ -1515,23 +1516,8 @@ const SalesContent = () => {
       const totalPaidCUP = efectivoCupRounded + transferenciaCupRounded + (efectivoUsdRounded + transferenciaUsdRounded) * cambio;
       const totalPaidUSD = efectivoUsdRounded + transferenciaUsdRounded + (efectivoCupRounded + transferenciaCupRounded) / cambio;
 
-      // Adjust prices proportionally if paid amount differs from current total
-      let adjustedSaleItems = [...saleItems];
-      
-      if (Math.abs(totalPaidCUP - totalCurrentCUPRounded) > 0.1 && totalCurrentCUP > 0) {
-        // Calculate adjustment factor
-        const adjustmentFactor = totalPaidCUP / totalCurrentCUP;
-        
-        // Apply adjustment to each product's price
-        adjustedSaleItems = saleItems.map(item => ({
-          ...item,
-          precio_cup: roundTo5Decimals(item.precio_cup * adjustmentFactor),
-          precio_usd: roundTo5Decimals(item.precio_usd * adjustmentFactor),
-        }));
-      }
-
-      // Use the adjusted prices (or original if no adjustment needed)
-      const ventas = adjustedSaleItems.map(item => ({
+      // Use the prices as defined by the user (no automatic adjustment)
+      const ventas = saleItems.map(item => ({
         id_servicio_tienda: item.id_servicio_tienda,
         cantidad: item.cantidad,
         precio_cobrado_cup: item.precio_cup,
@@ -1558,8 +1544,8 @@ const SalesContent = () => {
       
       showToast({ type: 'success', message: 'Venta realizada correctamente' });
       
-      // Save sale items with adjusted prices for comprobante before resetting
-      setComprobanteSaleItems([...adjustedSaleItems]);
+      // Save sale items for comprobante before resetting
+      setComprobanteSaleItems([...saleItems]);
       
       // Show comprobante option
       setShowComprobanteModal(true);

@@ -1745,10 +1745,10 @@ const VentasContent = () => {
                       )}
                       <View style={styles.cantidadRow}>
                         {(() => {
-                          const totalCUP = venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_cup || 0) * (v.cantidad || 0)), 0) || 0;
-                          const totalUSD = venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_usd || 0) * (v.cantidad || 0)), 0) || 0;
-                          const paidInCUP = (parseFloat(venta.cantidad_cobrada_efectivo_cup || 0) + parseFloat(venta.cantidad_cobrada_transferencia_cup || 0)) > 0;
-                          const paidInUSD = (parseFloat(venta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(venta.cantidad_cobrada_transferencia_usd || 0)) > 0;
+                          const totalCUP = (parseFloat(venta.cantidad_cobrada_efectivo_cup || 0) + parseFloat(venta.cantidad_cobrada_transferencia_cup || 0));
+                          const totalUSD = (parseFloat(venta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(venta.cantidad_cobrada_transferencia_usd || 0));
+                          const paidInCUP = totalCUP > 0;
+                          const paidInUSD = totalUSD > 0;
 
                           return (
                             <>
@@ -1885,16 +1885,14 @@ const VentasContent = () => {
                         )}
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
                           {(() => {
-                            const totalCUP = venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_cup || 0) * (v.cantidad || 0)), 0) || 0;
-                            const paidInCUP = (parseFloat(venta.cantidad_cobrada_efectivo_cup || 0) + parseFloat(venta.cantidad_cobrada_transferencia_cup || 0)) > 0;
-                            return paidInCUP ? `$${totalCUP.toFixed(2)}` : '-';
+                            const totalCUP = (parseFloat(venta.cantidad_cobrada_efectivo_cup || 0) + parseFloat(venta.cantidad_cobrada_transferencia_cup || 0));
+                            return totalCUP > 0 ? `$${totalCUP.toFixed(2)}` : '-';
                           })()}
                         </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
                           {(() => {
-                            const totalUSD = venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_usd || 0) * (v.cantidad || 0)), 0) || 0;
-                            const paidInUSD = (parseFloat(venta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(venta.cantidad_cobrada_transferencia_usd || 0)) > 0;
-                            return paidInUSD ? `$${totalUSD.toFixed(2)}` : '-';
+                            const totalUSD = (parseFloat(venta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(venta.cantidad_cobrada_transferencia_usd || 0));
+                            return totalUSD > 0 ? `$${totalUSD.toFixed(2)}` : '-';
                           })()}
                         </Text>
                         <View style={[styles.tableCellWithFlags, { width: responsive.responsiveWidth(200) }]}>
