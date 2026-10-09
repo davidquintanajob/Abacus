@@ -1374,7 +1374,7 @@ const SalesContent = () => {
       }
       
       if (totalPaidCUP < totalOriginalCUPRounded - tolerance) {
-        // Prepare sale data for later use
+        // Show confirmation modal for underpayment (not forcing debt)
         const ventaData = {
           fecha_hora: new Date().toISOString(),
           nota: ventaNota,
@@ -1392,6 +1392,7 @@ const SalesContent = () => {
           totalOriginalUSD,
           totalPaidCUP,
           totalPaidUSD,
+          isDeuda: false, // Not forcing debt, just confirmation for underpayment
         };
 
         setPendingSaleData(ventaData);
@@ -1495,7 +1496,7 @@ const SalesContent = () => {
       }
       // ─────────────────────────────────────────────────────────────────────
 
-      // Round all values to 5 decimals to match backend precision and handle rounding discrepancies
+      // Round all values to 5 decimals to match backend precision
       const roundTo5Decimals = (value) => Math.round(value * 100000) / 100000;
       
       const cambio = parseFloat(config.cupToUsdRate || 1);
@@ -1503,120 +1504,62 @@ const SalesContent = () => {
       const efectivoUsdRounded = roundTo5Decimals(efectivoUsd);
       const transferenciaCupRounded = roundTo5Decimals(transferenciaCup);
       const transferenciaUsdRounded = roundTo5Decimals(transferenciaUsd);
-      const totalOriginalCUPRounded = roundTo5Decimals(totalOriginalCUP);
-      const totalOriginalUSDRounded = roundTo5Decimals(totalOriginalUSD);
 
-      // Calculate difference and distribute equitably using rounded values
+      // Calculate total current prices (what user is actually charging)
+      const totalCurrentCUP = saleItems.reduce((sum, item) => sum + (item.precio_cup * item.cantidad), 0);
+      const totalCurrentUSD = saleItems.reduce((sum, item) => sum + (item.precio_usd * item.cantidad), 0);
+      const totalCurrentCUPRounded = roundTo5Decimals(totalCurrentCUP);
+      const totalCurrentUSDRounded = roundTo5Decimals(totalCurrentUSD);
+
+      // Calculate total paid
       const totalPaidCUP = efectivoCupRounded + transferenciaCupRounded + (efectivoUsdRounded + transferenciaUsdRounded) * cambio;
       const totalPaidUSD = efectivoUsdRounded + transferenciaUsdRounded + (efectivoCupRounded + transferenciaCupRounded) / cambio;
 
-      const diferenciaCUP = roundTo5Decimals(totalPaidCUP - totalOriginalCUPRounded);
-      const diferenciaUSD = roundTo5Decimals(totalPaidUSD - totalOriginalUSDRounded);
-
-      // If the difference is very small (within tolerance), treat as no adjustment needed
-      // Only check the currency that was actually paid in
-      const tolerance = 0.1;
-      const paidInCUP = efectivoCupRounded + transferenciaCupRounded > 0;
-      const paidInUSD = efectivoUsdRounded + transferenciaUsdRounded > 0;
+      // Adjust prices proportionally if paid amount differs from current total
+      let adjustedSaleItems = [...saleItems];
       
-      const cupWithinTolerance = Math.abs(diferenciaCUP) <= tolerance;
-      const usdWithinTolerance = Math.abs(diferenciaUSD) <= tolerance;
-      
-      // If paid in both currencies, both must be within tolerance
-      // If paid in only one currency, only that one needs to be within tolerance
-      const shouldSkipAdjustment = paidInCUP && paidInUSD 
-        ? cupWithinTolerance && usdWithinTolerance
-        : paidInCUP ? cupWithinTolerance : usdWithinTolerance;
-      
-      if (shouldSkipAdjustment) {
-        // No adjustment needed, use exact original prices from servicio_tienda to avoid any backend calculations
-        const ventasSinAjuste = saleItems.map(item => ({
-          id_servicio_tienda: item.id_servicio_tienda,
-          cantidad: item.cantidad,
-          precio_cobrado_cup: item.precio_cup,
-          precio_cobrado_usd: item.precio_usd,
+      if (Math.abs(totalPaidCUP - totalCurrentCUPRounded) > 0.1 && totalCurrentCUP > 0) {
+        // Calculate adjustment factor
+        const adjustmentFactor = totalPaidCUP / totalCurrentCUP;
+        
+        // Apply adjustment to each product's price
+        adjustedSaleItems = saleItems.map(item => ({
+          ...item,
+          precio_cup: roundTo5Decimals(item.precio_cup * adjustmentFactor),
+          precio_usd: roundTo5Decimals(item.precio_usd * adjustmentFactor),
         }));
-
-        const ventaData = {
-          fecha_hora: new Date().toISOString(),
-          nota: ventaNota,
-          cantidad_cobrada_efectivo_cup: efectivoCupRounded,
-          cantidad_cobrada_efectivo_usd: efectivoUsdRounded,
-          cantidad_cobrada_transferencia_cup: transferenciaCupRounded,
-          cantidad_cobrada_transferencia_usd: transferenciaUsdRounded,
-          id_cuenta_efectivo_cup: efectivoCupRounded > 0 ? selectedCuentas.efectivo_cup?.id_cuenta : null,
-          id_cuenta_efectivo_usd: efectivoUsdRounded > 0 ? selectedCuentas.efectivo_usd?.id_cuenta : null,
-          id_cuenta_transferencia_cup: transferenciaCupRounded > 0 ? selectedCuentas.transferencia_cup?.id_cuenta : null,
-          id_cuenta_transferencia_usd: transferenciaUsdRounded > 0 ? selectedCuentas.transferencia_usd?.id_cuenta : null,
-          id_usuario: user.id_usuario,
-          cambio_moneda: cambio,
-          ventas: ventasSinAjuste,
-        };
-
-        const result = await createVenta(ventaData);
-        
-        showToast({ type: 'success', message: 'Venta realizada correctamente' });
-        
-        // Save sale items for comprobante before resetting
-        setComprobanteSaleItems([...saleItems]);
-        
-        // Show comprobante option
-        setShowComprobanteModal(true);
-        
-        // Reset form
-        setSaleItems([]);
-        setPaymentAmounts({
-          efectivo_cup: '',
-          efectivo_usd: '',
-          transferencia_cup: '',
-          transferencia_usd: '',
-        });
-        
-        setIsSubmitting(false);
-        return result;
       }
 
-      // Use current prices from saleItems (user can edit them in product cards)
-      const ventasConAjuste = saleItems.map(item => ({
+      // Use the adjusted prices (or original if no adjustment needed)
+      const ventas = adjustedSaleItems.map(item => ({
         id_servicio_tienda: item.id_servicio_tienda,
         cantidad: item.cantidad,
         precio_cobrado_cup: item.precio_cup,
         precio_cobrado_usd: item.precio_usd,
       }));
 
-      // Update sale items with adjusted prices for comprobante
-      const saleItemsConAjuste = saleItems.map((item, index) => {
-        const ventaAjustada = ventasConAjuste[index];
-        return {
-          ...item,
-          precio_cup: ventaAjustada.precio_cobrado_cup,
-          precio_usd: ventaAjustada.precio_cobrado_usd,
-        };
-      });
-
       const ventaData = {
         fecha_hora: new Date().toISOString(),
         nota: ventaNota,
-        cantidad_cobrada_efectivo_cup: efectivoCup,
-        cantidad_cobrada_efectivo_usd: efectivoUsd,
-        cantidad_cobrada_transferencia_cup: transferenciaCup,
-        cantidad_cobrada_transferencia_usd: transferenciaUsd,
-        id_cuenta_efectivo_cup: efectivoCup > 0 ? selectedCuentas.efectivo_cup?.id_cuenta : null,
-        id_cuenta_efectivo_usd: efectivoUsd > 0 ? selectedCuentas.efectivo_usd?.id_cuenta : null,
-        id_cuenta_transferencia_cup: transferenciaCup > 0 ? selectedCuentas.transferencia_cup?.id_cuenta : null,
-        id_cuenta_transferencia_usd: transferenciaUsd > 0 ? selectedCuentas.transferencia_usd?.id_cuenta : null,
+        cantidad_cobrada_efectivo_cup: efectivoCupRounded,
+        cantidad_cobrada_efectivo_usd: efectivoUsdRounded,
+        cantidad_cobrada_transferencia_cup: transferenciaCupRounded,
+        cantidad_cobrada_transferencia_usd: transferenciaUsdRounded,
+        id_cuenta_efectivo_cup: efectivoCupRounded > 0 ? selectedCuentas.efectivo_cup?.id_cuenta : null,
+        id_cuenta_efectivo_usd: efectivoUsdRounded > 0 ? selectedCuentas.efectivo_usd?.id_cuenta : null,
+        id_cuenta_transferencia_cup: transferenciaCupRounded > 0 ? selectedCuentas.transferencia_cup?.id_cuenta : null,
+        id_cuenta_transferencia_usd: transferenciaUsdRounded > 0 ? selectedCuentas.transferencia_usd?.id_cuenta : null,
         id_usuario: user.id_usuario,
-        cambio_moneda: config.cupToUsdRate || 1,
-        ventas: ventasConAjuste,
+        cambio_moneda: cambio,
+        ventas: ventas,
       };
-
 
       const result = await createVenta(ventaData);
       
       showToast({ type: 'success', message: 'Venta realizada correctamente' });
       
       // Save sale items with adjusted prices for comprobante before resetting
-      setComprobanteSaleItems([...saleItemsConAjuste]);
+      setComprobanteSaleItems([...adjustedSaleItems]);
       
       // Show comprobante option
       setShowComprobanteModal(true);

@@ -1378,16 +1378,12 @@ const VentaEditContent = () => {
                   />
                 </View>
                 <View style={[styles.formGroup, { flex: 1, marginLeft: responsive.responsiveWidth(8) }]}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Fecha *</Text>
-                  <TouchableOpacity
-                    style={[styles.dropdown, { backgroundColor: colors.surfaceVariant, borderColor: colors.outlineVariant }]}
-                    onPress={() => setShowDatePicker(true)}
-                  >
+                  <Text style={[styles.label, { color: colors.outline }]}>Fecha</Text>
+                  <View style={[styles.dropdown, { backgroundColor: colors.surfaceVariant, borderColor: colors.outlineVariant }]}>
                     <Text style={[styles.dropdownText, { color: formData.fecha_hora ? colors.onSurface : colors.outline }]}>
-                      {formData.fecha_hora ? new Date(formData.fecha_hora).toLocaleString() : 'Seleccionar fecha'}
+                      {formData.fecha_hora ? new Date(formData.fecha_hora).toLocaleDateString() : ''}
                     </Text>
-                    <Ionicons name="calendar-outline" size={responsive.responsiveWidth(20)} color={colors.outline} />
-                  </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             )}
