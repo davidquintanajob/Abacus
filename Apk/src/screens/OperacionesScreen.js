@@ -737,7 +737,7 @@ const OperacionesContent = () => {
     <>
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Header 
-          title="Operaciones"
+          title="Abacus"
           onMenuPress={() => setSidebarOpen(true)}
           onThemePress={toggleTheme}
           onSettingsPress={undefined}
