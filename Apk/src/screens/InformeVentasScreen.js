@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Platform, TouchableWithoutFeedback } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -14,7 +14,7 @@ import { useOffline } from '../context/OfflineContext';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Svg, Path, Line, Circle, G, Text as SvgText } from 'react-native-svg';
+import { Svg, Path, Line, Circle, G, Text as SvgText, Rect } from 'react-native-svg';
 import { getVentas } from '../services/ventaService';
 import { getTiendas } from '../services/tiendaService';
 import { getUsuarios } from '../services/usuarioService';
@@ -214,10 +214,10 @@ const InformeVentasContent = () => {
       }
 
 
-      // Fetch all ventas with pagination
+      // Fetch all ventas with high limit to get all data
       let allVentas = [];
       let page = 1;
-      const limit = 100;
+      const limit = 10000;
       let hasMore = true;
 
       while (hasMore) {
@@ -353,6 +353,9 @@ const InformeVentasContent = () => {
   };
 
   const MountainChart = ({ data, width = 350, height = 250, formaCobroFilter = null }) => {
+    const [selectedPoint, setSelectedPoint] = useState(null);
+    const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+
     if (!data || data.length === 0) {
       return (
         <View style={[styles.emptyChart, { backgroundColor: colors.surface }]}>
@@ -372,30 +375,30 @@ const InformeVentasContent = () => {
     if (!formaCobroFilter) {
       // No filter, show all
       metricsToShow = [
-        { key: 'ventasCupEfectivo', color: '#4CAF50', label: 'Ventas CUP Efectivo' },
-        { key: 'ventasCupTransferencia', color: '#2196F3', label: 'Ventas CUP Transferencia' },
-        { key: 'ventasUsdEfectivo', color: '#FF9800', label: 'Ventas USD Efectivo' },
-        { key: 'ventasUsdTransferencia', color: '#9C27B0', label: 'Ventas USD Transferencia' },
+        { key: 'ventasCupEfectivo', color: '#4CAF50', label: 'Efectivo CUP' },
+        { key: 'ventasCupTransferencia', color: '#2196F3', label: 'Transferencia CUP' },
+        { key: 'ventasUsdEfectivo', color: '#FF9800', label: 'Efectivo USD' },
+        { key: 'ventasUsdTransferencia', color: '#9C27B0', label: 'Transferencia USD' },
         { key: 'costos', color: '#F44336', label: 'Costos' },
       ];
     } else if (formaCobroFilter === 'Efectivo CUP') {
       metricsToShow = [
-        { key: 'ventasCupEfectivo', color: '#4CAF50', label: 'Ventas CUP Efectivo' },
+        { key: 'ventasCupEfectivo', color: '#4CAF50', label: 'Efectivo CUP' },
         { key: 'costos', color: '#F44336', label: 'Costos' },
       ];
     } else if (formaCobroFilter === 'Efectivo USD') {
       metricsToShow = [
-        { key: 'ventasUsdEfectivo', color: '#FF9800', label: 'Ventas USD Efectivo' },
+        { key: 'ventasUsdEfectivo', color: '#FF9800', label: 'Efectivo USD' },
         { key: 'costos', color: '#F44336', label: 'Costos' },
       ];
     } else if (formaCobroFilter === 'Transferencia CUP') {
       metricsToShow = [
-        { key: 'ventasCupTransferencia', color: '#2196F3', label: 'Ventas CUP Transferencia' },
+        { key: 'ventasCupTransferencia', color: '#2196F3', label: 'Transferencia CUP' },
         { key: 'costos', color: '#F44336', label: 'Costos' },
       ];
     } else if (formaCobroFilter === 'Transferencia USD') {
       metricsToShow = [
-        { key: 'ventasUsdTransferencia', color: '#9C27B0', label: 'Ventas USD Transferencia' },
+        { key: 'ventasUsdTransferencia', color: '#9C27B0', label: 'Transferencia USD' },
         { key: 'costos', color: '#F44336', label: 'Costos' },
       ];
     }
@@ -424,132 +427,248 @@ const InformeVentasContent = () => {
       return padding + index * xStep;
     };
 
+    const handleChartTouch = (event) => {
+      const x = event.nativeEvent.locationX;
+      const y = event.nativeEvent.locationY;
+
+      // Find closest data point based on x position
+      let closestIndex = 0;
+      let minDistance = Math.abs(x - getX(0));
+
+      for (let i = 1; i < data.length; i++) {
+        const distance = Math.abs(x - getX(i));
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestIndex = i;
+        }
+      }
+
+      setSelectedPoint(data[closestIndex]);
+      
+      // Calculate tooltip position using percentage for better positioning
+      const pointX = getX(closestIndex);
+      const pointY = getY(data[closestIndex].ventasCupEfectivo || 0);
+      
+      // Position tooltip above the point
+      const tooltipXPercent = (pointX / width) * 100;
+      const tooltipYPercent = (pointY / height) * 100;
+      
+      setTooltipPosition({ xPercent: tooltipXPercent, yPercent: tooltipYPercent });
+    };
+
+    const handleBackgroundTouch = () => {
+      setSelectedPoint(null);
+    };
+
     return (
-      <Svg width={width} height={height}>
-        {/* Y axis lines */}
-        {[0, 0.25, 0.5, 0.75, 1].map(ratio => {
-          const y = padding + chartHeight * (1 - ratio);
-          const value = (yMax * ratio).toFixed(0);
-          return (
-            <G key={ratio}>
-              <Line
-                x1={padding}
-                y1={y}
-                x2={width - padding}
-                y2={y}
-                stroke={colors.outlineVariant}
-                strokeWidth={1}
-                strokeDasharray="4,4"
-              />
-              <SvgText
-                x={padding - 5}
-                y={y + 4}
-                fontSize={10}
-                fill={colors.outline}
-                textAnchor="end"
-              >
-                {value}
-              </SvgText>
-            </G>
-          );
-        })}
-
-        {/* X axis labels (show every nth date to avoid overlap) */}
-        {data.map((d, i) => {
-          if (data.length > 10 && i % Math.ceil(data.length / 10) !== 0) return null;
-          const x = getX(i);
-          const dateLabel = d.date.slice(5); // Show MM-DD
-          return (
-            <SvgText
-              key={i}
-              x={x}
-              y={height - padding + 15}
-              fontSize={10}
-              fill={colors.outline}
-              textAnchor="middle"
-            >
-              {dateLabel}
-            </SvgText>
-          );
-        })}
-
-        {/* Mountain charts for each metric */}
-        {metricsToShow.map(({ key, color }) => {
-          if (data.length === 1) {
-            // Single data point - draw a horizontal line
-            const x = getX(0);
-            const y = getY(data[0][key]);
-            const lineStart = padding;
-            const lineEnd = width - padding;
-            
+      <View style={{ position: 'relative', width, height }}>
+        <TouchableOpacity 
+          activeOpacity={1}
+          onPress={(event) => {
+            const { locationX, locationY } = event.nativeEvent;
+            handleChartTouch({ nativeEvent: { locationX, locationY } });
+          }}
+          style={{ width: '100%', height: '100%' }}
+        >
+          <Svg width={width} height={height}>
+          {/* Y axis lines */}
+          {[0, 0.25, 0.5, 0.75, 1].map(ratio => {
+            const y = padding + chartHeight * (1 - ratio);
+            const value = (yMax * ratio).toFixed(0);
             return (
-              <G key={key}>
-                {/* Fill area */}
-                <Path
-                  d={`M ${lineStart} ${y} L ${lineEnd} ${y} L ${lineEnd} ${padding + chartHeight} L ${lineStart} ${padding + chartHeight} Z`}
-                  fill={color}
-                  fillOpacity={0.2}
+              <G key={ratio}>
+                <Line
+                  x1={padding}
+                  y1={y}
+                  x2={width - padding}
+                  y2={y}
+                  stroke={colors.outlineVariant}
+                  strokeWidth={1}
+                  strokeDasharray="4,4"
                 />
-                {/* Line */}
-                <Path
-                  d={`M ${lineStart} ${y} L ${lineEnd} ${y}`}
-                  fill="none"
-                  stroke={color}
-                  strokeWidth={2}
-                />
-                {/* Point */}
-                <Circle
-                  cx={x}
-                  cy={y}
-                  r={4}
-                  fill={color}
-                />
+                <SvgText
+                  x={padding - 5}
+                  y={y + 4}
+                  fontSize={10}
+                  fill={colors.outline}
+                  textAnchor="end"
+                >
+                  {value}
+                </SvgText>
               </G>
             );
-          }
+          })}
 
-          const pathData = data.map((d, i) => {
+          {/* X axis labels (show every nth date to avoid overlap) */}
+          {data.map((d, i) => {
+            if (data.length > 10 && i % Math.ceil(data.length / 10) !== 0) return null;
             const x = getX(i);
-            const y = getY(d[key]);
-            return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-          }).join(' ');
+            const dateLabel = d.date.slice(5); // Show MM-DD
+            return (
+              <SvgText
+                key={i}
+                x={x}
+                y={height - padding + 15}
+                fontSize={10}
+                fill={colors.outline}
+                textAnchor="middle"
+              >
+                {dateLabel}
+              </SvgText>
+            );
+          })}
 
-          // Close the path for fill
-          const fillPath = `${pathData} L ${getX(data.length - 1)} ${padding + chartHeight} L ${padding} ${padding + chartHeight} Z`;
-
-          return (
-            <G key={key}>
-              {/* Fill area */}
-              <Path
-                d={fillPath}
-                fill={color}
-                fillOpacity={0.2}
-              />
-              {/* Line */}
-              <Path
-                d={pathData}
-                fill="none"
-                stroke={color}
-                strokeWidth={2}
-              />
-              {/* Points for each data point */}
-              {data.map((d, i) => {
-                const x = getX(i);
-                const y = getY(d[key]);
-                return (
+          {/* Mountain charts for each metric */}
+          {metricsToShow.map(({ key, color }) => {
+            if (data.length === 1) {
+              // Single data point - draw a horizontal line
+              const x = getX(0);
+              const y = getY(data[0][key]);
+              const lineStart = padding;
+              const lineEnd = width - padding;
+              
+              return (
+                <G key={key}>
+                  {/* Fill area */}
+                  <Path
+                    d={`M ${lineStart} ${y} L ${lineEnd} ${y} L ${lineEnd} ${padding + chartHeight} L ${lineStart} ${padding + chartHeight} Z`}
+                    fill={color}
+                    fillOpacity={0.2}
+                  />
+                  {/* Line */}
+                  <Path
+                    d={`M ${lineStart} ${y} L ${lineEnd} ${y}`}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={2}
+                  />
+                  {/* Point */}
                   <Circle
-                    key={i}
                     cx={x}
                     cy={y}
                     r={4}
                     fill={color}
                   />
-                );
-              })}
-            </G>
-          );
-        })}
-      </Svg>
+                </G>
+              );
+            }
+
+            // Generate smooth bezier curve path
+            const pathData = data.map((d, i) => {
+              const x = getX(i);
+              const y = getY(d[key]);
+              return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+            }).join(' ');
+
+            // Generate smooth bezier curve for the line
+            const smoothPathData = (() => {
+              if (data.length < 3) return pathData;
+              
+              let path = `M ${getX(0)} ${getY(data[0][key])}`;
+              
+              for (let i = 0; i < data.length - 1; i++) {
+                const x0 = getX(i);
+                const y0 = getY(data[i][key]);
+                const x1 = getX(i + 1);
+                const y1 = getY(data[i + 1][key]);
+                
+                // Control points for bezier curve
+                const cp1x = x0 + (x1 - x0) * 0.5;
+                const cp1y = y0;
+                const cp2x = x1 - (x1 - x0) * 0.5;
+                const cp2y = y1;
+                
+                path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x1} ${y1}`;
+              }
+              
+              return path;
+            })();
+
+            // Close the path for fill (use straight lines for fill area)
+            const fillPath = `${pathData} L ${getX(data.length - 1)} ${padding + chartHeight} L ${padding} ${padding + chartHeight} Z`;
+
+            return (
+              <G key={key}>
+                {/* Fill area */}
+                <Path
+                  d={fillPath}
+                  fill={color}
+                  fillOpacity={0.2}
+                />
+                {/* Line */}
+                <Path
+                  d={smoothPathData}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth={2}
+                />
+                {/* Points for each data point */}
+                {data.map((d, i) => {
+                  const x = getX(i);
+                  const y = getY(d[key]);
+                  return (
+                    <Circle
+                      key={i}
+                      cx={x}
+                      cy={y}
+                      r={selectedPoint === d ? 6 : 4}
+                      fill={color}
+                    />
+                  );
+                })}
+              </G>
+            );
+          })}
+
+          {/* Touchable area */}
+          <Rect
+            x={padding}
+            y={padding}
+            width={chartWidth}
+            height={chartHeight}
+            fill="transparent"
+          />
+        </Svg>
+        </TouchableOpacity>
+
+        {/* Tooltip card */}
+        {selectedPoint && (
+          <TouchableOpacity 
+            activeOpacity={1}
+            onPress={handleBackgroundTouch}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+          >
+            <View style={[
+              styles.tooltipCard,
+              { 
+                backgroundColor: colors.surface,
+                borderColor: colors.outlineVariant,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.25,
+                shadowRadius: 4,
+                elevation: 5,
+                left: `${tooltipPosition.xPercent}%`,
+                top: `${tooltipPosition.yPercent}%`,
+                transform: [{ translateX: 10 }, { translateY: -120 }],
+              }
+            ]}>
+              <Text style={[styles.tooltipDate, { color: colors.onSurface }]}>
+                {selectedPoint.date}
+              </Text>
+              {metricsToShow.map(({ key, color, label }) => (
+                <View key={key} style={styles.tooltipRow}>
+                  <View style={[styles.tooltipDot, { backgroundColor: color }]} />
+                  <Text style={[styles.tooltipLabel, { color: colors.outline }]}>{label}:</Text>
+                  <Text style={[styles.tooltipValue, { color: colors.onSurface }]}>
+                    ${formatNumber(selectedPoint[key] || 0)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </TouchableOpacity>
+        )}
+      </View>
     );
   };
 
@@ -1441,6 +1560,41 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   legendText: {
     fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+  },
+  tooltipCard: {
+    position: 'absolute',
+    padding: responsive.responsivePadding(12),
+    borderRadius: 8,
+    borderWidth: 1,
+    minWidth: 180,
+    zIndex: 10,
+  },
+  tooltipDate: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  tooltipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  tooltipDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: responsive.responsiveMargin(6),
+  },
+  tooltipLabel: {
+    fontSize: responsive.responsiveFontSize(10),
+    fontFamily: 'Inter',
+    flex: 1,
+  },
+  tooltipValue: {
+    fontSize: responsive.responsiveFontSize(10),
+    fontWeight: '600',
     fontFamily: 'Inter',
   },
   totalsCard: {
