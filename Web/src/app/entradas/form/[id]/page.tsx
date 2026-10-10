@@ -75,6 +75,27 @@ export default function EntradaFormPage() {
   const [hasManuallyModifiedCostos, setHasManuallyModifiedCostos] = useState(false);
   const [config, setConfig] = useState({ applyWeightedAverageCost: false });
   
+  // Estados para formateo de precios/costos
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+  
+  // Funciones de formateo
+  const formatTo2Decimals = (value: number | null | string): string => {
+    if (value === null || value === '' || value === undefined) return '';
+    return parseFloat(String(value)).toFixed(2);
+  };
+  
+  const formatTo5Decimals = (value: number | null | string): string => {
+    if (value === null || value === '' || value === undefined) return '';
+    return parseFloat(String(value)).toFixed(5);
+  };
+  
+  const getFormattedValue = (value: number | null | string, fieldName: string): string => {
+    if (focusedField === fieldName) {
+      return formatTo5Decimals(value);
+    }
+    return formatTo2Decimals(value);
+  };
+  
   const [formData, setFormData] = useState<{
     id_servicio_tienda: number | null;
     cantidad_entrada: string;
@@ -929,7 +950,7 @@ export default function EntradaFormPage() {
                     </label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="0.00001"
                       className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
                       style={{ 
                         backgroundColor: colors.background, 
@@ -937,8 +958,10 @@ export default function EntradaFormPage() {
                         borderColor: colors.outlineVariant
                       }}
                       placeholder="Costo CUP"
-                      value={formData.costo_cup}
+                      value={getFormattedValue(formData.costo_cup, 'costo_cup')}
                       onChange={(e) => setFormData(prev => ({ ...prev, costo_cup: e.target.value }))}
+                      onFocus={() => setFocusedField('costo_cup')}
+                      onBlur={() => setFocusedField(null)}
                       disabled={isReadOnly}
                     />
                   </div>
@@ -949,7 +972,7 @@ export default function EntradaFormPage() {
                     </label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="0.00001"
                       className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
                       style={{ 
                         backgroundColor: colors.background, 
@@ -957,8 +980,10 @@ export default function EntradaFormPage() {
                         borderColor: colors.outlineVariant
                       }}
                       placeholder="Costo USD"
-                      value={formData.costo_usd}
+                      value={getFormattedValue(formData.costo_usd, 'costo_usd')}
                       onChange={(e) => setFormData(prev => ({ ...prev, costo_usd: e.target.value }))}
+                      onFocus={() => setFocusedField('costo_usd')}
+                      onBlur={() => setFocusedField(null)}
                       disabled={isReadOnly}
                     />
                   </div>
@@ -976,7 +1001,7 @@ export default function EntradaFormPage() {
                     </label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="0.00001"
                       className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
                       style={{ 
                         backgroundColor: colors.background, 
@@ -984,8 +1009,10 @@ export default function EntradaFormPage() {
                         borderColor: colors.outlineVariant
                       }}
                       placeholder="Precio CUP"
-                      value={formData.precio_cup}
+                      value={getFormattedValue(formData.precio_cup, 'precio_cup')}
                       onChange={(e) => setFormData(prev => ({ ...prev, precio_cup: e.target.value }))}
+                      onFocus={() => setFocusedField('precio_cup')}
+                      onBlur={() => setFocusedField(null)}
                       disabled={isReadOnly}
                     />
                   </div>
@@ -996,7 +1023,7 @@ export default function EntradaFormPage() {
                     </label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="0.00001"
                       className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
                       style={{ 
                         backgroundColor: colors.background, 
@@ -1004,8 +1031,10 @@ export default function EntradaFormPage() {
                         borderColor: colors.outlineVariant
                       }}
                       placeholder="Precio USD"
-                      value={formData.precio_usd}
+                      value={getFormattedValue(formData.precio_usd, 'precio_usd')}
                       onChange={(e) => setFormData(prev => ({ ...prev, precio_usd: e.target.value }))}
+                      onFocus={() => setFocusedField('precio_usd')}
+                      onBlur={() => setFocusedField(null)}
                       disabled={isReadOnly}
                     />
                   </div>

@@ -94,6 +94,27 @@ export default function ProductoFormPage() {
   const [priceInputTexts, setPriceInputTexts] = useState<{ [key: number]: { precio_cup?: string; precio_usd?: string; costo_cup?: string; costo_usd?: string } }>({});
   const [generalPriceInputTexts, setGeneralPriceInputTexts] = useState<{ precio_cup?: string; precio_usd?: string; costo_cup?: string; costo_usd?: string }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Estados para formateo de precios/costos
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+  
+  // Funciones de formateo
+  const formatTo2Decimals = (value: number | null | string): string => {
+    if (value === null || value === '' || value === undefined) return '';
+    return parseFloat(String(value)).toFixed(2);
+  };
+  
+  const formatTo5Decimals = (value: number | null | string): string => {
+    if (value === null || value === '' || value === undefined) return '';
+    return parseFloat(String(value)).toFixed(5);
+  };
+  
+  const getFormattedValue = (value: number | null | string, fieldName: string): string => {
+    if (focusedField === fieldName) {
+      return formatTo5Decimals(value);
+    }
+    return formatTo2Decimals(value);
+  };
 
   const handleImagePick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1284,7 +1305,7 @@ export default function ProductoFormPage() {
                       </label>
                       <input
                         type="number"
-                        step="0.01"
+                        step="0.00001"
                         className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
                         style={{ 
                           backgroundColor: colors.background, 
@@ -1293,8 +1314,10 @@ export default function ProductoFormPage() {
                           fontFamily: 'Inter, sans-serif'
                         }}
                         placeholder="Costo CUP"
-                        value={formData.costo_cup_general || ''}
+                        value={getFormattedValue(formData.costo_cup_general, 'costo_cup_general')}
                         onChange={(e) => handleGeneralPriceChange('costo_cup_general', parseFloat(e.target.value) || null)}
+                        onFocus={() => setFocusedField('costo_cup_general')}
+                        onBlur={() => setFocusedField(null)}
                         disabled={isReadOnly}
                       />
                     </div>
@@ -1307,7 +1330,7 @@ export default function ProductoFormPage() {
                       </label>
                       <input
                         type="number"
-                        step="0.01"
+                        step="0.00001"
                         className="w-full rounded-lg px-4 py-3 border focus:outline-none focus:ring-2"
                         style={{ 
                           backgroundColor: colors.background, 
@@ -1316,8 +1339,10 @@ export default function ProductoFormPage() {
                           fontFamily: 'Inter, sans-serif'
                         }}
                         placeholder="Costo USD"
-                        value={formData.costo_usd_general || ''}
+                        value={getFormattedValue(formData.costo_usd_general, 'costo_usd_general')}
                         onChange={(e) => handleGeneralPriceChange('costo_usd_general', parseFloat(e.target.value) || null)}
+                        onFocus={() => setFocusedField('costo_usd_general')}
+                        onBlur={() => setFocusedField(null)}
                         disabled={isReadOnly}
                       />
                     </div>
@@ -1516,7 +1541,7 @@ export default function ProductoFormPage() {
                     </label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="0.00001"
                       className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
                       style={{ 
                         backgroundColor: colors.background, 
@@ -1524,9 +1549,13 @@ export default function ProductoFormPage() {
                         borderColor: colors.outlineVariant
                       }}
                       placeholder="Precio CUP"
-                      value={formData.precio_cup_general || ''}
+                      value={getFormattedValue(formData.precio_cup_general, 'precio_cup_general')}
                       onChange={(e) => handleGeneralPriceChange('precio_cup_general', e.target.value === '' ? null : parseFloat(e.target.value))}
-                      onBlur={handleGeneralPriceBlur}
+                      onFocus={() => setFocusedField('precio_cup_general')}
+                      onBlur={() => {
+                        setFocusedField(null);
+                        handleGeneralPriceBlur();
+                      }}
                       disabled={isReadOnly}
                     />
                   </div>
@@ -1536,7 +1565,7 @@ export default function ProductoFormPage() {
                     </label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="0.00001"
                       className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
                       style={{ 
                         backgroundColor: colors.background, 
@@ -1544,9 +1573,13 @@ export default function ProductoFormPage() {
                         borderColor: colors.outlineVariant
                       }}
                       placeholder="Precio USD"
-                      value={formData.precio_usd_general || ''}
+                      value={getFormattedValue(formData.precio_usd_general, 'precio_usd_general')}
                       onChange={(e) => handleGeneralPriceChange('precio_usd_general', e.target.value === '' ? null : parseFloat(e.target.value))}
-                      onBlur={handleGeneralPriceBlur}
+                      onFocus={() => setFocusedField('precio_usd_general')}
+                      onBlur={() => {
+                        setFocusedField(null);
+                        handleGeneralPriceBlur();
+                      }}
                       disabled={isReadOnly}
                     />
                   </div>
@@ -1630,15 +1663,17 @@ export default function ProductoFormPage() {
                                   </label>
                                   <input
                                     type="number"
-                                    step="0.01"
+                                    step="0.00001"
                                     className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
                                     style={{ 
                                       backgroundColor: colors.surface, 
                                       color: colors.onSurface, 
                                       borderColor: colors.outlineVariant
                                     }}
-                                    value={tiendaProducto.precio_cup ?? ''}
+                                    value={getFormattedValue(tiendaProducto.precio_cup, `tienda_precio_cup_${index}`)}
                                     onChange={(e) => handleTiendaProductoChange(index, 'precio_cup', e.target.value)}
+                                    onFocus={() => setFocusedField(`tienda_precio_cup_${index}`)}
+                                    onBlur={() => setFocusedField(null)}
                                     disabled={isReadOnly}
                                   />
                                 </div>
@@ -1648,15 +1683,17 @@ export default function ProductoFormPage() {
                                   </label>
                                   <input
                                     type="number"
-                                    step="0.01"
+                                    step="0.00001"
                                     className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
                                     style={{ 
                                       backgroundColor: colors.surface, 
                                       color: colors.onSurface, 
                                       borderColor: colors.outlineVariant
                                     }}
-                                    value={tiendaProducto.precio_usd ?? ''}
+                                    value={getFormattedValue(tiendaProducto.precio_usd, `tienda_precio_usd_${index}`)}
                                     onChange={(e) => handleTiendaProductoChange(index, 'precio_usd', e.target.value)}
+                                    onFocus={() => setFocusedField(`tienda_precio_usd_${index}`)}
+                                    onBlur={() => setFocusedField(null)}
                                     disabled={isReadOnly}
                                   />
                                 </div>
@@ -1668,15 +1705,17 @@ export default function ProductoFormPage() {
                                       </label>
                                       <input
                                         type="number"
-                                        step="0.01"
+                                        step="0.00001"
                                         className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
                                         style={{ 
                                           backgroundColor: colors.surface, 
                                           color: colors.onSurface, 
                                           borderColor: colors.outlineVariant
                                         }}
-                                        value={tiendaProducto.costo_cup ?? ''}
+                                        value={getFormattedValue(tiendaProducto.costo_cup, `tienda_costo_cup_${index}`)}
                                         onChange={(e) => handleTiendaProductoChange(index, 'costo_cup', e.target.value)}
+                                        onFocus={() => setFocusedField(`tienda_costo_cup_${index}`)}
+                                        onBlur={() => setFocusedField(null)}
                                         disabled={isReadOnly}
                                       />
                                     </div>
@@ -1686,15 +1725,17 @@ export default function ProductoFormPage() {
                                       </label>
                                       <input
                                         type="number"
-                                        step="0.01"
+                                        step="0.00001"
                                         className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
                                         style={{ 
                                           backgroundColor: colors.surface, 
                                           color: colors.onSurface, 
                                           borderColor: colors.outlineVariant
                                         }}
-                                        value={tiendaProducto.costo_usd ?? ''}
+                                        value={getFormattedValue(tiendaProducto.costo_usd, `tienda_costo_usd_${index}`)}
                                         onChange={(e) => handleTiendaProductoChange(index, 'costo_usd', e.target.value)}
+                                        onFocus={() => setFocusedField(`tienda_costo_usd_${index}`)}
+                                        onBlur={() => setFocusedField(null)}
                                         disabled={isReadOnly}
                                       />
                                     </div>

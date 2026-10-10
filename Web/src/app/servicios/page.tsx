@@ -886,14 +886,14 @@ export default function ServiciosPage() {
                               fontFamily: 'Inter, sans-serif',
                               textAlign: 'left'
                             }}>
-                              Precio CUP: ${servicio.tiendas_servicio?.find((ts: any) => ts.id_tienda === parseInt(filters.id_tienda))?.precio_cup || servicio.tiendas_servicio?.[0]?.precio_cup || '0'}
+                              Precio CUP: ${(parseFloat(servicio.tiendas_servicio?.find((ts: any) => ts.id_tienda === parseInt(filters.id_tienda))?.precio_cup || servicio.tiendas_servicio?.[0]?.precio_cup || '0')).toFixed(2)}
                             </p>
                             <p className="text-sm font-medium" style={{ 
                               color: colors.primary, 
                               fontFamily: 'Inter, sans-serif',
                               textAlign: 'left'
                             }}>
-                              Precio USD: ${servicio.tiendas_servicio?.find((ts: any) => ts.id_tienda === parseInt(filters.id_tienda))?.precio_usd || servicio.tiendas_servicio?.[0]?.precio_usd || '0'}
+                              Precio USD: ${(parseFloat(servicio.tiendas_servicio?.find((ts: any) => ts.id_tienda === parseInt(filters.id_tienda))?.precio_usd || servicio.tiendas_servicio?.[0]?.precio_usd || '0')).toFixed(2)}
                             </p>
                           </>
                         )}
@@ -973,10 +973,10 @@ export default function ServiciosPage() {
                             {servicio.esvendible ? 'Vendible' : 'No vendible'}
                           </td>
                           <td className="px-4 py-3 text-sm font-medium" style={{ color: colors.primary }}>
-                            ${servicio.tiendas_servicio?.find((ts: any) => ts.id_tienda === parseInt(filters.id_tienda))?.precio_cup || servicio.tiendas_servicio?.[0]?.precio_cup || '0'}
+                            ${(parseFloat(servicio.tiendas_servicio?.find((ts: any) => ts.id_tienda === parseInt(filters.id_tienda))?.precio_cup || servicio.tiendas_servicio?.[0]?.precio_cup || '0')).toFixed(2)}
                           </td>
                           <td className="px-4 py-3 text-sm font-medium" style={{ color: colors.primary }}>
-                            ${servicio.tiendas_servicio?.find((ts: any) => ts.id_tienda === parseInt(filters.id_tienda))?.precio_usd || servicio.tiendas_servicio?.[0]?.precio_usd || '0'}
+                            ${(parseFloat(servicio.tiendas_servicio?.find((ts: any) => ts.id_tienda === parseInt(filters.id_tienda))?.precio_usd || servicio.tiendas_servicio?.[0]?.precio_usd || '0')).toFixed(2)}
                           </td>
                           {isAdmin && (
                             <td className="px-4 py-3">
