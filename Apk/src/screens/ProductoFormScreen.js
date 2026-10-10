@@ -715,30 +715,37 @@ const ProductoFormContent = () => {
     setIsSaving(true);
     if (!formData.nombre.trim()) {
       showToast({ type: 'warning', message: 'El nombre es requerido' });
+      setIsSaving(false);
       return;
     }
     if (formData.nombre.length < 3 || formData.nombre.length > 100) {
       showToast({ type: 'error', message: 'El nombre debe tener entre 3 y 100 caracteres' });
+      setIsSaving(false);
       return;
     }
     if (!formData.categoria.trim()) {
       showToast({ type: 'warning', message: 'La categoría es requerida' });
+      setIsSaving(false);
       return;
     }
     if (formData.categoria.length < 2 || formData.categoria.length > 50) {
       showToast({ type: 'error', message: 'La categoría debe tener entre 2 y 50 caracteres' });
+      setIsSaving(false);
       return;
     }
     if (!formData.sufijo.trim()) {
       showToast({ type: 'warning', message: 'El sufijo es requerido' });
+      setIsSaving(false);
       return;
     }
     if (formData.sufijo.length < 1 || formData.sufijo.length > 50) {
       showToast({ type: 'error', message: 'El sufijo debe tener entre 1 y 50 caracteres' });
+      setIsSaving(false);
       return;
     }
     if (!formData.codigoList || formData.codigoList.length === 0) {
       showToast({ type: 'warning', message: 'Debe agregar al menos un código' });
+      setIsSaving(false);
       return;
     }
     // Validate that there are no duplicate stores in productoTiendaList
@@ -746,6 +753,7 @@ const ProductoFormContent = () => {
     const uniqueTiendaIds = new Set(tiendaIds);
     if (tiendaIds.length !== uniqueTiendaIds.size) {
       showToast({ type: 'error', message: 'No se puede guardar: hay tiendas duplicadas en la lista de precios y costos' });
+      setIsSaving(false);
       return;
     }
 
@@ -1579,23 +1587,34 @@ const ProductoFormContent = () => {
                     setFormData(prev => ({ ...prev, categoria: text }));
                     setCategoriaSearchText(text);
                   }}
-                  onFocus={() => !isReadOnly && setShowCategoriaDropdown(true)}
-                  onBlur={() => {
-                    setShowCategoriaDropdown(false);
-                    // Save custom category if it doesn't exist in predefined or custom categories
-                    if (formData.categoria && formData.categoria.trim() !== '') {
-                      const allCategories = [...predefinedCategories, ...customCategories];
-                      if (!allCategories.includes(formData.categoria.trim())) {
-                        saveCustomCategory(formData.categoria);
-                      }
+                  onFocus={() => {
+                    if (!isReadOnly) {
+                      setShowCategoriaDropdown(true);
+                      setCategoriaSearchText(formData.categoria);
                     }
+                  }}
+                  onBlur={() => {
+                    // Delay hiding dropdown to allow TouchableOpacity press to complete
+                    setTimeout(() => {
+                      setShowCategoriaDropdown(false);
+                      // Save custom category if it doesn't exist in predefined or custom categories
+                      if (formData.categoria && formData.categoria.trim() !== '') {
+                        const allCategories = [...predefinedCategories, ...customCategories];
+                        if (!allCategories.includes(formData.categoria.trim())) {
+                          saveCustomCategory(formData.categoria);
+                        }
+                      }
+                    }, 200);
                   }}
                   editable={!isReadOnly}
                 />
                 {!isReadOnly && (
                   <TouchableOpacity
                     style={styles.dropdownIcon}
-                    onPress={() => setShowCategoriaDropdown(!showCategoriaDropdown)}
+                    onPress={() => {
+                      setShowCategoriaDropdown(!showCategoriaDropdown);
+                      setCategoriaSearchText(formData.categoria);
+                    }}
                   >
                     <Ionicons name={showCategoriaDropdown ? "chevron-up" : "chevron-down"} size={20} color={colors.outline} />
                   </TouchableOpacity>
