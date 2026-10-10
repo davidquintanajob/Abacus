@@ -757,6 +757,35 @@ const ProductoFormContent = () => {
       return;
     }
 
+    // Validate that at least one price AND one cost are defined (cost must be > 0)
+    const hasAnyPrice = 
+      (formData.precio_cup_general !== null && formData.precio_cup_general !== '' && formData.precio_cup_general !== undefined) ||
+      (formData.precio_usd_general !== null && formData.precio_usd_general !== '' && formData.precio_usd_general !== undefined) ||
+      formData.productoTiendaList.some(item => 
+        (item.precio_cup !== null && item.precio_cup !== '' && item.precio_cup !== undefined) ||
+        (item.precio_usd !== null && item.precio_usd !== '' && item.precio_usd !== undefined)
+      );
+
+    const hasAnyCostGreaterThanZero = 
+      (formData.costo_cup_general !== null && formData.costo_cup_general !== '' && formData.costo_cup_general !== undefined && parseFloat(formData.costo_cup_general) > 0) ||
+      (formData.costo_usd_general !== null && formData.costo_usd_general !== '' && formData.costo_usd_general !== undefined && parseFloat(formData.costo_usd_general) > 0) ||
+      formData.productoTiendaList.some(item => 
+        (item.costo_cup !== null && item.costo_cup !== '' && item.costo_cup !== undefined && parseFloat(item.costo_cup) > 0) ||
+        (item.costo_usd !== null && item.costo_usd !== '' && item.costo_usd !== undefined && parseFloat(item.costo_usd) > 0)
+      );
+
+    if (!hasAnyPrice) {
+      showToast({ type: 'error', message: 'El producto debe tener al menos un precio definido (puede ser 0)' });
+      setIsSaving(false);
+      return;
+    }
+
+    if (!hasAnyCostGreaterThanZero) {
+      showToast({ type: 'error', message: 'El producto debe tener al menos un costo definido mayor a 0' });
+      setIsSaving(false);
+      return;
+    }
+
     // Check if general prices are defined and update tiendas accordingly
     const hasAnyGeneralPrice = 
       (formData.precio_cup_general !== null && formData.precio_cup_general !== '') ||
@@ -789,19 +818,19 @@ const ProductoFormContent = () => {
         id_tienda,
         precio_cup: precioCup !== null ? precioCup : 0,
         precio_usd: precioUsd !== null ? precioUsd : 0,
-        costo_cup: formData.costo_cup_general || 0,
-        costo_usd: formData.costo_usd_general || 0,
+        costo_cup: (formData.costo_cup_general !== null && formData.costo_cup_general !== '' && formData.costo_cup_general !== undefined) ? formData.costo_cup_general : null,
+        costo_usd: (formData.costo_usd_general !== null && formData.costo_usd_general !== '' && formData.costo_usd_general !== undefined) ? formData.costo_usd_general : null,
       }));
       
       // Update existing entries - only update prices that are defined
       formData.productoTiendaList = [
-        ...formData.productoTiendaList.map(item => ({
+        ...formData.productoTiendaList.map(item => (({
           ...item,
           ...(precioCup !== null && { precio_cup: precioCup }),
           ...(precioUsd !== null && { precio_usd: precioUsd }),
-          costo_cup: formData.costo_cup_general || 0,
-          costo_usd: formData.costo_usd_general || 0,
-        })),
+          costo_cup: (formData.costo_cup_general !== null && formData.costo_cup_general !== '' && formData.costo_cup_general !== undefined) ? formData.costo_cup_general : item.costo_cup,
+          costo_usd: (formData.costo_usd_general !== null && formData.costo_usd_general !== '' && formData.costo_usd_general !== undefined) ? formData.costo_usd_general : item.costo_usd,
+        }))),
         ...newTiendaEntries
       ];
     }
@@ -819,9 +848,9 @@ const ProductoFormContent = () => {
         ...(isEditMode && !imagenModificada ? {} : { imagen: formData.imagen }),
         productoTiendaList: (() => {
           const toFixed5 = (value) => {
-            if (value === null || value === undefined || value === '') return 0;
+            if (value === null || value === undefined || value === '') return null;
             const num = typeof value === 'number' ? value : parseFloat(value);
-            return isNaN(num) ? 0 : parseFloat(num.toFixed(5));
+            return isNaN(num) ? null : parseFloat(num.toFixed(5));
           };
 
           let baseList = [];
@@ -835,6 +864,8 @@ const ProductoFormContent = () => {
               // Only include stores that have at least one price defined (not null and not 0)
               const precioCup = specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general);
               const precioUsd = specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general);
+              const costoCup = specific.costo_cup !== null ? toFixed5(specific.costo_cup) : toFixed5(formData.costo_cup_general);
+              const costoUsd = specific.costo_usd !== null ? toFixed5(specific.costo_usd) : toFixed5(formData.costo_usd_general);
               
               // Skip if both prices are 0 or undefined
               if ((precioCup === 0 || precioCup === null || precioCup === undefined) && 
@@ -846,6 +877,8 @@ const ProductoFormContent = () => {
                 id_tienda: specific.id_tienda,
                 precio_cup: precioCup,
                 precio_usd: precioUsd,
+                ...(costoCup !== null && { costo_cup: costoCup }),
+                ...(costoUsd !== null && { costo_usd: costoUsd }),
               });
             });
           } 
@@ -853,6 +886,8 @@ const ProductoFormContent = () => {
           else if (formData.precio_cup_general !== null || formData.precio_usd_general !== null) {
             const precioCupGeneral = toFixed5(formData.precio_cup_general);
             const precioUsdGeneral = toFixed5(formData.precio_usd_general);
+            const costoCupGeneral = toFixed5(formData.costo_cup_general);
+            const costoUsdGeneral = toFixed5(formData.costo_usd_general);
             
             // Only apply general prices if at least one is defined and not 0
             if ((precioCupGeneral !== 0 && precioCupGeneral !== null && precioCupGeneral !== undefined) ||
@@ -861,19 +896,13 @@ const ProductoFormContent = () => {
                 id_tienda: tienda.id_tienda,
                 precio_cup: precioCupGeneral,
                 precio_usd: precioUsdGeneral,
+                ...(costoCupGeneral !== null && { costo_cup: costoCupGeneral }),
+                ...(costoUsdGeneral !== null && { costo_usd: costoUsdGeneral }),
               }));
             }
           }
           
-          // Apply global cost fields to all stores
-          const costoCup = toFixed5(formData.costo_cup_general);
-          const costoUsd = toFixed5(formData.costo_usd_general);
-          
-          return baseList.map(item => ({
-            ...item,
-            costo_cup: costoCup,
-            costo_usd: costoUsd,
-          }));
+          return baseList;
         })(),
       };
 
@@ -1615,6 +1644,7 @@ const ProductoFormContent = () => {
                       setShowCategoriaDropdown(!showCategoriaDropdown);
                       setCategoriaSearchText(formData.categoria);
                     }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <Ionicons name={showCategoriaDropdown ? "chevron-up" : "chevron-down"} size={20} color={colors.outline} />
                   </TouchableOpacity>
@@ -1634,6 +1664,7 @@ const ProductoFormContent = () => {
                             setShowCategoriaDropdown(false);
                             setCategoriaSearchText('');
                           }}
+                          hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
                         >
                           <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{category}</Text>
                         </TouchableOpacity>
@@ -1644,20 +1675,29 @@ const ProductoFormContent = () => {
             </View>
 
             <View style={[styles.formColumn, styles.formGroup]}>
-              <Text style={[styles.label, { color: colors.outline }]}>Código interno (Sufijo) *</Text>
-              <TextInput
-                style={[
-                  styles.input, 
-                  { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                  isReadOnly && styles.inputDisabled
-                ]}
-                placeholderTextColor={colors.outline}
-                placeholder="Sufijo del producto"
-                value={formData.sufijo}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, sufijo: text }))}
-                editable={!isReadOnly}
-                textAlignVertical="center"
-              />
+              <Text style={[styles.label, { color: colors.outline }]}>Codigo de Lote (Sufijo)</Text>
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => {
+                  if (!isReadOnly) {
+                    // Focus the input when pressed
+                  }
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <TextInput
+                  style={[
+                    styles.input,
+                    { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                    isReadOnly && styles.inputDisabled
+                  ]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Sufijo del producto"
+                  value={formData.sufijo}
+                  onChangeText={(text) => setFormData(prev => ({ ...prev, sufijo: text }))}
+                  editable={!isReadOnly}
+                />
+              </TouchableOpacity>
             </View>
           </View>
 

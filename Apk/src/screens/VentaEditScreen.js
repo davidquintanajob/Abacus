@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Keyboard, Dimensions, Image, Vibration, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { Header } from '../components/layout/Header';
@@ -14,7 +15,7 @@ import { getVentaById, updateVenta } from '../services/ventaService';
 import { getTiendas } from '../services/tiendaService';
 import { getApiBaseUrl } from '../services/api';
 import { getUsuarios } from '../services/usuarioService';
-import { getServicios } from '../services/servicioService';
+import { getServicios, getServicioByCodigo } from '../services/servicioService';
 import { getCuentas } from '../services/cuentaService';
 import configService from '../services/configService';
 import { Toast } from '../components/common/Toast';
@@ -22,6 +23,7 @@ import { useToast } from '../hooks/useToast';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { CameraView, Camera } from 'expo-camera';
 import { ALLOWED_BARCODE_TYPES } from '../barcode/config/BarcodeTypes';
+import BarcodeEngine from '../barcode/BarcodeEngine';
 
 const VentaEditContent = () => {
   const navigation = useNavigation();
@@ -42,12 +44,224 @@ const VentaEditContent = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingVenta, setIsFetchingVenta] = useState(false);
 
+  // Barcode Engine
+  const barcodeEngineRef = useRef(null);
+
   // Camera state (disabled by default)
   const [permission, setPermission] = useState(null);
   const [showCamera, setShowCamera] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [cameraKey, setCameraKey] = useState(0);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [lastScannedCode, setLastScannedCode] = useState(null);
+  const [lastScannedTimestamp, setLastScannedTimestamp] = useState(null);
+  const [isPreferenceLoaded, setIsPreferenceLoaded] = useState(false);
+
+  // Load scanner preference from AsyncStorage
+  useEffect(() => {
+    const loadScannerPreference = async () => {
+      try {
+        const savedScannerState = await AsyncStorage.getItem('scannerEnabled');
+        if (savedScannerState !== null) {
+          const enabled = savedScannerState === 'true';
+          setShowCamera(enabled);
+          setIsScanning(enabled);
+        }
+        setIsPreferenceLoaded(true);
+      } catch (error) {
+        console.error('Error loading scanner preference:', error);
+        setIsPreferenceLoaded(true);
+      }
+    };
+    loadScannerPreference();
+  }, []);
+
+  // Save scanner preference to AsyncStorage when it changes (only after preference is loaded)
+  useEffect(() => {
+    if (isPreferenceLoaded) {
+      const saveScannerPreference = async () => {
+        try {
+          await AsyncStorage.setItem('scannerEnabled', showCamera.toString());
+        } catch (error) {
+          console.error('Error saving scanner preference:', error);
+        }
+      };
+      saveScannerPreference();
+    }
+  }, [showCamera, isPreferenceLoaded]);
+
+  // Initialize Barcode Engine
+  useEffect(() => {
+    if (!barcodeEngineRef.current) {
+      barcodeEngineRef.current = new BarcodeEngine('SALES');
+      barcodeEngineRef.current.startSession();
+    }
+
+    return () => {
+      if (barcodeEngineRef.current) {
+        barcodeEngineRef.current.resetSession();
+      }
+    };
+  }, []);
+
+  const handleBarcodeScanned = async (scanningResult) => {
+    console.log('[VentaEditScreen] handleBarcodeScanned called, isScanning:', isScanning);
+    if (!isScanning || !barcodeEngineRef.current) {
+      console.log('[VentaEditScreen] Scanning disabled or barcode engine not ready');
+      return;
+    }
+
+    try {
+      const rawCode = scanningResult.data;
+      console.log('[VentaEditScreen] Raw code scanned:', rawCode);
+      
+      // Validate scanning result
+      if (!rawCode || typeof rawCode !== 'string') {
+        console.warn('[VentaEditScreen] Invalid scanning result:', scanningResult);
+        return;
+      }
+      
+      const currentTime = Date.now();
+
+      // If same code scanned within 2 seconds, ignore to prevent accidental duplicates
+      if (lastScannedCode === rawCode && lastScannedTimestamp && (currentTime - lastScannedTimestamp) < 2000) {
+        console.log('[VentaEditScreen] Same code scanned within 2 seconds, ignoring');
+        showToast({ type: 'warning', message: 'Espere 2 segundos antes de escanear el mismo producto' });
+        return;
+      }
+
+      // Disable scanning immediately to prevent duplicate detections
+      console.log('[VentaEditScreen] Disabling scanning to process code');
+      setIsScanning(false);
+
+      try {
+        if (!barcodeEngineRef.current) {
+          console.log('[VentaEditScreen] Barcode engine ref is null, re-enabling scanning');
+          setIsScanning(true);
+          return;
+        }
+        const result = await barcodeEngineRef.current.processScanningResult({
+          data: rawCode,
+          type: scanningResult.type
+        });
+        console.log('[VentaEditScreen] Barcode engine result:', result);
+
+        if (result && result.success) {
+          console.log('[VentaEditScreen] Barcode accepted, calling addProductByCode');
+          await addProductByCode(rawCode);
+        } else {
+          console.log('[VentaEditScreen] Barcode rejected by engine');
+        }
+
+        // Update last scanned code and timestamp
+        setLastScannedCode(rawCode);
+        setLastScannedTimestamp(currentTime);
+
+        // Re-enable scanning after 1.5 seconds
+        setTimeout(() => {
+          console.log('[VentaEditScreen] Re-enabling scanning');
+          setIsScanning(true);
+        }, 1500);
+      } catch (innerError) {
+        console.error('[VentaEditScreen] Error in barcode processing logic:', innerError);
+        showToast({ type: 'error', message: 'Error al procesar código' });
+
+        // Re-enable scanning on error
+        setTimeout(() => {
+          setIsScanning(true);
+        }, 1500);
+      }
+    } catch (error) {
+      console.error('[VentaEditScreen] Error processing barcode:', error);
+      showToast({ type: 'error', message: 'Error al procesar código' });
+
+      // Re-enable scanning on error
+      setTimeout(() => {
+        setIsScanning(true);
+      }, 1500);
+    }
+  };
+
+  const addProductByCode = async (code) => {
+    console.log('[VentaEditScreen] addProductByCode called with:', code);
+    try {
+      if (!selectedTienda) {
+        showToast({ type: 'warning', message: 'Selecciona una tienda primero' });
+        return;
+      }
+
+      // Use getServicios with codigo filter to search both services and products
+      const filters = { codigo: code, fetchProducto: true };
+      
+      const data = await getServicios(filters, 1, 10);
+      
+      const servicio = data.data?.[0];
+
+      if (!servicio) {
+        showToast({ type: 'error', message: 'Producto o servicio no encontrado' });
+        return;
+      }
+
+      // Find the servicio_tienda for the selected store
+      const servicioTienda = servicio.tiendas_servicio?.find(t => t.id_tienda === selectedTienda.id_tienda);
+
+      if (!servicioTienda) {
+        showToast({ type: 'error', message: 'Producto no disponible en esta tienda' });
+        return;
+      }
+
+      // Check if product already exists in saleItems by id_servicio
+      const existingItem = saleItems.find(
+        item => item.id_servicio === servicio.id_servicio
+      );
+
+      if (existingItem) {
+        updateItemQuantity(saleItems.indexOf(existingItem), existingItem.cantidad + 1);
+        if (Platform.OS === 'android') {
+          Vibration.vibrate(100);
+        }
+        showToast({ type: 'success', message: 'Cantidad aumentada' });
+        return;
+      }
+
+      // Build full image URL
+      let fullImageUrl = null;
+      if (servicio.producto?.imagen) {
+        const isBase64 = servicio.producto.imagen.startsWith('data:');
+        if (isBase64) {
+          fullImageUrl = servicio.producto.imagen;
+        } else {
+          const imagePath = servicio.producto.imagen.startsWith('/') ? servicio.producto.imagen : `/${servicio.producto.imagen}`;
+          const currentBaseUrl = await getApiBaseUrl();
+          fullImageUrl = currentBaseUrl ? `${currentBaseUrl}${imagePath}` : servicio.producto.imagen;
+        }
+      }
+
+      const newItem = {
+        id_servicio_tienda: servicioTienda.id_servicio_tienda,
+        id_servicio: servicio.id_servicio,
+        codigo_barras_ean: code,
+        nombre: servicio.nombre || 'Sin nombre',
+        imagen: fullImageUrl,
+        cantidad: 1,
+        precio_cup: parseFloat(servicioTienda.precio_cup || 0),
+        precio_usd: parseFloat(servicioTienda.precio_usd || 0),
+        precio_original_cup: parseFloat(servicioTienda.precio_cup || 0),
+        precio_original_usd: parseFloat(servicioTienda.precio_usd || 0),
+        esOferta: servicio.componentes?.length > 0,
+        componentes: [],
+      };
+
+      setSaleItems(prev => [...prev, newItem]);
+      if (Platform.OS === 'android') {
+        Vibration.vibrate(100);
+      }
+      showToast({ type: 'success', message: 'Producto agregado correctamente' });
+    } catch (error) {
+      console.error('[VentaEditScreen] Error in addProductByCode:', error);
+      showToast({ type: 'error', message: 'Error al agregar producto' });
+    }
+  };
 
   // SalesScreen-like state
   const [selectedTienda, setSelectedTienda] = useState(null);
@@ -918,6 +1132,7 @@ const VentaEditContent = () => {
                 barcodeScannerSettings={{
                   barcodeTypes: ALLOWED_BARCODE_TYPES,
                 }}
+                onBarcodeScanned={isScanning ? handleBarcodeScanned : undefined}
               />
               <View style={styles.cameraOverlay}>
                 <View style={[styles.corner, styles.topLeft]} />
