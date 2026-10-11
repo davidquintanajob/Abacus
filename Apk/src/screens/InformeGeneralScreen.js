@@ -181,15 +181,20 @@ const InformeGeneralContent = () => {
       }
 
       // Calculate losses from salidas (costo_cup/usd is already total cost, not unit cost)
+      // Only consider CUP losses since USD is equivalent to CUP
       let perdidasSalidasCUP = 0;
       let perdidasSalidasUSD = 0;
 
       for (const salida of salidas) {
+        const cantidad = parseFloat(salida.cantidad_total || 1); // Use cantidad_total from API
         const costoCUP = parseFloat(salida.costo_cup || 0);
         const costoUSD = parseFloat(salida.costo_usd || 0);
 
-        perdidasSalidasCUP += costoCUP;
-        perdidasSalidasUSD += costoUSD;
+        // Only add CUP cost to losses (USD cost is equivalent, not separate)
+        // Multiply by cantidad to get total loss for all units
+        perdidasSalidasCUP += costoCUP * cantidad;
+        // Keep USD losses at 0 since they're equivalent to CUP
+        perdidasSalidasUSD = 0;
       }
 
       // Convert only USD income to CUP for total calculation (costs stay in their currency)
@@ -197,7 +202,8 @@ const InformeGeneralContent = () => {
       const gananciaNetaCUP = ingresosTotalesCUP - costosVentasCUP - perdidasSalidasCUP;
       
       // Ganancia USD should be only from USD sales (not conversion of CUP profit)
-      const gananciaNetaUSD = ingresosVentasUSD - costosVentasUSD - perdidasSalidasUSD;
+      // USD losses are 0 since they're equivalent to CUP losses
+      const gananciaNetaUSD = ingresosVentasUSD - costosVentasUSD;
 
       // Ganancia neta total en CUP (base para calcular % por producto)
       const ingresosTotalesCUPCalc = ingresosVentasCUP + (ingresosVentasUSD * cambioMoneda);
@@ -256,8 +262,8 @@ const InformeGeneralContent = () => {
     if (!reportData) return { cup: 0, usd: 0 };
     // Ganancia Neta CUP = Ingresos Ventas CUP - Costos Ventas CUP - Pérdidas Salidas CUP
     const gananciaCUP = reportData.ingresosVentasCUP - reportData.costosVentasCUP - reportData.perdidasSalidasCUP;
-    // Ganancia Neta USD = Ingresos Ventas USD - Costos Ventas USD - Pérdidas Salidas USD
-    const gananciaUSD = reportData.ingresosVentasUSD - reportData.costosVentasUSD - reportData.perdidasSalidasUSD;
+    // Ganancia Neta USD = Ingresos Ventas USD - Costos Ventas USD (no USD losses since they're equivalent to CUP)
+    const gananciaUSD = reportData.ingresosVentasUSD - reportData.costosVentasUSD;
     return { cup: gananciaCUP, usd: gananciaUSD };
   };
 
@@ -427,7 +433,7 @@ const InformeGeneralContent = () => {
                 {(() => {
                   const ventasCUP = reportData.ingresosVentasCUP;
                   const ventasUSD = reportData.ingresosVentasUSD * reportData.cambioMoneda;
-                  const perdidas = reportData.perdidasSalidasCUP + (reportData.perdidasSalidasUSD * reportData.cambioMoneda);
+                  const perdidas = reportData.perdidasSalidasCUP; // Only CUP losses, USD losses are equivalent
                   const costos = reportData.costosVentasCUP; // Only CUP costs, no USD conversion
                   const total = ventasCUP + ventasUSD + perdidas + costos;
 
