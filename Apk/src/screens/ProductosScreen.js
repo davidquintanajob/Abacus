@@ -13,6 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
 import { useViewMode } from '../context/ViewModeContext';
 import { getProductos, getProductoByCodigo, deleteProducto } from '../services/productoService';
+import { getTiendas } from '../services/tiendaService';
 import configService from '../services/configService';
 import { getApiBaseUrl } from '../services/api';
 import ExportService from '../services/ExportService';
@@ -147,11 +148,6 @@ const ProductosContent = () => {
   const canEdit = isAdmin;
 
   useEffect(() => {
-    loadApiBaseUrl();
-  }, []);
-
-  // Restore saved state only on initial load (before setting default filters)
-  useEffect(() => {
     const restoreState = async () => {
       try {
         const fromForm = await AsyncStorage.getItem('productos_from_form');
@@ -187,7 +183,6 @@ const ProductosContent = () => {
           setIsInitialized(true);
         }
       } catch (error) {
-        console.error('Error restoring state:', error);
         await AsyncStorage.removeItem('productos_state');
         await AsyncStorage.removeItem('productos_from_form');
         setUserTiendaReady(true);
@@ -196,6 +191,10 @@ const ProductosContent = () => {
     };
     restoreState();
   }, [user?.id_tienda]);
+
+  useEffect(() => {
+    loadApiBaseUrl();
+  }, []);
 
   // Single API call when all data is ready
   useEffect(() => {

@@ -27,6 +27,9 @@ import { storageService } from '../services/storageService';
 import configService from '../services/configService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as XLSX from 'xlsx';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 
 const VentasContent = () => {
   const navigation = useNavigation();
@@ -48,6 +51,9 @@ const VentasContent = () => {
   const [selectedCuenta, setSelectedCuenta] = useState(null);
   const [completeUserData, setCompleteUserData] = useState(null);
   const [tiendaCuentasConfig, setTiendaCuentasConfig] = useState({});
+  const [showOrderSelectionModal, setShowOrderSelectionModal] = useState(false);
+  const [selectedOrderField, setSelectedOrderField] = useState('fecha_hora');
+  const [isExporting, setIsExporting] = useState(false);
 
   const [isInitialized, setIsInitialized] = useState(false);
   const [userTiendaReady, setUserTiendaReady] = useState(false);
@@ -461,7 +467,6 @@ const VentasContent = () => {
             // Refresh cuentas when returning from edit/create
             fetchCuentas();
           } catch (error) {
-            console.error('Error restoring filters:', error);
             fetchVentas();
             fetchCuentas();
           }
@@ -508,7 +513,6 @@ const VentasContent = () => {
       }
       setHasLoadedAllTiendas(true);
     } catch (error) {
-      console.error('Error fetching tiendas:', error);
       showToast({ type: 'error', message: 'Error al cargar tiendas' });
     } finally {
       setIsLoadingTiendas(false);
@@ -530,7 +534,6 @@ const VentasContent = () => {
       setUsers(allUsers);
       setHasLoadedAllUsers(true);
     } catch (error) {
-      console.error('Error fetching users:', error);
       showToast({ type: 'error', message: 'Error al cargar usuarios' });
     } finally {
       setIsLoadingUsers(false);
@@ -554,7 +557,6 @@ const VentasContent = () => {
       setServicios(allServicios);
       setHasLoadedAllServicios(true);
     } catch (error) {
-      console.error('Error fetching servicios:', error);
       showToast({ type: 'error', message: 'Error al cargar servicios' });
     } finally {
       setIsLoadingServicios(false);
@@ -597,7 +599,7 @@ const VentasContent = () => {
 
       setCuentas(allCuentas);
     } catch (error) {
-      console.error('Error fetching cuentas:', error);
+      // Error fetching cuentas
     }
   }, [filters.id_tienda, tiendaCuentasConfig, isOfflineMode]);
 
@@ -609,7 +611,7 @@ const VentasContent = () => {
       const data = await getUsuarioById(user.id_usuario);
       setCompleteUserData(data);
     } catch (error) {
-      console.error('Error fetching complete user data:', error);
+      // Error fetching complete user data
     }
   };
 
@@ -623,7 +625,7 @@ const VentasContent = () => {
         setTiendaCuentasConfig(config.tiendaCuentasConfig);
       }
     } catch (error) {
-      console.error('Error fetching tienda cuentas config:', error);
+      // Error fetching tienda cuentas config
     }
   };
 
@@ -692,45 +694,32 @@ const VentasContent = () => {
         data = await getVentas(adjustedFilters, pagination.currentPage, pagination.limit);
       }
 
-      console.log('[VentasScreen] Total ventas fetched:', (data.data || []).length);
-      console.log('[VentasScreen] Ventas with is_deuda:', (data.data || []).filter(v => v.is_deuda).length);
-
       // Cargar información completa para ventas que son deudas
       const ventasWithDeudaInfo = await Promise.all(
         (data.data || []).map(async (venta) => {
-          console.log('[VentasScreen] Processing venta:', venta.id_lista_venta, 'is_deuda:', venta.is_deuda, 'id_deuda:', venta.id_deuda);
           if (venta.is_deuda) {
             try {
               // Obtener venta completa con getVentaById para obtener id_deuda
-              console.log('[VentasScreen] Fetching full venta data for:', venta.id_lista_venta);
               const ventaCompleta = await getVentaById(venta.id_lista_venta);
-              console.log('[VentasScreen] Full venta data:', ventaCompleta);
-              console.log('[VentasScreen] Full venta data - is_deuda:', ventaCompleta.is_deuda, 'deuda:', ventaCompleta.deuda, 'id_deuda:', ventaCompleta.id_deuda);
               
               if (ventaCompleta.deuda) {
-                console.log('[VentasScreen] Using deuda from ventaCompleta');
                 const deudaData = ventaCompleta.deuda;
-                console.log('[VentasScreen] Deuda data:', deudaData);
                 
                 // Load cliente information separately if not included or if nombre is missing
                 if (deudaData.id_cliente && (!deudaData.cliente || !deudaData.cliente.nombre)) {
                   try {
                     const clienteData = await getClienteById(deudaData.id_cliente);
-                    console.log('[VentasScreen] Cliente loaded:', clienteData);
                     deudaData.cliente = clienteData;
                   } catch (error) {
-                    console.error('Error loading cliente for deuda:', error);
+                    // Error loading cliente for deuda
                   }
                 }
                 
-                console.log('[VentasScreen] Cliente from deuda:', deudaData?.cliente);
                 return { ...venta, deuda: deudaData };
               } else {
-                console.log('[VentasScreen] Venta is_deuda but no deuda found');
                 return venta;
               }
             } catch (error) {
-              console.error('Error fetching full venta data:', venta.id_lista_venta, error);
               return venta;
             }
           }
@@ -748,7 +737,6 @@ const VentasContent = () => {
 
       await AsyncStorage.setItem('ventas_filters', JSON.stringify(effectiveFilters));
     } catch (error) {
-      console.error('Error fetching ventas:', error);
       setError(error.message);
       showToast({ type: 'error', message: 'Error al cargar ventas' });
     } finally {
@@ -779,6 +767,187 @@ const VentasContent = () => {
     setFilters(defaultFilters);
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     fetchVentas();
+  };
+
+  // Function to fetch all ventas for export (without pagination)
+  const fetchAllVentasForExport = async () => {
+    try {
+      const effectiveFilters = { ...filters };
+      
+      const userRole = user?.rol?.toLowerCase();
+      const canViewAllVentas = 
+        userRole === 'administrador' ||
+        (userRole === 'dependiente' && ventaAccessLevels?.dependiente === 'all_stores') ||
+        (userRole === 'almacenero' && ventaAccessLevels?.almacenero === 'all_stores') ||
+        (userRole === 'económico' && ventaAccessLevels?.economico === 'all_stores');
+
+      if (!canViewAllVentas && user?.id_tienda) {
+        effectiveFilters.id_tienda = user.id_tienda.toString();
+      }
+
+      const adjustedFilters = adjustFiltersForCubaTimezone(effectiveFilters);
+
+      let allVentas = [];
+      let page = 1;
+      const limit = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        let data;
+        if (isOfflineMode) {
+          data = await storageService.getVentas(adjustedFilters, page, limit);
+        } else {
+          data = await getVentas(adjustedFilters, page, limit);
+        }
+
+        allVentas = [...allVentas, ...(data.data || [])];
+        hasMore = (data.data || []).length === limit && (data.pagination?.currentPage < data.pagination?.totalPages);
+        page++;
+      }
+
+      return allVentas;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // Function to export ventas to Excel
+  const exportVentasToExcel = async () => {
+    try {
+      setIsExporting(true);
+      setShowOrderSelectionModal(false);
+
+      const allVentas = await fetchAllVentasForExport();
+
+      // Fetch complete venta data for each venta to get usuario, forma_cobro, and cuenta
+      const ventasWithFullData = await Promise.all(
+        allVentas.map(async (venta) => {
+          try {
+            const ventaCompleta = await getVentaById(venta.id_lista_venta);
+            return ventaCompleta;
+          } catch (error) {
+            return venta;
+          }
+        })
+      );
+
+      // Sort ventas based on selected order field
+      const sortedVentas = [...ventasWithFullData].sort((a, b) => {
+        switch (selectedOrderField) {
+          case 'fecha_hora':
+            return new Date(a.fecha) - new Date(b.fecha);
+          case 'nombre_producto':
+            const productA = a.ventas?.[0]?.servicioTienda?.servicio?.nombre || '';
+            const productB = b.ventas?.[0]?.servicioTienda?.servicio?.nombre || '';
+            return productA.localeCompare(productB);
+          case 'forma_cobro':
+            return (a.forma_cobro || '').localeCompare(b.forma_cobro || '');
+          case 'nombre_usuario':
+            return (a.usuario?.nombre_natural || '').localeCompare(b.usuario?.nombre_natural || '');
+          default:
+            return 0;
+        }
+      });
+
+      // Prepare data for Excel
+      const data = sortedVentas.map(venta => {
+        const row = {};
+        row['Fecha y Hora'] = venta.fecha_hora || 'N/A';
+        
+        // Tienda from ventas array
+        const tienda = venta.ventas?.[0]?.servicioTienda?.tienda;
+        row['Tienda'] = tienda?.nombre || 'N/A';
+        
+        // Usuario from operaciones or from venta.id_usuario
+        const usuario = venta.operaciones?.[0]?.usuario || venta.usuario;
+        row['Usuario'] = usuario?.nombre_natural || 'N/A';
+        
+        // Forma de cobro - derive from which cantidad is > 0
+        let formaCobro = 'N/A';
+        if (venta.cantidad_cobrada_efectivo_cup > 0) formaCobro = 'Efectivo CUP';
+        else if (venta.cantidad_cobrada_efectivo_usd > 0) formaCobro = 'Efectivo USD';
+        else if (venta.cantidad_cobrada_transferencia_cup > 0) formaCobro = 'Transferencia CUP';
+        else if (venta.cantidad_cobrada_transferencia_usd > 0) formaCobro = 'Transferencia USD';
+        row['Forma de Cobro'] = formaCobro;
+        
+        // Cuenta from operaciones
+        const cuenta = venta.operaciones?.[0]?.cuenta;
+        row['Cuenta'] = cuenta?.nombre || 'N/A';
+        
+        // Get product names from ventas array
+        const productos = venta.ventas?.map(v => v.servicioTienda?.servicio?.nombre).filter(Boolean).join(', ') || 'N/A';
+        row['Productos'] = productos;
+        
+        row['Efectivo CUP'] = venta.cantidad_cobrada_efectivo_cup || 0;
+        row['Transferencia CUP'] = venta.cantidad_cobrada_transferencia_cup || 0;
+        row['Efectivo USD'] = venta.cantidad_cobrada_efectivo_usd || 0;
+        row['Transferencia USD'] = venta.cantidad_cobrada_transferencia_usd || 0;
+        row['Total CUP'] = (venta.cantidad_cobrada_efectivo_cup || 0) + (venta.cantidad_cobrada_transferencia_cup || 0);
+        row['Total USD'] = (venta.cantidad_cobrada_efectivo_usd || 0) + (venta.cantidad_cobrada_transferencia_usd || 0);
+        row['Nota'] = venta.nota || '';
+        
+        return row;
+      });
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(data);
+      XLSX.utils.book_append_sheet(wb, ws, 'Ventas');
+
+      // Generate file
+      const excelBase64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+      
+      // Save file
+      const date = new Date();
+      const formattedDate = `${date.getDate().toString().padStart(2, '0')}_${(date.getMonth() + 1).toString().padStart(2, '0')}_${date.getFullYear()}`;
+      const fileName = `Ventas_${formattedDate}.xlsx`;
+      const downloadDir = FileSystem.documentDirectory;
+      const fileUri = `${downloadDir}${fileName}`;
+      
+      await FileSystem.writeAsStringAsync(fileUri, excelBase64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      // Show share alert
+      Alert.alert(
+        'Excel Generado',
+        'El archivo Excel ha sido generado exitosamente.',
+        [
+          {
+            text: 'Cancelar',
+            style: 'cancel',
+          },
+          {
+            text: 'Compartir',
+            onPress: async () => {
+              try {
+                if (await Sharing.isAvailableAsync()) {
+                  await Sharing.shareAsync(fileUri, {
+                    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    dialogTitle: 'Compartir Excel',
+                    UTI: 'com.microsoft.excel.xls',
+                  });
+                } else {
+                  showToast({ type: 'error', message: 'Compartir no está disponible en este dispositivo' });
+                }
+              } catch (error) {
+                showToast({ type: 'error', message: 'Error al compartir el archivo' });
+              }
+            },
+          },
+          {
+            text: 'Guardar',
+            onPress: () => {
+              showToast({ type: 'success', message: `Archivo guardado en: ${fileUri}` });
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al exportar ventas: ' + error.message });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleEdit = (venta) => {
@@ -1449,6 +1618,21 @@ const VentasContent = () => {
                   )}
                 </View>
               </View>
+
+              <TouchableOpacity
+                style={[styles.exportButton, { backgroundColor: colors.primary }]}
+                onPress={() => setShowOrderSelectionModal(true)}
+                disabled={isExporting}
+              >
+                {isExporting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="download-outline" size={20} color="#fff" />
+                    <Text style={styles.exportButtonText}>Exportar Ventas en Excel</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </>
           )}
 
@@ -2018,6 +2202,68 @@ const VentasContent = () => {
                 </Text>
               </View>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Order Selection Modal for Excel Export */}
+      <Modal
+        visible={showOrderSelectionModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowOrderSelectionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                Ordenar por
+              </Text>
+              <TouchableOpacity onPress={() => setShowOrderSelectionModal(false)}>
+                <Ionicons name="close" size={responsive.responsiveWidth(24)} color={colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.orderOptionsScroll}>
+              {[
+                { value: 'fecha_hora', label: 'Fecha y Hora' },
+                { value: 'nombre_producto', label: 'Nombre de Producto' },
+                { value: 'forma_cobro', label: 'Forma de Cobro' },
+                { value: 'nombre_usuario', label: 'Nombre de Usuario' },
+              ].map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.orderOptionItem,
+                    { 
+                      backgroundColor: colors.surfaceVariant,
+                      borderColor: selectedOrderField === option.value ? colors.primary : 'transparent',
+                      borderWidth: 2,
+                    }
+                  ]}
+                  onPress={() => setSelectedOrderField(option.value)}
+                >
+                  <View style={[styles.radioButton, { borderColor: colors.outlineVariant }]}>
+                    {selectedOrderField === option.value && (
+                      <View style={[styles.radioButtonInner, { backgroundColor: colors.primary }]} />
+                    )}
+                  </View>
+                  <Text style={[styles.orderOptionText, { color: colors.onSurface }]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={[styles.exportConfirmButton, { backgroundColor: colors.primary }]}
+              onPress={exportVentasToExcel}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={[styles.exportConfirmButtonText, { color: '#fff' }]}>Generar Excel</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -2612,5 +2858,61 @@ const createStyles = (responsive) => StyleSheet.create({
     fontWeight: '500',
     fontFamily: 'Inter',
     textAlign: 'center',
+  },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: responsive.responsiveMargin(8),
+    paddingVertical: responsive.responsivePadding(14),
+    borderRadius: 8,
+    marginTop: responsive.responsiveMargin(16),
+  },
+  exportButtonText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    color: '#fff',
+  },
+  orderOptionsScroll: {
+    maxHeight: responsive.responsiveHeight(200),
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  orderOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(12),
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(16),
+    borderRadius: 8,
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  radioButton: {
+    width: responsive.responsiveWidth(20),
+    height: responsive.responsiveWidth(20),
+    borderRadius: 10,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  radioButtonInner: {
+    width: responsive.responsiveWidth(10),
+    height: responsive.responsiveWidth(10),
+    borderRadius: 5,
+  },
+  orderOptionText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontFamily: 'Inter',
+    flex: 1,
+  },
+  exportConfirmButton: {
+    paddingVertical: responsive.responsivePadding(14),
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  exportConfirmButtonText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
   },
 });

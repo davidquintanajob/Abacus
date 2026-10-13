@@ -706,6 +706,36 @@ const ProductoFormContent = () => {
     const porcentajeGananciaUsd = precioUsd > 0 ? (gananciaUsd / precioUsd) * 100 : 0;
 
     return {
+      gananciaCup: !isNaN(gananciaCup) ? gananciaCup : 0,
+      gananciaUsd: !isNaN(gananciaUsd) ? gananciaUsd : 0,
+      porcentajeGananciaCup: !isNaN(porcentajeGananciaCup) ? porcentajeGananciaCup : 0,
+      porcentajeGananciaUsd: !isNaN(porcentajeGananciaUsd) ? porcentajeGananciaUsd : 0
+    };
+  };
+
+  const calculateTiendaProfitMargin = (tiendaProducto) => {
+    const precioCup = tiendaProducto.precio_cup !== null && tiendaProducto.precio_cup !== ''
+      ? (typeof tiendaProducto.precio_cup === 'number' ? tiendaProducto.precio_cup : (isNaN(parseFloat(tiendaProducto.precio_cup)) ? 0 : parseFloat(tiendaProducto.precio_cup)))
+      : 0;
+    const precioUsd = tiendaProducto.precio_usd !== null && tiendaProducto.precio_usd !== ''
+      ? (typeof tiendaProducto.precio_usd === 'number' ? tiendaProducto.precio_usd : (isNaN(parseFloat(tiendaProducto.precio_usd)) ? 0 : parseFloat(tiendaProducto.precio_usd)))
+      : 0;
+    const costoCup = canViewCosts ? (tiendaProducto.costo_cup !== null && tiendaProducto.costo_cup !== ''
+      ? (typeof tiendaProducto.costo_cup === 'number' ? tiendaProducto.costo_cup : (isNaN(parseFloat(tiendaProducto.costo_cup)) ? 0 : parseFloat(tiendaProducto.costo_cup)))
+      : 0) : 0;
+    const costoUsd = canViewCosts ? (tiendaProducto.costo_usd !== null && tiendaProducto.costo_usd !== ''
+      ? (typeof tiendaProducto.costo_usd === 'number' ? tiendaProducto.costo_usd : (isNaN(parseFloat(tiendaProducto.costo_usd)) ? 0 : parseFloat(tiendaProducto.costo_usd)))
+      : 0) : 0;
+
+    const gananciaCup = precioCup - costoCup;
+    const gananciaUsd = precioUsd - costoUsd;
+
+    const porcentajeGananciaCup = precioCup > 0 ? (gananciaCup / precioCup) * 100 : 0;
+    const porcentajeGananciaUsd = precioUsd > 0 ? (gananciaUsd / precioUsd) * 100 : 0;
+
+    return {
+      gananciaCup: !isNaN(gananciaCup) ? gananciaCup : 0,
+      gananciaUsd: !isNaN(gananciaUsd) ? gananciaUsd : 0,
       porcentajeGananciaCup: !isNaN(porcentajeGananciaCup) ? porcentajeGananciaCup : 0,
       porcentajeGananciaUsd: !isNaN(porcentajeGananciaUsd) ? porcentajeGananciaUsd : 0
     };
@@ -2168,6 +2198,25 @@ const ProductoFormContent = () => {
                         </View>
                       </View>
                       
+                      {(!isViewMode || canEditProduct) && !isOfflineMode && !isAddMode && (
+                        <View style={styles.tiendaProfitContainer}>
+                          <Text style={[styles.tiendaProfitLabel, { color: colors.outline }]}>Ganancia</Text>
+                          <View style={styles.tiendaProfitValues}>
+                            <Text style={[styles.profitMarginValue, { color: calculateTiendaProfitMargin(tiendaProducto).porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                              {calculateTiendaProfitMargin(tiendaProducto).porcentajeGananciaCup.toFixed(2)}%
+                            </Text>
+                            <Text style={[styles.profitValueText, { color: colors.outline }]}>|</Text>
+                            <Text style={[styles.profitValueText, { color: colors.onSurface }]}>
+                              {calculateTiendaProfitMargin(tiendaProducto).gananciaCup.toFixed(2)} CUP
+                            </Text>
+                            <Text style={[styles.profitValueText, { color: colors.outline }]}>|</Text>
+                            <Text style={[styles.profitValueText, { color: colors.onSurface }]}>
+                              {calculateTiendaProfitMargin(tiendaProducto).gananciaUsd.toFixed(2)} USD
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+                      
                       {(!isViewMode || canEditProduct) && (
                         <TouchableOpacity
                           style={[styles.removeButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
@@ -2266,12 +2315,20 @@ const ProductoFormContent = () => {
             </View>
           )}
 
-          {(!isViewMode || canEditProduct) && !isOfflineMode && (
+          {(!isViewMode || canEditProduct) && !isOfflineMode && isAddMode && (
             <View style={styles.profitMarginContainer}>
-              <Text style={[styles.profitMarginLabel, { color: colors.outline }]}>% Ganancia</Text>
-              <View style={[styles.profitBadge, { backgroundColor: calculateProfitMargin().porcentajeGananciaCup >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: calculateProfitMargin().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+              <Text style={[styles.profitMarginLabel, { color: colors.outline }]}>Ganancia</Text>
+              <View style={styles.profitValuesContainer}>
                 <Text style={[styles.profitMarginValue, { color: calculateProfitMargin().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
                   {calculateProfitMargin().porcentajeGananciaCup.toFixed(2)}%
+                </Text>
+                <Text style={[styles.profitValueText, { color: colors.outline }]}>|</Text>
+                <Text style={[styles.profitValueText, { color: colors.onSurface }]}>
+                  {calculateProfitMargin().gananciaCup.toFixed(2)} CUP
+                </Text>
+                <Text style={[styles.profitValueText, { color: colors.outline }]}>|</Text>
+                <Text style={[styles.profitValueText, { color: colors.onSurface }]}>
+                  {calculateProfitMargin().gananciaUsd.toFixed(2)} USD
                 </Text>
               </View>
             </View>
@@ -3368,9 +3425,9 @@ const createStyles = (responsive) => StyleSheet.create({
     borderRadius: 8,
   },
   profitMarginContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
     paddingVertical: responsive.responsivePadding(8),
     paddingHorizontal: responsive.responsivePadding(12),
     borderRadius: 8,
@@ -3391,5 +3448,34 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.bodySmall,
     fontWeight: '600',
     fontFamily: 'Inter',
+  },
+  profitValuesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+  },
+  profitValueText: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+  },
+  tiendaProfitContainer: {
+    flexDirection: 'column',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    paddingVertical: responsive.responsivePadding(6),
+    paddingHorizontal: responsive.responsivePadding(10),
+    borderRadius: 8,
+    marginTop: responsive.responsiveMargin(8),
+  },
+  tiendaProfitLabel: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+  },
+  tiendaProfitValues: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(6),
   },
 });

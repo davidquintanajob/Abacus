@@ -51,8 +51,8 @@ const InformesContent = () => {
       subtitle: 'Reporte de pérdidas de productos',
       icon: 'trending-down-outline',
       color: '#F44336',
-      route: null,
-      available: false,
+      route: 'InformeSalidas',
+      available: true,
     },
     {
       id: 'cuentas',
