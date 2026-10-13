@@ -356,6 +356,13 @@ const filterListaVentas = async (filters, limit, offset) => {
     }
   }
   if (filters.nota) where.nota = { [Op.iLike]: `%${filters.nota}%` };
+  if (filters.is_nota === true) {
+    andConditions.push({ nota: { [Op.not]: null } }, { nota: { [Op.ne]: "" } });
+  } else if (filters.is_nota === false) {
+    andConditions.push({
+      [Op.or]: [{ nota: null }, { nota: "" }],
+    });
+  }
 
   const totalCobrado = Sequelize.literal(`
     COALESCE("lista_venta"."cantidad_cobrada_efectivo_cup", 0) +

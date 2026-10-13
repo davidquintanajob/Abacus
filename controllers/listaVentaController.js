@@ -31,6 +31,7 @@ const filterListaVentas = async (req, res) => {
       fecha_desde,
       fecha_hasta,
       nota,
+      is_nota,
       cantidad_min,
       cantidad_max,
       forma_cobro,
@@ -64,6 +65,12 @@ const filterListaVentas = async (req, res) => {
       filters.fecha_hasta = date;
     }
     if (nota) filters.nota = nota.trim();
+    if (is_nota !== undefined) {
+      if (is_nota !== "true" && is_nota !== "false") {
+        throwError("El parámetro 'is_nota' debe ser true o false.", 400);
+      }
+      filters.is_nota = is_nota === "true";
+    }
     if (cantidad_min !== undefined) {
       const val = parseFloat(cantidad_min);
       if (isNaN(val) || val < 0) throwError("cantidad_min debe ser un número no negativo.", 400);

@@ -83,6 +83,11 @@ const authenticate = require("../helpers/authenticate");
  *         schema:
  *           type: string
  *       - in: query
+ *         name: is_nota
+ *         schema:
+ *           type: boolean
+ *         description: Si es true, filtra listas con nota no nula ni vacía; si es false, filtra listas sin nota
+ *       - in: query
  *         name: cantidad_min
  *         schema:
  *           type: number
