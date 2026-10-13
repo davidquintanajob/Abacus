@@ -42,6 +42,9 @@ const authenticate = require("../helpers/authenticate");
  *                 type: integer
  *               cantidad:
  *                 type: number
+ *               cantidad_restante:
+ *                 type: number
+ *                 description: Cantidad disponible del movimiento; se inicializa automáticamente con cantidad y no se envía al crear.
  *               nota:
  *                 type: string
  *               servicioTiendaOrigen:
@@ -159,6 +162,7 @@ router.get("/movimiento/:id", authenticate(), movimientoController.getMovimiento
  *       - El `servicio_tienda` de destino se crea automáticamente si no existe, copiando precios, costos y cantidad_alerta del origen e iniciando cantidad en cero.
  *       - Origen y destino no pueden ser la misma tienda.
  *       - Cada `cantidad` debe ser mayor que cero.
+ *       - `cantidad_restante` se inicializa automáticamente con el mismo valor de `cantidad`; no se envía en la solicitud.
  *       - Si `estado` es `true`, el origen debe tener stock suficiente para cada movimiento.
  *
  *       **3. Comportamiento según `estado`:**
@@ -243,6 +247,7 @@ router.post("/movimiento", authenticate(), movimientoController.createMovimiento
  *     description: |
  *       **Lógica de actualización:**
  *       - Si el `estado` anterior era `true`, se revierten todos los efectos (stock y entradas) antes de aplicar los nuevos.
+ *       - No se puede editar ni eliminar un movimiento que ya haya sido consumido por ventas; primero deben revertirse esas ventas.
  *       - Luego se aplican los nuevos datos respetando la lógica del `estado`.
  *       - `id_tienda_origen` e `id_tienda_destino` se reciben **una sola vez a nivel raíz** y se aplican a todos los items del arreglo `movimientos`.
  *       - Cada item de `movimientos` debe indicar su propio `id_servicio`, `cantidad` y opcionalmente `nota`.
@@ -321,6 +326,7 @@ router.put("/movimiento/:id", authenticate(), movimientoController.updateMovimie
  *       **Lógica de eliminación:**
  *       - Si el `estado` era `true`, se revierten todos los efectos.
  *       - Si el `estado` era `false`, solo se eliminan los registros sin afectar inventario.
+ *       - No se puede eliminar un movimiento que ya haya sido consumido por ventas; primero deben revertirse esas ventas.
  *       - Todo dentro de una transacción.
  *     responses:
  *       200:

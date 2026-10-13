@@ -373,6 +373,7 @@ const startApp = async () => {
     const { Cliente } = require("./models/cliente");
     const { ListaVenta } = require("./models/lista_venta");
     const { VentaEntrada } = require("./models/venta_entrada");
+    const { VentaMovimiento } = require("./models/venta_movimiento");
     const { MovimientoLista } = require("./models/movimiento_lista.js");
     const { Movimiento } = require("./models/movimiento.js");
     const { MovimientoEntrada } = require("./models/movimiento_entrada.js");
@@ -396,6 +397,7 @@ const startApp = async () => {
       Cliente,          // ✅ AGREGAR ESTO
       ListaVenta,
       VentaEntrada,
+      VentaMovimiento,
       MovimientoLista,
       Movimiento,
       MovimientoEntrada,
@@ -408,6 +410,24 @@ const startApp = async () => {
         model.associate(models);
       }
     });
+
+    const [movimientoSchema] = await sequelize.query(`
+      SELECT
+        EXISTS (
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = current_schema() AND table_name = 'movimientos'
+        ) AS table_exists,
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'movimientos'
+            AND column_name = 'cantidad_restante'
+        ) AS remaining_column_exists
+    `);
+    if (movimientoSchema[0].table_exists && !movimientoSchema[0].remaining_column_exists) {
+      await sequelize.query('ALTER TABLE "movimientos" ADD COLUMN "cantidad_restante" DOUBLE PRECISION');
+      await sequelize.query('UPDATE "movimientos" SET "cantidad_restante" = "cantidad"');
+    }
 
     await sequelize.sync({ alter: true });
     console.log("✅ Tablas sincronizadas correctamente");

@@ -246,7 +246,8 @@ router.get("/lista-venta/:id", authenticate(), listaVentaController.getListaVent
  *       - **Por cada venta:**
  *           - Se toman automáticamente `precio_original_cup`, `precio_original_usd`, `costo_original_cup`, `costo_original_usd` del `servicio_tienda` relacionado.
  *           - Se crea el registro en `ventas` con todos los campos.
- *           - Si es un producto, se descuentan entradas disponibles (`cantidad_restante > 0`) y el stock (`servicio_tienda.cantidad`). Los servicios normales no consumen stock ni entradas.
+ *           - Si es un producto, se descuentan primero las entradas disponibles y, si hace falta, los movimientos recibidos con `cantidad_restante > 0`, además del stock (`servicio_tienda.cantidad`). Los servicios normales no consumen stock ni entradas/movimientos.
+ *           - El consumo queda registrado por entrada o movimiento; al editar o eliminar la venta se restaura el saldo de su origen correspondiente.
  *       - **Por cada forma de cobro** (efectivo CUP, efectivo USD, transferencia CUP, transferencia USD) cuyo monto > 0:
  *           - Se crea una operación de tipo "Ingreso" asociada a la lista_venta, con el usuario y la cuenta correspondiente.
  *           - La operación se crea con el monto de la forma de cobro en `cantidad_operacion`, y el resto de campos como `motivo = "Ingreso por Venta"`, `fecha_hora = fecha_hora de la lista`.
@@ -254,7 +255,7 @@ router.get("/lista-venta/:id", authenticate(), listaVentaController.getListaVent
  *       - Si `is_deuda` es `true`, se omite por completo la creación de operaciones y la actualización de fondos; el descuento de inventario no cambia.
  *
  *       **4. Respuesta:**
- *       Se devuelve la lista_venta creada con todas sus relaciones (ventas, sus entradas, servicio_tienda, tienda, servicio, producto; y operaciones con usuario y cuenta).
+ *       Se devuelve la lista_venta creada con todas sus relaciones (ventas, sus entradas y movimientos consumidos, servicio_tienda, tienda, servicio, producto; y operaciones con usuario y cuenta).
  *
  *       **Nota:** La selección de entradas sigue la misma política que en las salidas: para productos vencibles se priorizan las fechas de vencimiento más cercanas; para no vencibles, se usan las entradas más antiguas (FIFO).
  *     requestBody:

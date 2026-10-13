@@ -227,16 +227,32 @@ const revertirMovimientoEntradas = async (id_movimiento, transaction) => {
     where: { id_movimiento },
     transaction,
   });
+  const movimiento = await Movimiento.findByPk(id_movimiento, { transaction });
+  let cantidadPendiente = parseFloat(movimiento?.cantidad_restante || 0);
 
   for (const me of movimientoEntradas) {
+    if (cantidadPendiente <= 0) {
+      await me.destroy({ transaction });
+      continue;
+    }
     const entrada = await Entrada.findByPk(me.id_entrada, { transaction });
-    if (entrada) {
-      await entrada.update(
-        { cantidad_restante: entrada.cantidad_restante + me.cantidad },
-        { transaction }
+    if (!entrada) {
+      throwError(
+        "No se puede revertir el movimiento porque una de sus entradas de origen ya no existe.",
+        400
       );
     }
+    const cantidadADevolver = Math.min(parseFloat(me.cantidad), cantidadPendiente);
+    await entrada.update(
+      { cantidad_restante: parseFloat(entrada.cantidad_restante) + cantidadADevolver },
+      { transaction }
+    );
+    cantidadPendiente -= cantidadADevolver;
     await me.destroy({ transaction });
+  }
+
+  if (cantidadPendiente > 0) {
+    throwError("No se puede revertir el movimiento: sus entradas de origen no cubren la cantidad restante.", 400);
   }
 };
 
@@ -253,6 +269,12 @@ const revertirMovimientoCompleto = async (id_movimiento_lista, transaction) => {
 
   if (lista.estado) {
     for (const mov of lista.movimientos) {
+      if (parseFloat(mov.cantidad_restante) < parseFloat(mov.cantidad)) {
+        throwError(
+          "No se puede editar ni eliminar un movimiento que ya fue consumido por ventas. Elimine o actualice primero las ventas relacionadas.",
+          400
+        );
+      }
       // 1. Revertir entradas del origen
       await revertirMovimientoEntradas(mov.id_movimiento, transaction);
 
@@ -277,14 +299,15 @@ const revertirMovimientoCompleto = async (id_movimiento_lista, transaction) => {
       );
       if (stDestino) {
         const cantDestino = parseFloat(stDestino.cantidad || 0);
-        if (cantDestino < mov.cantidad) {
+        const cantidadRestante = parseFloat(mov.cantidad_restante);
+        if (cantDestino < cantidadRestante) {
           throwError(
-            `No hay suficiente cantidad en el destino (tienda "${stDestino.tienda?.nombre || stDestino.id_tienda}") para revertir el movimiento. Disponible: ${cantDestino}, se necesita: ${mov.cantidad}`,
+            `No hay suficiente cantidad en el destino (tienda "${stDestino.tienda?.nombre || stDestino.id_tienda}") para revertir el movimiento. Disponible: ${cantDestino}, se necesita: ${cantidadRestante}`,
             400
           );
         }
         await stDestino.update(
-          { cantidad: cantDestino - mov.cantidad },
+          { cantidad: cantDestino - cantidadRestante },
           { transaction }
         );
       }
@@ -303,6 +326,7 @@ const _crearMovimientosParaLista = async (id_movimiento_lista, movimientos, esta
     const movimiento = await Movimiento.create(
       {
         cantidad: item.cantidad,
+        cantidad_restante: item.cantidad,
         nota: item.nota || null,
         id_tienda_origen: item.id_tienda_origen,
         id_tienda_destino: item.id_tienda_destino,

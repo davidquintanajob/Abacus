@@ -3,7 +3,10 @@ const { Cliente } = require("../models/cliente");
 const { Deuda } = require("../models/deuda");
 const { Venta } = require("../models/venta");
 const { VentaEntrada } = require("../models/venta_entrada");
+const { VentaMovimiento } = require("../models/venta_movimiento");
 const { Entrada } = require("../models/entrada");
+const { Movimiento } = require("../models/movimiento");
+const { MovimientoLista } = require("../models/movimiento_lista");
 const { ServicioTienda } = require("../models/servicio_tienda");
 const { Servicio } = require("../models/servicio");
 const { Producto } = require("../models/producto");
@@ -39,6 +42,11 @@ const getListaVentaWithRelations = async (id) => {
             model: VentaEntrada,
             as: "ventaEntradas",
             include: [{ model: Entrada, as: "entrada" }],
+          },
+          {
+            model: VentaMovimiento,
+            as: "ventaMovimientos",
+            include: [{ model: Movimiento, as: "movimiento" }],
           },
         ],
       },
@@ -170,13 +178,14 @@ const aplicarConsumosVenta = async (idVenta, consumos, transaction) => {
     if (!st || stockActual < consumo.cantidad) {
       throwError(`Stock insuficiente para el servicio-tienda ${consumo.id_servicio_tienda}.`, 400);
     }
-    await descontarEntradasParaVenta(idVenta, consumo.id_servicio_tienda, consumo.cantidad, transaction);
+    await descontarExistenciasParaVenta(idVenta, consumo.id_servicio_tienda, consumo.cantidad, transaction);
     await st.update({ cantidad: stockActual - consumo.cantidad }, { transaction });
   }
 };
 
 const revertirConsumosVenta = async (idVenta, consumos, transaction) => {
   await revertirVentaEntradas(idVenta, transaction);
+  await revertirVentaMovimientos(idVenta, transaction);
   for (const consumo of consumos) {
     const st = await ServicioTienda.findByPk(consumo.id_servicio_tienda, { transaction });
     if (st) {
@@ -228,11 +237,9 @@ const getEntradasDisponibles = async (id_servicio_tienda, isVencible, transactio
 };
 
 /**
- * Descuenta una cantidad de entradas disponibles para un servicio_tienda,
- * creando registros en VentaEntrada (uno por entrada usada).
- * Similar a descontarEntradas en salidas.
+ * Descuenta primero entradas y luego movimientos disponibles, registrando el origen consumido.
  */
-const descontarEntradasParaVenta = async (id_venta, id_servicio_tienda, cantidadTotal, transaction) => {
+const descontarExistenciasParaVenta = async (id_venta, id_servicio_tienda, cantidadTotal, transaction) => {
   const st = await ServicioTienda.findByPk(id_servicio_tienda, {
     include: [
       {
@@ -271,7 +278,47 @@ const descontarEntradasParaVenta = async (id_venta, id_servicio_tienda, cantidad
   }
 
   if (cantidadPendiente > 0) {
-    throwError("No hay suficiente cantidad en las entradas para cubrir la venta.", 400);
+    const movimientos = await Movimiento.findAll({
+      where: {
+        id_tienda_destino: st.id_tienda,
+        id_servicio: st.id_servicio,
+        cantidad_restante: { [Op.gt]: 0 },
+      },
+      include: [{
+        model: MovimientoLista,
+        as: "movimientoLista",
+        required: true,
+        where: { estado: true },
+      }],
+      order: [
+        [{ model: MovimientoLista, as: "movimientoLista" }, "fecha_hora", "ASC"],
+        ["id_movimiento", "ASC"],
+      ],
+      transaction,
+    });
+
+    for (const movimiento of movimientos) {
+      if (cantidadPendiente <= 0) break;
+      const disponible = parseFloat(movimiento.cantidad_restante);
+      const cantidadAUsar = Math.min(disponible, cantidadPendiente);
+      await movimiento.update(
+        { cantidad_restante: disponible - cantidadAUsar },
+        { transaction }
+      );
+      await VentaMovimiento.create(
+        {
+          id_venta,
+          id_movimiento: movimiento.id_movimiento,
+          cantidad: cantidadAUsar,
+        },
+        { transaction }
+      );
+      cantidadPendiente -= cantidadAUsar;
+    }
+  }
+
+  if (cantidadPendiente > 0) {
+    throwError("No hay suficiente cantidad en las entradas y movimientos para cubrir la venta.", 400);
   }
 };
 
@@ -294,6 +341,24 @@ const revertirVentaEntradas = async (id_venta, transaction) => {
       );
     }
     await ve.destroy({ transaction });
+  }
+};
+
+const revertirVentaMovimientos = async (id_venta, transaction) => {
+  const ventaMovimientos = await VentaMovimiento.findAll({
+    where: { id_venta },
+    transaction,
+  });
+
+  for (const vm of ventaMovimientos) {
+    const movimiento = await Movimiento.findByPk(vm.id_movimiento, { transaction });
+    if (movimiento) {
+      await movimiento.update(
+        { cantidad_restante: parseFloat(movimiento.cantidad_restante) + parseFloat(vm.cantidad) },
+        { transaction }
+      );
+    }
+    await vm.destroy({ transaction });
   }
 };
 
@@ -480,6 +545,11 @@ const filterListaVentas = async (filters, limit, offset) => {
         model: VentaEntrada,
         as: "ventaEntradas",
         include: [{ model: Entrada, as: "entrada" }],
+      },
+      {
+        model: VentaMovimiento,
+        as: "ventaMovimientos",
+        include: [{ model: Movimiento, as: "movimiento" }],
       },
     ],
   };

@@ -237,8 +237,9 @@ const updateEntrada = async (id, updateData) => {
 
     const updateFields = {};
     let deltaCantidad = 0;
-    let cantidadEntradaActual = parseFloat(entrada.cantidad_entrada);
-    let nuevaCantidadEntrada = cantidadEntradaActual;
+    const cantidadEntradaActual = parseFloat(entrada.cantidad_entrada);
+    const cantidadRestanteActual = parseFloat(entrada.cantidad_restante);
+    let nuevaCantidadRestante = cantidadRestanteActual;
 
     if (updateData.cantidad_entrada !== undefined) {
       const newCantidad = parseFloat(updateData.cantidad_entrada);
@@ -246,9 +247,16 @@ const updateEntrada = async (id, updateData) => {
         throwError("La cantidad de entrada debe ser un número mayor que cero.", 400);
       }
       deltaCantidad = newCantidad - cantidadEntradaActual;
-      nuevaCantidadEntrada = newCantidad;
+      const cantidadConsumida = cantidadEntradaActual - cantidadRestanteActual;
+      if (newCantidad < cantidadConsumida) {
+        throwError(
+          `La cantidad de entrada no puede ser menor que la cantidad ya consumida (${cantidadConsumida}).`,
+          400
+        );
+      }
+      nuevaCantidadRestante = newCantidad - cantidadConsumida;
       updateFields.cantidad_entrada = newCantidad;
-      updateFields.cantidad_restante = newCantidad;
+      updateFields.cantidad_restante = nuevaCantidadRestante;
     }
 
     if (updateData.costo_usd !== undefined) {
@@ -286,7 +294,7 @@ const updateEntrada = async (id, updateData) => {
       throwError("No se proporcionaron campos válidos para actualizar.", 400);
     }
 
-    const cantidadAUsar = deltaCantidad !== 0 ? nuevaCantidadEntrada : cantidadEntradaActual;
+    const cantidadAUsar = deltaCantidad !== 0 ? nuevaCantidadRestante : cantidadRestanteActual;
 
     if (isChangingServicioTienda) {
       await updateCantidadServicioTienda(currentServicioTiendaId, -cantidadAUsar, transaction);
@@ -313,7 +321,11 @@ const deleteEntrada = async (id) => {
     const entrada = await Entrada.findByPk(id, { transaction });
     if (!entrada) throwError("Entrada no encontrada.", 404);
 
-    await updateCantidadServicioTienda(entrada.id_servicio_tienda, -entrada.cantidad_entrada, transaction);
+    await updateCantidadServicioTienda(
+      entrada.id_servicio_tienda,
+      -parseFloat(entrada.cantidad_restante),
+      transaction
+    );
 
     await entrada.destroy({ transaction });
 

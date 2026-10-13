@@ -267,7 +267,7 @@ router.post("/entrada/bulk", authenticate(), entradaController.createEntradasBul
  *                 description: Nuevo ID de relación servicio-tienda (opcional). Si se cambia, la cantidad se ajusta automáticamente entre la tienda origen y destino.
  *               cantidad_entrada:
  *                 type: number
- *                 description: Nueva cantidad (debe ser mayor que 0)
+ *                 description: Nueva cantidad total (debe ser mayor que 0 y no menor que lo ya consumido)
  *               costo_usd:
  *                 type: number
  *                 description: Costo en USD (con 5 decimales)
@@ -290,8 +290,9 @@ router.post("/entrada/bulk", authenticate(), entradaController.createEntradasBul
  *                 description: Nueva fecha y hora de la entrada (opcional)
  *             note: |
  *               - No se puede modificar el código de lote ni la cantidad restante.
- *               - Si se cambia la cantidad_entrada, la cantidad restante se ajusta automáticamente.
- *               - Si se cambia el id_servicio_tienda, la cantidad se resta de la tienda origen y se suma a la tienda destino.
+ *               - Si se cambia la cantidad_entrada, la cantidad restante se ajusta conservando las cantidades ya consumidas.
+ *               - Si se cambia el id_servicio_tienda, solo la cantidad restante de la entrada se mueve entre tiendas; los movimientos ya creados se conservan.
+ *               - Al eliminar, solo se descuenta del inventario la cantidad restante de la entrada.
  *               - Si el nuevo producto es vencible, la fecha_vencimiento es obligatoria.
  *     responses:
  *       200:

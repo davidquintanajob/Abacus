@@ -19,6 +19,16 @@ const Movimiento = sequelize.define(
         },
       },
     },
+    cantidad_restante: {
+      type: DataTypes.DOUBLE,
+      allowNull: false,
+      validate: {
+        min: {
+          args: [0],
+          msg: "La cantidad restante no puede ser negativa",
+        },
+      },
+    },
     nota: {
       type: DataTypes.STRING,
       allowNull: true,
@@ -74,6 +84,16 @@ const Movimiento = sequelize.define(
   {
     timestamps: true,
     tableName: "movimientos",
+    hooks: {
+      beforeValidate: (movimiento) => {
+        if (
+          movimiento.isNewRecord &&
+          (movimiento.cantidad_restante === undefined || movimiento.cantidad_restante === null)
+        ) {
+          movimiento.cantidad_restante = movimiento.cantidad;
+        }
+      },
+    },
     indexes: [
       { fields: ["id_tienda_origen"] },
       { fields: ["id_tienda_destino"] },
@@ -112,6 +132,10 @@ Movimiento.associate = function (models) {
   Movimiento.hasMany(models.MovimientoEntrada, {
     foreignKey: "id_movimiento",
     as: "movimientoEntradas",
+  });
+  Movimiento.hasMany(models.VentaMovimiento, {
+    foreignKey: "id_movimiento",
+    as: "ventaMovimientos",
   });
 };
 

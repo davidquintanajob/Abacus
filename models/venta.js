@@ -140,6 +140,16 @@ Venta.associate = function (models) {
     foreignKey: "id_venta",
     as: "ventaEntradas",
   });
+  Venta.belongsToMany(models.Movimiento, {
+    through: models.VentaMovimiento,
+    foreignKey: "id_venta",
+    otherKey: "id_movimiento",
+    as: "movimientos",
+  });
+  Venta.hasMany(models.VentaMovimiento, {
+    foreignKey: "id_venta",
+    as: "ventaMovimientos",
+  });
 };
 
 module.exports = { Venta };
