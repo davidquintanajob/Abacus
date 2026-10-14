@@ -115,6 +115,9 @@ const ProductoFormContent = () => {
   const [priceInputTexts, setPriceInputTexts] = useState({});
   const [generalPriceInputTexts, setGeneralPriceInputTexts] = useState({});
   const [imagenModificada, setImagenModificada] = useState(false);
+  const [showAlertInfoModal, setShowAlertInfoModal] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImageUri, setSelectedImageUri] = useState(null);
 
   const [formData, setFormData] = useState({
     nombre: producto?.nombre || '',
@@ -850,6 +853,7 @@ const ProductoFormContent = () => {
         precio_usd: precioUsd !== null ? precioUsd : 0,
         costo_cup: (formData.costo_cup_general !== null && formData.costo_cup_general !== '' && formData.costo_cup_general !== undefined) ? formData.costo_cup_general : null,
         costo_usd: (formData.costo_usd_general !== null && formData.costo_usd_general !== '' && formData.costo_usd_general !== undefined) ? formData.costo_usd_general : null,
+        cantidad_alerta: null,
       }));
       
       // Update existing entries - only update prices that are defined
@@ -909,6 +913,7 @@ const ProductoFormContent = () => {
                 precio_usd: precioUsd,
                 ...(costoCup !== null && { costo_cup: costoCup }),
                 ...(costoUsd !== null && { costo_usd: costoUsd }),
+                ...(specific.cantidad_alerta !== null && specific.cantidad_alerta !== undefined && specific.cantidad_alerta !== '' && { cantidad_alerta: parseFloat(specific.cantidad_alerta) }),
               });
             });
           } 
@@ -928,6 +933,7 @@ const ProductoFormContent = () => {
                 precio_usd: precioUsdGeneral,
                 ...(costoCupGeneral !== null && { costo_cup: costoCupGeneral }),
                 ...(costoUsdGeneral !== null && { costo_usd: costoUsdGeneral }),
+                cantidad_alerta: null,
               }));
             }
           }
@@ -1737,16 +1743,26 @@ const ProductoFormContent = () => {
               <View style={styles.imageContainer}>
                 {formData.imagen ? (
                   <View style={styles.imagePreviewContainer}>
-                    <Image 
-                      source={{ 
-                        uri: formData.imagen.startsWith('data:') 
-                          ? formData.imagen 
-                          : (apiBaseUrl && formData.imagen.startsWith('/') 
-                              ? `${apiBaseUrl}${formData.imagen}` 
-                              : formData.imagen)
-                      }} 
-                      style={styles.imagePreview} 
-                    />
+                    <TouchableOpacity onPress={() => {
+                      const imageUri = formData.imagen.startsWith('data:') 
+                        ? formData.imagen 
+                        : (apiBaseUrl && formData.imagen.startsWith('/') 
+                            ? `${apiBaseUrl}${formData.imagen}` 
+                            : formData.imagen);
+                      setSelectedImageUri(imageUri);
+                      setShowImageModal(true);
+                    }}>
+                      <Image 
+                        source={{ 
+                          uri: formData.imagen.startsWith('data:') 
+                            ? formData.imagen 
+                            : (apiBaseUrl && formData.imagen.startsWith('/') 
+                                ? `${apiBaseUrl}${formData.imagen}` 
+                                : formData.imagen)
+                        }} 
+                        style={styles.imagePreview} 
+                      />
+                    </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.removeImageButton}
                       onPress={handleRemoveImage}
@@ -2198,6 +2214,41 @@ const ProductoFormContent = () => {
                         </View>
                       </View>
                       
+                      <View style={styles.alertField}>
+                        <View style={styles.alertLabelContainer}>
+                          <Text style={[styles.label, { color: colors.outline }]}>Cantidad Alerta</Text>
+                          <TouchableOpacity
+                            onPress={() => setShowAlertInfoModal(true)}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                          >
+                            <Ionicons 
+                              name="information-circle-outline" 
+                              size={responsive.responsiveWidth(18)} 
+                              color={colors.primary} 
+                            />
+                          </TouchableOpacity>
+                        </View>
+                        <TextInput
+                          style={[
+                            styles.input, 
+                            { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                            isReadOnly && styles.inputDisabled
+                          ]}
+                          value={
+                            tiendaProducto.cantidad_alerta !== null && tiendaProducto.cantidad_alerta !== '' && !isNaN(parseFloat(tiendaProducto.cantidad_alerta))
+                              ? String(tiendaProducto.cantidad_alerta)
+                              : ''
+                          }
+                          onChangeText={(text) => {
+                            handleTiendaProductoChange(index, 'cantidad_alerta', text === '' ? null : parseFloat(text));
+                          }}
+                          keyboardType="decimal-pad"
+                            editable={!isViewMode || canEditProduct}
+                          placeholder="Opcional"
+                          placeholderTextColor={colors.outline}
+                        />
+                      </View>
+                      
                       {(!isViewMode || canEditProduct) && !isOfflineMode && !isAddMode && (
                         <View style={styles.tiendaProfitContainer}>
                           <Text style={[styles.tiendaProfitLabel, { color: colors.outline }]}>Ganancia</Text>
@@ -2286,11 +2337,6 @@ const ProductoFormContent = () => {
                               </Text>
                             </View>
                           </View>
-                          {tiendaProducto.cantidad_alerta !== null && tiendaProducto.cantidad_alerta !== undefined && (
-                            <Text style={[styles.stockAlertText, { color: colors.outline }]}>
-                              Alerta: {tiendaProducto.cantidad_alerta !== null && tiendaProducto.cantidad_alerta !== undefined && !isNaN(parseFloat(tiendaProducto.cantidad_alerta)) ? parseFloat(tiendaProducto.cantidad_alerta).toFixed(2) : '0.00'}
-                            </Text>
-                          )}
                         </View>
                       );
                     })
@@ -2586,6 +2632,84 @@ const ProductoFormContent = () => {
                 )}
               </ScrollView>
             </Card>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Alert Info Modal */}
+      {showAlertInfoModal && (
+        <Modal
+          visible={showAlertInfoModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowAlertInfoModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowAlertInfoModal(false)}
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.surface }]} activeOpacity={1}>
+              <View style={styles.modalHeader}>
+                <View style={styles.modalHeaderLeft}>
+                  <Ionicons 
+                    name="information-circle" 
+                    size={responsive.responsiveWidth(28)} 
+                    color={colors.primary} 
+                  />
+                  <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Cantidad de Alerta</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowAlertInfoModal(false)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons 
+                    name="close" 
+                    size={responsive.responsiveWidth(24)} 
+                    color={colors.outline} 
+                  />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.modalBody}>
+                <Text style={[styles.modalText, { color: colors.onSurface }]}>
+                  El número que ingreses en el campo "Cantidad Alerta" se usará para alertarte cuando el stock de este producto en esta tienda sea igual o menor a esta cantidad.
+                </Text>
+                <Text style={[styles.modalText, { color: colors.onSurface }]}>
+                  Por ejemplo, si estableces el valor en 10, recibirás una alerta cuando el stock del producto en esta tienda sea de 10 unidades o menos.
+                </Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Image Preview Modal */}
+      {showImageModal && selectedImageUri && (
+        <Modal
+          visible={showImageModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowImageModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.imageModalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowImageModal(false)}
+          >
+            <View style={styles.imageModalContent} activeOpacity={1}>
+              <TouchableOpacity
+                style={styles.imageModalCloseButton}
+                onPress={() => setShowImageModal(false)}
+              >
+                <Ionicons name="close" size={responsive.responsiveWidth(28)} color="#fff" />
+              </TouchableOpacity>
+              <Image
+                source={{ uri: selectedImageUri }}
+                style={styles.imageModalImage}
+                resizeMode="contain"
+              />
+            </View>
           </TouchableOpacity>
         </Modal>
       )}
@@ -2998,6 +3122,16 @@ const createStyles = (responsive) => StyleSheet.create({
     flex: 1,
     minWidth: '45%',
   },
+  alertField: {
+    marginTop: responsive.responsiveMargin(16),
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  alertLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: responsive.responsiveMargin(8),
+  },
   tiendaProductoItem: {
     padding: responsive.responsivePadding(16),
     borderRadius: 8,
@@ -3130,7 +3264,26 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(18),
     fontWeight: '700',
     fontFamily: 'Hanken Grotesk',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: responsive.responsiveMargin(16),
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(12),
+  },
+  modalBody: {
+    marginBottom: responsive.responsiveMargin(20),
+  },
+  modalText: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+    lineHeight: responsive.fontSizes.body * 1.5,
+    marginBottom: responsive.responsiveMargin(12),
   },
   modalDescription: {
     fontSize: responsive.fontSizes.body,
@@ -3477,5 +3630,27 @@ const createStyles = (responsive) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: responsive.responsiveMargin(6),
+  },
+  imageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageModalContent: {
+    width: '90%',
+    height: '80%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageModalCloseButton: {
+    position: 'absolute',
+    top: responsive.responsiveMargin(20),
+    right: responsive.responsiveMargin(20),
+    zIndex: 1,
+  },
+  imageModalImage: {
+    width: '100%',
+    height: '100%',
   },
 });

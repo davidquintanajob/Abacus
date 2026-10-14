@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { getEntradas } from '../services/entradaService';
 import { getGeneralInformation } from '../services/informesService';
+import { getProductosEnAlerta } from '../services/productoService';
 import packageJson from '../../package.json';
 
 const HomeContent = () => {
@@ -32,6 +33,8 @@ const HomeContent = () => {
   const [expiringProducts, setExpiringProducts] = useState([]);
   const [allExpiringProducts, setAllExpiringProducts] = useState([]);
   const [loadingExpiring, setLoadingExpiring] = useState(false);
+  const [stockAlertProducts, setStockAlertProducts] = useState([]);
+  const [loadingStockAlerts, setLoadingStockAlerts] = useState(false);
   const [currentDate, setCurrentDate] = useState('');
   const [alertModalVisible, setAlertModalVisible] = useState(false);
   const [summaryData, setSummaryData] = useState({
@@ -52,7 +55,18 @@ const HomeContent = () => {
       enableOfflineMode();
     }
     checkVersionError();
-  }, [route.params?.isOfflineMode]);
+    
+    // Show welcome message from login
+    if (route.params?.welcomeMessage) {
+      showToast({ 
+        type: 'success', 
+        message: route.params.welcomeMessage, 
+        duration: 5000 
+      });
+      // Clear the param to avoid showing it again on re-renders
+      navigation.setParams({ welcomeMessage: undefined });
+    }
+  }, [route.params?.isOfflineMode, route.params?.welcomeMessage]);
 
   const checkVersionError = async () => {
     try {
@@ -348,14 +362,58 @@ const HomeContent = () => {
           });
         }
       } catch (error) {
-        // Error handling without console log
+        // Error fetching expiring products
       } finally {
         setLoadingExpiring(false);
       }
     };
-    
+
     fetchExpiringProducts();
-  }, []);
+  }, [isOfflineMode]);
+
+  // Consultar productos en alerta de stock
+  useEffect(() => {
+    const fetchStockAlertProducts = async () => {
+      try {
+        setLoadingStockAlerts(true);
+        
+        if (isOfflineMode) {
+          setLoadingStockAlerts(false);
+          return;
+        }
+        
+        // Check if user can view all stores based on permissions
+        const userRole = user?.rol?.toLowerCase();
+        const canViewAllStores = 
+          userRole === 'administrador' ||
+          (userRole === 'dependiente' && permissions?.dependiente) ||
+          (userRole === 'almacenero' && permissions?.almacenero) ||
+          (userRole === 'económico' && permissions?.economico);
+        
+        // Pass id_tienda only if user cannot view all stores
+        const productosEnAlerta = await getProductosEnAlerta(canViewAllStores ? undefined : user?.id_tienda);
+        setStockAlertProducts(productosEnAlerta || []);
+        
+        // Mostrar toast con los productos en alerta
+        if (productosEnAlerta && productosEnAlerta.length > 0) {
+          const nombresProductos = productosEnAlerta.map(p => p.nombre || 'Producto desconocido');
+          const message = `Productos en alerta de stock: ${nombresProductos.join(', ')}`;
+          
+          showToast({
+            type: 'warning',
+            message: message,
+            duration: 6000
+          });
+        }
+      } catch (error) {
+        // Error fetching stock alert products
+      } finally {
+        setLoadingStockAlerts(false);
+      }
+    };
+
+    fetchStockAlertProducts();
+  }, [user?.id_tienda, isOfflineMode, permissions]);
 
   // Consultar información general para el RESUMEN
   useEffect(() => {
@@ -657,6 +715,83 @@ const HomeContent = () => {
               >
                 <Text style={[styles.seeMoreText, { color: colors.primary }]}>
                   Ver más ({allExpiringProducts.length - 3} más)
+                </Text>
+                <Ionicons name="chevron-down" size={responsive.responsiveWidth(16)} color={colors.primary} />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* Alertas de Stock */}
+        {stockAlertProducts.length > 0 && (
+          <View style={styles.stockAlertSection}>
+            <Text style={[styles.sectionTitle, { color: colors.outline }]}>
+              ALERTAS DE STOCK
+            </Text>
+            <View style={styles.stockAlertList}>
+              {stockAlertProducts.slice(0, 3).map((producto, index) => {
+                // Filter tiendas that are in alert
+                const tiendasEnAlerta = producto.tiendas_servicio?.filter(ts => {
+                  const cantidad = parseFloat(ts.cantidad);
+                  const cantidadAlerta = parseFloat(ts.cantidad_alerta);
+                  const isInAlert = ts.cantidad !== null && 
+                    ts.cantidad_alerta !== null && 
+                    !isNaN(cantidad) && 
+                    !isNaN(cantidadAlerta) &&
+                    cantidad > 0 &&
+                    cantidad <= cantidadAlerta;
+                  
+                  return isInAlert;
+                }) || [];
+                
+                // Only show product if it has tiendas in alert
+                if (tiendasEnAlerta.length === 0) return null;
+                
+                return (
+                  <Card
+                    key={index}
+                    style={[
+                      styles.stockAlertItem,
+                      { 
+                        backgroundColor: colors.surface,
+                        borderLeftWidth: 4,
+                        borderLeftColor: '#F59E0B'
+                      }
+                    ]}
+                  >
+                    <View style={styles.stockAlertContent}>
+                      <View style={styles.stockAlertIconContainer}>
+                        <Ionicons name="warning" size={responsive.responsiveWidth(20)} color="#F59E0B" />
+                      </View>
+                      <View style={styles.stockAlertTextContainer}>
+                        <Text style={[styles.stockAlertProductName, { color: colors.onSurface }]}>
+                          {producto.nombre || 'Producto desconocido'}
+                        </Text>
+                        {tiendasEnAlerta.map((ts, idx) => (
+                          <Text key={idx} style={[styles.stockAlertInfo, { color: colors.outline }]}>
+                            {ts.tienda?.nombre || 'Tienda desconocida'}: {ts.cantidad !== null && ts.cantidad !== undefined ? parseFloat(ts.cantidad).toFixed(2) : '0'}
+                          </Text>
+                        ))}
+                      </View>
+                    </View>
+                  </Card>
+                );
+              })}
+            </View>
+            {stockAlertProducts.length > 3 && (
+              <TouchableOpacity
+                style={[styles.seeMoreButton, { backgroundColor: `${colors.primary}15` }]}
+                onPress={() => {
+                  showToast({ 
+                    type: 'info', 
+                    message: `Hay ${stockAlertProducts.length} productos en alerta de stock`,
+                    duration: 3000
+                  });
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.seeMoreText, { color: colors.primary }]}>
+                  Ver más ({stockAlertProducts.length - 3} más)
                 </Text>
                 <Ionicons name="chevron-down" size={responsive.responsiveWidth(16)} color={colors.primary} />
               </TouchableOpacity>
@@ -1191,6 +1326,51 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   expirationSection: {
     marginBottom: responsive.responsiveMargin(24),
+  },
+  stockAlertSection: {
+    marginBottom: responsive.responsiveMargin(24),
+  },
+  stockAlertList: {
+    gap: responsive.gridGap,
+  },
+  stockAlertItem: {
+    borderRadius: 14,
+    padding: responsive.responsivePadding(12),
+    flexDirection: 'column',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  stockAlertContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stockAlertIconContainer: {
+    width: responsive.responsiveWidth(40),
+    height: responsive.responsiveHeight(40),
+    borderRadius: 12,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: responsive.responsiveMargin(12),
+  },
+  stockAlertTextContainer: {
+    flex: 1,
+  },
+  stockAlertProductName: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    lineHeight: responsive.fontSizes.body * 1.4,
+    marginBottom: 2,
+  },
+  stockAlertInfo: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '400',
+    fontFamily: 'Inter',
+    lineHeight: responsive.fontSizes.bodySmall * 1.3,
   },
   expirationList: {
     gap: responsive.gridGap,

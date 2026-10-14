@@ -113,7 +113,7 @@ api.interceptors.request.use(
     }
 
     // Añadir versión de la APK
-    config.headers['Apk-version'] = packageJson.version;
+    config.headers['apk-version'] = packageJson.version;
 
     return config;
   },
@@ -130,16 +130,16 @@ api.interceptors.response.use(
     const isLoginRequest = requestUrl.includes('/usuario/login');
 
     // Detectar error de versión incompatible
+    const errorMessage = error.response?.data?.message || error.response?.data?.errors?.[0] || '';
     const isVersionError = error.response?.status === 426 || 
                           (error.response?.status === 400 && (
-                            error.response?.data?.message?.toLowerCase().includes('versión') ||
-                            error.response?.data?.message?.toLowerCase().includes('version') ||
-                            error.response?.data?.errors?.[0]?.toLowerCase().includes('versión') ||
-                            error.response?.data?.errors?.[0]?.toLowerCase().includes('version')
+                            errorMessage.toLowerCase().includes('versión') ||
+                            errorMessage.toLowerCase().includes('version') ||
+                            errorMessage.includes('APK no soportada')
                           )) ||
-                          error.response?.data?.message?.toLowerCase().includes('versión') ||
-                          error.response?.data?.errors?.[0]?.toLowerCase().includes('versión') ||
-                          error.response?.data?.errors?.[0]?.toLowerCase().includes('version');
+                          errorMessage.toLowerCase().includes('versión') ||
+                          errorMessage.toLowerCase().includes('version') ||
+                          errorMessage.includes('APK no soportada');
 
     if (isVersionError) {
       // Guardar el error de versión en SecureStore

@@ -8,14 +8,14 @@ export const login = async (nombre_usuario, contrasenna) => {
       contrasenna,
     });
 
-    const { usuario, token, refreshToken } = response.data;
+    const { usuario, token, refreshToken, message } = response.data;
 
     // Guardar en SecureStore
     await SecureStore.setItemAsync('token', token);
     await SecureStore.setItemAsync('refreshToken', refreshToken);
     await SecureStore.setItemAsync('user', JSON.stringify(usuario));
 
-    return { usuario, token, refreshToken };
+    return { usuario, token, refreshToken, message };
   } catch (error) {
     const errorMessage = error.response?.data?.errors?.[0] || 
                         error.response?.data?.message || 

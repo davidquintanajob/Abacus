@@ -64,7 +64,8 @@ const LoginContent = () => {
     setIsLoading(false);
 
     if (result.success) {
-      navigation.navigate('Home');
+      // Pass the message to HomeScreen via navigation params
+      navigation.navigate('Home', { welcomeMessage: result.message });
     } else {
       const code = result.code ?? null;
       showToast({ type: 'error', message: result.error, code });
