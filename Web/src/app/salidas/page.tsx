@@ -511,10 +511,10 @@ export default function SalidasPage() {
         onHide={hideToast}
         toastKey={toast.key}
       />
-      
-      <SidebarNavigation 
+
+      <SidebarNavigation
         ref={sidebarNavRef}
-        currentRoute="salidas"
+        currentRoute="Salidas"
       />
 
       <div 

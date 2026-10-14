@@ -533,9 +533,9 @@ export default function EntradasPage() {
       />
       
       {/* ConfirmDialog is now global via GlobalConfirmDialog in layout */}
-      <SidebarNavigation 
+      <SidebarNavigation
         ref={sidebarNavRef}
-        currentRoute="entradas"
+        currentRoute="Entradas"
       />
 
       <div 
@@ -1375,9 +1375,9 @@ export default function EntradasPage() {
                     <div className="flex gap-3 mt-2">
                       <button
                         className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border"
-                        style={{ 
-                          backgroundColor: colors.surface, 
-                          borderColor: colors.outlineVariant 
+                        style={{
+                          backgroundColor: colors.surface,
+                          borderColor: colors.outlineVariant
                         }}
                         onClick={handleClearFilters}
                       >
@@ -1386,7 +1386,7 @@ export default function EntradasPage() {
                       </button>
                       <button
                         className="flex-1 flex items-center justify-center gap-2 py-3 rounded-lg"
-                        style={{ 
+                        style={{
                           backgroundColor: colors.primary,
                           boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                         }}

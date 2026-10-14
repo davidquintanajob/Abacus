@@ -37,8 +37,10 @@ export default function ConfiguracionPage() {
   const [showEntradaConfig, setShowEntradaConfig] = useState(false);
   const [showEntradaPermissions, setShowEntradaPermissions] = useState(false);
   const [showSalidaPermissions, setShowSalidaPermissions] = useState(false);
+  const [showOperacionPermissions, setShowOperacionPermissions] = useState(false);
   const [showEntradaManage, setShowEntradaManage] = useState(false);
   const [showSalidaManage, setShowSalidaManage] = useState(false);
+  const [showOperacionManage, setShowOperacionManage] = useState(false);
   const [entradaAccessLevels, setEntradaAccessLevels] = useState({
     dependiente: 'none',
     almacenero: 'none',
@@ -49,12 +51,22 @@ export default function ConfiguracionPage() {
     almacenero: 'none',
     economico: 'none',
   });
+  const [operacionAccessLevels, setOperacionAccessLevels] = useState({
+    dependiente: 'none',
+    almacenero: 'none',
+    economico: 'none',
+  });
   const [entradaManagePermissions, setEntradaManagePermissions] = useState({
     dependiente: false,
     almacenero: false,
     economico: false,
   });
   const [salidaManagePermissions, setSalidaManagePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
+  const [operacionManagePermissions, setOperacionManagePermissions] = useState({
     dependiente: false,
     almacenero: false,
     economico: false,
@@ -120,6 +132,20 @@ export default function ConfiguracionPage() {
           economico: data.salidaManagePermissions.economico || false,
         });
       }
+      if (data.operacionAccessLevels) {
+        setOperacionAccessLevels({
+          dependiente: data.operacionAccessLevels.dependiente || 'none',
+          almacenero: data.operacionAccessLevels.almacenero || 'none',
+          economico: data.operacionAccessLevels.economico || 'none',
+        });
+      }
+      if (data.operacionManagePermissions) {
+        setOperacionManagePermissions({
+          dependiente: data.operacionManagePermissions.dependiente || false,
+          almacenero: data.operacionManagePermissions.almacenero || false,
+          economico: data.operacionManagePermissions.economico || false,
+        });
+      }
       if (data.autoApplySuggestedCost) {
         setAutoApplySuggestedCost({
           dependiente: data.autoApplySuggestedCost.dependiente || false,
@@ -173,8 +199,10 @@ export default function ConfiguracionPage() {
         permissions: permissions,
         entradaAccessLevels: entradaAccessLevels,
         salidaAccessLevels: salidaAccessLevels,
+        operacionAccessLevels: operacionAccessLevels,
         entradaManagePermissions: entradaManagePermissions,
         salidaManagePermissions: salidaManagePermissions,
+        operacionManagePermissions: operacionManagePermissions,
         applyWeightedAverageCost: applyWeightedAverageCost,
         autoApplySuggestedCost: autoApplySuggestedCost,
         showEntradaModalAfterProductCreation: showEntradaModalAfterProductCreation,
@@ -204,6 +232,168 @@ export default function ConfiguracionPage() {
     } catch (error) {
       showToast({ type: 'error', message: 'Error al actualizar permiso' });
       setPermissions(permissions);
+    }
+  };
+
+  const updateEntradaAccessLevel = async (role: 'dependiente' | 'almacenero' | 'economico', level: string) => {
+    const newLevels = { ...entradaAccessLevels, [role]: level };
+    setEntradaAccessLevels(newLevels);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        entradaAccessLevels: newLevels,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Nivel de acceso actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar nivel de acceso' });
+      setEntradaAccessLevels(entradaAccessLevels);
+    }
+  };
+
+  const updateSalidaAccessLevel = async (role: 'dependiente' | 'almacenero' | 'economico', level: string) => {
+    const newLevels = { ...salidaAccessLevels, [role]: level };
+    setSalidaAccessLevels(newLevels);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        salidaAccessLevels: newLevels,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Nivel de acceso actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar nivel de acceso' });
+      setSalidaAccessLevels(salidaAccessLevels);
+    }
+  };
+
+  const updateOperacionAccessLevel = async (role: 'dependiente' | 'almacenero' | 'economico', level: string) => {
+    const newLevels = { ...operacionAccessLevels, [role]: level };
+    setOperacionAccessLevels(newLevels);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        operacionAccessLevels: newLevels,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Nivel de acceso actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar nivel de acceso' });
+      setOperacionAccessLevels(operacionAccessLevels);
+    }
+  };
+
+  const toggleEntradaManagePermission = async (role: 'dependiente' | 'almacenero' | 'economico') => {
+    const newPermissions = { ...entradaManagePermissions, [role]: !entradaManagePermissions[role] };
+    setEntradaManagePermissions(newPermissions);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        entradaManagePermissions: newPermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Permiso de gestión actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de gestión' });
+      setEntradaManagePermissions(entradaManagePermissions);
+    }
+  };
+
+  const toggleSalidaManagePermission = async (role: 'dependiente' | 'almacenero' | 'economico') => {
+    const newPermissions = { ...salidaManagePermissions, [role]: !salidaManagePermissions[role] };
+    setSalidaManagePermissions(newPermissions);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        salidaManagePermissions: newPermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Permiso de gestión actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de gestión' });
+      setSalidaManagePermissions(salidaManagePermissions);
+    }
+  };
+
+  const toggleOperacionManagePermission = async (role: 'dependiente' | 'almacenero' | 'economico') => {
+    const newPermissions = { ...operacionManagePermissions, [role]: !operacionManagePermissions[role] };
+    setOperacionManagePermissions(newPermissions);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        operacionManagePermissions: newPermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Permiso de gestión actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de gestión' });
+      setOperacionManagePermissions(operacionManagePermissions);
+    }
+  };
+
+  const toggleAutoApplySuggestedCost = async (role: 'dependiente' | 'almacenero' | 'economico') => {
+    const newAutoApply = { ...autoApplySuggestedCost, [role]: !autoApplySuggestedCost[role] };
+    setAutoApplySuggestedCost(newAutoApply);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        autoApplySuggestedCost: newAutoApply,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Configuración actualizada correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar configuración' });
+      setAutoApplySuggestedCost(autoApplySuggestedCost);
+    }
+  };
+
+  const toggleApplyWeightedAverageCost = async () => {
+    const newValue = !applyWeightedAverageCost;
+    setApplyWeightedAverageCost(newValue);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        applyWeightedAverageCost: newValue,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Configuración actualizada correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar configuración' });
+      setApplyWeightedAverageCost(!newValue);
+    }
+  };
+
+  const toggleShowEntradaModal = async () => {
+    const newValue = !showEntradaModalAfterProductCreation;
+    setShowEntradaModalAfterProductCreation(newValue);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        showEntradaModalAfterProductCreation: newValue,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Configuración actualizada correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar configuración' });
+      setShowEntradaModalAfterProductCreation(!newValue);
     }
   };
 
@@ -651,7 +841,7 @@ export default function ConfiguracionPage() {
                         style={{
                           backgroundColor: applyWeightedAverageCost ? colors.primary : colors.outlineVariant,
                         }}
-                        onClick={() => setApplyWeightedAverageCost(!applyWeightedAverageCost)}
+                        onClick={() => toggleApplyWeightedAverageCost()}
                       >
                         <div 
                           className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
@@ -689,7 +879,7 @@ export default function ConfiguracionPage() {
                               style={{
                                 backgroundColor: autoApplySuggestedCost[role as keyof typeof autoApplySuggestedCost] ? colors.primary : colors.outlineVariant,
                               }}
-                              onClick={() => setAutoApplySuggestedCost(prev => ({ ...prev, [role]: !prev[role as keyof typeof prev] }))}
+                              onClick={() => toggleAutoApplySuggestedCost(role as 'dependiente' | 'almacenero' | 'economico')}
                             >
                               <div 
                                 className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
@@ -723,7 +913,7 @@ export default function ConfiguracionPage() {
                         style={{
                           backgroundColor: showEntradaModalAfterProductCreation ? colors.primary : colors.outlineVariant,
                         }}
-                        onClick={() => setShowEntradaModalAfterProductCreation(!showEntradaModalAfterProductCreation)}
+                        onClick={() => toggleShowEntradaModal()}
                       >
                         <div 
                           className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
@@ -817,9 +1007,7 @@ export default function ConfiguracionPage() {
                                   backgroundColor: entradaAccessLevels[role as keyof typeof entradaAccessLevels] === level ? colors.primary : 'transparent',
                                   borderColor: entradaAccessLevels[role as keyof typeof entradaAccessLevels] === level ? colors.primary : colors.outlineVariant,
                                 }}
-                                onClick={() => {
-                                  setEntradaAccessLevels(prev => ({ ...prev, [role]: level }));
-                                }}
+                                onClick={() => updateEntradaAccessLevel(role as 'dependiente' | 'almacenero' | 'economico', level)}
                               >
                                 {level === 'none' && <Lock size={18} style={{ color: entradaAccessLevels[role as keyof typeof entradaAccessLevels] === level ? '#fff' : colors.onSurface }} />}
                                 {level === 'own_store' && <Store size={18} style={{ color: entradaAccessLevels[role as keyof typeof entradaAccessLevels] === level ? '#fff' : colors.onSurface }} />}
@@ -871,7 +1059,7 @@ export default function ConfiguracionPage() {
                                   style={{
                                     backgroundColor: entradaManagePermissions.dependiente ? colors.primary : colors.outlineVariant,
                                   }}
-                                  onClick={() => setEntradaManagePermissions(prev => ({ ...prev, dependiente: !prev.dependiente }))}
+                                  onClick={() => toggleEntradaManagePermission('dependiente')}
                                 >
                                   <div 
                                     className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
@@ -903,7 +1091,7 @@ export default function ConfiguracionPage() {
                                   style={{
                                     backgroundColor: entradaManagePermissions.almacenero ? colors.primary : colors.outlineVariant,
                                   }}
-                                  onClick={() => setEntradaManagePermissions(prev => ({ ...prev, almacenero: !prev.almacenero }))}
+                                  onClick={() => toggleEntradaManagePermission('almacenero')}
                                 >
                                   <div 
                                     className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
@@ -935,7 +1123,7 @@ export default function ConfiguracionPage() {
                                   style={{
                                     backgroundColor: entradaManagePermissions.economico ? colors.primary : colors.outlineVariant,
                                   }}
-                                  onClick={() => setEntradaManagePermissions(prev => ({ ...prev, economico: !prev.economico }))}
+                                  onClick={() => toggleEntradaManagePermission('economico')}
                                 >
                                   <div 
                                     className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
@@ -1034,9 +1222,7 @@ export default function ConfiguracionPage() {
                                   backgroundColor: salidaAccessLevels[role as keyof typeof salidaAccessLevels] === level ? colors.primary : 'transparent',
                                   borderColor: salidaAccessLevels[role as keyof typeof salidaAccessLevels] === level ? colors.primary : colors.outlineVariant,
                                 }}
-                                onClick={() => {
-                                  setSalidaAccessLevels(prev => ({ ...prev, [role]: level }));
-                                }}
+                                onClick={() => updateSalidaAccessLevel(role as 'dependiente' | 'almacenero' | 'economico', level)}
                               >
                                 {level === 'none' && <Lock size={18} style={{ color: salidaAccessLevels[role as keyof typeof salidaAccessLevels] === level ? '#fff' : colors.onSurface }} />}
                                 {level === 'own_store' && <Store size={18} style={{ color: salidaAccessLevels[role as keyof typeof salidaAccessLevels] === level ? '#fff' : colors.onSurface }} />}
@@ -1088,7 +1274,7 @@ export default function ConfiguracionPage() {
                                   style={{
                                     backgroundColor: salidaManagePermissions.dependiente ? colors.primary : colors.outlineVariant,
                                   }}
-                                  onClick={() => setSalidaManagePermissions(prev => ({ ...prev, dependiente: !prev.dependiente }))}
+                                  onClick={() => toggleSalidaManagePermission('dependiente')}
                                 >
                                   <div 
                                     className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
@@ -1120,7 +1306,7 @@ export default function ConfiguracionPage() {
                                   style={{
                                     backgroundColor: salidaManagePermissions.almacenero ? colors.primary : colors.outlineVariant,
                                   }}
-                                  onClick={() => setSalidaManagePermissions(prev => ({ ...prev, almacenero: !prev.almacenero }))}
+                                  onClick={() => toggleSalidaManagePermission('almacenero')}
                                 >
                                   <div 
                                     className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
@@ -1152,13 +1338,228 @@ export default function ConfiguracionPage() {
                                   style={{
                                     backgroundColor: salidaManagePermissions.economico ? colors.primary : colors.outlineVariant,
                                   }}
-                                  onClick={() => setSalidaManagePermissions(prev => ({ ...prev, economico: !prev.economico }))}
+                                  onClick={() => toggleSalidaManagePermission('economico')}
                                 >
                                   <div 
                                     className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
                                     style={{
                                       transform: salidaManagePermissions.economico ? 'translateX(24px)' : 'translateX(0)',
                                       backgroundColor: salidaManagePermissions.economico ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Permisos de Operaciones */}
+              <div 
+                className="rounded-2xl p-5 mb-6 shadow-lg"
+                style={{ backgroundColor: colors.surface }}
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-2">
+                    <div style={{ width: '24px', height: '24px', filter: isDarkMode ? 'invert(1)' : 'none' }}>
+                      <img
+                        src="/icon-operaciones.png"
+                        alt="Permisos de Operaciones"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <h2 
+                      className="text-lg font-bold"
+                      style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                    >
+                      Permisos de Operaciones
+                    </h2>
+                  </div>
+                  <button
+                    className="w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                    style={{ 
+                      backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                      borderColor: colors.primary 
+                    }}
+                    onClick={() => setShowOperacionPermissions(!showOperacionPermissions)}
+                  >
+                    {showOperacionPermissions ? <ChevronUp size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                  </button>
+                </div>
+
+                {showOperacionPermissions && (
+                  <>
+                    <p className="text-sm mb-4" style={{ color: colors.outline }}>
+                      Configura el nivel de acceso a las operaciones para cada rol
+                    </p>
+
+                    <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: colors.background }}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Lock size={16} style={{ color: colors.outline }} />
+                        <span className="text-sm" style={{ color: colors.outline }}><strong>Sin acceso:</strong> No puede ver la pantalla de Operaciones ni ninguna operación del sistema</span>
+                      </div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Store size={16} style={{ color: colors.outline }} />
+                        <span className="text-sm" style={{ color: colors.outline }}><strong>Mi tienda:</strong> Puede ver la pantalla de Operaciones pero solo las operaciones de su tienda</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Globe size={16} style={{ color: colors.outline }} />
+                        <span className="text-sm" style={{ color: colors.outline }}><strong>Todas las tiendas:</strong> Puede ver la pantalla de Operaciones y las operaciones de todas las tiendas</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {['dependiente', 'almacenero', 'economico'].map((role) => (
+                        <div key={role} className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.background }}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>{role}</span>
+                            <button
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                              style={{ backgroundColor: colors.primary, color: '#fff' }}
+                              onClick={() => setInfoModal({
+                                title: `Acceso a Operaciones - ${role}`,
+                                content: 'Define si los usuarios con rol ' + role + ' no tienen acceso a operaciones, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
+                              })}
+                            >
+                              !
+                            </button>
+                          </div>
+                          <div className="flex gap-2">
+                            {['none', 'own_store', 'all_stores'].map((level) => (
+                              <button
+                                key={level}
+                                className={`w-10 h-10 rounded-lg flex items-center justify-center border-2 transition-colors`}
+                                style={{
+                                  backgroundColor: operacionAccessLevels[role as keyof typeof operacionAccessLevels] === level ? colors.primary : 'transparent',
+                                  borderColor: operacionAccessLevels[role as keyof typeof operacionAccessLevels] === level ? colors.primary : colors.outlineVariant,
+                                }}
+                                onClick={() => updateOperacionAccessLevel(role as 'dependiente' | 'almacenero' | 'economico', level)}
+                              >
+                                {level === 'none' && <Lock size={18} style={{ color: operacionAccessLevels[role as keyof typeof operacionAccessLevels] === level ? '#fff' : colors.onSurface }} />}
+                                {level === 'own_store' && <Store size={18} style={{ color: operacionAccessLevels[role as keyof typeof operacionAccessLevels] === level ? '#fff' : colors.onSurface }} />}
+                                {level === 'all_stores' && <Globe size={18} style={{ color: operacionAccessLevels[role as keyof typeof operacionAccessLevels] === level ? '#fff' : colors.onSurface }} />}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {(operacionAccessLevels.dependiente !== 'none' || operacionAccessLevels.almacenero !== 'none' || operacionAccessLevels.economico !== 'none') && (
+                      <div className="mt-4 p-4 rounded-lg" style={{ backgroundColor: colors.background }}>
+                        <div className="flex justify-between items-center mb-3">
+                          <h3 className="font-semibold" style={{ color: colors.onSurface }}>Gestión de Operaciones</h3>
+                          <button
+                            className="w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                            style={{ 
+                              backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                              borderColor: colors.primary 
+                            }}
+                            onClick={() => setShowOperacionManage(!showOperacionManage)}
+                          >
+                            {showOperacionManage ? <ChevronUp size={16} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={16} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                          </button>
+                        </div>
+                        {showOperacionManage && (
+                          <>
+                            <p className="text-sm mb-3" style={{ color: colors.outline }}>
+                              Configura qué roles pueden crear, editar y eliminar operaciones (solo visible para roles con acceso)
+                            </p>
+                            {operacionAccessLevels.dependiente !== 'none' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Dependiente</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Operaciones - Dependiente',
+                                      content: 'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar operaciones. Cuando está desactivado, solo pueden ver la información sin poder gestionar operaciones.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: operacionManagePermissions.dependiente ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => toggleOperacionManagePermission('dependiente')}
+                                >
+                                  <div 
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: operacionManagePermissions.dependiente ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: operacionManagePermissions.dependiente ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {operacionAccessLevels.almacenero !== 'none' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Almacenero</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Operaciones - Almacenero',
+                                      content: 'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar operaciones. Cuando está desactivado, solo pueden ver la información sin poder gestionar operaciones.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: operacionManagePermissions.almacenero ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => toggleOperacionManagePermission('almacenero')}
+                                >
+                                  <div 
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: operacionManagePermissions.almacenero ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: operacionManagePermissions.almacenero ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {operacionAccessLevels.economico !== 'none' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Económico</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Operaciones - Económico',
+                                      content: 'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar operaciones. Cuando está desactivado, solo pueden ver la información sin poder gestionar operaciones.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: operacionManagePermissions.economico ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => toggleOperacionManagePermission('economico')}
+                                >
+                                  <div 
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: operacionManagePermissions.economico ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: operacionManagePermissions.economico ? '#fff' : colors.outline,
                                     }}
                                   />
                                 </button>
