@@ -1872,11 +1872,11 @@ const SalesContent = () => {
               onBarcodeScanned={isScanning ? handleBarcodeScanned : undefined}
             >
               <View style={styles.cameraOverlay}>
-                <View style={styles.cameraCornerTopLeft} />
-                <View style={styles.cameraCornerTopRight} />
-                <View style={styles.cameraCornerBottomLeft} />
-                <View style={styles.cameraCornerBottomRight} />
-                <Text style={[styles.cameraText, { color: '#fff' }]}>
+                <View style={[styles.corner, styles.topLeft]} />
+                <View style={[styles.corner, styles.topRight]} />
+                <View style={[styles.corner, styles.bottomLeft]} />
+                <View style={[styles.corner, styles.bottomRight]} />
+                <Text style={[styles.cameraHint, { color: '#fff' }]}>
                   Apunta al código de barras
                 </Text>
               </View>
