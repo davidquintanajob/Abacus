@@ -4,6 +4,7 @@ const bcrypt = require("bcrypt");
 const { roles } = require("../models/usuario");
 const jwt = require("jsonwebtoken");
 const { throwError } = require("../helpers/errorLauncher");
+const { SecureLicenseManager } = require("../helpers/SecureLicenseManager");
 
 // Función auxiliar para responder errores (igual que antes)
 const handleError = (res, error) => {
@@ -267,6 +268,17 @@ const login = async (req, res) => {
       throwError("Contraseña incorrecta", 401);
     }
 
+    const licenseStatus = SecureLicenseManager.checkLicense();
+    if (!licenseStatus.isValid) {
+      throwError("Licencia inválida o expirada. Contacte al administrador.", 403, [
+        licenseStatus.message,
+      ]);
+    }
+
+    const message = licenseStatus.remainingDays <= 5
+      ? `Bienvenido, ${usuario.nombre_natural}. Advertencia: quedan ${licenseStatus.remainingDays} día${licenseStatus.remainingDays === 1 ? "" : "s"} de licencia.`
+      : `Sesión correcta. Bienvenido, ${usuario.nombre_natural}.`;
+
     const token = jwt.sign(
       {
         userId: usuario.id_usuario,
@@ -288,6 +300,7 @@ const login = async (req, res) => {
 
     // Devolvemos también la tienda (si existe)
     res.status(200).json({
+      message,
       usuario: {
         id_usuario: usuario.id_usuario,
         nombre_natural: usuario.nombre_natural,

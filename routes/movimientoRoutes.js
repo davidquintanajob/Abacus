@@ -45,6 +45,12 @@ const authenticate = require("../helpers/authenticate");
  *               cantidad_restante:
  *                 type: number
  *                 description: Cantidad disponible del movimiento; se inicializa automáticamente con cantidad y no se envía al crear.
+ *               costo_producto_cup:
+ *                 type: number
+ *                 description: Costo CUP del producto, asignado automáticamente desde el inventario de origen; no se envía ni modifica en la solicitud.
+ *               costo_producto_usd:
+ *                 type: number
+ *                 description: Costo USD del producto, asignado automáticamente desde el inventario de origen; no se envía ni modifica en la solicitud.
  *               nota:
  *                 type: string
  *               servicioTiendaOrigen:

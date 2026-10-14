@@ -295,9 +295,26 @@ router.delete("/usuario/:id", authenticate(), usuarioController.deleteUsuario);
  *                 type: string
  *     responses:
  *       200:
- *         description: Login exitoso, devuelve token, refreshToken y datos del usuario (incluye tienda)
+ *         description: Login exitoso con mensaje de bienvenida; advierte si quedan 5 días o menos de licencia.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Sesión correcta. Bienvenido, Ana.
+ *                 usuario:
+ *                   type: object
+ *                   description: Datos del usuario autenticado, incluida su tienda.
+ *                 token:
+ *                   type: string
+ *                 refreshToken:
+ *                   type: string
  *       401:
  *         description: Contraseña incorrecta
+ *       403:
+ *         description: Licencia inválida o expirada
  *       404:
  *         description: Usuario no encontrado
  */

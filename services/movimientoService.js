@@ -327,6 +327,8 @@ const _crearMovimientosParaLista = async (id_movimiento_lista, movimientos, esta
       {
         cantidad: item.cantidad,
         cantidad_restante: item.cantidad,
+        costo_producto_cup: item.stOrigen.costo_cup,
+        costo_producto_usd: item.stOrigen.costo_usd,
         nota: item.nota || null,
         id_tienda_origen: item.id_tienda_origen,
         id_tienda_destino: item.id_tienda_destino,

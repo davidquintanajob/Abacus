@@ -29,6 +29,16 @@ const Movimiento = sequelize.define(
         },
       },
     },
+    costo_producto_cup: {
+      type: DataTypes.DECIMAL,
+      allowNull: false,
+      defaultValue: 0.00000,
+    },
+    costo_producto_usd: {
+      type: DataTypes.DECIMAL,
+      allowNull: false,
+      defaultValue: 0.00000,
+    },
     nota: {
       type: DataTypes.STRING,
       allowNull: true,
