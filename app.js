@@ -13,6 +13,8 @@ const jwt = require("jsonwebtoken");
 const { throwError } = require("./helpers/errorLauncher"); // <-- Importar throwError
 const { DataTypes } = require("sequelize");
 const notifier = require("node-notifier"); // NUEVO: Notificaciones de escritorio
+const http = require("http");
+const { initSocket } = require("./helpers/socket");
 
 // <-- NUEVO: Importar el gestor de licencias
 const { SecureLicenseManager } = require("./helpers/SecureLicenseManager");
@@ -177,10 +179,15 @@ app.use((req, res, next) => {
   const isLessOrEqual = compareVersions(apkVersionHeader, maxVersion) <= 0;
 
   if (!isGreaterOrEqual || !isLessOrEqual) {
-    throwError(
-      `Versión de APK no soportada. Versión actual: ${apkVersionHeader}. Versiones soportadas: ${supportRange}`,
-      400
-    );
+    const message = `La versión de la aplicación móvil (${apkVersionHeader}) no está soportada. Actualiza la aplicación para continuar. Versiones compatibles: ${supportRange}.`;
+    logger.warn(`Acceso denegado por versión de APK no soportada: ${apkVersionHeader}`);
+    return res.status(426).json({
+      code: "APK_VERSION_UNSUPPORTED",
+      errors: [message],
+      versionActual: apkVersionHeader,
+      versionesSoportadas: supportRange,
+      actualizarAplicacion: true,
+    });
   }
 
   // Si todo ok, continuar
@@ -324,6 +331,7 @@ const listaVentaRoutes = require("./routes/listaVentaRoutes.js");
 const informesRoutes = require("./routes/informesRoutes");
 const movimientosRoutes = require("./routes/movimientoRoutes.js");
 const deudaRoutes = require("./routes/deudaRoutes.js");
+const notificacionRoutes = require("./routes/notificacionRoutes.js");
 
 app.use("/", servicioRoutes);
 app.use("/", productoRoutes);
@@ -339,6 +347,7 @@ app.use("/", listaVentaRoutes);
 app.use("/", informesRoutes);
 app.use("/", movimientosRoutes);
 app.use("/", deudaRoutes);
+app.use("/", notificacionRoutes);
 
 // Inicializar la base de datos y arrancar el servidor
 const startApp = async () => {
@@ -379,6 +388,7 @@ const startApp = async () => {
     const { MovimientoEntrada } = require("./models/movimiento_entrada.js");
     const { Deuda } = require("./models/deuda.js");
     const { PagoDeuda } = require("./models/pago_deuda.js");
+    const { Notificacion } = require("./models/notificacion.js");
 
     const models = {
       Usuario,
@@ -402,7 +412,8 @@ const startApp = async () => {
       Movimiento,
       MovimientoEntrada,
       Deuda,
-      PagoDeuda
+      PagoDeuda,
+      Notificacion
     };
 
     Object.values(models).forEach((model) => {
@@ -511,8 +522,11 @@ const startApp = async () => {
     // ===== FIN DE LA SECCIÓN MODIFICADA =====
 
     const PORT = process.env.PORT || 4000;
-    app.listen(PORT, "0.0.0.0", () => {
+    const server = http.createServer(app);
+    initSocket(server);
+    server.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+      console.log("🔌 Socket.IO inicializado. Los clientes autenticados pueden conectar con el token del login.");
       console.log(`📚 Documentación API: http://localhost:${PORT}/api-docs`);
     });
   } catch (error) {

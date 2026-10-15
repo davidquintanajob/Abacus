@@ -81,6 +81,10 @@ Usuario.associate = function(models) {
     foreignKey: 'id_usuario',
     as: 'movimientoListas',
   });
+  Usuario.hasMany(models.Notificacion, {
+    foreignKey: 'id_usuario',
+    as: 'notificaciones',
+  });
 };
 
 module.exports = { Usuario, roles };

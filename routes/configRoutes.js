@@ -78,6 +78,10 @@ router.put('/logo', authenticate(), configController.updateLogo);
  *       - `datosModificar`: string, debe ser exactamente `"costos"`, `"precios"` o `"ambos"`.
  *       - `tipoDatoModificar`: string, debe ser `"cup"` o `"usd"`.
  *       - `monedaValor`: número mayor que 0 (p.ej., `1.5`).
+ *       - `redondeo_exeso`: opcional; entero positivo. Si `tipoDatoModificar` es `"cup"`,
+ *         solo el precio calculado se redondea hacia arriba al múltiplo indicado
+ *         (por ejemplo, un precio de 451 con redondeo 5 se convierte en 455).
+ *         El costo mantiene el redondeo estándar a cinco decimales.
  *       
  *       Si alguno de estos campos no cumple con el tipo o valor esperado, la petición será rechazada con un error 400.
  *     tags: [Configuración]
@@ -98,6 +102,7 @@ router.put('/logo', authenticate(), configController.updateLogo);
  *               datosModificar: "costos"
  *               tipoDatoModificar: "cup"
  *               monedaValor: 1.5
+ *               redondeo_exeso: 5
  *     responses:
  *       200:
  *         description: Configuración actualizada correctamente
@@ -120,6 +125,7 @@ router.put('/logo', authenticate(), configController.updateLogo);
  *           - datosModificar debe ser "costos", "precios" o "ambos"
  *           - tipoDatoModificar debe ser "cup" o "usd"
  *           - monedaValor debe ser un número mayor que 0
+ *           - redondeo_exeso debe ser un número entero positivo si se proporciona
  *       500:
  *         description: Error interno del servidor
  */

@@ -213,7 +213,13 @@ class ConfigController {
           throwError('monedaConfig debe ser un objeto', 400);
         }
 
-        const { modificarSoloServicios, datosModificar, tipoDatoModificar, monedaValor } = moneda;
+        const {
+          modificarSoloServicios,
+          datosModificar,
+          tipoDatoModificar,
+          monedaValor,
+          redondeo_exeso: redondeoExeso
+        } = moneda;
 
         if (typeof modificarSoloServicios !== 'boolean') {
           throwError('monedaConfig.modificarSoloServicios debe ser un booleano', 400);
@@ -226,6 +232,10 @@ class ConfigController {
         }
         if (typeof monedaValor !== 'number' || monedaValor <= 0) {
           throwError('monedaConfig.monedaValor debe ser un número mayor que 0', 400);
+        }
+        if (redondeoExeso !== undefined &&
+            (!Number.isInteger(redondeoExeso) || redondeoExeso <= 0)) {
+          throwError('monedaConfig.redondeo_exeso debe ser un número entero positivo', 400);
         }
 
         // --- Inicio de la transacción para actualización masiva ---
@@ -261,6 +271,12 @@ class ConfigController {
 
           // Función para redondear a 5 decimales usando SQL
           const round5 = (expr) => sequelize.literal(`ROUND(${expr}, 5)`);
+          const roundCupValue = (expr) => {
+            if (redondeoExeso === undefined) {
+              return round5(expr);
+            }
+            return round5(`CEIL((${expr}) / ${redondeoExeso}) * ${redondeoExeso}`);
+          };
 
           if (tipoDatoModificar === 'usd') {
             // Actualizar USD a partir de CUP
@@ -273,7 +289,7 @@ class ConfigController {
           } else { // 'cup'
             // Actualizar CUP a partir de USD
             if (datosModificar === 'precios' || datosModificar === 'ambos') {
-              updateFields.precio_cup = round5(`precio_usd * ${factor}`);
+              updateFields.precio_cup = roundCupValue(`precio_usd * ${factor}`);
             }
             if (datosModificar === 'costos' || datosModificar === 'ambos') {
               updateFields.costo_cup = round5(`costo_usd * ${factor}`);

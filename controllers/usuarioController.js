@@ -298,6 +298,8 @@ const login = async (req, res) => {
       { expiresIn: "24h" }
     );
 
+    console.log(`[Login] Usuario ${usuario.id_usuario} (${usuario.nombre_usuario}) autenticado. Socket.IO disponible para iniciar conexión con el token de sesión.`);
+
     // Devolvemos también la tienda (si existe)
     res.status(200).json({
       message,

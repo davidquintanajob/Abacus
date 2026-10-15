@@ -67,6 +67,16 @@ function initSocket(server) {
   return io;
 }
 
+function emitToUser(userId, event, data) {
+  const socketServer = getIO();
+  const room = `user:${userId}`;
+  const connectedSockets = socketServer.sockets.adapter.rooms.get(room);
+  const recipientCount = connectedSockets ? connectedSockets.size : 0;
+
+  socketServer.to(room).emit(event, data);
+  console.log(`[Socket.IO] Evento "${event}" enviado a usuario ${userId} (${recipientCount} conexión(es) activa(s))`);
+}
+
 function getIO() {
   if (!io) {
     throw new Error('Socket.IO no ha sido inicializado');
@@ -77,4 +87,5 @@ function getIO() {
 module.exports = {
   initSocket,
   getIO,
+  emitToUser,
 };

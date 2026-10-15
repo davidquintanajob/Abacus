@@ -15,7 +15,7 @@ const authenticate = (...allowedRoles) => { // Acepta una lista de roles, por de
 
         // Extraer datos del usuario del token decodificado
         req.userData = {
-          userId: decodedToken.id_usuario,
+          userId: decodedToken.userId || decodedToken.id_usuario,
           nombre: decodedToken.nombre,
           nombre_usuario: decodedToken.nombre_usuario,
           rol: decodedToken.rol // Obtener el rol del usuario
