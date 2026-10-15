@@ -318,6 +318,7 @@ const VentasContent = () => {
   // Filter states
   const [filters, setFilters] = useState({ 
     nota: '', 
+    is_nota: null,
     fecha_desde: formattedDate, 
     fecha_hasta: formattedDate, 
     id_tienda: '', 
@@ -753,6 +754,7 @@ const VentasContent = () => {
   const handleClearFilters = () => {
     const defaultFilters = { 
       nota: '', 
+      is_nota: null,
       fecha_desde: '', 
       fecha_hasta: '', 
       id_tienda: user?.id_tienda ? user.id_tienda.toString() : '', 
@@ -1182,6 +1184,59 @@ const VentasContent = () => {
               value={filters.nota}
               onChangeText={(text) => setFilters(prev => ({ ...prev, nota: text }))}
             />
+          </View>
+
+          <View style={styles.filterGroup}>
+            <Text style={[styles.label, { color: colors.outline }]}>Solo ventas con nota</Text>
+            <View style={styles.switchContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.switchOption,
+                  { borderColor: colors.outlineVariant },
+                  filters.is_nota === true && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => {
+                  const newIsNota = filters.is_nota === true ? null : true;
+                  const updatedFilters = { ...filters, is_nota: newIsNota };
+                  setFilters(updatedFilters);
+                  setPagination(prev => ({ ...prev, currentPage: 1 }));
+                  fetchVentas(null, updatedFilters);
+                }}
+              >
+                <Text style={[styles.switchOptionText, { color: filters.is_nota === true ? '#fff' : colors.outline }]}>Sí</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.switchOption,
+                  { borderColor: colors.outlineVariant },
+                  filters.is_nota === false && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => {
+                  const newIsNota = filters.is_nota === false ? null : false;
+                  const updatedFilters = { ...filters, is_nota: newIsNota };
+                  setFilters(updatedFilters);
+                  setPagination(prev => ({ ...prev, currentPage: 1 }));
+                  fetchVentas(null, updatedFilters);
+                }}
+              >
+                <Text style={[styles.switchOptionText, { color: filters.is_nota === false ? '#fff' : colors.outline }]}>No</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.switchOption,
+                  { borderColor: colors.outlineVariant },
+                  filters.is_nota === null && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => {
+                  const updatedFilters = { ...filters, is_nota: null };
+                  setFilters(updatedFilters);
+                  setPagination(prev => ({ ...prev, currentPage: 1 }));
+                  fetchVentas(null, updatedFilters);
+                }}
+              >
+                <Text style={[styles.switchOptionText, { color: filters.is_nota === null ? '#fff' : colors.outline }]}>Todos</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.filterGroup}>
@@ -2329,6 +2384,23 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   filterRow: {
     flexDirection: 'row',
+  },
+  switchContainer: {
+    flexDirection: 'row',
+    gap: responsive.responsiveWidth(8),
+  },
+  switchOption: {
+    paddingHorizontal: responsive.responsivePadding(12),
+    paddingVertical: responsive.responsivePadding(8),
+    borderRadius: 8,
+    borderWidth: 1,
+    minWidth: responsive.responsiveWidth(60),
+    alignItems: 'center',
+  },
+  switchOptionText: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+    fontWeight: '500',
   },
   label: {
     fontSize: responsive.fontSizes.bodySmall,

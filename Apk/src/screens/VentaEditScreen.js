@@ -709,8 +709,19 @@ const VentaEditContent = () => {
   const handleSavePriceEdit = () => {
     if (editingItemIndex !== null) {
       const newItems = [...saleItems];
-      newItems[editingItemIndex].precio_cup = parseFloat(editingItemPrices.cup) || 0;
-      newItems[editingItemIndex].precio_usd = parseFloat(editingItemPrices.usd) || 0;
+      const item = newItems[editingItemIndex];
+      
+      // Promediar el nuevo precio con el precio original
+      const newPriceCUP = parseFloat(editingItemPrices.cup) || 0;
+      const newPriceUSD = parseFloat(editingItemPrices.usd) || 0;
+      
+      const originalPriceCUP = item.precio_original_cup || item.precio_cup || 0;
+      const originalPriceUSD = item.precio_original_usd || item.precio_usd || 0;
+      
+      // Calcular promedio
+      newItems[editingItemIndex].precio_cup = roundTo5Decimals((originalPriceCUP + newPriceCUP) / 2);
+      newItems[editingItemIndex].precio_usd = roundTo5Decimals((originalPriceUSD + newPriceUSD) / 2);
+      
       setSaleItems(newItems);
     }
     setShowPriceEditModal(false);
@@ -1483,8 +1494,9 @@ const VentaEditContent = () => {
                 <TouchableOpacity
                   style={[styles.navigateButton, { backgroundColor: colors.primary }]}
                   onPress={() => {
-                    console.log('[VentaEdit] Navigating to DeudaForm with deuda:', venta.deuda);
-                    navigation.navigate('DeudaForm', { deuda: venta.deuda, mode: 'edit' });
+                    if (venta.deuda) {
+                      navigation.navigate('DeudaForm', { deuda: venta.deuda, mode: 'edit' });
+                    }
                   }}
                 >
                   <Ionicons name="arrow-forward" size={responsive.responsiveWidth(16)} color="#fff" />
@@ -1494,75 +1506,73 @@ const VentaEditContent = () => {
 
             {/* Deuda Information - Only show if venta has deuda */}
             {venta?.is_deuda && venta?.deuda && (
-              <>
-                <View style={styles.deudaInfoCard}>
-                  <View style={styles.deudaInfoRow}>
-                    <View style={styles.deudaInfoItem}>
-                      <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Fecha de creación</Text>
-                      <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
-                        {new Date(venta.deuda.fecha_hora).toLocaleDateString()}
-                      </Text>
-                    </View>
-                    <View style={styles.deudaInfoItem}>
-                      <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Cliente</Text>
-                      <Text style={[styles.deudaInfoValue, { color: colors.primary }]}>
-                        {venta.deuda.cliente?.nombre || 'N/A'}
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.deudaInfoRow}>
-                    <View style={styles.deudaInfoItem}>
-                      <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Monto total</Text>
-                      <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
-                        {venta.deuda.monto_cup > 0 ? `$${venta.deuda.monto_cup} CUP` : ''}
-                        {venta.deuda.monto_usd > 0 ? `$${venta.deuda.monto_usd} USD` : ''}
-                      </Text>
-                    </View>
-                    <View style={styles.deudaInfoItem}>
-                      <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Cantidad pagada</Text>
-                      <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
-                        {(() => {
-                          const pagadoCup = venta.deuda.monto_restante_cup !== undefined 
-                            ? venta.deuda.monto_cup - venta.deuda.monto_restante_cup 
-                            : 0;
-                          const pagadoUsd = venta.deuda.monto_restante_usd !== undefined 
-                            ? venta.deuda.monto_usd - venta.deuda.monto_restante_usd 
-                            : 0;
-                          
-                          let parts = [];
-                          if (pagadoCup > 0) parts.push(`(${pagadoCup.toFixed(2)}) CUP`);
-                          if (pagadoUsd > 0) parts.push(`(${pagadoUsd.toFixed(2)}) USD`);
-                          
-                          return parts.join(' ');
-                        })()}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.deudaInfoRow}>
-                    <View style={styles.deudaInfoItem}>
-                      <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Restante</Text>
-                      <Text style={[
-                        styles.deudaInfoValue, 
-                        { 
-                          color: (venta.deuda.monto_restante_cup > 0 || venta.deuda.monto_restante_usd > 0) 
-                            ? colors.error 
-                            : '#4CAF50',
-                          fontWeight: '700'
-                        }
-                      ]}>
-                        {venta.deuda.monto_restante_cup > 0 ? `$${venta.deuda.monto_restante_cup.toFixed(2)} CUP` : ''}
-                        {venta.deuda.monto_restante_usd > 0 ? `$${venta.deuda.monto_restante_usd.toFixed(2)} USD` : ''}
-                        {(venta.deuda.monto_restante_cup === 0 || venta.deuda.monto_restante_cup === undefined) &&
-                         (venta.deuda.monto_restante_usd === 0 || venta.deuda.monto_restante_usd === undefined) ? 'Saldada' : ''}
-                      </Text>
-                    </View>
-                  </View>
+              <View style={styles.deudaInfoContainer}>
+                <View style={styles.deudaInfoItem}>
+                  <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Fecha de creación</Text>
+                  <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
+                    {venta.deuda.fecha_hora ? new Date(venta.deuda.fecha_hora).toLocaleDateString() : 'N/A'}
+                  </Text>
                 </View>
-              </>
+                <View style={styles.deudaInfoItem}>
+                  <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Cliente</Text>
+                  <Text style={[styles.deudaInfoValue, { color: colors.primary }]}>
+                    {venta.deuda.cliente?.nombre || 'N/A'}
+                  </Text>
+                </View>
+              </View>
             )}
 
+            {venta?.is_deuda && venta?.deuda && (
+              <View style={styles.deudaInfoContainer}>
+                <View style={styles.deudaInfoItem}>
+                  <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Monto total</Text>
+                  <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
+                    {venta.deuda.monto_cup > 0 ? `$${venta.deuda.monto_cup} CUP` : ''}
+                    {venta.deuda.monto_usd > 0 ? `$${venta.deuda.monto_usd} USD` : ''}
+                  </Text>
+                </View>
+                <View style={styles.deudaInfoItem}>
+                  <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Cantidad pagada</Text>
+                  <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
+                    {(() => {
+                      const pagadoCup = venta.deuda.monto_restante_cup !== undefined 
+                        ? venta.deuda.monto_cup - venta.deuda.monto_restante_cup 
+                        : 0;
+                      const pagadoUsd = venta.deuda.monto_restante_usd !== undefined 
+                        ? venta.deuda.monto_usd - venta.deuda.monto_restante_usd 
+                        : 0;
+                      
+                      let parts = [];
+                      if (pagadoCup > 0) parts.push(`$${pagadoCup.toFixed(2)} CUP`);
+                      if (pagadoUsd > 0) parts.push(`$${pagadoUsd.toFixed(2)} USD`);
+                      return parts.join(' + ') || '$0.00';
+                    })()}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {venta?.is_deuda && venta?.deuda && (
+              <View style={styles.deudaInfoContainer}>
+                <View style={styles.deudaInfoItem}>
+                  <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Restante</Text>
+                  <Text style={[
+                    styles.deudaInfoValue, 
+                    { 
+                      color: (venta.deuda.monto_restante_cup > 0 || venta.deuda.monto_restante_usd > 0) 
+                        ? colors.error 
+                        : '#4CAF50',
+                      fontWeight: '700'
+                    }
+                  ]}>
+                    {venta.deuda.monto_restante_cup > 0 ? `$${venta.deuda.monto_restante_cup.toFixed(2)} CUP` : ''}
+                    {venta.deuda.monto_restante_usd > 0 ? `$${venta.deuda.monto_restante_usd.toFixed(2)} USD` : ''}
+                    {(venta.deuda.monto_restante_cup === 0 || venta.deuda.monto_restante_cup === undefined) &&
+                     (venta.deuda.monto_restante_usd === 0 || venta.deuda.monto_restante_usd === undefined) ? 'Saldada' : ''}
+                  </Text>
+                </View>
+              </View>
+            )}
             {/* Usuario - Only show if NOT a deuda */}
             {!venta?.is_deuda && (
               <View style={styles.formGroup}>

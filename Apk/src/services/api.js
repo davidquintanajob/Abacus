@@ -131,20 +131,61 @@ api.interceptors.response.use(
 
     // Detectar error de versión incompatible
     const errorMessage = error.response?.data?.message || error.response?.data?.errors?.[0] || '';
-    const isVersionError = error.response?.status === 426 || 
+    
+    // También verificar si el data es HTML y contiene el mensaje de versión
+    const dataString = typeof error.response?.data === 'string' ? error.response?.data : '';
+    const isHtmlError = dataString.toLowerCase().includes('versión de apk no soportada') ||
+                        dataString.toLowerCase().includes('versión de apk no soportada');
+    
+    console.log('[API Interceptor] Full error response:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      errorMessage: errorMessage,
+      dataMessage: error.response?.data?.message,
+      dataErrors: error.response?.data?.errors,
+      dataString: dataString.substring(0, 200),
+      isHtmlError,
+      requestUrl: requestUrl,
+      currentVersion: packageJson.version
+    });
+
+    const isVersionError = error.response?.status === 426 ||
+                          isHtmlError ||
                           (error.response?.status === 400 && (
                             errorMessage.toLowerCase().includes('versión') ||
                             errorMessage.toLowerCase().includes('version') ||
-                            errorMessage.includes('APK no soportada')
+                            error.response?.data?.errors?.[0]?.toLowerCase().includes('versión') ||
+                            error.response?.data?.errors?.[0]?.toLowerCase().includes('version')
                           )) ||
-                          errorMessage.toLowerCase().includes('versión') ||
-                          errorMessage.toLowerCase().includes('version') ||
-                          errorMessage.includes('APK no soportada');
+                          error.response?.data?.message?.toLowerCase().includes('versión') ||
+                          error.response?.data?.errors?.[0]?.toLowerCase().includes('versión') ||
+                          error.response?.data?.errors?.[0]?.toLowerCase().includes('version');
+
+    console.log('[API Interceptor] Error detected:', {
+      status: error.response?.status,
+      message: errorMessage,
+      isVersionError,
+      requestUrl: requestUrl,
+      currentVersion: packageJson.version
+    });
 
     if (isVersionError) {
+      console.log('[API Interceptor] Version error detected, saving to SecureStore');
+      
+      // Extraer el mensaje del error
+      let versionErrorMessage = error.response?.data?.message || error.response?.data?.errors?.[0];
+      
+      // Si es HTML, extraer el mensaje de la primera línea
+      if (!versionErrorMessage && typeof error.response?.data === 'string') {
+        const htmlMatch = error.response.data.match(/Error: ([^<]+)/);
+        if (htmlMatch) {
+          versionErrorMessage = htmlMatch[1].trim();
+        }
+      }
+      
       // Guardar el error de versión en SecureStore
       const versionError = {
-        message: error.response?.data?.message || error.response?.data?.errors?.[0] || 'Versión de la aplicación incompatible con el servidor',
+        message: versionErrorMessage || 'Versión de la aplicación incompatible con el servidor',
         code: error.response?.status || 426,
         currentVersion: packageJson.version
       };
@@ -152,6 +193,7 @@ api.interceptors.response.use(
 
       // Redirigir a PasswordRecoveryScreen
       if (navigationRef.isReady()) {
+        console.log('[API Interceptor] Redirecting to PasswordRecoveryScreen');
         navigationRef.reset({
           index: 0,
           routes: [{ name: 'PasswordRecovery' }],

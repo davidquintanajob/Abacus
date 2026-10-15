@@ -33,10 +33,17 @@ const LoginContent = () => {
     try {
       const versionError = await SecureStore.getItemAsync('versionError');
       if (versionError) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'PasswordRecovery' }],
-        });
+        const error = JSON.parse(versionError);
+        
+        // Si la versión actual es diferente a la que causó el error, limpiar el error
+        if (error.currentVersion !== packageJson.version) {
+          await SecureStore.deleteItemAsync('versionError');
+        } else {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'PasswordRecovery' }],
+          });
+        }
       }
     } catch (error) {
       // Error checking version error
@@ -64,6 +71,13 @@ const LoginContent = () => {
     setIsLoading(false);
 
     if (result.success) {
+      // Limpiar el error de versión de SecureStore si el login fue exitoso
+      try {
+        await SecureStore.deleteItemAsync('versionError');
+      } catch (error) {
+        // Error clearing version error
+      }
+      
       // Pass the message to HomeScreen via navigation params
       navigation.navigate('Home', { welcomeMessage: result.message });
     } else {

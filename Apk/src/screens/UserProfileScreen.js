@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
 import { getUsuarioById, changePassword } from '../services/usuarioService';
+import configService from '../services/configService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 
@@ -22,6 +23,8 @@ const UserProfileContent = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [userData, setUserData] = useState(null);
   const [error, setError] = useState(null);
+  const [dataConsumption, setDataConsumption] = useState(null);
+  const [isLoadingConsumption, setIsLoadingConsumption] = useState(false);
   
   // Change password state
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -38,7 +41,87 @@ const UserProfileContent = () => {
 
   useEffect(() => {
     fetchUserData();
+    fetchDataConsumption();
   }, []);
+
+  const fetchDataConsumption = async () => {
+    try {
+      setIsLoadingConsumption(true);
+      
+      if (!user?.id_usuario) {
+        return;
+      }
+
+      // Calcular fechas: primer día del mes actual hasta hoy
+      const today = new Date();
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      
+      const formatDate = (date) => {
+        return date.toISOString().split('T')[0];
+      };
+
+      const fechaDesde = formatDate(firstDayOfMonth);
+      const fechaHasta = formatDate(today);
+
+      const data = await configService.getAuditLogSummary(user.id_usuario, fechaDesde, fechaHasta);
+      setDataConsumption(data);
+    } catch (err) {
+      // Error fetching data consumption
+    } finally {
+      setIsLoadingConsumption(false);
+    }
+  };
+
+  const formatDataConsumption = () => {
+    if (!dataConsumption?.sumatorias) return null;
+    
+    const { totalReq, totalRes } = dataConsumption.sumatorias;
+    
+    // Convertir todo a KB para sumar
+    const toKB = (value, unit) => {
+      if (unit === 'GB') return value * 1024 * 1024;
+      if (unit === 'MB') return value * 1024;
+      return value; // KB
+    };
+    
+    const totalReqKB = toKB(totalReq.valor, totalReq.unidad);
+    const totalResKB = toKB(totalRes.valor, totalRes.unidad);
+    const totalKB = totalReqKB + totalResKB;
+    
+    // Determinar la unidad apropiada
+    let valor = totalKB;
+    let unidad = 'KB';
+    
+    if (totalKB >= 1024 * 1024) {
+      valor = totalKB / (1024 * 1024);
+      unidad = 'GB';
+    } else if (totalKB >= 1024) {
+      valor = totalKB / 1024;
+      unidad = 'MB';
+    }
+    
+    // Formatear fechas para mostrar solo la fecha (sin hora)
+    const formatDateOnly = (dateString) => {
+      if (!dateString) return '';
+      // Intentar separar por T (formato ISO)
+      if (dateString.includes('T')) {
+        return dateString.split('T')[0];
+      }
+      // Intentar separar por espacio (formato común)
+      if (dateString.includes(' ')) {
+        return dateString.split(' ')[0];
+      }
+      // Si no tiene separador, devolver tal cual
+      return dateString;
+    };
+    
+    return {
+      valor: valor.toFixed(2),
+      unidad,
+      fechaDesde: formatDateOnly(dataConsumption.fecha_desde),
+      fechaHasta: formatDateOnly(dataConsumption.fecha_hasta),
+    };
+  };
 
   const fetchUserData = async () => {
     try {
@@ -167,6 +250,43 @@ const UserProfileContent = () => {
               </Text>
               <Text style={[styles.infoValue, { color: colors.onSurface }]}>
                 {userData.tienda.activo ? 'Activa' : 'Inactiva'}
+              </Text>
+            </View>
+          </View>
+        )}
+      </Card>
+    );
+  };
+
+  const renderDataConsumption = () => {
+    const consumption = formatDataConsumption();
+    
+    if (!consumption) return null;
+
+    return (
+      <Card style={[styles.dataConsumptionCard, { backgroundColor: colors.surface }]}>
+        <View style={styles.consumptionHeader}>
+          <Ionicons name="cloud-outline" size={responsive.responsiveWidth(24)} color={colors.primary} />
+          <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+            Consumo de Datos
+          </Text>
+        </View>
+        
+        {isLoadingConsumption ? (
+          <View style={styles.consumptionLoading}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        ) : (
+          <View style={styles.consumptionContent}>
+            <Text style={[styles.consumptionText, { color: colors.outline }]}>
+              Desde el {consumption.fechaDesde} hasta el {consumption.fechaHasta}
+            </Text>
+            <View style={styles.consumptionValueContainer}>
+              <Text style={[styles.consumptionValue, { color: colors.primary }]}>
+                {consumption.valor} {consumption.unidad}
+              </Text>
+              <Text style={[styles.consumptionLabel, { color: colors.outline }]}>
+                Datos consumidos
               </Text>
             </View>
           </View>
@@ -352,6 +472,8 @@ const UserProfileContent = () => {
 
             {renderUserInfo()}
 
+            {renderDataConsumption()}
+
             <TouchableOpacity
               style={[styles.changePasswordButton, { backgroundColor: colors.surface }]}
               onPress={() => setShowChangePassword(!showChangePassword)}
@@ -489,6 +611,46 @@ const createStyles = (responsive) => StyleSheet.create({
     paddingTop: responsive.responsivePadding(16),
     borderTopWidth: 1,
     borderTopColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  dataConsumptionCard: {
+    borderRadius: 16,
+    padding: responsive.responsivePadding(20),
+    marginBottom: responsive.responsiveMargin(24),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  consumptionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  consumptionLoading: {
+    alignItems: 'center',
+    paddingVertical: responsive.responsivePadding(20),
+  },
+  consumptionContent: {
+    alignItems: 'center',
+  },
+  consumptionText: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  consumptionValueContainer: {
+    alignItems: 'center',
+  },
+  consumptionValue: {
+    fontSize: responsive.responsiveFontSize(28),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+  },
+  consumptionLabel: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontFamily: 'Inter',
   },
   changePasswordButton: {
     flexDirection: 'row',

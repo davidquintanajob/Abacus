@@ -34,6 +34,9 @@ const InformeVentasContent = () => {
   const [loadingMessage, setLoadingMessage] = useState('');
   const [showLoadingModal, setShowLoadingModal] = useState(false);
 
+  const [reportData, setReportData] = useState(null);
+  const [selectedHourlyPoint, setSelectedHourlyPoint] = useState(null);
+
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [startDate, setStartDate] = useState(new Date());
@@ -76,8 +79,6 @@ const InformeVentasContent = () => {
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isLoadingServicios, setIsLoadingServicios] = useState(false);
   const [servicioDebounceTimer, setServicioDebounceTimer] = useState(null);
-
-  const [reportData, setReportData] = useState(null);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
@@ -351,7 +352,7 @@ const InformeVentasContent = () => {
           const gananciaUSD = ventaUSD - costoUSD;
 
           if (!productosVentas.has(productoNombre)) {
-            productosVentas.set(productoNombre, { ventaCUP: 0, ventaUSD: 0, gananciaCUP: 0, gananciaUSD: 0 });
+            productosVentas.set(productoNombre, { ventaCUP: 0, ventaUSD: 0, gananciaCUP: 0, gananciaUSD: 0, cantidad: 0 });
           }
           
           const productoData = productosVentas.get(productoNombre);
@@ -359,31 +360,54 @@ const InformeVentasContent = () => {
           productoData.ventaUSD += ventaUSD;
           productoData.gananciaCUP += gananciaCUP;
           productoData.gananciaUSD += gananciaUSD;
+          productoData.cantidad += cantidad;
         }
       }
 
       const totalVentasCUP = totals.ventasCupEfectivo + totals.ventasCupTransferencia;
       const totalVentasUSD = totals.ventasUsdEfectivo + totals.ventasUsdTransferencia;
 
+      // Group sales by hour (0-23)
+      const salesByHour = new Map();
+      
+      // Initialize all hours with 0
+      for (let i = 0; i < 24; i++) {
+        salesByHour.set(i, { count: 0, totalCUP: 0, totalUSD: 0 });
+      }
+
+      for (const listaVenta of allVentas) {
+        const dateTime = new Date(listaVenta.fecha_hora);
+        const hour = dateTime.getHours();
+        
+        const hourData = salesByHour.get(hour);
+        if (hourData) {
+          hourData.count += 1;
+          hourData.totalCUP += parseFloat(listaVenta.cantidad_cobrada_efectivo_cup || 0) + 
+                             parseFloat(listaVenta.cantidad_cobrada_transferencia_cup || 0);
+          hourData.totalUSD += parseFloat(listaVenta.cantidad_cobrada_efectivo_usd || 0) + 
+                             parseFloat(listaVenta.cantidad_cobrada_transferencia_usd || 0);
+        }
+      }
+
+      // Create array for hourly chart
+      const hourlySalesData = Array.from(salesByHour.entries()).map(([hour, data]) => ({
+        hour: `${hour}:00`,
+        hourValue: hour,
+        count: data.count,
+        totalCUP: data.totalCUP,
+        totalUSD: data.totalUSD,
+      }));
+
       // Top 5 productos más vendidos (por ventas en CUP)
       const topProductosMasVendidos = Array.from(productosVentas.entries())
         .map(([nombre, data]) => ({
           nombre,
           ventaCUP: data.ventaCUP,
+          cantidad: data.cantidad,
           porcentaje: totalVentasCUP > 0 ? (data.ventaCUP / totalVentasCUP) * 100 : 0,
         }))
         .sort((a, b) => b.ventaCUP - a.ventaCUP)
         .slice(0, 5);
-
-      // Add "Otros" category for top 5
-      const top5Percentage = topProductosMasVendidos.reduce((sum, p) => sum + p.porcentaje, 0);
-      if (top5Percentage < 100 && top5Percentage > 0) {
-        topProductosMasVendidos.push({
-          nombre: 'Otros',
-          ventaCUP: totalVentasCUP - topProductosMasVendidos.reduce((sum, p) => sum + p.ventaCUP, 0),
-          porcentaje: 100 - top5Percentage,
-        });
-      }
 
       // Top 10 productos menos vendidos (por ganancias)
       const topProductosMenosVendidos = Array.from(productosVentas.entries())
@@ -393,31 +417,17 @@ const InformeVentasContent = () => {
           ventaUSD: data.ventaUSD,
           gananciaCUP: data.gananciaCUP,
           gananciaUSD: data.gananciaUSD,
+          cantidad: data.cantidad,
           porcentajeCUP: totalVentasCUP > 0 ? (data.ventaCUP / totalVentasCUP) * 100 : 0,
           porcentajeUSD: totalVentasUSD > 0 ? (data.ventaUSD / totalVentasUSD) * 100 : 0,
         }))
         .sort((a, b) => a.gananciaCUP - b.gananciaCUP)
         .slice(0, 10);
 
-      // Add "Otros" category for top 10
-      const top10PercentageCUP = topProductosMenosVendidos.reduce((sum, p) => sum + p.porcentajeCUP, 0);
-      const top10PercentageUSD = topProductosMenosVendidos.reduce((sum, p) => sum + p.porcentajeUSD, 0);
-      if (top10PercentageCUP < 100 && top10PercentageCUP > 0) {
-        topProductosMenosVendidos.push({
-          nombre: 'Otros',
-          ventaCUP: totalVentasCUP - topProductosMenosVendidos.reduce((sum, p) => sum + p.ventaCUP, 0),
-          ventaUSD: totalVentasUSD - topProductosMenosVendidos.reduce((sum, p) => sum + p.ventaUSD, 0),
-          gananciaCUP: 0,
-          gananciaUSD: 0,
-          porcentajeCUP: 100 - top10PercentageCUP,
-          porcentajeUSD: 100 - top10PercentageUSD,
-        });
-      }
-
       setLoadingProgress(100);
       setLoadingMessage('Generando informe...');
 
-      setReportData({ chartData, totals, topProductosMasVendidos, topProductosMenosVendidos });
+      setReportData({ chartData, totals, topProductosMasVendidos, topProductosMenosVendidos, hourlySalesData });
 
       setTimeout(() => {
         setShowLoadingModal(false);
@@ -510,6 +520,154 @@ const InformeVentasContent = () => {
           );
         })}
       </Svg>
+    );
+  };
+
+  const HourlySalesChart = ({ data, width = 800, height = 300, selectedPoint, setSelectedPoint }) => {
+    if (!data || data.length === 0) {
+      return (
+        <View style={[styles.emptyChart, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.emptyChartText, { color: colors.outline }]}>
+            No hay datos para mostrar
+          </Text>
+        </View>
+      );
+    }
+
+    const padding = 50;
+    const chartWidth = width - padding * 2;
+    const chartHeight = height - padding * 2;
+
+    // Find max value for Y axis (count of sales)
+    const maxCount = Math.max(...data.map(d => d.count || 0));
+    const yMax = maxCount > 0 ? maxCount * 1.2 : 10;
+
+    const xStep = chartWidth / (data.length - 1);
+
+    const getY = (value) => {
+      return padding + chartHeight - (value / yMax) * chartHeight;
+    };
+
+    const getX = (index) => {
+      return padding + index * xStep;
+    };
+
+    const handleChartTouch = (event) => {
+      const x = event.nativeEvent.locationX;
+      
+      let closestIndex = 0;
+      let minDistance = Math.abs(x - getX(0));
+
+      for (let i = 1; i < data.length; i++) {
+        const distance = Math.abs(x - getX(i));
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestIndex = i;
+        }
+      }
+
+      setSelectedPoint(data[closestIndex]);
+    };
+
+    return (
+      <View style={{ position: 'relative', width, height }}>
+        <Svg width={width} height={height}>
+          {/* Y axis lines */}
+          {[0, 0.25, 0.5, 0.75, 1].map(ratio => {
+            const y = padding + chartHeight * (1 - ratio);
+            const value = Math.round(yMax * ratio);
+            return (
+              <G key={ratio}>
+                <Line
+                  x1={padding}
+                  y1={y}
+                  x2={width - padding}
+                  y2={y}
+                  stroke={colors.outlineVariant}
+                  strokeWidth={1}
+                  strokeDasharray="4,4"
+                />
+                <SvgText
+                  x={padding - 5}
+                  y={y + 4}
+                  fontSize={10}
+                  fill={colors.outline}
+                  textAnchor="end"
+                >
+                  {value}
+                </SvgText>
+              </G>
+            );
+          })}
+
+          {/* X axis labels (show every 3 hours to avoid overlap) */}
+          {data.map((d, i) => {
+            if (i % 3 !== 0) return null;
+            const x = getX(i);
+            return (
+              <SvgText
+                key={i}
+                x={x}
+                y={height - padding + 20}
+                fontSize={10}
+                fill={colors.outline}
+                textAnchor="middle"
+              >
+                {d.hour}
+              </SvgText>
+            );
+          })}
+
+          {/* Line chart */}
+          <Path
+            d={data.map((d, i) => {
+              const x = getX(i);
+              const y = getY(d.count);
+              return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+            }).join(' ')}
+            fill="none"
+            stroke={colors.primary}
+            strokeWidth={2}
+          />
+
+          {/* Points for each data point */}
+          {data.map((d, i) => {
+            const x = getX(i);
+            const y = getY(d.count);
+            return (
+              <Circle
+                key={i}
+                cx={x}
+                cy={y}
+                r={selectedPoint === d ? 6 : 4}
+                fill={colors.primary}
+                stroke={colors.surface}
+                strokeWidth={2}
+              />
+            );
+          })}
+        </Svg>
+
+        {/* Invisible touchable areas for each point */}
+        {data.map((d, i) => {
+          const x = getX(i);
+          const y = getY(d.count);
+          return (
+            <TouchableOpacity
+              key={i}
+              activeOpacity={1}
+              onPress={() => setSelectedPoint(d)}
+              style={{
+                position: 'absolute',
+                left: x - 20,
+                top: y - 20,
+                width: 40,
+                height: 40,
+              }}
+            />
+          );
+        })}
+      </View>
     );
   };
 
@@ -1343,6 +1501,58 @@ const InformeVentasContent = () => {
               </View>
             </Card>
 
+            {/* Ventas por Hora */}
+            <Card style={[styles.chartCard, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Ventas por Hora del Día</Text>
+              <ScrollView 
+                horizontal={true} 
+                showsHorizontalScrollIndicator={true}
+                style={styles.chartScrollContainer}
+              >
+                <View style={styles.chartWrapper}>
+                  <HourlySalesChart
+                    data={reportData.hourlySalesData}
+                    width={800}
+                    selectedPoint={selectedHourlyPoint}
+                    setSelectedPoint={setSelectedHourlyPoint}
+                    height={300}
+                  />
+                </View>
+              </ScrollView>
+              <View style={styles.legend}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendColor, { backgroundColor: colors.primary }]} />
+                  <Text style={[styles.legendText, { color: colors.onSurface }]}>Cantidad de Ventas</Text>
+                </View>
+              </View>
+            </Card>
+
+            {/* Tooltip Modal for Hourly Chart */}
+            <Modal
+              visible={selectedHourlyPoint !== null}
+              transparent={true}
+              animationType="fade"
+              onRequestClose={() => setSelectedHourlyPoint(null)}
+            >
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => setSelectedHourlyPoint(null)}
+                style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
+              >
+                <View style={[styles.tooltipModalCard, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                  <Text style={[styles.tooltipDate, { color: colors.onSurface }]}>
+                    Hora: {selectedHourlyPoint?.hour}
+                  </Text>
+                  <View style={styles.tooltipRow}>
+                    <Text style={[styles.tooltipLabel, { color: colors.outline }]}>Ventas:</Text>
+                    <Text style={[styles.tooltipValue, { color: colors.onSurface }]}>
+                      {selectedHourlyPoint?.count}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </Modal>
+
             {/* Totals */}
             <Card style={[styles.totalsCard, { backgroundColor: colors.surface }]}>
               <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Totales del Período</Text>
@@ -1472,76 +1682,52 @@ const InformeVentasContent = () => {
               )}
             </Card>
 
-            {/* Product Distribution Pie Chart */}
+            {/* Top 5 Productos más vendidos Card */}
             <Card style={[styles.chartCard, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Gráfico del top 5 productos más vendidos</Text>
+              <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Top 5 Productos más vendidos</Text>
               <View style={styles.chartContainer}>
                 {(() => {
                   const pieData = reportData.topProductosMasVendidos.map((producto, index) => ({
                     value: producto.ventaCUP,
-                    color: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336', '#795548'][index % 6],
+                    color: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336'][index % 5],
                     label: producto.nombre,
                     displayValue: producto.ventaCUP,
-                    currency: 'CUP',
                   }));
 
                   return (
-                    <>
-                      <PieChart
-                        size={200}
-                        data={pieData}
-                      />
-                      <View style={styles.legend}>
-                        {pieData.map((item, index) => {
-                          const totalVentasCUP = (reportData.totals.ventasCupEfectivo || 0) + (reportData.totals.ventasCupTransferencia || 0);
-                          const percentage = totalVentasCUP > 0 
-                            ? ((item.value / totalVentasCUP) * 100).toFixed(1) 
-                            : '0.0';
-                          return (
-                            <View key={index} style={styles.legendItem}>
-                              <View style={[styles.legendColor, { backgroundColor: item.color }]} />
-                              <View style={styles.legendTextContainer}>
-                                <Text style={[styles.legendText, { color: colors.onSurface }]}>{item.label}</Text>
-                                <Text style={[styles.legendValue, { color: colors.outline }]}>
-                                  {formatNumber(item.displayValue)} {item.currency}
-                                </Text>
-                                <Text style={[styles.legendPercentage, { color: colors.primary }]}>
-                                  {percentage}%
-                                </Text>
-                              </View>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    </>
+                    <PieChart
+                      size={200}
+                      data={pieData}
+                    />
                   );
                 })()}
               </View>
-            </Card>
-
-            {/* Top 5 Productos más vendidos */}
-            <Card style={[styles.chartCard, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Top 5 Productos más vendidos</Text>
-              {reportData.topProductosMasVendidos.map((producto, index) => (
-                <View key={index} style={styles.productRow}>
-                  <Text style={[styles.productName, { color: colors.onSurface }]} numberOfLines={1}>
-                    {producto.nombre}
-                  </Text>
-                  <View style={styles.productStatsContainer}>
-                    <Text style={[styles.productVenta, { color: colors.primary }]}>
-                      {formatNumber(producto.ventaCUP)} CUP
+              <View style={styles.productListContainer}>
+                {reportData.topProductosMasVendidos.map((producto, index) => (
+                  <View key={index} style={styles.productRow}>
+                    <View style={[styles.productColorIndicator, { backgroundColor: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336'][index % 5] }]} />
+                    <Text style={[styles.productName, { color: colors.onSurface }]} numberOfLines={1}>
+                      {producto.nombre}
                     </Text>
-                    <Text style={[styles.productPorcentaje, { color: colors.outline }]}>
-                      {(producto.porcentaje || 0).toFixed(1)}% del total
-                    </Text>
+                    <View style={styles.productStatsContainer}>
+                      <Text style={[styles.productVenta, { color: colors.primary }]}>
+                        {formatNumber(producto.ventaCUP)} CUP
+                      </Text>
+                      <Text style={[styles.productCantidad, { color: colors.outline }]}>
+                        {producto.cantidad} unidades
+                      </Text>
+                      <Text style={[styles.productPorcentaje, { color: colors.outline }]}>
+                        {(producto.porcentaje || 0).toFixed(1)}% del total
+                      </Text>
+                    </View>
                   </View>
-                </View>
-              ))}
+                ))}
+              </View>
             </Card>
 
-            {/* Product Distribution Pie Chart for Top 10 menos vendidos */}
+            {/* Top 10 Productos menos vendidos (por ganancias) Card */}
             <Card style={[styles.chartCard, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Gráfico del top 10 productos menos vendidos (por ganancias)</Text>
+              <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Top 10 Productos menos vendidos (por ganancias)</Text>
               <View style={styles.chartContainer}>
                 {(() => {
                   const pieData = reportData.topProductosMenosVendidos.map((producto, index) => ({
@@ -1549,66 +1735,42 @@ const InformeVentasContent = () => {
                     color: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336', '#795548', '#607D8B', '#8BC34A', '#FF5722', '#E91E63'][index % 10],
                     label: producto.nombre,
                     displayValue: producto.ventaCUP,
-                    currency: 'CUP',
                   }));
 
                   return (
-                    <>
-                      <PieChart
-                        size={200}
-                        data={pieData}
-                      />
-                      <View style={styles.legend}>
-                        {pieData.map((item, index) => {
-                          const totalVentasCUP = (reportData.totals.ventasCupEfectivo || 0) + (reportData.totals.ventasCupTransferencia || 0);
-                          const percentage = totalVentasCUP > 0 
-                            ? ((item.value / totalVentasCUP) * 100).toFixed(1) 
-                            : '0.0';
-                          return (
-                            <View key={index} style={styles.legendItem}>
-                              <View style={[styles.legendColor, { backgroundColor: item.color }]} />
-                              <View style={styles.legendTextContainer}>
-                                <Text style={[styles.legendText, { color: colors.onSurface }]}>{item.label}</Text>
-                                <Text style={[styles.legendValue, { color: colors.outline }]}>
-                                  {formatNumber(item.displayValue)} {item.currency}
-                                </Text>
-                                <Text style={[styles.legendPercentage, { color: colors.primary }]}>
-                                  {percentage}%
-                                </Text>
-                              </View>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    </>
+                    <PieChart
+                      size={200}
+                      data={pieData}
+                    />
                   );
                 })()}
               </View>
-            </Card>
-
-            {/* Top 10 Productos menos vendidos (por ganancias) */}
-            <Card style={[styles.chartCard, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Top 10 Productos menos vendidos (por ganancias)</Text>
-              {reportData.topProductosMenosVendidos.map((producto, index) => (
-                <View key={index} style={styles.productRow}>
-                  <Text style={[styles.productName, { color: colors.onSurface }]} numberOfLines={1}>
-                    {producto.nombre}
-                  </Text>
-                  <View style={styles.productStatsContainer}>
-                    <Text style={[styles.productVenta, { color: colors.primary }]}>
-                      {formatNumber(producto.ventaCUP)} CUP
+              <View style={styles.productListContainer}>
+                {reportData.topProductosMenosVendidos.map((producto, index) => (
+                  <View key={index} style={styles.productRow}>
+                    <View style={[styles.productColorIndicator, { backgroundColor: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336', '#795548', '#607D8B', '#8BC34A', '#FF5722', '#E91E63'][index % 10] }]} />
+                    <Text style={[styles.productName, { color: colors.onSurface }]} numberOfLines={1}>
+                      {producto.nombre}
                     </Text>
-                    <Text style={[styles.productPorcentaje, { color: colors.outline }]}>
-                      {(producto.porcentajeCUP || 0).toFixed(1)}% del total
-                    </Text>
+                    <View style={styles.productStatsContainer}>
+                      <Text style={[styles.productVenta, { color: colors.primary }]}>
+                        {formatNumber(producto.ventaCUP)} CUP
+                      </Text>
+                      <Text style={[styles.productCantidad, { color: colors.outline }]}>
+                        {producto.cantidad} unidades
+                      </Text>
+                      <Text style={[styles.productPorcentaje, { color: colors.outline }]}>
+                        {(producto.porcentajeCUP || 0).toFixed(1)}% del total
+                      </Text>
+                    </View>
                   </View>
-                </View>
-              ))}
+                ))}
+              </View>
             </Card>
 
-            {/* Ganancia Neta */}
+            {/* Ganancia Bruta */}
             <Card style={[styles.profitCard, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Ganancia Neta</Text>
+              <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Ganancia Bruta</Text>
               <View style={styles.profitRow}>
                 <View style={styles.profitItem}>
                   <Text style={[styles.profitLabel, { color: colors.outline }]}>CUP</Text>
@@ -1898,9 +2060,17 @@ const createStyles = (responsive) => StyleSheet.create({
     position: 'absolute',
     padding: responsive.responsivePadding(12),
     borderRadius: 8,
+  },
+  tooltipModalCard: {
+    padding: responsive.responsivePadding(16),
+    borderRadius: 12,
     borderWidth: 1,
-    minWidth: 180,
-    zIndex: 10,
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
   },
   tooltipDate: {
     fontSize: responsive.responsiveFontSize(12),
@@ -1963,6 +2133,9 @@ const createStyles = (responsive) => StyleSheet.create({
     fontFamily: 'Inter',
     color: '#fff',
   },
+  productListContainer: {
+    marginTop: responsive.responsiveMargin(16),
+  },
   productRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1970,6 +2143,12 @@ const createStyles = (responsive) => StyleSheet.create({
     paddingVertical: responsive.responsivePadding(8),
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  productColorIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: responsive.responsiveMargin(12),
   },
   productName: {
     flex: 1,
@@ -1984,6 +2163,10 @@ const createStyles = (responsive) => StyleSheet.create({
   productVenta: {
     fontSize: responsive.responsiveFontSize(14),
     fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  productCantidad: {
+    fontSize: responsive.responsiveFontSize(12),
     fontFamily: 'Inter',
   },
   productPorcentaje: {

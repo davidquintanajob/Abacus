@@ -55,10 +55,17 @@ const SettingsContent = () => {
     try {
       const versionError = await SecureStore.getItemAsync('versionError');
       if (versionError) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'PasswordRecovery' }],
-        });
+        const error = JSON.parse(versionError);
+        
+        // Si la versión actual es diferente a la que causó el error, limpiar el error
+        if (error.currentVersion !== packageJson.version) {
+          await SecureStore.deleteItemAsync('versionError');
+        } else {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'PasswordRecovery' }],
+          });
+        }
       }
     } catch (error) {
       // Error checking version error

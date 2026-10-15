@@ -16,7 +16,7 @@ import { getTiendas } from '../services/tiendaService';
 import { getServicios } from '../services/servicioService';
 import { getApiBaseUrl } from '../services/api';
 import { getUsuarios } from '../services/usuarioService';
-import { getCuentas } from '../services/cuentaService';
+import { getCuentas, getCuentaById } from '../services/cuentaService';
 import { createVenta } from '../services/ventaService';
 import configService from '../services/configService';
 import { Toast } from '../components/common/Toast';
@@ -183,6 +183,11 @@ const SalesContent = () => {
   const [availableCuentas, setAvailableCuentas] = useState([]);
 
   const [config, setConfig] = useState({});
+  const [priceChangePermissions, setPriceChangePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
   const [comprobanteConfig, setComprobanteConfig] = useState({
     logo: null,
     nombreNegocio: '',
@@ -467,7 +472,23 @@ const SalesContent = () => {
 
   const roundTo5Decimals = (value) => Math.round(value * 100000) / 100000;
 
+  const canChangePrice = () => {
+    const userRole = user?.rol?.toLowerCase();
+    if (userRole === 'administrador') return true;
+    
+    if (userRole === 'dependiente' && priceChangePermissions.dependiente) return true;
+    if (userRole === 'almacenero' && priceChangePermissions.almacenero) return true;
+    if (userRole === 'económico' && priceChangePermissions.economico) return true;
+    
+    return false;
+  };
+
   const handleOpenPriceEditModal = (index) => {
+    if (!canChangePrice()) {
+      showToast({ type: 'error', message: 'No tienes permiso para cambiar el precio de los productos' });
+      return;
+    }
+    
     const item = saleItems[index];
     setEditingItemIndex(index);
     setEditingItemPrices({
@@ -547,6 +568,9 @@ const SalesContent = () => {
       setConfig(data);
       if (data.comprobanteConfig) {
         setComprobanteConfig(data.comprobanteConfig);
+      }
+      if (data.priceChangePermissions) {
+        setPriceChangePermissions(data.priceChangePermissions);
       }
       if (data.tiendaCuentasConfig && selectedTienda) {
         setCuentaConfig(data.tiendaCuentasConfig[selectedTienda.id_tienda] || {

@@ -215,6 +215,11 @@ const CurrencyExchangeContent = () => {
     economico: false,
   });
   const [showCuentaChangePermissions, setShowCuentaChangePermissions] = useState(false);
+  const [priceChangePermissions, setPriceChangePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
   const [showComprobanteConfigCard, setShowComprobanteConfigCard] = useState(false);
   const [showComprobanteConfig, setShowComprobanteConfig] = useState(false);
   const [comprobanteConfig, setComprobanteConfig] = useState({
@@ -385,6 +390,9 @@ const CurrencyExchangeContent = () => {
       }
       if (data.cuentaChangePermissions) {
         setCuentaChangePermissions(data.cuentaChangePermissions);
+      }
+      if (data.priceChangePermissions) {
+        setPriceChangePermissions(data.priceChangePermissions);
       }
       if (data.comprobanteConfig) {
         setComprobanteConfig(data.comprobanteConfig);
@@ -702,6 +710,7 @@ const CurrencyExchangeContent = () => {
         customSalidaTypes: customSalidaTypes,
         tiendaCuentasConfig: tiendaCuentasConfig,
         cuentaChangePermissions: cuentaChangePermissions,
+        priceChangePermissions: priceChangePermissions,
         comprobanteConfig: comprobanteConfig,
         prioritizeWifiConnection: prioritizeWifiConnection,
       };
@@ -778,6 +787,24 @@ const CurrencyExchangeContent = () => {
     } catch (error) {
       showToast({ type: 'error', message: 'Error al actualizar permiso de cambio de cuenta' });
       setCuentaChangePermissions(cuentaChangePermissions);
+    }
+  };
+
+  const togglePriceChangePermission = async (role) => {
+    const newPriceChangePermissions = { ...priceChangePermissions, [role]: !priceChangePermissions[role] };
+    setPriceChangePermissions(newPriceChangePermissions);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        priceChangePermissions: newPriceChangePermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Permiso de cambio de precio actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de cambio de precio' });
+      setPriceChangePermissions(priceChangePermissions);
     }
   };
 
@@ -2455,6 +2482,85 @@ const CurrencyExchangeContent = () => {
                     onValueChange={() => toggleCuentaChangePermission('economico')}
                     trackColor={{ false: colors.outlineVariant, true: colors.primary }}
                     thumbColor={cuentaChangePermissions.economico ? '#fff' : colors.outline}
+                  />
+                </View>
+              </View>
+
+              {/* Cambio de Precio en Ventas */}
+              <View style={styles.subSection}>
+                <Text style={[styles.subSectionTitle, { color: colors.onSurface }]}>
+                  Cambio de Precio en Ventas
+                </Text>
+                <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                  Configura qué roles pueden cambiar el precio de los productos al momento de realizar una venta
+                </Text>
+
+                <View style={styles.permissionItem}>
+                  <View style={styles.permissionInfo}>
+                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                      Dependiente
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                      onPress={() => showInfoModal(
+                        'Cambio de Precio - Dependiente',
+                        'Cuando está activo, los usuarios con rol Dependiente pueden cambiar el precio de los productos al momento de realizar una venta.'
+                      )}
+                    >
+                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Switch
+                    value={priceChangePermissions.dependiente}
+                    onValueChange={() => togglePriceChangePermission('dependiente')}
+                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                    thumbColor={priceChangePermissions.dependiente ? '#fff' : colors.outline}
+                  />
+                </View>
+
+                <View style={styles.permissionItem}>
+                  <View style={styles.permissionInfo}>
+                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                      Almacenero
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                      onPress={() => showInfoModal(
+                        'Cambio de Precio - Almacenero',
+                        'Cuando está activo, los usuarios con rol Almacenero pueden cambiar el precio de los productos al momento de realizar una venta.'
+                      )}
+                    >
+                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Switch
+                    value={priceChangePermissions.almacenero}
+                    onValueChange={() => togglePriceChangePermission('almacenero')}
+                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                    thumbColor={priceChangePermissions.almacenero ? '#fff' : colors.outline}
+                  />
+                </View>
+
+                <View style={styles.permissionItem}>
+                  <View style={styles.permissionInfo}>
+                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                      Económico
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                      onPress={() => showInfoModal(
+                        'Cambio de Precio - Económico',
+                        'Cuando está activo, los usuarios con rol Económico pueden cambiar el precio de los productos al momento de realizar una venta.'
+                      )}
+                    >
+                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Switch
+                    value={priceChangePermissions.economico}
+                    onValueChange={() => togglePriceChangePermission('economico')}
+                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                    thumbColor={priceChangePermissions.economico ? '#fff' : colors.outline}
                   />
                 </View>
               </View>

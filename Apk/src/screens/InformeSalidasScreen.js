@@ -376,7 +376,7 @@ const InformeSalidasContent = () => {
               </View>
             </Card>
 
-            {/* Pie Chart Card */}
+            {/* Top 5 Productos con más Pérdidas Card */}
             <Card style={[styles.chartCard, { backgroundColor: colors.surface }]}>
               <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Top 5 Productos con más Pérdidas</Text>
               <View style={styles.chartContainer}>
@@ -389,56 +389,31 @@ const InformeSalidasContent = () => {
                   }));
 
                   return (
-                    <>
-                      <PieChart
-                        size={200}
-                        data={pieData}
-                      />
-                      <View style={styles.legend}>
-                        {pieData.map((item, index) => {
-                          const percentage = reportData.totalPerdidasCUP > 0 
-                            ? ((item.value / reportData.totalPerdidasCUP) * 100).toFixed(1) 
-                            : '0.0';
-                          return (
-                            <View key={index} style={styles.legendItem}>
-                              <View style={[styles.legendColor, { backgroundColor: item.color }]} />
-                              <View style={styles.legendTextContainer}>
-                                <Text style={[styles.legendText, { color: colors.onSurface }]}>{item.label}</Text>
-                                <Text style={[styles.legendValue, { color: colors.outline }]}>
-                                  {formatNumber(item.displayValue)} CUP
-                                </Text>
-                                <Text style={[styles.legendPercentage, { color: colors.primary }]}>
-                                  {percentage}%
-                                </Text>
-                              </View>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    </>
+                    <PieChart
+                      size={200}
+                      data={pieData}
+                    />
                   );
                 })()}
               </View>
-            </Card>
-
-            {/* Top 5 Products List */}
-            <Card style={[styles.chartCard, { backgroundColor: colors.surface }]}>
-              <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Top 5 Productos con más Pérdidas</Text>
-              {reportData.topProductosPerdidas.map((producto, index) => (
-                <View key={index} style={styles.productRow}>
-                  <Text style={[styles.productName, { color: colors.onSurface }]} numberOfLines={1}>
-                    {producto.nombre}
-                  </Text>
-                  <View style={styles.productStatsContainer}>
-                    <Text style={[styles.productPerdida, { color: colors.primary }]}>
-                      {formatNumber(producto.perdida)} CUP
+              <View style={styles.productListContainer}>
+                {reportData.topProductosPerdidas.map((producto, index) => (
+                  <View key={index} style={styles.productRow}>
+                    <View style={[styles.productColorIndicator, { backgroundColor: ['#F44336', '#E91E63', '#9C27B0', '#673AB7', '#FF5722'][index % 5] }]} />
+                    <Text style={[styles.productName, { color: colors.onSurface }]} numberOfLines={1}>
+                      {producto.nombre}
                     </Text>
-                    <Text style={[styles.productPorcentaje, { color: colors.outline }]}>
-                      {(producto.porcentaje || 0).toFixed(1)}% del total
-                    </Text>
+                    <View style={styles.productStatsContainer}>
+                      <Text style={[styles.productPerdida, { color: colors.primary }]}>
+                        {formatNumber(producto.perdida)} CUP
+                      </Text>
+                      <Text style={[styles.productPorcentaje, { color: colors.outline }]}>
+                        {(producto.porcentaje || 0).toFixed(1)}% del total
+                      </Text>
+                    </View>
                   </View>
-                </View>
-              ))}
+                ))}
+              </View>
             </Card>
           </>
         )}
@@ -656,6 +631,9 @@ const createStyles = (responsive) => StyleSheet.create({
     fontFamily: 'Inter',
     fontWeight: '600',
   },
+  productListContainer: {
+    marginTop: responsive.responsiveMargin(16),
+  },
   productRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -663,6 +641,12 @@ const createStyles = (responsive) => StyleSheet.create({
     paddingVertical: responsive.responsivePadding(8),
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  productColorIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: responsive.responsiveMargin(12),
   },
   productName: {
     flex: 1,
