@@ -240,6 +240,86 @@ router.get('/audit-logs', authenticate(), configController.getAuditLogs);
 
 /**
  * @swagger
+ * /config/audit-logs/summary:
+ *   get:
+ *     summary: Obtener las sumatorias de tráfico de un usuario por rango de fechas
+ *     description: |
+ *       Busca el tramo de fechas en audit.log mediante búsqueda binaria y suma el
+ *       tamaño de las solicitudes (Req) y respuestas (Res) del usuario indicado.
+ *       Ambos extremos del rango son inclusivos. Si se indica la misma fecha para
+ *       inicio y fin sin hora, se incluyen todos los registros de ese día.
+ *       Las sumas se expresan en KB, MB o GB según su tamaño.
+ *     tags: [Configuración]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: id_usuario
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID exacto del usuario.
+ *       - in: query
+ *         name: fecha_desde
+ *         required: true
+ *         schema:
+ *           type: string
+ *           example: "2026-09-03"
+ *         description: Fecha inicial (YYYY-MM-DD) o fecha y hora (YYYY-MM-DD HH:mm:ss).
+ *           El límite es inclusivo; si se omite la hora, comienza a las 00:00:00.
+ *       - in: query
+ *         name: fecha_hasta
+ *         required: true
+ *         schema:
+ *           type: string
+ *           example: "2026-10-15"
+ *         description: |
+ *           Fecha final inclusiva, con el mismo formato de fecha_desde.
+ *           Si se omite la hora, incluye el día hasta las 23:59:59.
+ *     responses:
+ *       200:
+ *         description: Sumatorias de solicitudes y respuestas con su unidad.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id_usuario:
+ *                   type: string
+ *                 fecha_desde:
+ *                   type: string
+ *                 fecha_hasta:
+ *                   type: string
+ *                 sumatorias:
+ *                   type: object
+ *                   properties:
+ *                     totalReq:
+ *                       type: object
+ *                       properties:
+ *                         valor:
+ *                           type: number
+ *                         unidad:
+ *                           type: string
+ *                           enum: [KB, MB, GB]
+ *                     totalRes:
+ *                       type: object
+ *                       properties:
+ *                         valor:
+ *                           type: number
+ *                         unidad:
+ *                           type: string
+ *                           enum: [KB, MB, GB]
+ *       400:
+ *         description: Parámetros de filtro faltantes o inválidos.
+ *       404:
+ *         description: Archivo de auditoría no encontrado.
+ *       500:
+ *         description: Error interno del servidor.
+ */
+router.get('/audit-logs/summary', authenticate(), configController.getAuditLogSummary);
+
+/**
+ * @swagger
  * /config/ping:
  *   get:
  *     summary: Verifica que el servicio esté activo

@@ -65,6 +65,65 @@ const parseAuditLine = (line) => {
   return { timestamp, usuario, endpoint, reqSizeKB, resSizeKB };
 };
 
+const normalizeAuditDate = (value, parameter, endOfDay = false) => {
+  const match = /^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}):(\d{2}):(\d{2}))?$/.exec(value);
+  if (!match) {
+    throwError(`${parameter} debe tener formato YYYY-MM-DD o YYYY-MM-DD HH:mm:ss`, 400);
+  }
+
+  const date = new Date(`${match[1]}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== match[1]) {
+    throwError(`${parameter} no es una fecha válida`, 400);
+  }
+
+  if (!match[2]) {
+    return `${match[1]} ${endOfDay ? '23:59:59' : '00:00:00'}`;
+  }
+
+  const [, , hours, minutes, seconds] = match;
+  if (Number(hours) > 23 || Number(minutes) > 59 || Number(seconds) > 59) {
+    throwError(`${parameter} no es una fecha válida`, 400);
+  }
+
+  return `${match[1]} ${hours}:${minutes}:${seconds}`;
+};
+
+const findFirstAuditLine = (lines, timestamp, strictlyAfter = false) => {
+  let low = 0;
+  let high = lines.length;
+
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    const lineTimestamp = lines[middle].slice(0, 19);
+    if (lineTimestamp < timestamp || (strictlyAfter && lineTimestamp === timestamp)) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+
+  return low;
+};
+
+const formatAuditSize = (sizeKB) => {
+  const sizeBytes = sizeKB * 1024;
+  let valor;
+  let unidad;
+
+  if (sizeBytes < 1024 ** 2) {
+    valor = sizeKB;
+    unidad = 'KB';
+  } else if (sizeBytes < 1024 ** 3) {
+    valor = sizeBytes / (1024 ** 2);
+    unidad = 'MB';
+  } else {
+    valor = sizeBytes / (1024 ** 3);
+    unidad = 'GB';
+  }
+
+  return { valor: Number(valor.toFixed(5)), unidad };
+};
+
 class ConfigController {
   /**
    * GET /config
@@ -341,35 +400,20 @@ class ConfigController {
         filtered = filtered.filter(entry => entry.endpoint.toLowerCase().includes(endpointLower));
       }
 
-      // Filtro por fecha_desde
-      if (fecha_desde) {
-        let since = new Date(fecha_desde);
-        if (isNaN(since.getTime())) {
-          throwError('fecha_desde no es una fecha válida (formato ISO: YYYY-MM-DD o YYYY-MM-DD HH:mm:ss)', 400);
-        }
-        // Si no tiene hora, ajustar a las 00:00:00
-        if (fecha_desde.length <= 10) {
-          since.setHours(0, 0, 0, 0);
-        }
-        filtered = filtered.filter(entry => {
-          const entryDate = new Date(entry.timestamp);
-          return entryDate >= since;
-        });
+      const start = fecha_desde
+        ? normalizeAuditDate(fecha_desde, 'fecha_desde')
+        : null;
+      const end = fecha_hasta
+        ? normalizeAuditDate(fecha_hasta, 'fecha_hasta', true)
+        : null;
+      if (start && end && start > end) {
+        throwError('fecha_desde debe ser anterior o igual a fecha_hasta', 400);
       }
-
-      // Filtro por fecha_hasta
-      if (fecha_hasta) {
-        let until = new Date(fecha_hasta);
-        if (isNaN(until.getTime())) {
-          throwError('fecha_hasta no es una fecha válida (formato ISO: YYYY-MM-DD o YYYY-MM-DD HH:mm:ss)', 400);
-        }
-        if (fecha_hasta.length <= 10) {
-          until.setHours(23, 59, 59, 999);
-        }
-        filtered = filtered.filter(entry => {
-          const entryDate = new Date(entry.timestamp);
-          return entryDate <= until;
-        });
+      if (start) {
+        filtered = filtered.filter(entry => entry.timestamp >= start);
+      }
+      if (end) {
+        filtered = filtered.filter(entry => entry.timestamp <= end);
       }
 
       // Ordenar por timestamp (más reciente primero)
@@ -402,6 +446,70 @@ class ConfigController {
         }
       });
 
+    } catch (error) {
+      handleError(res, error);
+    }
+  }
+
+  /**
+   * GET /config/audit-logs/summary
+   * Suma el tráfico por usuario dentro de un rango de fechas del audit.log.
+   */
+  async getAuditLogSummary(req, res) {
+    try {
+      const { id_usuario, fecha_desde, fecha_hasta } = req.query;
+      if (typeof id_usuario !== 'string' || !id_usuario.trim()) {
+        throwError('id_usuario es obligatorio', 400);
+      }
+      if (typeof fecha_desde !== 'string' || !fecha_desde.trim()) {
+        throwError('fecha_desde es obligatoria', 400);
+      }
+      if (typeof fecha_hasta !== 'string' || !fecha_hasta.trim()) {
+        throwError('fecha_hasta es obligatoria', 400);
+      }
+
+      const start = normalizeAuditDate(fecha_desde.trim(), 'fecha_desde');
+      const end = normalizeAuditDate(fecha_hasta.trim(), 'fecha_hasta', true);
+      if (start > end) {
+        throwError('fecha_desde debe ser anterior o igual a fecha_hasta', 400);
+      }
+
+      let content;
+      try {
+        content = await fs.readFile(AUDIT_LOG_FILE, 'utf8');
+      } catch (error) {
+        if (error.code === 'ENOENT') {
+          throwError('Archivo de auditoría no encontrado', 404);
+        }
+        throw error;
+      }
+      const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
+      const rangeStart = findFirstAuditLine(lines, start);
+      const rangeEnd = findFirstAuditLine(lines, end, true);
+      let totalReqKB = 0;
+      let totalResKB = 0;
+      const userId = id_usuario.trim();
+
+      for (let index = rangeStart; index < rangeEnd; index += 1) {
+        const entry = parseAuditLine(lines[index]);
+        if (!entry) continue;
+
+        const entryUserId = /^(\d+)(?:\s|$)/.exec(entry.usuario)?.[1];
+        if (entryUserId !== userId) continue;
+
+        totalReqKB += entry.reqSizeKB;
+        totalResKB += entry.resSizeKB;
+      }
+
+      return res.status(200).json({
+        id_usuario: userId,
+        fecha_desde: start,
+        fecha_hasta: end,
+        sumatorias: {
+          totalReq: formatAuditSize(totalReqKB),
+          totalRes: formatAuditSize(totalResKB),
+        },
+      });
     } catch (error) {
       handleError(res, error);
     }
