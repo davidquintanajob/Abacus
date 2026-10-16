@@ -1004,6 +1004,17 @@ const VentasContent = () => {
         allVentas.map(async (venta) => {
           try {
             const ventaCompleta = await getVentaById(venta.id_lista_venta);
+
+            // Load cliente information separately if not included or if nombre is missing
+            if (ventaCompleta.deuda && ventaCompleta.deuda.id_cliente && (!ventaCompleta.deuda.cliente || !ventaCompleta.deuda.cliente.nombre)) {
+              try {
+                const clienteData = await getClienteById(ventaCompleta.deuda.id_cliente);
+                ventaCompleta.deuda.cliente = clienteData;
+              } catch (error) {
+                // Error loading cliente for deuda
+              }
+            }
+
             return ventaCompleta;
           } catch (error) {
             return venta;
@@ -1034,27 +1045,31 @@ const VentasContent = () => {
       sortedVentas.forEach(venta => {
         // Tienda from ventas array
         const tienda = venta.ventas?.[0]?.servicioTienda?.tienda;
-        const tiendaNombre = tienda?.nombre || 'N/A';
+        const tiendaNombre = tienda?.nombre || '-';
 
         // Usuario from operaciones or from venta.id_usuario
         const usuario = venta.operaciones?.[0]?.usuario || venta.usuario;
-        const usuarioNombre = usuario?.nombre_natural || 'N/A';
+        const usuarioNombre = usuario?.nombre_natural || '-';
 
-        // Cliente from deuda
-        const cliente = venta.cliente?.nombre || 'N/A';
+        // Cliente from deuda - use same logic as VentasScreen.js
+        const cliente = venta.deuda?.cliente?.nombre || '-';
 
         // Debt status
         const tieneDeuda = venta.is_deuda ? 'Sí' : 'No';
 
         // Split fecha and hora
-        const fechaHora = venta.fecha_hora || 'N/A';
-        let fecha = 'N/A';
-        let hora = 'N/A';
-        if (fechaHora !== 'N/A') {
+        const fechaHora = venta.fecha_hora || '-';
+        let fecha = '-';
+        let hora = '-';
+        if (fechaHora !== '-') {
           const dateObj = new Date(fechaHora);
           fecha = dateObj.toLocaleDateString('es-ES');
           hora = dateObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
         }
+
+        // Determine if sale is only in CUP or only in USD
+        const hasCUP = (venta.cantidad_cobrada_efectivo_cup > 0 || venta.cantidad_cobrada_transferencia_cup > 0);
+        const hasUSD = (venta.cantidad_cobrada_efectivo_usd > 0 || venta.cantidad_cobrada_transferencia_usd > 0);
 
         // Get individual ventas (products sold)
         const ventasIndividuales = venta.ventas || [];
@@ -1068,12 +1083,12 @@ const VentasContent = () => {
           row['Tiene Deuda'] = tieneDeuda;
 
           // Producto
-          const producto = v.servicioTienda?.servicio?.nombre || 'N/A';
+          const producto = v.servicioTienda?.servicio?.nombre || '-';
           row['Producto'] = producto;
           row['Cantidad'] = v.cantidad || 0;
 
           // Forma de cobro - derive from which cantidad is > 0
-          let formaCobro = 'N/A';
+          let formaCobro = '-';
           if (venta.cantidad_cobrada_efectivo_cup > 0) formaCobro = 'Efectivo CUP';
           else if (venta.cantidad_cobrada_efectivo_usd > 0) formaCobro = 'Efectivo USD';
           else if (venta.cantidad_cobrada_transferencia_cup > 0) formaCobro = 'Transferencia CUP';
@@ -1082,7 +1097,7 @@ const VentasContent = () => {
 
           // Cuenta from operaciones
           const cuenta = venta.operaciones?.[0]?.cuenta;
-          row['Cuenta'] = cuenta?.nombre || 'N/A';
+          row['Cuenta'] = cuenta?.nombre || '-';
 
           // Precios - remove .00 decimals for whole numbers
           const formatNumber = (num) => {
@@ -1091,12 +1106,20 @@ const VentasContent = () => {
             return formatted.endsWith('.00') ? parseFloat(formatted).toString() : formatted;
           };
 
-          row['Precio CUP'] = formatNumber(v.precio_cobrado_cup);
-          row['Precio USD'] = formatNumber(v.precio_cobrado_usd);
-          row['Total CUP'] = formatNumber(v.precio_cobrado_cup * v.cantidad);
-          row['Total USD'] = formatNumber(v.precio_cobrado_usd * v.cantidad);
+          // If sale is only in CUP, show 0 for USD fields
+          // If sale is only in USD, show 0 for CUP fields
+          // If sale has both, show actual values
+          const precioCUP = hasCUP ? (v.precio_cobrado_cup || 0) : 0;
+          const precioUSD = hasUSD ? (v.precio_cobrado_usd || 0) : 0;
+          const totalCUP = hasCUP ? (precioCUP * v.cantidad) : 0;
+          const totalUSD = hasUSD ? (precioUSD * v.cantidad) : 0;
 
-          row['Nota'] = venta.nota || '';
+          row['Precio CUP'] = formatNumber(precioCUP);
+          row['Precio USD'] = formatNumber(precioUSD);
+          row['Total CUP'] = formatNumber(totalCUP);
+          row['Total USD'] = formatNumber(totalUSD);
+
+          row['Nota'] = venta.nota || '-';
 
           data.push(row);
         });
