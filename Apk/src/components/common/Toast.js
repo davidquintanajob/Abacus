@@ -23,7 +23,7 @@ const TOAST_CONFIG = {
   },
 };
 
-export const Toast = ({ visible, type = 'error', message, code, duration = 4000, onHide, toastKey }) => {
+export const Toast = ({ visible, type = 'error', message, code, duration = 4000, onHide, toastKey, index = 0 }) => {
   const insets = useSafeAreaInsets() || { top: 0, bottom: 0, left: 0, right: 0 };
   const responsive = useResponsive();
   const translateY = useRef(new Animated.Value(-120)).current;
@@ -31,6 +31,9 @@ export const Toast = ({ visible, type = 'error', message, code, duration = 4000,
   const timerRef = useRef(null);
 
   const config = TOAST_CONFIG[type] || TOAST_CONFIG.error;
+
+  // Calcular posición vertical basada en el índice
+  const topOffset = insets.top + 8 + (index * 80);
 
   useEffect(() => {
     if (visible) {
@@ -97,7 +100,7 @@ export const Toast = ({ visible, type = 'error', message, code, duration = 4000,
     <Animated.View
       style={[
         styles.container,
-        { backgroundColor: config.background, transform: [{ translateY }], opacity },
+        { backgroundColor: config.background, transform: [{ translateY }], opacity, top: topOffset },
       ]}
       pointerEvents="box-none"
     >

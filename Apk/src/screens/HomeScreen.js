@@ -25,7 +25,7 @@ const HomeContent = () => {
   const route = useRoute();
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
-  const { toast, showToast, hideToast } = useToast();
+  const { toast, toasts, showToast, hideToast } = useToast();
   const { enableOfflineMode, isOfflineMode: contextOfflineMode } = useOffline();
   const { user, permissions } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -957,16 +957,19 @@ const HomeContent = () => {
         {/* Espacio inferior */}
         <View style={styles.bottomSpacer} />
       </ScrollView>
-      
-      <Toast 
-        visible={toast.visible}
-        type={toast.type}
-        message={toast.message}
-        code={toast.code}
-        duration={toast.duration}
-        onHide={hideToast}
-        toastKey={toast.key}
-      />
+
+      {toasts.map((toast, index) => (
+        <Toast
+          key={toast.id}
+          visible={toast.visible}
+          type={toast.type}
+          message={toast.message}
+          code={toast.code}
+          duration={toast.duration}
+          onHide={() => hideToast(toast.id)}
+          index={index}
+        />
+      ))}
       
       {/* Modal de todas las alertas */}
       <Modal

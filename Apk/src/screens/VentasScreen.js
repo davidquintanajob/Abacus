@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Activi
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
+import { WebView } from 'react-native-webview';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { Header } from '../components/layout/Header';
@@ -30,6 +31,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as XLSX from 'xlsx';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
 
 const VentasContent = () => {
   const navigation = useNavigation();
@@ -54,6 +56,12 @@ const VentasContent = () => {
   const [showOrderSelectionModal, setShowOrderSelectionModal] = useState(false);
   const [selectedOrderField, setSelectedOrderField] = useState('fecha_hora');
   const [isExporting, setIsExporting] = useState(false);
+  const [showComprobanteModal, setShowComprobanteModal] = useState(false);
+  const [comprobanteSaleItems, setComprobanteSaleItems] = useState([]);
+  const [comprobanteConfig, setComprobanteConfig] = useState({
+    logo: null,
+    nombreNegocio: '',
+  });
 
   const [isInitialized, setIsInitialized] = useState(false);
   const [userTiendaReady, setUserTiendaReady] = useState(false);
@@ -625,6 +633,9 @@ const VentasContent = () => {
       if (config && config.tiendaCuentasConfig) {
         setTiendaCuentasConfig(config.tiendaCuentasConfig);
       }
+      if (config && config.comprobanteConfig) {
+        setComprobanteConfig(config.comprobanteConfig);
+      }
     } catch (error) {
       // Error fetching tienda cuentas config
     }
@@ -752,14 +763,14 @@ const VentasContent = () => {
   };
 
   const handleClearFilters = () => {
-    const defaultFilters = { 
-      nota: '', 
+    const defaultFilters = {
+      nota: '',
       is_nota: null,
-      fecha_desde: '', 
-      fecha_hasta: '', 
-      id_tienda: user?.id_tienda ? user.id_tienda.toString() : '', 
-      id_usuario: '', 
-      cantidad_min: '', 
+      fecha_desde: '',
+      fecha_hasta: '',
+      id_tienda: user?.id_tienda ? user.id_tienda.toString() : '',
+      id_usuario: '',
+      cantidad_min: '',
       cantidad_max: '',
       forma_cobro: '',
       tipo_cuenta: '',
@@ -769,6 +780,173 @@ const VentasContent = () => {
     setFilters(defaultFilters);
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     fetchVentas();
+  };
+
+  const formatComprobanteNumber = (num) => {
+    const formatted = parseFloat(num).toFixed(2);
+    const withoutZeros = formatted.endsWith('.00') ? formatted.slice(0, -3) : formatted;
+    const parts = withoutZeros.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return parts.join('.');
+  };
+
+  const handleShowComprobante = (venta) => {
+    // Extract sale items from venta
+    const saleItems = venta.ventas?.map(v => ({
+      nombre: v.servicioTienda?.servicio?.nombre || 'N/A',
+      cantidad: v.cantidad || 0,
+      precio_cup: v.precio_cobrado_cup || 0,
+      precio_usd: v.precio_cobrado_usd || 0,
+    })) || [];
+
+    setComprobanteSaleItems(saleItems);
+    setShowComprobanteModal(true);
+  };
+
+  const handleGenerateComprobante = async () => {
+    try {
+      const totalCUP = comprobanteSaleItems.reduce((sum, item) => sum + (item.cantidad * item.precio_cup), 0);
+      const totalUSD = comprobanteSaleItems.reduce((sum, item) => sum + (item.cantidad * item.precio_usd), 0);
+
+      let logoBase64 = '';
+      if (comprobanteConfig.logo) {
+        logoBase64 = comprobanteConfig.logo;
+      }
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Comprobante de Pago</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              font-size: 12px;
+              padding: 20px;
+              max-width: 300px;
+              margin: 0 auto;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 20px;
+            }
+            .business-name {
+              font-weight: bold;
+              font-size: 16px;
+              margin-bottom: 5px;
+            }
+            .text {
+              margin: 5px 0;
+            }
+            .text-centered {
+              text-align: center;
+            }
+            .table {
+              width: 100%;
+              margin: 15px 0;
+            }
+            .table-row {
+              display: flex;
+              justify-content: space-between;
+              padding: 5px 0;
+            }
+            .table-column {
+              flex: 1;
+            }
+            .table-column-bold {
+              font-weight: bold;
+            }
+            .line {
+              border-top: 1px solid #000;
+              margin: 10px 0;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            ${logoBase64 ? `
+              <svg width="100" height="100" viewBox="0 0 100 100" style="margin: 0 auto 10px;">
+                <defs>
+                  <filter id="grayscale">
+                    <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0"/>
+                  </filter>
+                </defs>
+                <image href="${logoBase64}" width="100" height="100" filter="url(#grayscale)"/>
+              </svg>
+            ` : ''}
+            ${comprobanteConfig.nombreNegocio ? `<div class="business-name">${comprobanteConfig.nombreNegocio}</div>` : ''}
+            <div class="text">DEPENDIENTE: ${user?.nombre_natural || 'N/A'}</div>
+            <div class="text">${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+          </div>
+          <div class="table">
+            <div class="table-row">
+              <div class="table-column table-column-bold">Servicio/Producto</div>
+              <div class="table-column table-column-bold">Cant</div>
+              <div class="table-column table-column-bold">Total</div>
+            </div>
+            <div class="line"></div>
+            ${comprobanteSaleItems.map(item => `
+              <div class="table-row">
+                <div class="table-column">${item.nombre}</div>
+                <div class="table-column">${item.cantidad}</div>
+                <div class="table-column">$${formatComprobanteNumber(item.cantidad * item.precio_cup)}</div>
+              </div>
+            `).join('')}
+            <div class="table-row">
+              <div class="table-column table-column-bold">TOTAL</div>
+              <div class="table-column"></div>
+              <div class="table-column table-column-bold">$${formatComprobanteNumber(totalCUP)}</div>
+            </div>
+            <div class="line"></div>
+            <div class="text-centered text">¡Gracias por su compra!</div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      const { uri } = await Print.printToFileAsync({ html });
+
+      Alert.alert(
+        'Comprobante Generado',
+        '¿Qué deseas hacer con el comprobante?',
+        [
+          {
+            text: 'CERRAR',
+            style: 'cancel',
+            onPress: () => {
+              setShowComprobanteModal(false);
+            }
+          },
+          {
+            text: 'GUARDAR',
+            onPress: async () => {
+              if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri, {
+                  mimeType: 'application/pdf',
+                  dialogTitle: 'Guardar comprobante',
+                });
+              }
+              setShowComprobanteModal(false);
+            }
+          },
+          {
+            text: 'COMPARTIR',
+            onPress: async () => {
+              if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri, {
+                  mimeType: 'application/pdf',
+                  dialogTitle: 'Compartir comprobante',
+                });
+              }
+              setShowComprobanteModal(false);
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al generar comprobante' });
+    }
   };
 
   // Function to fetch all ventas for export (without pagination)
@@ -851,44 +1029,77 @@ const VentasContent = () => {
         }
       });
 
-      // Prepare data for Excel
-      const data = sortedVentas.map(venta => {
-        const row = {};
-        row['Fecha y Hora'] = venta.fecha_hora || 'N/A';
-        
+      // Prepare data for Excel - show individual sales instead of lista_venta
+      const data = [];
+      sortedVentas.forEach(venta => {
         // Tienda from ventas array
         const tienda = venta.ventas?.[0]?.servicioTienda?.tienda;
-        row['Tienda'] = tienda?.nombre || 'N/A';
-        
+        const tiendaNombre = tienda?.nombre || 'N/A';
+
         // Usuario from operaciones or from venta.id_usuario
         const usuario = venta.operaciones?.[0]?.usuario || venta.usuario;
-        row['Usuario'] = usuario?.nombre_natural || 'N/A';
-        
-        // Forma de cobro - derive from which cantidad is > 0
-        let formaCobro = 'N/A';
-        if (venta.cantidad_cobrada_efectivo_cup > 0) formaCobro = 'Efectivo CUP';
-        else if (venta.cantidad_cobrada_efectivo_usd > 0) formaCobro = 'Efectivo USD';
-        else if (venta.cantidad_cobrada_transferencia_cup > 0) formaCobro = 'Transferencia CUP';
-        else if (venta.cantidad_cobrada_transferencia_usd > 0) formaCobro = 'Transferencia USD';
-        row['Forma de Cobro'] = formaCobro;
-        
-        // Cuenta from operaciones
-        const cuenta = venta.operaciones?.[0]?.cuenta;
-        row['Cuenta'] = cuenta?.nombre || 'N/A';
-        
-        // Get product names from ventas array
-        const productos = venta.ventas?.map(v => v.servicioTienda?.servicio?.nombre).filter(Boolean).join(', ') || 'N/A';
-        row['Productos'] = productos;
-        
-        row['Efectivo CUP'] = venta.cantidad_cobrada_efectivo_cup || 0;
-        row['Transferencia CUP'] = venta.cantidad_cobrada_transferencia_cup || 0;
-        row['Efectivo USD'] = venta.cantidad_cobrada_efectivo_usd || 0;
-        row['Transferencia USD'] = venta.cantidad_cobrada_transferencia_usd || 0;
-        row['Total CUP'] = (venta.cantidad_cobrada_efectivo_cup || 0) + (venta.cantidad_cobrada_transferencia_cup || 0);
-        row['Total USD'] = (venta.cantidad_cobrada_efectivo_usd || 0) + (venta.cantidad_cobrada_transferencia_usd || 0);
-        row['Nota'] = venta.nota || '';
-        
-        return row;
+        const usuarioNombre = usuario?.nombre_natural || 'N/A';
+
+        // Cliente from deuda
+        const cliente = venta.cliente?.nombre || 'N/A';
+
+        // Debt status
+        const tieneDeuda = venta.is_deuda ? 'Sí' : 'No';
+
+        // Split fecha and hora
+        const fechaHora = venta.fecha_hora || 'N/A';
+        let fecha = 'N/A';
+        let hora = 'N/A';
+        if (fechaHora !== 'N/A') {
+          const dateObj = new Date(fechaHora);
+          fecha = dateObj.toLocaleDateString('es-ES');
+          hora = dateObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Get individual ventas (products sold)
+        const ventasIndividuales = venta.ventas || [];
+        ventasIndividuales.forEach(v => {
+          const row = {};
+          row['Fecha'] = fecha;
+          row['Hora'] = hora;
+          row['Tienda'] = tiendaNombre;
+          row['Usuario'] = usuarioNombre;
+          row['Cliente'] = cliente;
+          row['Tiene Deuda'] = tieneDeuda;
+
+          // Producto
+          const producto = v.servicioTienda?.servicio?.nombre || 'N/A';
+          row['Producto'] = producto;
+          row['Cantidad'] = v.cantidad || 0;
+
+          // Forma de cobro - derive from which cantidad is > 0
+          let formaCobro = 'N/A';
+          if (venta.cantidad_cobrada_efectivo_cup > 0) formaCobro = 'Efectivo CUP';
+          else if (venta.cantidad_cobrada_efectivo_usd > 0) formaCobro = 'Efectivo USD';
+          else if (venta.cantidad_cobrada_transferencia_cup > 0) formaCobro = 'Transferencia CUP';
+          else if (venta.cantidad_cobrada_transferencia_usd > 0) formaCobro = 'Transferencia USD';
+          row['Forma de Cobro'] = formaCobro;
+
+          // Cuenta from operaciones
+          const cuenta = venta.operaciones?.[0]?.cuenta;
+          row['Cuenta'] = cuenta?.nombre || 'N/A';
+
+          // Precios - remove .00 decimals for whole numbers
+          const formatNumber = (num) => {
+            if (num === null || num === undefined || num === 0) return 0;
+            const formatted = parseFloat(num).toFixed(2);
+            return formatted.endsWith('.00') ? parseFloat(formatted).toString() : formatted;
+          };
+
+          row['Precio CUP'] = formatNumber(v.precio_cobrado_cup);
+          row['Precio USD'] = formatNumber(v.precio_cobrado_usd);
+          row['Total CUP'] = formatNumber(v.precio_cobrado_cup * v.cantidad);
+          row['Total USD'] = formatNumber(v.precio_cobrado_usd * v.cantidad);
+
+          row['Nota'] = venta.nota || '';
+
+          data.push(row);
+        });
       });
 
       // Create workbook and worksheet
@@ -952,12 +1163,29 @@ const VentasContent = () => {
     }
   };
 
+  const canEditDeleteVenta = (venta) => {
+    const userRole = user?.rol?.toLowerCase();
+    const isAdmin = userRole === 'administrador';
+    const ventaUserId = venta.operaciones?.[0]?.id_usuario;
+    return isAdmin || ventaUserId === user?.id_usuario;
+  };
+
   const handleEdit = (venta) => {
+    if (!canEditDeleteVenta(venta)) {
+      showToast({ type: 'error', message: 'No tienes permiso para editar esta venta' });
+      return;
+    }
+
     const mode = canManageVentas ? 'edit' : 'view';
     navigation.navigate('VentaEdit', { venta, mode });
   };
 
   const handleDelete = (venta) => {
+    if (!canEditDeleteVenta(venta)) {
+      showToast({ type: 'error', message: 'No tienes permiso para eliminar esta venta' });
+      return;
+    }
+
     Alert.alert(
       'Eliminar Venta',
       '¿Estás seguro de que quieres eliminar esta venta? Esta acción no se puede deshacer.',
@@ -992,7 +1220,7 @@ const VentasContent = () => {
   };
 
   const handleVentaPress = (venta) => {
-    const mode = canManageVentas ? 'edit' : 'view';
+    const mode = canEditDeleteVenta(venta) ? 'edit' : 'view';
     navigation.navigate('VentaEdit', { venta, mode });
   };
 
@@ -1107,7 +1335,7 @@ const VentasContent = () => {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} animated={true} />
-      
+
       <Toast
         visible={toast.visible}
         type={toast.type}
@@ -2023,32 +2251,49 @@ const VentasContent = () => {
                     </View>
                     {canManageVentas && (
                       <View style={styles.ventaActions}>
+                        {canEditDeleteVenta(venta) && (
+                          <TouchableOpacity
+                            style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleEdit(venta);
+                            }}
+                          >
+                            <Image
+                              source={require('../../assets/editar.png')}
+                              style={styles.actionIconSmall}
+                              resizeMode="contain"
+                            />
+                          </TouchableOpacity>
+                        )}
                         <TouchableOpacity
-                          style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                          style={[styles.actionButtonSmall, styles.printButtonSmall, { backgroundColor: isDarkMode ? '#FFC107' : '#FFF9C4' }]}
                           onPress={(e) => {
                             e.stopPropagation();
-                            handleEdit(venta);
+                            handleShowComprobante(venta);
                           }}
                         >
                           <Image
-                            source={require('../../assets/editar.png')}
+                            source={require('../../assets/impresora.png')}
                             style={styles.actionIconSmall}
                             resizeMode="contain"
                           />
                         </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleDelete(venta);
-                          }}
-                        >
-                          <Image
-                            source={require('../../assets/basura.png')}
-                            style={styles.actionIconSmall}
-                            resizeMode="contain"
-                          />
-                        </TouchableOpacity>
+                        {canEditDeleteVenta(venta) && (
+                          <TouchableOpacity
+                            style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleDelete(venta);
+                            }}
+                          >
+                            <Image
+                              source={require('../../assets/basura.png')}
+                              style={styles.actionIconSmall}
+                              resizeMode="contain"
+                            />
+                          </TouchableOpacity>
+                        )}
                       </View>
                     )}
                   </Card>
@@ -2154,24 +2399,37 @@ const VentasContent = () => {
                         {canManageVentas && (
                           <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(100) }]}>
                             <View style={styles.tableActionsRow}>
+                              {canEditDeleteVenta(venta) && (
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableEditButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleEdit(venta);
+                                  }}
+                                >
+                                  <Ionicons name="create-outline" size={responsive.responsiveWidth(18)} color={colors.primary} />
+                                </TouchableOpacity>
+                              )}
                               <TouchableOpacity
-                                style={[styles.tableActionButton, styles.tableEditButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                                style={[styles.tableActionButton, styles.tablePrintButton, { backgroundColor: isDarkMode ? '#FFC107' : '#FFF9C4' }]}
                                 onPress={(e) => {
                                   e.stopPropagation();
-                                  handleEdit(venta);
+                                  handleShowComprobante(venta);
                                 }}
                               >
-                                <Ionicons name="create-outline" size={responsive.responsiveWidth(18)} color={colors.primary} />
+                                <Ionicons name="print-outline" size={responsive.responsiveWidth(18)} color={isDarkMode ? '#fff' : colors.primary} />
                               </TouchableOpacity>
-                              <TouchableOpacity
-                                style={[styles.tableActionButton, styles.tableDeleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                                onPress={(e) => {
-                                  e.stopPropagation();
-                                  handleDelete(venta);
-                                }}
-                              >
-                                <Ionicons name="trash-outline" size={responsive.responsiveWidth(18)} color={colors.error} />
-                              </TouchableOpacity>
+                              {canEditDeleteVenta(venta) && (
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableDeleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(venta);
+                                  }}
+                                >
+                                  <Ionicons name="trash-outline" size={responsive.responsiveWidth(18)} color={colors.error} />
+                                </TouchableOpacity>
+                              )}
                             </View>
                           </View>
                         )}
@@ -2221,7 +2479,7 @@ const VentasContent = () => {
         onRequestClose={() => setShowQRModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.surface }]} >
+          <View style={[styles.qrModalContent, { backgroundColor: colors.surface }]} >
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
                 Realizar transferencia por Transfermovil
@@ -2269,7 +2527,7 @@ const VentasContent = () => {
         onRequestClose={() => setShowOrderSelectionModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+          <View style={[styles.orderModalContent, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
                 Ordenar por
@@ -2319,6 +2577,98 @@ const VentasContent = () => {
                 <Text style={[styles.exportConfirmButtonText, { color: '#fff' }]}>Generar Excel</Text>
               )}
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Comprobante Modal */}
+      <Modal
+        visible={showComprobanteModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowComprobanteModal(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface, padding: responsive.responsiveWidth(20) }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Comprobante</Text>
+              <TouchableOpacity onPress={() => setShowComprobanteModal(false)}>
+                <Ionicons name="close" size={24} color={colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.modalScrollContent}>
+                <Text style={[styles.modalDescription, { color: colors.outline }]}>
+                  Se generará un PDF con el comprobante de la venta.
+                </Text>
+                <View style={[styles.comprobantePreview, { backgroundColor: '#fff', borderColor: '#000' }]}>
+                  {comprobanteConfig.logo && (
+                    <View style={styles.comprobanteLogoContainer}>
+                      <View style={styles.comprobanteLogo}>
+                        <WebView
+                          source={{
+                            html: `
+                              <svg viewBox="0 0 100 100" style="width: 100%; height: 100%;">
+                                <defs>
+                                  <filter id="grayscale">
+                                    <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0"/>
+                                  </filter>
+                                </defs>
+                                <image href="${comprobanteConfig.logo}" width="100" height="100" filter="url(#grayscale)" preserveAspectRatio="xMidYMid meet"/>
+                              </svg>
+                            `
+                          }}
+                          style={{ width: '100%', height: '100%' }}
+                          scrollEnabled={false}
+                        />
+                      </View>
+                    </View>
+                  )}
+                  <Text style={styles.comprobanteNegocioName}>
+                    {comprobanteConfig.nombreNegocio || 'Nombre del Negocio'}
+                  </Text>
+                  <Text style={[styles.comprobanteText, styles.comprobanteTextCentered]}>DEPENDIENTE: {user?.nombre_natural || 'N/A'}</Text>
+                  <Text style={[styles.comprobanteText, styles.comprobanteTextCentered]}>
+                    {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  </Text>
+                  <View style={styles.comprobanteTableHeader}>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Servicio/Producto</Text>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Cant</Text>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Total</Text>
+                  </View>
+                  <View style={styles.comprobanteLine} />
+                  {comprobanteSaleItems.map((item, index) => (
+                    <View key={index} style={styles.comprobanteTableRow}>
+                      <Text style={styles.comprobanteTableColumn}>{item.nombre}</Text>
+                      <Text style={styles.comprobanteTableColumn}>{item.cantidad}</Text>
+                      <Text style={styles.comprobanteTableColumn}>${formatComprobanteNumber(item.cantidad * item.precio_cup)}</Text>
+                    </View>
+                  ))}
+                  <View style={styles.comprobanteTableRow}>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>TOTAL</Text>
+                    <Text style={styles.comprobanteTableColumn}></Text>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>${formatComprobanteNumber(comprobanteSaleItems.reduce((sum, item) => sum + (item.cantidad * item.precio_cup), 0))}</Text>
+                  </View>
+                  <View style={styles.comprobanteLine} />
+                  <Text style={[styles.comprobanteText, styles.comprobanteTextCentered]}>¡Gracias por su compra!</Text>
+                </View>
+              </View>
+            </ScrollView>
+
+            <View style={[styles.modalFooter, { justifyContent: 'center' }]}>
+              <TouchableOpacity
+                style={[styles.shareButton, { backgroundColor: colors.primary }]}
+                onPress={handleGenerateComprobante}
+              >
+                <Ionicons name="share-outline" size={responsive.responsiveWidth(20)} color="#fff" />
+                <Text style={[styles.shareButtonText, { color: '#fff' }]}>Generar y Compartir PDF</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -2886,6 +3236,31 @@ const createStyles = (responsive) => StyleSheet.create({
     padding: responsive.responsivePadding(24),
     width: '100%',
     maxWidth: responsive.responsiveWidth(350),
+    height: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  orderModalContent: {
+    borderRadius: 16,
+    padding: responsive.responsivePadding(24),
+    width: '100%',
+    maxWidth: responsive.responsiveWidth(350),
+    maxHeight: '50%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  qrModalContent: {
+    borderRadius: 16,
+    padding: responsive.responsivePadding(24),
+    width: '100%',
+    maxWidth: responsive.responsiveWidth(350),
+    maxHeight: '70%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
@@ -2903,6 +3278,86 @@ const createStyles = (responsive) => StyleSheet.create({
     fontWeight: '700',
     fontFamily: 'Hanken Grotesk',
     flex: 1,
+  },
+  modalScroll: {
+    flex: 1,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    paddingBottom: responsive.responsiveHeight(8),
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    paddingTop: responsive.responsiveHeight(16),
+    borderTopWidth: 1,
+  },
+  modalDescription: {
+    fontSize: responsive.responsiveWidth(14),
+    textAlign: 'center',
+    marginBottom: responsive.responsiveHeight(16),
+  },
+  comprobantePreview: {
+    flex: 1,
+    padding: responsive.responsiveWidth(20),
+    borderRadius: responsive.responsiveWidth(8),
+    borderWidth: 1,
+  },
+  comprobanteLogo: {
+    width: responsive.responsiveWidth(80),
+    height: responsive.responsiveHeight(80),
+    alignSelf: 'center',
+  },
+  comprobanteLogoContainer: {
+    alignItems: 'center',
+    marginBottom: responsive.responsiveHeight(10),
+  },
+  comprobanteNegocioName: {
+    fontSize: responsive.responsiveWidth(18),
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: responsive.responsiveHeight(10),
+  },
+  comprobanteText: {
+    fontSize: responsive.responsiveWidth(12),
+    marginBottom: responsive.responsiveHeight(5),
+  },
+  comprobanteTextCentered: {
+    textAlign: 'center',
+  },
+  comprobanteTableHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: responsive.responsiveHeight(5),
+  },
+  comprobanteTableColumn: {
+    flex: 1,
+    fontSize: responsive.responsiveWidth(12),
+  },
+  comprobanteTableColumnBold: {
+    fontWeight: 'bold',
+  },
+  comprobanteLine: {
+    height: 1,
+    backgroundColor: '#000',
+    marginVertical: responsive.responsiveHeight(10),
+  },
+  comprobanteTableRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: responsive.responsiveHeight(5),
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: responsive.responsivePadding(12),
+    borderRadius: responsive.responsiveWidth(12),
+    marginTop: responsive.responsiveHeight(16),
+  },
+  shareButtonText: {
+    fontSize: responsive.responsiveWidth(16),
+    fontWeight: '600',
+    marginLeft: responsive.responsiveWidth(8),
   },
   qrContainer: {
     alignItems: 'center',

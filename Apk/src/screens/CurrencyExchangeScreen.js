@@ -242,6 +242,7 @@ const CurrencyExchangeContent = () => {
     datosModificar: 'ambos',
     modificarSoloServicios: false,
     tipoDatoModificar: 'usd',
+    redondeo_exeso: 'ninguna',
   });
   
   // Estados para configuración de cuentas por tienda
@@ -723,6 +724,11 @@ const CurrencyExchangeContent = () => {
           tipoDatoModificar: invertedTipoDato,
           monedaValor: rate,
         };
+
+        // Only include redondeo_exeso if not 'ninguna'
+        if (currencyModalConfig.redondeo_exeso !== 'ninguna') {
+          updatedConfig.monedaConfig.redondeo_exeso = parseInt(currencyModalConfig.redondeo_exeso, 10);
+        }
       }
 
       const response = await configService.updateConfig(updatedConfig);
@@ -3524,9 +3530,11 @@ const CurrencyExchangeContent = () => {
                   </View>
 
                   <View style={styles.currencyModalSection}>
-                    <Text style={[styles.currencyModalSectionTitle, { color: colors.onSurface }]}>
-                      ¿Basar conversión en?
-                    </Text>
+                    <View style={styles.currencyModalSectionHeader}>
+                      <Text style={[styles.currencyModalSectionTitle, { color: colors.onSurface }]}>
+                        ¿Basar conversión en?
+                      </Text>
+                    </View>
                     <View style={styles.currencyModalOptions}>
                       <TouchableOpacity
                         style={[
@@ -3554,6 +3562,80 @@ const CurrencyExchangeContent = () => {
                         </Text>
                         <Text style={[styles.currencyModalOptionSubtext, { color: currencyModalConfig.tipoDatoModificar === 'cup' ? '#fff' : colors.outline }]}>
                           USD = CUP / {exchangeRate}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={styles.currencyModalSection}>
+                    <View style={styles.currencyModalSectionHeader}>
+                      <Text style={[styles.currencyModalSectionTitle, { color: colors.onSurface }]}>
+                        Redondeo por exceso (CUP)
+                      </Text>
+                      <TouchableOpacity
+                        style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                        onPress={() => showInfoModal(
+                          'Redondeo por Exceso',
+                          'El redondeo por exceso se aplica al precio CUP calculado. Por ejemplo: si el precio calculado es 364.5 y seleccionas redondeo a 5, el precio será 365. Si seleccionas redondeo a 10, será 370. Esto ayuda a evitar precios con decimales.'
+                        )}
+                      >
+                        <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.currencyModalOptions}>
+                      <TouchableOpacity
+                        style={[
+                          styles.currencyModalOption,
+                          currencyModalConfig.redondeo_exeso === 'ninguna' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, redondeo_exeso: 'ninguna' })}
+                      >
+                        <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.redondeo_exeso === 'ninguna' ? '#fff' : colors.onSurface }]}>
+                          Ninguna
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.currencyModalOption,
+                          currencyModalConfig.redondeo_exeso === '5' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, redondeo_exeso: '5' })}
+                      >
+                        <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.redondeo_exeso === '5' ? '#fff' : colors.onSurface }]}>
+                          5
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.currencyModalOption,
+                          currencyModalConfig.redondeo_exeso === '10' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, redondeo_exeso: '10' })}
+                      >
+                        <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.redondeo_exeso === '10' ? '#fff' : colors.onSurface }]}>
+                          10
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.currencyModalOption,
+                          currencyModalConfig.redondeo_exeso === '20' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, redondeo_exeso: '20' })}
+                      >
+                        <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.redondeo_exeso === '20' ? '#fff' : colors.onSurface }]}>
+                          20
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.currencyModalOption,
+                          currencyModalConfig.redondeo_exeso === '50' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, redondeo_exeso: '50' })}
+                      >
+                        <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.redondeo_exeso === '50' ? '#fff' : colors.onSurface }]}>
+                          50
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -4329,11 +4411,16 @@ const createStyles = (responsive) => StyleSheet.create({
   currencyModalSection: {
     marginBottom: responsive.responsiveMargin(20),
   },
+  currencyModalSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: responsive.responsiveMargin(12),
+  },
   currencyModalSectionTitle: {
     fontSize: responsive.fontSizes.body,
     fontWeight: '600',
     fontFamily: 'Hanken Grotesk',
-    marginBottom: responsive.responsiveMargin(12),
   },
   currencyModalOptions: {
     gap: responsive.responsiveMargin(8),
