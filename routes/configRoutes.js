@@ -78,6 +78,8 @@ router.put('/logo', authenticate(), configController.updateLogo);
  *       - `datosModificar`: string, debe ser exactamente `"costos"`, `"precios"` o `"ambos"`.
  *       - `tipoDatoModificar`: string, debe ser `"cup"` o `"usd"`.
  *       - `monedaValor`: número mayor que 0 (p.ej., `1.5`).
+ *       - `categoria_servicio`: opcional; filtra los servicios y productos cuya categoría contenga
+ *         el texto indicado, de forma similar al filtro por categoría de sus endpoints.
  *       - `redondeo_exeso`: opcional; entero positivo. Si `tipoDatoModificar` es `"cup"`,
  *         solo el precio calculado se redondea hacia arriba al múltiplo indicado
  *         (por ejemplo, un precio de 451 con redondeo 5 se convierte en 455).
@@ -102,6 +104,7 @@ router.put('/logo', authenticate(), configController.updateLogo);
  *               datosModificar: "costos"
  *               tipoDatoModificar: "cup"
  *               monedaValor: 1.5
+ *               categoria_servicio: "Consulta"
  *               redondeo_exeso: 5
  *     responses:
  *       200:
@@ -125,6 +128,7 @@ router.put('/logo', authenticate(), configController.updateLogo);
  *           - datosModificar debe ser "costos", "precios" o "ambos"
  *           - tipoDatoModificar debe ser "cup" o "usd"
  *           - monedaValor debe ser un número mayor que 0
+ *           - categoria_servicio debe ser un texto no vacío si se proporciona
  *           - redondeo_exeso debe ser un número entero positivo si se proporciona
  *       500:
  *         description: Error interno del servidor

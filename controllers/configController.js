@@ -218,9 +218,14 @@ class ConfigController {
           datosModificar,
           tipoDatoModificar,
           monedaValor,
+          categoria_servicio: categoriaServicio,
           redondeo_exeso: redondeoExeso
         } = moneda;
 
+        if (categoriaServicio !== undefined &&
+            (typeof categoriaServicio !== 'string' || categoriaServicio.trim() === '')) {
+          throwError('monedaConfig.categoria_servicio debe ser un texto no vacío', 400);
+        }
         if (typeof modificarSoloServicios !== 'boolean') {
           throwError('monedaConfig.modificarSoloServicios debe ser un booleano', 400);
         }
@@ -241,27 +246,35 @@ class ConfigController {
         // --- Inicio de la transacción para actualización masiva ---
         const transaction = await sequelize.transaction();
         try {
-          // 1. Obtener los IDs de servicio a modificar
+          // 1. Obtener los IDs de servicio a modificar cuando hay filtros
           let servicioIds = null; // null = todos
+          const servicioWhere = {};
 
           if (modificarSoloServicios === true) {
-            // Servicios que NO tienen producto asociado
+            servicioWhere.id_servicio = {
+              [Op.notIn]: sequelize.literal('(SELECT id_servicio FROM productos)')
+            };
+          }
+          if (categoriaServicio !== undefined) {
+            servicioWhere.categoria = {
+              [Op.iLike]: `%${categoriaServicio.trim()}%`
+            };
+          }
+
+          if (modificarSoloServicios === true || categoriaServicio !== undefined) {
             const results = await Servicio.findAll({
               attributes: ['id_servicio'],
-              where: {
-                id_servicio: {
-                  [Op.notIn]: sequelize.literal('(SELECT id_servicio FROM productos)')
-                }
-              },
+              where: servicioWhere,
               raw: true,
               transaction
             });
             servicioIds = results.map(r => r.id_servicio);
-            console.log(`🔍 Servicios sin producto encontrados: ${servicioIds.length}`);
+            console.log(`🔍 Servicios coincidentes encontrados: ${servicioIds.length}`);
             if (servicioIds.length === 0) {
-              console.warn('⚠️ No hay servicios sin producto. No se actualizará ningún registro.');
+              console.warn('⚠️ No hay servicios coincidentes. No se actualizará ningún registro.');
             }
-          } else {
+          }
+          if (categoriaServicio === undefined && modificarSoloServicios === false) {
             console.log('🔍 Se actualizarán TODOS los servicios (incluyendo productos).');
           }
 
