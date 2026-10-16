@@ -24,7 +24,7 @@ const actualizarFondoCuenta = async (cuentaId, delta, transaction) => {
 // ---- Operaciones de una sola entidad ----
 
 const createOperacion = async (operacionData, transaction = null) => {
-  const { id_cuenta, id_usuario, cantidad_operacion, tipo_operacion, fecha_hora, motivo, cambio_moneda } = operacionData;
+  const { id_cuenta, id_usuario, cantidad_operacion, tipo_operacion, fecha_hora, motivo, cambio_moneda, is_check } = operacionData;
 
   // Validar usuario (si se envía)
   if (id_usuario) {
@@ -60,6 +60,7 @@ const createOperacion = async (operacionData, transaction = null) => {
       fecha_hora: fecha,
       motivo,
       cambio_moneda,
+      is_check,
     },
     { transaction }
   );
@@ -121,6 +122,7 @@ const updateOperacion = async (id, updateData, transaction = null) => {
   if (updateData.fecha_hora !== undefined) newData.fecha_hora = updateData.fecha_hora;
   if (updateData.motivo !== undefined) newData.motivo = updateData.motivo;
   if (updateData.cambio_moneda !== undefined) newData.cambio_moneda = updateData.cambio_moneda;
+  if (updateData.is_check !== undefined) newData.is_check = updateData.is_check;
 
   // Validar nueva cuenta si cambia
   let cuentaNueva = cuentaActual;
@@ -285,6 +287,9 @@ const filterOperaciones = async (filters, limit, offset) => {
     where.tipo_operacion = filters.tipo_operacion === "Operaciones Manuales"
       ? { [Op.in]: ["Ingreso", "Retiro"] }
       : filters.tipo_operacion;
+  }
+  if (filters.is_check !== undefined) {
+    where.is_check = filters.is_check;
   }
   if (filters.fecha_desde || filters.fecha_hasta) {
     where.fecha_hora = {};

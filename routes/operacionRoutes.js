@@ -38,6 +38,9 @@ const authenticate = require("../helpers/authenticate");
  *         cambio_moneda:
  *           type: number
  *           format: double
+ *         is_check:
+ *           type: boolean
+ *           default: false
  *         createdAt:
  *           type: string
  *           format: date-time
@@ -111,6 +114,11 @@ const authenticate = require("../helpers/authenticate");
  *           type: string
  *           enum: [Ingreso, Retiro, Ingreso por Venta, Operaciones Manuales]
  *         description: Filtra por tipo de operación; Operaciones Manuales incluye Ingreso y Retiro
+ *       - in: query
+ *         name: is_check
+ *         schema:
+ *           type: boolean
+ *         description: Filtra por el estado de verificación de la operación
  *     responses:
  *       200:
  *         description: Lista de operaciones con paginación y sumatorias
@@ -223,6 +231,8 @@ router.get("/operacion/:id", authenticate(), operacionController.getOperacionByI
  *                 type: string
  *               cambio_moneda:
  *                 type: number
+ *               is_check:
+ *                 type: boolean
  *     responses:
  *       201:
  *         description: Operación creada exitosamente
@@ -277,6 +287,8 @@ router.post("/operacion", authenticate(), operacionController.createOperacion);
  *                       type: string
  *                     cambio_moneda:
  *                       type: number
+ *                     is_check:
+ *                       type: boolean
  *     responses:
  *       201:
  *         description: Operaciones creadas exitosamente
@@ -322,6 +334,8 @@ router.post("/operacion/bulk", authenticate(), operacionController.createOperaci
  *                 type: string
  *               cambio_moneda:
  *                 type: number
+ *               is_check:
+ *                 type: boolean
  *     responses:
  *       200:
  *         description: Operación actualizada correctamente
@@ -374,6 +388,8 @@ router.put("/operacion/:id", authenticate(), operacionController.updateOperacion
  *                       type: string
  *                     cambio_moneda:
  *                       type: number
+ *                     is_check:
+ *                       type: boolean
  *     responses:
  *       200:
  *         description: Operaciones actualizadas correctamente

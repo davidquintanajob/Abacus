@@ -1,5 +1,5 @@
 {
-  "cupToUsdRate": 770,
+  "cupToUsdRate": 800,
   "permissions": {
     "dependiente": false,
     "almacenero": false,
@@ -161,5 +161,10 @@
   "customCategories": [
     "Bebida",
     "Test"
-  ]
+  ],
+  "priceChangePermissions": {
+    "dependiente": false,
+    "almacenero": false,
+    "economico": false
+  }
 }

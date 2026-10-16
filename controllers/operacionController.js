@@ -25,6 +25,7 @@ const createOperacion = async (req, res) => {
       fecha_hora,
       motivo,
       cambio_moneda,
+      is_check,
     } = req.body;
 
     const errors = [];
@@ -33,6 +34,9 @@ const createOperacion = async (req, res) => {
     if (!tipo_operacion) errors.push("tipo_operacion es obligatorio.");
     if (!motivo || motivo.trim() === "") errors.push("motivo es obligatorio.");
     if (cambio_moneda === undefined || cambio_moneda === null) errors.push("cambio_moneda es obligatorio.");
+    if (is_check !== undefined && typeof is_check !== "boolean") {
+      errors.push("is_check debe ser un valor booleano.");
+    }
 
     if (cantidad_operacion !== undefined && (isNaN(cantidad_operacion) || cantidad_operacion < 0)) {
       errors.push("cantidad_operacion debe ser un número no negativo.");
@@ -63,6 +67,7 @@ const createOperacion = async (req, res) => {
       fecha_hora: fecha_hora || null,
       motivo: motivo.trim(),
       cambio_moneda,
+      is_check,
     };
 
     const newOperacion = await operacionService.createOperacion(operacionData);
@@ -96,6 +101,7 @@ const updateOperacion = async (req, res) => {
       fecha_hora,
       motivo,
       cambio_moneda,
+      is_check,
     } = req.body;
 
     if (Object.keys(req.body).length === 0) {
@@ -111,6 +117,9 @@ const updateOperacion = async (req, res) => {
     }
     if (cambio_moneda !== undefined && (isNaN(cambio_moneda) || cambio_moneda <= 0)) {
       errors.push("cambio_moneda debe ser un número mayor que cero.");
+    }
+    if (is_check !== undefined && typeof is_check !== "boolean") {
+      errors.push("is_check debe ser un valor booleano.");
     }
     if (fecha_hora !== undefined) {
       const fechaObj = new Date(fecha_hora);
@@ -135,6 +144,7 @@ const updateOperacion = async (req, res) => {
     if (fecha_hora !== undefined) updateData.fecha_hora = fecha_hora;
     if (motivo !== undefined) updateData.motivo = motivo.trim();
     if (cambio_moneda !== undefined) updateData.cambio_moneda = cambio_moneda;
+    if (is_check !== undefined) updateData.is_check = is_check;
 
     const updated = await operacionService.updateOperacion(id, updateData);
     res.status(200).json({
@@ -182,6 +192,7 @@ const createOperacionesBulk = async (req, res) => {
         fecha_hora,
         motivo,
         cambio_moneda,
+        is_check,
       } = item;
 
       const localErrors = [];
@@ -190,6 +201,9 @@ const createOperacionesBulk = async (req, res) => {
       if (!tipo_operacion) localErrors.push("tipo_operacion es obligatorio.");
       if (!motivo || motivo.trim() === "") localErrors.push("motivo es obligatorio.");
       if (cambio_moneda === undefined || cambio_moneda === null) localErrors.push("cambio_moneda es obligatorio.");
+      if (is_check !== undefined && typeof is_check !== "boolean") {
+        localErrors.push("is_check debe ser un valor booleano.");
+      }
 
       if (cantidad_operacion !== undefined && (isNaN(cantidad_operacion) || cantidad_operacion < 0)) {
         localErrors.push("cantidad_operacion debe ser no negativo.");
@@ -221,6 +235,7 @@ const createOperacionesBulk = async (req, res) => {
         fecha_hora: fecha_hora || null,
         motivo: motivo.trim(),
         cambio_moneda,
+        is_check,
       });
     });
 
@@ -269,6 +284,9 @@ const updateOperacionesBulk = async (req, res) => {
       }
       if (rest.cambio_moneda !== undefined && (isNaN(rest.cambio_moneda) || rest.cambio_moneda <= 0)) {
         localErrors.push("cambio_moneda debe ser mayor que cero.");
+      }
+      if (rest.is_check !== undefined && typeof rest.is_check !== "boolean") {
+        localErrors.push("is_check debe ser un valor booleano.");
       }
       if (rest.fecha_hora !== undefined) {
         const fechaObj = new Date(rest.fecha_hora);
@@ -323,6 +341,7 @@ const filterOperaciones = async (req, res) => {
       cantidad_min,
       cantidad_max,
       tipo_operacion,
+      is_check,
     } = req.query;
 
     const hasLimit = limit !== undefined;
@@ -345,6 +364,12 @@ const filterOperaciones = async (req, res) => {
         throwError(`tipo_operacion debe ser uno de: ${tiposFiltro.join(", ")}.`, 400);
       }
       filters.tipo_operacion = tipo_operacion;
+    }
+    if (is_check !== undefined) {
+      if (is_check !== "true" && is_check !== "false") {
+        throwError("is_check debe ser 'true' o 'false'.", 400);
+      }
+      filters.is_check = is_check === "true";
     }
     if (id_tienda !== undefined) {
       const tiendaId = parseInt(id_tienda, 10);

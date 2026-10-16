@@ -161,7 +161,7 @@ app.use((req, res, next) => {
     throwError('Configuración de soporte de versiones inválida', 500);
   }
 
-  const [minVersion, maxVersion] = supportRange.split('-');
+  const [rangeStart, rangeEnd] = supportRange.split('-');
 
   // Función de comparación semántica
   const compareVersions = (v1, v2) => {
@@ -175,6 +175,9 @@ app.use((req, res, next) => {
     return 0;
   };
 
+  const [minVersion, maxVersion] = compareVersions(rangeStart, rangeEnd) <= 0
+    ? [rangeStart, rangeEnd]
+    : [rangeEnd, rangeStart];
   const isGreaterOrEqual = compareVersions(apkVersionHeader, minVersion) >= 0;
   const isLessOrEqual = compareVersions(apkVersionHeader, maxVersion) <= 0;
 
