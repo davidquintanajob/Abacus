@@ -5,6 +5,7 @@ import { API_CONFIG } from '../config';
 import { navigationRef } from '../navigationRef';
 import NetInfo from '@react-native-community/netinfo';
 import packageJson from '../../package.json';
+import { bindToWifiNetwork, unbindFromNetwork, isWifiConnected } from '../native-modules/WifiNetworkModule';
 
 // Función para verificar si el servidor está disponible
 const checkServerAvailability = async (url) => {
@@ -23,8 +24,8 @@ const checkServerAvailability = async (url) => {
   }
 };
 
-// Función para verificar si el dispositivo está conectado a WiFi
-const isWifiConnected = async () => {
+// Función para verificar si el dispositivo está conectado a WiFi (usando NetInfo)
+const isWifiConnectedNetInfo = async () => {
   try {
     const state = await NetInfo.fetch();
     // isConnectionExpensive returns true for cellular data, false for WiFi
@@ -55,16 +56,24 @@ const getApiBaseUrl = async () => {
 
   // Solo aplicar lógica de priorización WiFi si el usuario lo ha activado
   if (prioritizeWifi) {
-    // Verificar si estamos en WiFi
+    // Verificar si estamos en WiFi usando el módulo nativo
     const wifiConnected = await isWifiConnected();
 
     // Si estamos en WiFi y hay una URL configurada por el usuario (servidor local)
     if (wifiConnected && userConfiguredURL) {
-      // Verificar si el servidor local está disponible
-      const serverAvailable = await checkServerAvailability(userConfiguredURL);
-      if (serverAvailable) {
-        return userConfiguredURL;
+      // Vincular el proceso a la red WiFi usando el módulo nativo
+      const bound = await bindToWifiNetwork();
+      
+      if (bound) {
+        // Verificar si el servidor local está disponible
+        const serverAvailable = await checkServerAvailability(userConfiguredURL);
+        if (serverAvailable) {
+          return userConfiguredURL;
+        }
       }
+      
+      // Si falla, desvincular
+      await unbindFromNetwork();
     }
   }
 

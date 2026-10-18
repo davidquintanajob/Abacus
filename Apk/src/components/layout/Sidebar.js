@@ -19,6 +19,7 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
   const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels, deudaAccessLevels } = useAuth();
   const { isOfflineMode } = useOffline();
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   const isAdmin = user?.rol === 'Administrador';
   const userRole = user?.rol?.toLowerCase();
@@ -248,12 +249,25 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
                   styles.navItem,
                   isActive && { backgroundColor: colors.primary }
                 ]}
-                onPress={() => {
+                onPress={async () => {
+                  if (isNavigating) return;
+                  
+                  setIsNavigating(true);
+                  
+                  // Cerrar el sidebar inmediatamente
+                  onClose();
+                  
+                  // Esperar un momento para que el sidebar se cierre antes de navegar
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                  
                   if (navigationRef.isReady()) {
                     navigationRef.navigate(item.route);
                   }
-                  onClose();
+                  
+                  // Desactivar el estado de navegación después de un tiempo
+                  setTimeout(() => setIsNavigating(false), 2000);
                 }}
+                disabled={isNavigating}
               >
                 <Image
                   source={item.icon}
@@ -296,6 +310,16 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
           </TouchableOpacity>
           <Text style={[styles.version, { color: colors.outline }]}>v1.0.0</Text>
         </View>
+
+        {/* Loading overlay for slow navigation */}
+        {isNavigating && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, { color: colors.onSurface }]}>
+              Cargando...
+            </Text>
+          </View>
+        )}
       </Animated.View>
     </>
   );
@@ -435,5 +459,22 @@ const createStyles = (responsive, insets) => StyleSheet.create({
     fontWeight: '500',
     fontFamily: 'JetBrains Mono',
     letterSpacing: 0.05,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  loadingText: {
+    marginTop: responsive.responsiveMargin(16),
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '500',
+    fontFamily: 'Inter',
   },
 });

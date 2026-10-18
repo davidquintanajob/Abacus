@@ -427,19 +427,23 @@ const CurrencyExchangeContent = () => {
   const togglePrioritizeWifiConnection = async () => {
     const newValue = !prioritizeWifiConnection;
     setPrioritizeWifiConnection(newValue);
-    
+
     try {
+      // Guardar en SecureStore para que el módulo API pueda leerlo
+      await SecureStore.setItemAsync('prioritizeWifiConnection', newValue.toString());
+
       const updatedConfig = {
         ...config,
         prioritizeWifiConnection: newValue,
       };
       await configService.updateConfig(updatedConfig);
       setConfig(updatedConfig);
-      showToast({ 
-        type: 'success', 
-        message: newValue 
-          ? 'Prioridad de conexión WiFi activada' 
-          : 'Prioridad de conexión WiFi desactivada' 
+
+      showToast({
+        type: 'success',
+        message: newValue
+          ? 'Prioridad de WiFi activada'
+          : 'Prioridad de WiFi desactivada'
       });
     } catch (error) {
       showToast({ type: 'error', message: 'Error al guardar configuración de WiFi' });
