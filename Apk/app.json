@@ -20,7 +20,15 @@
     },
     "plugins": [
       "expo-audio",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "package": "com.agust9999.Abacus"
+          }
+        }
+      ]
     ],
     "android": {
       "permissions": [
