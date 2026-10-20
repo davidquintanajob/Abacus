@@ -14,10 +14,13 @@ import configService from '../services/configService';
 import { exchangeRateService } from '../services/exchangeRateService';
 import { getCuentas } from '../services/cuentaService';
 import { getTiendas } from '../services/tiendaService';
+import { getProductos } from '../services/productoService';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import NetInfo from '@react-native-community/netinfo';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../context/AuthContext';
 
 const AccessLevelSwitch = ({ value, onChange, colors, responsive }) => {
   const levels = [
@@ -103,6 +106,7 @@ const CurrencyExchangeContent = () => {
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
   const { toast, showToast, hideToast } = useToast();
+  const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -215,6 +219,11 @@ const CurrencyExchangeContent = () => {
     economico: false,
   });
   const [showCuentaChangePermissions, setShowCuentaChangePermissions] = useState(false);
+  const [priceChangePermissions, setPriceChangePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
   const [showComprobanteConfigCard, setShowComprobanteConfigCard] = useState(false);
   const [showComprobanteConfig, setShowComprobanteConfig] = useState(false);
   const [comprobanteConfig, setComprobanteConfig] = useState({
@@ -237,8 +246,154 @@ const CurrencyExchangeContent = () => {
     datosModificar: 'ambos',
     modificarSoloServicios: false,
     tipoDatoModificar: 'usd',
+    redondeo_exeso: 'ninguna',
+    categoria_servicio: '',
   });
-  
+  const [showCategoriaDropdown, setShowCategoriaDropdown] = useState(false);
+  const [categoriaSearchText, setCategoriaSearchText] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewItems, setPreviewItems] = useState([]);
+
+  const predefinedCategories = ['Alimentos', 'Bebidas', 'Limpieza', 'Higiene', 'Electrónicos', 'Ropa', 'Medicamentos', 'Otros'];
+  const [customCategories, setCustomCategories] = useState([]);
+
+  // Cargar categorías personalizadas
+  const loadCustomCategories = async () => {
+    try {
+      const savedCategories = await AsyncStorage.getItem('customCategories');
+      if (savedCategories) {
+        setCustomCategories(JSON.parse(savedCategories));
+      }
+    } catch (error) {
+      console.error('Error loading custom categories:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadCustomCategories();
+  }, []);
+
+  // Función para calcular nuevo precio con redondeo por exceso
+  // Lógica igual al backend (configController.js líneas 294-310)
+  const calculateNewPrice = (currentPrice, tipoDatoModificar, rate, redondeo_exeso) => {
+    let newPrice;
+    if (tipoDatoModificar === 'usd') {
+      // Actualizar USD a partir de CUP: USD = CUP / rate
+      newPrice = currentPrice / rate;
+    } else {
+      // Actualizar CUP a partir de USD: CUP = USD * rate
+      newPrice = currentPrice * rate;
+    }
+
+    // Aplicar redondeo por exceso solo para CUP (igual que el backend)
+    if (tipoDatoModificar === 'cup' && redondeo_exeso && redondeo_exeso !== 'ninguna') {
+      const roundTo = parseInt(redondeo_exeso, 10);
+      newPrice = Math.ceil(newPrice / roundTo) * roundTo;
+    }
+
+    // Redondear a 5 decimales (igual que el backend usa round5)
+    newPrice = Math.round(newPrice * 100000) / 100000;
+
+    return newPrice;
+  };
+
+  // Función para obtener vista previa de productos/servicios a modificar
+  const fetchPreviewItems = async () => {
+    try {
+      const rate = parseFloat(exchangeRate);
+      const filters = {};
+
+      // Agregar filtro de categoría si está seleccionada
+      if (currencyModalConfig.categoria_servicio && currencyModalConfig.categoria_servicio.trim() !== '') {
+        filters.categoria = currencyModalConfig.categoria_servicio;
+      }
+
+      // Agregar filtro de esvendible según configuración
+      // modificarSoloServicios=true significa solo servicios (esvendible=false)
+      // modificarSoloServicios=false significa todos (no agregar filtro)
+      if (currencyModalConfig.modificarSoloServicios) {
+        filters.esvendible = 'false';
+      }
+
+      // Skip filtros automáticos del servicio
+      filters.skipEsvendible = true;
+      filters.skipCantidadMin = true;
+
+      const data = await getProductos(filters, 1, 1000);
+      const productos = data.data || [];
+
+      // Si tenemos tiendas_servicio, calcular precios. Si no, vista previa simplificada.
+      const itemsWithNewPrices = [];
+      productos.forEach(producto => {
+        if (producto.tiendas_servicio && producto.tiendas_servicio.length > 0) {
+          // Tenemos tiendas_servicio, calcular precios
+          // Calcular ambos precios (USD y CUP) independientemente de la opción seleccionada
+
+          producto.tiendas_servicio.forEach(ts => {
+            const precioCUP = parseFloat(ts.precio_cup) || 0;
+            const precioUSD = parseFloat(ts.precio_usd) || 0;
+            const costoCUP = parseFloat(ts.costo_cup) || 0;
+            const costoUSD = parseFloat(ts.costo_usd) || 0;
+
+            // Calcular nuevos precios basándose en la configuración
+            // Si tipoDatoModificar='usd', actualizamos USD basándonos en CUP
+            // Si tipoDatoModificar='cup', actualizamos CUP basándonos en USD
+            let newPrecioCUP, newPrecioUSD, newCostoCUP, newCostoUSD;
+
+            if (currencyModalConfig.tipoDatoModificar === 'usd') {
+              // Actualizar USD basándose en CUP
+              newPrecioUSD = calculateNewPrice(precioCUP, 'usd', rate, currencyModalConfig.redondeo_exeso);
+              newCostoUSD = calculateNewPrice(costoCUP, 'usd', rate, currencyModalConfig.redondeo_exeso);
+              // CUP se mantiene igual
+              newPrecioCUP = precioCUP;
+              newCostoCUP = costoCUP;
+            } else {
+              // Actualizar CUP basándose en USD
+              newPrecioCUP = calculateNewPrice(precioUSD, 'cup', rate, currencyModalConfig.redondeo_exceso);
+              newCostoCUP = calculateNewPrice(costoUSD, 'cup', rate, currencyModalConfig.redondeo_exeso);
+              // USD se mantiene igual
+              newPrecioUSD = precioUSD;
+              newCostoUSD = costoUSD;
+            }
+
+            itemsWithNewPrices.push({
+              ...producto,
+              tiendaNombre: ts.tienda?.nombre || 'Tienda desconocida',
+              currentPrecioCUP: precioCUP,
+              currentPrecioUSD: precioUSD,
+              currentCostoCUP: costoCUP,
+              currentCostoUSD: costoUSD,
+              newPrecioCUP,
+              newPrecioUSD,
+              newCostoCUP,
+              newCostoUSD,
+            });
+          });
+        } else {
+          // No tenemos tiendas_servicio, vista previa simplificada
+          itemsWithNewPrices.push({
+            ...producto,
+            tiendaNombre: 'Sin datos de tienda',
+            currentPrecioCUP: null,
+            currentPrecioUSD: null,
+            currentCostoCUP: null,
+            currentCostoUSD: null,
+            newPrecioCUP: null,
+            newPrecioUSD: null,
+            newCostoCUP: null,
+            newCostoUSD: null,
+          });
+        }
+      });
+
+      setPreviewItems(itemsWithNewPrices);
+      setShowPreview(true);
+    } catch (error) {
+      console.error('[Preview] Error:', error);
+      showToast({ type: 'error', message: 'Error al cargar vista previa' });
+    }
+  };
+
   // Estados para configuración de cuentas por tienda
   const [showSalesConfigCard, setShowSalesConfigCard] = useState(false);
   const [showSalesConfig, setShowSalesConfig] = useState(false);
@@ -277,19 +432,23 @@ const CurrencyExchangeContent = () => {
   const togglePrioritizeWifiConnection = async () => {
     const newValue = !prioritizeWifiConnection;
     setPrioritizeWifiConnection(newValue);
-    
+
     try {
+      // Guardar en SecureStore para que el módulo API pueda leerlo
+      await SecureStore.setItemAsync('prioritizeWifiConnection', newValue.toString());
+
       const updatedConfig = {
         ...config,
         prioritizeWifiConnection: newValue,
       };
       await configService.updateConfig(updatedConfig);
       setConfig(updatedConfig);
-      showToast({ 
-        type: 'success', 
-        message: newValue 
-          ? 'Prioridad de conexión WiFi activada' 
-          : 'Prioridad de conexión WiFi desactivada' 
+
+      showToast({
+        type: 'success',
+        message: newValue
+          ? 'Prioridad de WiFi activada'
+          : 'Prioridad de WiFi desactivada'
       });
     } catch (error) {
       showToast({ type: 'error', message: 'Error al guardar configuración de WiFi' });
@@ -385,6 +544,9 @@ const CurrencyExchangeContent = () => {
       }
       if (data.cuentaChangePermissions) {
         setCuentaChangePermissions(data.cuentaChangePermissions);
+      }
+      if (data.priceChangePermissions) {
+        setPriceChangePermissions(data.priceChangePermissions);
       }
       if (data.comprobanteConfig) {
         setComprobanteConfig(data.comprobanteConfig);
@@ -702,6 +864,7 @@ const CurrencyExchangeContent = () => {
         customSalidaTypes: customSalidaTypes,
         tiendaCuentasConfig: tiendaCuentasConfig,
         cuentaChangePermissions: cuentaChangePermissions,
+        priceChangePermissions: priceChangePermissions,
         comprobanteConfig: comprobanteConfig,
         prioritizeWifiConnection: prioritizeWifiConnection,
       };
@@ -714,6 +877,16 @@ const CurrencyExchangeContent = () => {
           tipoDatoModificar: invertedTipoDato,
           monedaValor: rate,
         };
+
+        // Only include redondeo_exeso if not 'ninguna'
+        if (currencyModalConfig.redondeo_exeso !== 'ninguna') {
+          updatedConfig.monedaConfig.redondeo_exeso = parseInt(currencyModalConfig.redondeo_exeso, 10);
+        }
+
+        // Include categoria_servicio if a category is selected
+        if (currencyModalConfig.categoria_servicio && currencyModalConfig.categoria_servicio.trim() !== '') {
+          updatedConfig.monedaConfig.categoria_servicio = currencyModalConfig.categoria_servicio;
+        }
       }
 
       const response = await configService.updateConfig(updatedConfig);
@@ -778,6 +951,24 @@ const CurrencyExchangeContent = () => {
     } catch (error) {
       showToast({ type: 'error', message: 'Error al actualizar permiso de cambio de cuenta' });
       setCuentaChangePermissions(cuentaChangePermissions);
+    }
+  };
+
+  const togglePriceChangePermission = async (role) => {
+    const newPriceChangePermissions = { ...priceChangePermissions, [role]: !priceChangePermissions[role] };
+    setPriceChangePermissions(newPriceChangePermissions);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        priceChangePermissions: newPriceChangePermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Permiso de cambio de precio actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de cambio de precio' });
+      setPriceChangePermissions(priceChangePermissions);
     }
   };
 
@@ -2459,6 +2650,85 @@ const CurrencyExchangeContent = () => {
                 </View>
               </View>
 
+              {/* Cambio de Precio en Ventas */}
+              <View style={styles.subSection}>
+                <Text style={[styles.subSectionTitle, { color: colors.onSurface }]}>
+                  Cambio de Precio en Ventas
+                </Text>
+                <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
+                  Configura qué roles pueden cambiar el precio de los productos al momento de realizar una venta
+                </Text>
+
+                <View style={styles.permissionItem}>
+                  <View style={styles.permissionInfo}>
+                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                      Dependiente
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                      onPress={() => showInfoModal(
+                        'Cambio de Precio - Dependiente',
+                        'Cuando está activo, los usuarios con rol Dependiente pueden cambiar el precio de los productos al momento de realizar una venta.'
+                      )}
+                    >
+                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Switch
+                    value={priceChangePermissions.dependiente}
+                    onValueChange={() => togglePriceChangePermission('dependiente')}
+                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                    thumbColor={priceChangePermissions.dependiente ? '#fff' : colors.outline}
+                  />
+                </View>
+
+                <View style={styles.permissionItem}>
+                  <View style={styles.permissionInfo}>
+                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                      Almacenero
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                      onPress={() => showInfoModal(
+                        'Cambio de Precio - Almacenero',
+                        'Cuando está activo, los usuarios con rol Almacenero pueden cambiar el precio de los productos al momento de realizar una venta.'
+                      )}
+                    >
+                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Switch
+                    value={priceChangePermissions.almacenero}
+                    onValueChange={() => togglePriceChangePermission('almacenero')}
+                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                    thumbColor={priceChangePermissions.almacenero ? '#fff' : colors.outline}
+                  />
+                </View>
+
+                <View style={styles.permissionItem}>
+                  <View style={styles.permissionInfo}>
+                    <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                      Económico
+                    </Text>
+                    <TouchableOpacity 
+                      style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                      onPress={() => showInfoModal(
+                        'Cambio de Precio - Económico',
+                        'Cuando está activo, los usuarios con rol Económico pueden cambiar el precio de los productos al momento de realizar una venta.'
+                      )}
+                    >
+                      <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Switch
+                    value={priceChangePermissions.economico}
+                    onValueChange={() => togglePriceChangePermission('economico')}
+                    trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                    thumbColor={priceChangePermissions.economico ? '#fff' : colors.outline}
+                  />
+                </View>
+              </View>
+
               {/* Configuración de Comprobante */}
               <View style={styles.subSection}>
                 <Text style={[styles.subSectionTitle, { color: colors.onSurface }]}>
@@ -3418,9 +3688,69 @@ const CurrencyExchangeContent = () => {
                   </View>
 
                   <View style={styles.currencyModalSection}>
-                    <Text style={[styles.currencyModalSectionTitle, { color: colors.onSurface }]}>
-                      ¿Basar conversión en?
-                    </Text>
+                    <View style={styles.currencyModalSectionHeader}>
+                      <Text style={[styles.currencyModalSectionTitle, { color: colors.onSurface }]}>
+                        Categoría (Opcional)
+                      </Text>
+                    </View>
+                    <View style={styles.currencyModalInputContainer}>
+                      <TextInput
+                        style={[styles.currencyModalInput, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                        placeholder="Todas las categorías"
+                        placeholderTextColor={colors.outline}
+                        value={currencyModalConfig.categoria_servicio}
+                        onChangeText={(text) => {
+                          setCurrencyModalConfig({ ...currencyModalConfig, categoria_servicio: text });
+                          setCategoriaSearchText(text);
+                        }}
+                        onFocus={() => setShowCategoriaDropdown(true)}
+                      />
+                      <TouchableOpacity
+                        style={styles.dropdownIcon}
+                        onPress={() => setShowCategoriaDropdown(!showCategoriaDropdown)}
+                      >
+                        <Ionicons name={showCategoriaDropdown ? "chevron-up" : "chevron-down"} size={20} color={colors.outline} />
+                      </TouchableOpacity>
+                    </View>
+                    {showCategoriaDropdown && (
+                      <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                        <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                          <TouchableOpacity
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                              setCurrencyModalConfig({ ...currencyModalConfig, categoria_servicio: '' });
+                              setShowCategoriaDropdown(false);
+                              setCategoriaSearchText('');
+                            }}
+                          >
+                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todas las categorías</Text>
+                          </TouchableOpacity>
+                          {[...predefinedCategories, ...customCategories]
+                            .filter(cat => cat.toLowerCase().includes(categoriaSearchText.toLowerCase()))
+                            .map((category, index, filteredArray) => (
+                              <TouchableOpacity
+                                key={category}
+                                style={[styles.dropdownItem, index === filteredArray.length - 1 && styles.dropdownItemLast]}
+                                onPress={() => {
+                                  setCurrencyModalConfig({ ...currencyModalConfig, categoria_servicio: category });
+                                  setShowCategoriaDropdown(false);
+                                  setCategoriaSearchText('');
+                                }}
+                              >
+                                <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{category}</Text>
+                              </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.currencyModalSection}>
+                    <View style={styles.currencyModalSectionHeader}>
+                      <Text style={[styles.currencyModalSectionTitle, { color: colors.onSurface }]}>
+                        ¿Basar conversión en?
+                      </Text>
+                    </View>
                     <View style={styles.currencyModalOptions}>
                       <TouchableOpacity
                         style={[
@@ -3452,6 +3782,80 @@ const CurrencyExchangeContent = () => {
                       </TouchableOpacity>
                     </View>
                   </View>
+
+                  <View style={styles.currencyModalSection}>
+                    <View style={styles.currencyModalSectionHeader}>
+                      <Text style={[styles.currencyModalSectionTitle, { color: colors.onSurface }]}>
+                        Redondeo por exceso (CUP)
+                      </Text>
+                      <TouchableOpacity
+                        style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                        onPress={() => showInfoModal(
+                          'Redondeo por Exceso',
+                          'El redondeo por exceso se aplica al precio CUP calculado. Por ejemplo: si el precio calculado es 364.5 y seleccionas redondeo a 5, el precio será 365. Si seleccionas redondeo a 10, será 370. Esto ayuda a evitar precios con decimales.'
+                        )}
+                      >
+                        <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.currencyModalOptions}>
+                      <TouchableOpacity
+                        style={[
+                          styles.currencyModalOption,
+                          currencyModalConfig.redondeo_exeso === 'ninguna' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, redondeo_exeso: 'ninguna' })}
+                      >
+                        <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.redondeo_exeso === 'ninguna' ? '#fff' : colors.onSurface }]}>
+                          Ninguna
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.currencyModalOption,
+                          currencyModalConfig.redondeo_exeso === '5' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, redondeo_exeso: '5' })}
+                      >
+                        <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.redondeo_exeso === '5' ? '#fff' : colors.onSurface }]}>
+                          5
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.currencyModalOption,
+                          currencyModalConfig.redondeo_exeso === '10' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, redondeo_exeso: '10' })}
+                      >
+                        <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.redondeo_exeso === '10' ? '#fff' : colors.onSurface }]}>
+                          10
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.currencyModalOption,
+                          currencyModalConfig.redondeo_exeso === '20' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, redondeo_exeso: '20' })}
+                      >
+                        <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.redondeo_exeso === '20' ? '#fff' : colors.onSurface }]}>
+                          20
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.currencyModalOption,
+                          currencyModalConfig.redondeo_exeso === '50' && { backgroundColor: colors.primary, borderColor: colors.primary }
+                        ]}
+                        onPress={() => setCurrencyModalConfig({ ...currencyModalConfig, redondeo_exeso: '50' })}
+                      >
+                        <Text style={[styles.currencyModalOptionText, { color: currencyModalConfig.redondeo_exeso === '50' ? '#fff' : colors.onSurface }]}>
+                          50
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 </>
               )}
             </ScrollView>
@@ -3465,10 +3869,116 @@ const CurrencyExchangeContent = () => {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.currencyModalButton, styles.currencyModalConfirmButton, { backgroundColor: colors.primary }]}
-                onPress={handleCurrencyModalConfirm}
+                onPress={async () => {
+                  if (currencyModalConfig.datosModificar !== 'nada') {
+                    await fetchPreviewItems();
+                  } else {
+                    handleCurrencyModalConfirm();
+                  }
+                }}
               >
                 <Text style={[styles.currencyModalButtonText, { color: '#fff' }]}>Aplicar Cambios</Text>
               </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Preview Modal */}
+      <Modal
+        visible={showPreview}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowPreview(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.currencyModalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Ionicons name="list" size={responsive.responsiveWidth(28)} color={colors.primary} />
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                Vista Previa de Cambios
+              </Text>
+            </View>
+
+            <ScrollView style={styles.currencyModalScrollView} showsVerticalScrollIndicator={true}>
+              <Text style={[styles.currencyModalSubtitle, { color: colors.outline }]}>
+                {previewItems.length} {previewItems.length === 1 ? 'producto/servicio' : 'productos/servicios'} serán modificados
+                {currencyModalConfig.categoria_servicio ? ` en la categoría "${currencyModalConfig.categoria_servicio}"` : ''}
+              </Text>
+              <Text style={[styles.currencyModalSubtitle, { color: colors.outline }]}>
+                Los cambios se aplicarán a todas las tiendas del sistema.
+              </Text>
+
+              {previewItems.length === 0 ? (
+                <Text style={[styles.currencyModalSubtitle, { color: colors.outline }]}>
+                  No se encontraron productos/servicios para modificar
+                </Text>
+              ) : (
+                <View style={styles.previewList}>
+                  {previewItems.slice(0, 50).map((item, index) => (
+                    <View key={`${item.id_servicio}-${item.tiendaNombre}-${index}`} style={[styles.previewItem, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <Text style={[styles.previewItemName, { color: colors.onSurface }]}>{item.nombre}</Text>
+                      <Text style={[styles.previewItemCategory, { color: colors.outline }]}>{item.categoria}</Text>
+                      {item.currentPrecioCUP !== null && item.currentPrecioCUP !== undefined ? (
+                        <>
+                          <Text style={[styles.previewItemTienda, { color: colors.outline }]}>{item.tiendaNombre}</Text>
+                          <View style={styles.previewItemDetails}>
+                            <View style={styles.previewItemRow}>
+                              <View style={styles.previewItemDetail}>
+                                <Text style={[styles.previewItemLabel, { color: colors.outline }]}>Precio actual CUP:</Text>
+                                <Text style={[styles.previewItemValue, { color: colors.onSurface }]}>{item.currentPrecioCUP.toFixed(2)}</Text>
+                              </View>
+                              <View style={styles.previewItemDetail}>
+                                <Text style={[styles.previewItemLabel, { color: colors.outline }]}>Nuevo precio CUP:</Text>
+                                <Text style={[styles.previewItemValue, { color: colors.primary }]}>{item.newPrecioCUP !== undefined ? item.newPrecioCUP.toFixed(5) : 'N/A'}</Text>
+                              </View>
+                            </View>
+                            <View style={styles.previewItemRow}>
+                              <View style={styles.previewItemDetail}>
+                                <Text style={[styles.previewItemLabel, { color: colors.outline }]}>Precio actual USD:</Text>
+                                <Text style={[styles.previewItemValue, { color: colors.onSurface }]}>{item.currentPrecioUSD.toFixed(2)}</Text>
+                              </View>
+                              <View style={styles.previewItemDetail}>
+                                <Text style={[styles.previewItemLabel, { color: colors.outline }]}>Nuevo precio USD:</Text>
+                                <Text style={[styles.previewItemValue, { color: colors.primary }]}>{item.newPrecioUSD !== undefined ? item.newPrecioUSD.toFixed(5) : 'N/A'}</Text>
+                              </View>
+                            </View>
+                          </View>
+                        </>
+                      ) : (
+                        <Text style={[styles.previewItemTienda, { color: colors.outline }]}>
+                          {item.tiendaNombre}
+                        </Text>
+                      )}
+                    </View>
+                  ))}
+                  {previewItems.length > 50 && (
+                    <Text style={[styles.currencyModalSubtitle, { color: colors.outline }]}>
+                      ... y {previewItems.length - 50} más
+                    </Text>
+                  )}
+                </View>
+              )}
+            </ScrollView>
+
+            <View style={styles.currencyModalButtons}>
+              <TouchableOpacity
+                style={[styles.currencyModalButton, styles.currencyModalCancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
+                onPress={() => setShowPreview(false)}
+              >
+                <Text style={[styles.currencyModalButtonText, { color: colors.onSurface }]}>Volver</Text>
+              </TouchableOpacity>
+              {previewItems.length > 0 && (
+                <TouchableOpacity
+                  style={[styles.currencyModalButton, styles.currencyModalConfirmButton, { backgroundColor: colors.primary }]}
+                  onPress={async () => {
+                    setShowPreview(false);
+                    await handleCurrencyModalConfirm();
+                  }}
+                >
+                  <Text style={[styles.currencyModalButtonText, { color: '#fff' }]}>Confirmar</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>
@@ -4223,11 +4733,16 @@ const createStyles = (responsive) => StyleSheet.create({
   currencyModalSection: {
     marginBottom: responsive.responsiveMargin(20),
   },
+  currencyModalSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: responsive.responsiveMargin(12),
+  },
   currencyModalSectionTitle: {
     fontSize: responsive.fontSizes.body,
     fontWeight: '600',
     fontFamily: 'Hanken Grotesk',
-    marginBottom: responsive.responsiveMargin(12),
   },
   currencyModalOptions: {
     gap: responsive.responsiveMargin(8),
@@ -4499,5 +5014,93 @@ const createStyles = (responsive) => StyleSheet.create({
     fontWeight: '600',
     fontFamily: 'Inter',
     color: '#fff',
+  },
+  currencyModalInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  currencyModalInput: {
+    flex: 1,
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(14),
+    borderRadius: 8,
+    borderWidth: 1,
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+  },
+  dropdownIcon: {
+    position: 'absolute',
+    right: responsive.responsivePadding(12),
+    padding: responsive.responsivePadding(4),
+  },
+  dropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: responsive.responsiveMargin(4),
+    borderRadius: 8,
+    borderWidth: 1,
+    maxHeight: responsive.responsiveHeight(200),
+    zIndex: 10,
+  },
+  dropdownScroll: {
+    maxHeight: responsive.responsiveHeight(200),
+  },
+  dropdownItem: {
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(14),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  dropdownItemText: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+  },
+  previewList: {
+    gap: responsive.responsiveMargin(8),
+  },
+  previewItem: {
+    padding: responsive.responsivePadding(12),
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  previewItemName: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  previewItemCategory: {
+    fontSize: responsive.fontSizes.caption,
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(8),
+    fontStyle: 'italic',
+  },
+  previewItemDetails: {
+    flexDirection: 'column',
+    gap: responsive.responsiveMargin(8),
+  },
+  previewItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: responsive.responsiveMargin(16),
+  },
+  previewItemDetail: {
+    flex: 1,
+  },
+  previewItemLabel: {
+    fontSize: responsive.fontSizes.caption,
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  previewItemValue: {
+    fontSize: responsive.fontSizes.body,
+    fontWeight: '600',
+    fontFamily: 'Inter',
   },
 });

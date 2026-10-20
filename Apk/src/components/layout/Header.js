@@ -39,7 +39,7 @@ export const Header = ({
   const { isAuthenticated } = useAuth();
 
   // Get version from package.json if not provided
-  const appVersion = version || Constants.expoConfig?.version || Constants.manifest?.version || '1.1.0';
+  const appVersion = version || Constants.expoConfig?.version || Constants.manifest?.version;
 
   const handleLogoPress = () => {
     if (onLogoPress) {

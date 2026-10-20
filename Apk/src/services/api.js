@@ -5,6 +5,7 @@ import { API_CONFIG } from '../config';
 import { navigationRef } from '../navigationRef';
 import NetInfo from '@react-native-community/netinfo';
 import packageJson from '../../package.json';
+import { bindToWifiNetwork, unbindFromNetwork, isWifiConnected } from '../native-modules/WifiNetworkModule';
 
 // Función para verificar si el servidor está disponible
 const checkServerAvailability = async (url) => {
@@ -23,8 +24,8 @@ const checkServerAvailability = async (url) => {
   }
 };
 
-// Función para verificar si el dispositivo está conectado a WiFi
-const isWifiConnected = async () => {
+// Función para verificar si el dispositivo está conectado a WiFi (usando NetInfo)
+const isWifiConnectedNetInfo = async () => {
   try {
     const state = await NetInfo.fetch();
     // isConnectionExpensive returns true for cellular data, false for WiFi
@@ -55,16 +56,24 @@ const getApiBaseUrl = async () => {
 
   // Solo aplicar lógica de priorización WiFi si el usuario lo ha activado
   if (prioritizeWifi) {
-    // Verificar si estamos en WiFi
+    // Verificar si estamos en WiFi usando el módulo nativo
     const wifiConnected = await isWifiConnected();
 
     // Si estamos en WiFi y hay una URL configurada por el usuario (servidor local)
     if (wifiConnected && userConfiguredURL) {
-      // Verificar si el servidor local está disponible
-      const serverAvailable = await checkServerAvailability(userConfiguredURL);
-      if (serverAvailable) {
-        return userConfiguredURL;
+      // Vincular el proceso a la red WiFi usando el módulo nativo
+      const bound = await bindToWifiNetwork();
+      
+      if (bound) {
+        // Verificar si el servidor local está disponible
+        const serverAvailable = await checkServerAvailability(userConfiguredURL);
+        if (serverAvailable) {
+          return userConfiguredURL;
+        }
       }
+      
+      // Si falla, desvincular
+      await unbindFromNetwork();
     }
   }
 
@@ -113,7 +122,7 @@ api.interceptors.request.use(
     }
 
     // Añadir versión de la APK
-    config.headers['Apk-version'] = packageJson.version;
+    config.headers['apk-version'] = packageJson.version;
 
     return config;
   },
@@ -130,10 +139,30 @@ api.interceptors.response.use(
     const isLoginRequest = requestUrl.includes('/usuario/login');
 
     // Detectar error de versión incompatible
-    const isVersionError = error.response?.status === 426 || 
+    const errorMessage = error.response?.data?.message || error.response?.data?.errors?.[0] || '';
+    
+    // También verificar si el data es HTML y contiene el mensaje de versión
+    const dataString = typeof error.response?.data === 'string' ? error.response?.data : '';
+    const isHtmlError = dataString.toLowerCase().includes('versión de apk no soportada') ||
+                        dataString.toLowerCase().includes('versión de apk no soportada');
+    
+    console.log('[API Interceptor] Full error response:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      errorMessage: errorMessage,
+      dataMessage: error.response?.data?.message,
+      dataErrors: error.response?.data?.errors,
+      dataString: dataString.substring(0, 200),
+      isHtmlError,
+      requestUrl: requestUrl,
+      currentVersion: packageJson.version
+    });
+
+    const isVersionError = error.response?.status === 426 ||
+                          isHtmlError ||
                           (error.response?.status === 400 && (
-                            error.response?.data?.message?.toLowerCase().includes('versión') ||
-                            error.response?.data?.message?.toLowerCase().includes('version') ||
+                            errorMessage.toLowerCase().includes('versión') ||
+                            errorMessage.toLowerCase().includes('version') ||
                             error.response?.data?.errors?.[0]?.toLowerCase().includes('versión') ||
                             error.response?.data?.errors?.[0]?.toLowerCase().includes('version')
                           )) ||
@@ -141,10 +170,31 @@ api.interceptors.response.use(
                           error.response?.data?.errors?.[0]?.toLowerCase().includes('versión') ||
                           error.response?.data?.errors?.[0]?.toLowerCase().includes('version');
 
+    console.log('[API Interceptor] Error detected:', {
+      status: error.response?.status,
+      message: errorMessage,
+      isVersionError,
+      requestUrl: requestUrl,
+      currentVersion: packageJson.version
+    });
+
     if (isVersionError) {
+      console.log('[API Interceptor] Version error detected, saving to SecureStore');
+      
+      // Extraer el mensaje del error
+      let versionErrorMessage = error.response?.data?.message || error.response?.data?.errors?.[0];
+      
+      // Si es HTML, extraer el mensaje de la primera línea
+      if (!versionErrorMessage && typeof error.response?.data === 'string') {
+        const htmlMatch = error.response.data.match(/Error: ([^<]+)/);
+        if (htmlMatch) {
+          versionErrorMessage = htmlMatch[1].trim();
+        }
+      }
+      
       // Guardar el error de versión en SecureStore
       const versionError = {
-        message: error.response?.data?.message || error.response?.data?.errors?.[0] || 'Versión de la aplicación incompatible con el servidor',
+        message: versionErrorMessage || 'Versión de la aplicación incompatible con el servidor',
         code: error.response?.status || 426,
         currentVersion: packageJson.version
       };
@@ -152,6 +202,7 @@ api.interceptors.response.use(
 
       // Redirigir a PasswordRecoveryScreen
       if (navigationRef.isReady()) {
+        console.log('[API Interceptor] Redirecting to PasswordRecoveryScreen');
         navigationRef.reset({
           index: 0,
           routes: [{ name: 'PasswordRecovery' }],

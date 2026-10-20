@@ -19,6 +19,7 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
   const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels, deudaAccessLevels } = useAuth();
   const { isOfflineMode } = useOffline();
   const [isSyncing, setIsSyncing] = useState(false);
+  const [navigatingItem, setNavigatingItem] = useState(null);
 
   const isAdmin = user?.rol === 'Administrador';
   const userRole = user?.rol?.toLowerCase();
@@ -248,26 +249,43 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
                   styles.navItem,
                   isActive && { backgroundColor: colors.primary }
                 ]}
-                onPress={() => {
+                onPress={async () => {
+                  if (navigatingItem !== null) return;
+
+                  setNavigatingItem(index);
+
+                  // Cerrar el sidebar inmediatamente
+                  onClose();
+
+                  // Esperar un momento para que el sidebar se cierre antes de navegar
+                  await new Promise(resolve => setTimeout(resolve, 300));
+
                   if (navigationRef.isReady()) {
                     navigationRef.navigate(item.route);
                   }
-                  onClose();
+
+                  // Desactivar el estado de navegación después de un tiempo
+                  setTimeout(() => setNavigatingItem(null), 2000);
                 }}
+                disabled={navigatingItem !== null}
               >
-                <Image
-                  source={item.icon}
-                  style={[
-                    styles.navIcon,
-                    { tintColor: isActive ? colors.onPrimary : colors.onSurfaceVariant }
-                  ]}
-                  resizeMode="contain"
-                />
+                {navigatingItem === index ? (
+                  <ActivityIndicator size={responsive.responsiveWidth(24)} color={isActive ? colors.onPrimary : colors.primary} />
+                ) : (
+                  <Image
+                    source={item.icon}
+                    style={[
+                      styles.navIcon,
+                      { tintColor: isActive ? colors.onPrimary : colors.onSurfaceVariant }
+                    ]}
+                    resizeMode="contain"
+                  />
+                )}
                 <Text style={[
                   styles.navLabel,
                   isActive ? { color: colors.onPrimary } : { color: colors.onSurfaceVariant }
                 ]}>
-                  {item.label}
+                  {navigatingItem === index ? 'Cargando...' : item.label}
                 </Text>
               </TouchableOpacity>
             );
@@ -294,7 +312,7 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
               {isSyncing ? 'Sincronizando...' : 'Cerrar Sesión'}
             </Text>
           </TouchableOpacity>
-          <Text style={[styles.version, { color: colors.outline }]}>v1.0.0</Text>
+          <Text style={[styles.version, { color: colors.outline }]}>v1.1.1</Text>
         </View>
       </Animated.View>
     </>

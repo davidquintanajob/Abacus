@@ -9,6 +9,7 @@ export const getVentas = async (filters = {}, page = 1, limit = 10) => {
 
     // Add filters
     if (filters.nota) queryParams.append('nota', filters.nota);
+    if (filters.is_nota !== null && filters.is_nota !== undefined) queryParams.append('is_nota', filters.is_nota.toString());
     if (filters.id_tienda) queryParams.append('id_tienda', filters.id_tienda);
     if (filters.id_usuario) queryParams.append('id_usuario', filters.id_usuario);
     if (filters.fecha_desde) queryParams.append('fecha_desde', filters.fecha_desde);

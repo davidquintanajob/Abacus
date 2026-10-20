@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Platform, TouchableWithoutFeedback } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -14,7 +14,7 @@ import { useOffline } from '../context/OfflineContext';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Svg, Path, Line, Circle, G, Text as SvgText } from 'react-native-svg';
+import { Svg, Path, Line, Circle, G, Text as SvgText, Rect } from 'react-native-svg';
 import { getVentas } from '../services/ventaService';
 import { getTiendas } from '../services/tiendaService';
 import { getUsuarios } from '../services/usuarioService';
@@ -33,6 +33,9 @@ const InformeVentasContent = () => {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [showLoadingModal, setShowLoadingModal] = useState(false);
+
+  const [reportData, setReportData] = useState(null);
+  const [selectedHourlyPoint, setSelectedHourlyPoint] = useState(null);
 
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
@@ -76,8 +79,6 @@ const InformeVentasContent = () => {
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isLoadingServicios, setIsLoadingServicios] = useState(false);
   const [servicioDebounceTimer, setServicioDebounceTimer] = useState(null);
-
-  const [reportData, setReportData] = useState(null);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
   const isAdmin = user?.rol === 'Administrador';
@@ -214,10 +215,10 @@ const InformeVentasContent = () => {
       }
 
 
-      // Fetch all ventas with pagination
+      // Fetch all ventas with high limit to get all data
       let allVentas = [];
       let page = 1;
-      const limit = 100;
+      const limit = 10000;
       let hasMore = true;
 
       while (hasMore) {
@@ -331,10 +332,102 @@ const InformeVentasContent = () => {
         costos: chartData.reduce((sum, d) => sum + d.costos, 0),
       };
 
+      // Calculate product sales and profits
+      const productosVentas = new Map();
+
+      for (const listaVenta of allVentas) {
+        for (const venta of listaVenta.ventas || []) {
+          const productoNombre = venta.servicioTienda?.servicio?.nombre || 'Producto desconocido';
+          const cantidad = parseFloat(venta.cantidad || 0);
+          const precioCobradoCUP = parseFloat(venta.precio_cobrado_cup || 0);
+          const precioCobradoUSD = parseFloat(venta.precio_cobrado_usd || 0);
+          const costoOriginalCUP = parseFloat(venta.costo_original_cup || 0);
+          const costoOriginalUSD = parseFloat(venta.costo_original_usd || 0);
+          
+          const ventaCUP = precioCobradoCUP * cantidad;
+          const ventaUSD = precioCobradoUSD * cantidad;
+          const costoCUP = costoOriginalCUP * cantidad;
+          const costoUSD = costoOriginalUSD * cantidad;
+          const gananciaCUP = ventaCUP - costoCUP;
+          const gananciaUSD = ventaUSD - costoUSD;
+
+          if (!productosVentas.has(productoNombre)) {
+            productosVentas.set(productoNombre, { ventaCUP: 0, ventaUSD: 0, gananciaCUP: 0, gananciaUSD: 0, cantidad: 0 });
+          }
+          
+          const productoData = productosVentas.get(productoNombre);
+          productoData.ventaCUP += ventaCUP;
+          productoData.ventaUSD += ventaUSD;
+          productoData.gananciaCUP += gananciaCUP;
+          productoData.gananciaUSD += gananciaUSD;
+          productoData.cantidad += cantidad;
+        }
+      }
+
+      const totalVentasCUP = totals.ventasCupEfectivo + totals.ventasCupTransferencia;
+      const totalVentasUSD = totals.ventasUsdEfectivo + totals.ventasUsdTransferencia;
+
+      // Group sales by hour (0-23)
+      const salesByHour = new Map();
+      
+      // Initialize all hours with 0
+      for (let i = 0; i < 24; i++) {
+        salesByHour.set(i, { count: 0, totalCUP: 0, totalUSD: 0 });
+      }
+
+      for (const listaVenta of allVentas) {
+        const dateTime = new Date(listaVenta.fecha_hora);
+        const hour = dateTime.getHours();
+        
+        const hourData = salesByHour.get(hour);
+        if (hourData) {
+          hourData.count += 1;
+          hourData.totalCUP += parseFloat(listaVenta.cantidad_cobrada_efectivo_cup || 0) + 
+                             parseFloat(listaVenta.cantidad_cobrada_transferencia_cup || 0);
+          hourData.totalUSD += parseFloat(listaVenta.cantidad_cobrada_efectivo_usd || 0) + 
+                             parseFloat(listaVenta.cantidad_cobrada_transferencia_usd || 0);
+        }
+      }
+
+      // Create array for hourly chart
+      const hourlySalesData = Array.from(salesByHour.entries()).map(([hour, data]) => ({
+        hour: `${hour}:00`,
+        hourValue: hour,
+        count: data.count,
+        totalCUP: data.totalCUP,
+        totalUSD: data.totalUSD,
+      }));
+
+      // Top 5 productos más vendidos (por ventas en CUP)
+      const topProductosMasVendidos = Array.from(productosVentas.entries())
+        .map(([nombre, data]) => ({
+          nombre,
+          ventaCUP: data.ventaCUP,
+          cantidad: data.cantidad,
+          porcentaje: totalVentasCUP > 0 ? (data.ventaCUP / totalVentasCUP) * 100 : 0,
+        }))
+        .sort((a, b) => b.ventaCUP - a.ventaCUP)
+        .slice(0, 5);
+
+      // Top 10 productos menos vendidos (por ganancias)
+      const topProductosMenosVendidos = Array.from(productosVentas.entries())
+        .map(([nombre, data]) => ({
+          nombre,
+          ventaCUP: data.ventaCUP,
+          ventaUSD: data.ventaUSD,
+          gananciaCUP: data.gananciaCUP,
+          gananciaUSD: data.gananciaUSD,
+          cantidad: data.cantidad,
+          porcentajeCUP: totalVentasCUP > 0 ? (data.ventaCUP / totalVentasCUP) * 100 : 0,
+          porcentajeUSD: totalVentasUSD > 0 ? (data.ventaUSD / totalVentasUSD) * 100 : 0,
+        }))
+        .sort((a, b) => a.gananciaCUP - b.gananciaCUP)
+        .slice(0, 10);
+
       setLoadingProgress(100);
       setLoadingMessage('Generando informe...');
 
-      setReportData({ chartData, totals });
+      setReportData({ chartData, totals, topProductosMasVendidos, topProductosMenosVendidos, hourlySalesData });
 
       setTimeout(() => {
         setShowLoadingModal(false);
@@ -349,10 +442,239 @@ const InformeVentasContent = () => {
   };
 
   const formatNumber = (value) => {
+    if (value === undefined || value === null || isNaN(value)) return '0.00';
     return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   };
 
+  const calculateGananciaNeta = () => {
+    if (!reportData || !reportData.totals) return { cup: 0, usd: 0 };
+    const ventasCupEfectivo = reportData.totals.ventasCupEfectivo || 0;
+    const ventasCupTransferencia = reportData.totals.ventasCupTransferencia || 0;
+    const ventasUsdEfectivo = reportData.totals.ventasUsdEfectivo || 0;
+    const ventasUsdTransferencia = reportData.totals.ventasUsdTransferencia || 0;
+    const costos = reportData.totals.costos || 0;
+    
+    const gananciaCUP = (ventasCupEfectivo + ventasCupTransferencia) - costos;
+    const gananciaUSD = ventasUsdEfectivo + ventasUsdTransferencia;
+    return { cup: gananciaCUP, usd: gananciaUSD };
+  };
+
+  const calculateUtilidadPorcentaje = () => {
+    if (!reportData || !reportData.totals) return '0.00';
+    const gananciaNeta = calculateGananciaNeta();
+    const costosTotalesCUP = reportData.totals.costos || 0;
+    if (costosTotalesCUP === 0) return '0.00';
+    const utilidad = (gananciaNeta.cup / costosTotalesCUP) * 100;
+    return isNaN(utilidad) ? '0.00' : utilidad.toFixed(2);
+  };
+
+  const PieChart = ({ data, size = 200 }) => {
+    const total = data.reduce((sum, item) => sum + item.value, 0);
+
+    // If total is 0, show empty chart with disabled color
+    if (total === 0) {
+      return (
+        <Svg width={size} height={size}>
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={size / 2 - 10}
+            fill={isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'}
+            stroke={isDarkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)'}
+            strokeWidth={2}
+          />
+        </Svg>
+      );
+    }
+
+    let startAngle = 0;
+    const radius = size / 2;
+    const center = size / 2;
+
+    return (
+      <Svg width={size} height={size}>
+        {data.map((item, index) => {
+          const angle = (item.value / total) * 360;
+          const endAngle = startAngle + angle;
+
+          const x1 = center + radius * Math.cos((startAngle - 90) * Math.PI / 180);
+          const y1 = center + radius * Math.sin((startAngle - 90) * Math.PI / 180);
+          const x2 = center + radius * Math.cos((endAngle - 90) * Math.PI / 180);
+          const y2 = center + radius * Math.sin((endAngle - 90) * Math.PI / 180);
+
+          const largeArcFlag = angle > 180 ? 1 : 0;
+
+          const pathData = `M ${center} ${center} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
+
+          startAngle = endAngle;
+
+          return (
+            <G key={index}>
+              <Path
+                d={pathData}
+                fill={item.color}
+                stroke={colors.surface}
+                strokeWidth={2}
+              />
+            </G>
+          );
+        })}
+      </Svg>
+    );
+  };
+
+  const HourlySalesChart = ({ data, width = 800, height = 300, selectedPoint, setSelectedPoint }) => {
+    if (!data || data.length === 0) {
+      return (
+        <View style={[styles.emptyChart, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.emptyChartText, { color: colors.outline }]}>
+            No hay datos para mostrar
+          </Text>
+        </View>
+      );
+    }
+
+    const padding = 50;
+    const chartWidth = width - padding * 2;
+    const chartHeight = height - padding * 2;
+
+    // Find max value for Y axis (count of sales)
+    const maxCount = Math.max(...data.map(d => d.count || 0));
+    const yMax = maxCount > 0 ? maxCount * 1.2 : 10;
+
+    const xStep = chartWidth / (data.length - 1);
+
+    const getY = (value) => {
+      return padding + chartHeight - (value / yMax) * chartHeight;
+    };
+
+    const getX = (index) => {
+      return padding + index * xStep;
+    };
+
+    const handleChartTouch = (event) => {
+      const x = event.nativeEvent.locationX;
+      
+      let closestIndex = 0;
+      let minDistance = Math.abs(x - getX(0));
+
+      for (let i = 1; i < data.length; i++) {
+        const distance = Math.abs(x - getX(i));
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestIndex = i;
+        }
+      }
+
+      setSelectedPoint(data[closestIndex]);
+    };
+
+    return (
+      <View style={{ position: 'relative', width, height }}>
+        <Svg width={width} height={height}>
+          {/* Y axis lines */}
+          {[0, 0.25, 0.5, 0.75, 1].map(ratio => {
+            const y = padding + chartHeight * (1 - ratio);
+            const value = Math.round(yMax * ratio);
+            return (
+              <G key={ratio}>
+                <Line
+                  x1={padding}
+                  y1={y}
+                  x2={width - padding}
+                  y2={y}
+                  stroke={colors.outlineVariant}
+                  strokeWidth={1}
+                  strokeDasharray="4,4"
+                />
+                <SvgText
+                  x={padding - 5}
+                  y={y + 4}
+                  fontSize={10}
+                  fill={colors.outline}
+                  textAnchor="end"
+                >
+                  {value}
+                </SvgText>
+              </G>
+            );
+          })}
+
+          {/* X axis labels (show every 3 hours to avoid overlap) */}
+          {data.map((d, i) => {
+            if (i % 3 !== 0) return null;
+            const x = getX(i);
+            return (
+              <SvgText
+                key={i}
+                x={x}
+                y={height - padding + 20}
+                fontSize={10}
+                fill={colors.outline}
+                textAnchor="middle"
+              >
+                {d.hour}
+              </SvgText>
+            );
+          })}
+
+          {/* Line chart */}
+          <Path
+            d={data.map((d, i) => {
+              const x = getX(i);
+              const y = getY(d.count);
+              return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+            }).join(' ')}
+            fill="none"
+            stroke={colors.primary}
+            strokeWidth={2}
+          />
+
+          {/* Points for each data point */}
+          {data.map((d, i) => {
+            const x = getX(i);
+            const y = getY(d.count);
+            return (
+              <Circle
+                key={i}
+                cx={x}
+                cy={y}
+                r={selectedPoint === d ? 6 : 4}
+                fill={colors.primary}
+                stroke={colors.surface}
+                strokeWidth={2}
+              />
+            );
+          })}
+        </Svg>
+
+        {/* Invisible touchable areas for each point */}
+        {data.map((d, i) => {
+          const x = getX(i);
+          const y = getY(d.count);
+          return (
+            <TouchableOpacity
+              key={i}
+              activeOpacity={1}
+              onPress={() => setSelectedPoint(d)}
+              style={{
+                position: 'absolute',
+                left: x - 20,
+                top: y - 20,
+                width: 40,
+                height: 40,
+              }}
+            />
+          );
+        })}
+      </View>
+    );
+  };
+
   const MountainChart = ({ data, width = 350, height = 250, formaCobroFilter = null }) => {
+    const [selectedPoint, setSelectedPoint] = useState(null);
+    const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+
     if (!data || data.length === 0) {
       return (
         <View style={[styles.emptyChart, { backgroundColor: colors.surface }]}>
@@ -372,30 +694,30 @@ const InformeVentasContent = () => {
     if (!formaCobroFilter) {
       // No filter, show all
       metricsToShow = [
-        { key: 'ventasCupEfectivo', color: '#4CAF50', label: 'Ventas CUP Efectivo' },
-        { key: 'ventasCupTransferencia', color: '#2196F3', label: 'Ventas CUP Transferencia' },
-        { key: 'ventasUsdEfectivo', color: '#FF9800', label: 'Ventas USD Efectivo' },
-        { key: 'ventasUsdTransferencia', color: '#9C27B0', label: 'Ventas USD Transferencia' },
+        { key: 'ventasCupEfectivo', color: '#4CAF50', label: 'Efectivo CUP' },
+        { key: 'ventasCupTransferencia', color: '#2196F3', label: 'Transferencia CUP' },
+        { key: 'ventasUsdEfectivo', color: '#FF9800', label: 'Efectivo USD' },
+        { key: 'ventasUsdTransferencia', color: '#9C27B0', label: 'Transferencia USD' },
         { key: 'costos', color: '#F44336', label: 'Costos' },
       ];
     } else if (formaCobroFilter === 'Efectivo CUP') {
       metricsToShow = [
-        { key: 'ventasCupEfectivo', color: '#4CAF50', label: 'Ventas CUP Efectivo' },
+        { key: 'ventasCupEfectivo', color: '#4CAF50', label: 'Efectivo CUP' },
         { key: 'costos', color: '#F44336', label: 'Costos' },
       ];
     } else if (formaCobroFilter === 'Efectivo USD') {
       metricsToShow = [
-        { key: 'ventasUsdEfectivo', color: '#FF9800', label: 'Ventas USD Efectivo' },
+        { key: 'ventasUsdEfectivo', color: '#FF9800', label: 'Efectivo USD' },
         { key: 'costos', color: '#F44336', label: 'Costos' },
       ];
     } else if (formaCobroFilter === 'Transferencia CUP') {
       metricsToShow = [
-        { key: 'ventasCupTransferencia', color: '#2196F3', label: 'Ventas CUP Transferencia' },
+        { key: 'ventasCupTransferencia', color: '#2196F3', label: 'Transferencia CUP' },
         { key: 'costos', color: '#F44336', label: 'Costos' },
       ];
     } else if (formaCobroFilter === 'Transferencia USD') {
       metricsToShow = [
-        { key: 'ventasUsdTransferencia', color: '#9C27B0', label: 'Ventas USD Transferencia' },
+        { key: 'ventasUsdTransferencia', color: '#9C27B0', label: 'Transferencia USD' },
         { key: 'costos', color: '#F44336', label: 'Costos' },
       ];
     }
@@ -424,132 +746,248 @@ const InformeVentasContent = () => {
       return padding + index * xStep;
     };
 
+    const handleChartTouch = (event) => {
+      const x = event.nativeEvent.locationX;
+      const y = event.nativeEvent.locationY;
+
+      // Find closest data point based on x position
+      let closestIndex = 0;
+      let minDistance = Math.abs(x - getX(0));
+
+      for (let i = 1; i < data.length; i++) {
+        const distance = Math.abs(x - getX(i));
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestIndex = i;
+        }
+      }
+
+      setSelectedPoint(data[closestIndex]);
+      
+      // Calculate tooltip position using percentage for better positioning
+      const pointX = getX(closestIndex);
+      const pointY = getY(data[closestIndex].ventasCupEfectivo || 0);
+      
+      // Position tooltip above the point
+      const tooltipXPercent = (pointX / width) * 100;
+      const tooltipYPercent = (pointY / height) * 100;
+      
+      setTooltipPosition({ xPercent: tooltipXPercent, yPercent: tooltipYPercent });
+    };
+
+    const handleBackgroundTouch = () => {
+      setSelectedPoint(null);
+    };
+
     return (
-      <Svg width={width} height={height}>
-        {/* Y axis lines */}
-        {[0, 0.25, 0.5, 0.75, 1].map(ratio => {
-          const y = padding + chartHeight * (1 - ratio);
-          const value = (yMax * ratio).toFixed(0);
-          return (
-            <G key={ratio}>
-              <Line
-                x1={padding}
-                y1={y}
-                x2={width - padding}
-                y2={y}
-                stroke={colors.outlineVariant}
-                strokeWidth={1}
-                strokeDasharray="4,4"
-              />
-              <SvgText
-                x={padding - 5}
-                y={y + 4}
-                fontSize={10}
-                fill={colors.outline}
-                textAnchor="end"
-              >
-                {value}
-              </SvgText>
-            </G>
-          );
-        })}
-
-        {/* X axis labels (show every nth date to avoid overlap) */}
-        {data.map((d, i) => {
-          if (data.length > 10 && i % Math.ceil(data.length / 10) !== 0) return null;
-          const x = getX(i);
-          const dateLabel = d.date.slice(5); // Show MM-DD
-          return (
-            <SvgText
-              key={i}
-              x={x}
-              y={height - padding + 15}
-              fontSize={10}
-              fill={colors.outline}
-              textAnchor="middle"
-            >
-              {dateLabel}
-            </SvgText>
-          );
-        })}
-
-        {/* Mountain charts for each metric */}
-        {metricsToShow.map(({ key, color }) => {
-          if (data.length === 1) {
-            // Single data point - draw a horizontal line
-            const x = getX(0);
-            const y = getY(data[0][key]);
-            const lineStart = padding;
-            const lineEnd = width - padding;
-            
+      <View style={{ position: 'relative', width, height }}>
+        <TouchableOpacity 
+          activeOpacity={1}
+          onPress={(event) => {
+            const { locationX, locationY } = event.nativeEvent;
+            handleChartTouch({ nativeEvent: { locationX, locationY } });
+          }}
+          style={{ width: '100%', height: '100%' }}
+        >
+          <Svg width={width} height={height}>
+          {/* Y axis lines */}
+          {[0, 0.25, 0.5, 0.75, 1].map(ratio => {
+            const y = padding + chartHeight * (1 - ratio);
+            const value = (yMax * ratio).toFixed(0);
             return (
-              <G key={key}>
-                {/* Fill area */}
-                <Path
-                  d={`M ${lineStart} ${y} L ${lineEnd} ${y} L ${lineEnd} ${padding + chartHeight} L ${lineStart} ${padding + chartHeight} Z`}
-                  fill={color}
-                  fillOpacity={0.2}
+              <G key={ratio}>
+                <Line
+                  x1={padding}
+                  y1={y}
+                  x2={width - padding}
+                  y2={y}
+                  stroke={colors.outlineVariant}
+                  strokeWidth={1}
+                  strokeDasharray="4,4"
                 />
-                {/* Line */}
-                <Path
-                  d={`M ${lineStart} ${y} L ${lineEnd} ${y}`}
-                  fill="none"
-                  stroke={color}
-                  strokeWidth={2}
-                />
-                {/* Point */}
-                <Circle
-                  cx={x}
-                  cy={y}
-                  r={4}
-                  fill={color}
-                />
+                <SvgText
+                  x={padding - 5}
+                  y={y + 4}
+                  fontSize={10}
+                  fill={colors.outline}
+                  textAnchor="end"
+                >
+                  {value}
+                </SvgText>
               </G>
             );
-          }
+          })}
 
-          const pathData = data.map((d, i) => {
+          {/* X axis labels (show every nth date to avoid overlap) */}
+          {data.map((d, i) => {
+            if (data.length > 10 && i % Math.ceil(data.length / 10) !== 0) return null;
             const x = getX(i);
-            const y = getY(d[key]);
-            return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-          }).join(' ');
+            const dateLabel = d.date.slice(5); // Show MM-DD
+            return (
+              <SvgText
+                key={i}
+                x={x}
+                y={height - padding + 15}
+                fontSize={10}
+                fill={colors.outline}
+                textAnchor="middle"
+              >
+                {dateLabel}
+              </SvgText>
+            );
+          })}
 
-          // Close the path for fill
-          const fillPath = `${pathData} L ${getX(data.length - 1)} ${padding + chartHeight} L ${padding} ${padding + chartHeight} Z`;
-
-          return (
-            <G key={key}>
-              {/* Fill area */}
-              <Path
-                d={fillPath}
-                fill={color}
-                fillOpacity={0.2}
-              />
-              {/* Line */}
-              <Path
-                d={pathData}
-                fill="none"
-                stroke={color}
-                strokeWidth={2}
-              />
-              {/* Points for each data point */}
-              {data.map((d, i) => {
-                const x = getX(i);
-                const y = getY(d[key]);
-                return (
+          {/* Mountain charts for each metric */}
+          {metricsToShow.map(({ key, color }) => {
+            if (data.length === 1) {
+              // Single data point - draw a horizontal line
+              const x = getX(0);
+              const y = getY(data[0][key]);
+              const lineStart = padding;
+              const lineEnd = width - padding;
+              
+              return (
+                <G key={key}>
+                  {/* Fill area */}
+                  <Path
+                    d={`M ${lineStart} ${y} L ${lineEnd} ${y} L ${lineEnd} ${padding + chartHeight} L ${lineStart} ${padding + chartHeight} Z`}
+                    fill={color}
+                    fillOpacity={0.2}
+                  />
+                  {/* Line */}
+                  <Path
+                    d={`M ${lineStart} ${y} L ${lineEnd} ${y}`}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={2}
+                  />
+                  {/* Point */}
                   <Circle
-                    key={i}
                     cx={x}
                     cy={y}
                     r={4}
                     fill={color}
                   />
-                );
-              })}
-            </G>
-          );
-        })}
-      </Svg>
+                </G>
+              );
+            }
+
+            // Generate smooth bezier curve path
+            const pathData = data.map((d, i) => {
+              const x = getX(i);
+              const y = getY(d[key]);
+              return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+            }).join(' ');
+
+            // Generate smooth bezier curve for the line
+            const smoothPathData = (() => {
+              if (data.length < 3) return pathData;
+              
+              let path = `M ${getX(0)} ${getY(data[0][key])}`;
+              
+              for (let i = 0; i < data.length - 1; i++) {
+                const x0 = getX(i);
+                const y0 = getY(data[i][key]);
+                const x1 = getX(i + 1);
+                const y1 = getY(data[i + 1][key]);
+                
+                // Control points for bezier curve
+                const cp1x = x0 + (x1 - x0) * 0.5;
+                const cp1y = y0;
+                const cp2x = x1 - (x1 - x0) * 0.5;
+                const cp2y = y1;
+                
+                path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x1} ${y1}`;
+              }
+              
+              return path;
+            })();
+
+            // Close the path for fill (use straight lines for fill area)
+            const fillPath = `${pathData} L ${getX(data.length - 1)} ${padding + chartHeight} L ${padding} ${padding + chartHeight} Z`;
+
+            return (
+              <G key={key}>
+                {/* Fill area */}
+                <Path
+                  d={fillPath}
+                  fill={color}
+                  fillOpacity={0.2}
+                />
+                {/* Line */}
+                <Path
+                  d={smoothPathData}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth={2}
+                />
+                {/* Points for each data point */}
+                {data.map((d, i) => {
+                  const x = getX(i);
+                  const y = getY(d[key]);
+                  return (
+                    <Circle
+                      key={i}
+                      cx={x}
+                      cy={y}
+                      r={selectedPoint === d ? 6 : 4}
+                      fill={color}
+                    />
+                  );
+                })}
+              </G>
+            );
+          })}
+
+          {/* Touchable area */}
+          <Rect
+            x={padding}
+            y={padding}
+            width={chartWidth}
+            height={chartHeight}
+            fill="transparent"
+          />
+        </Svg>
+        </TouchableOpacity>
+
+        {/* Tooltip card */}
+        {selectedPoint && (
+          <TouchableOpacity 
+            activeOpacity={1}
+            onPress={handleBackgroundTouch}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+          >
+            <View style={[
+              styles.tooltipCard,
+              { 
+                backgroundColor: colors.surface,
+                borderColor: colors.outlineVariant,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.25,
+                shadowRadius: 4,
+                elevation: 5,
+                left: `${tooltipPosition.xPercent}%`,
+                top: `${tooltipPosition.yPercent}%`,
+                transform: [{ translateX: 10 }, { translateY: -120 }],
+              }
+            ]}>
+              <Text style={[styles.tooltipDate, { color: colors.onSurface }]}>
+                {selectedPoint.date}
+              </Text>
+              {metricsToShow.map(({ key, color, label }) => (
+                <View key={key} style={styles.tooltipRow}>
+                  <View style={[styles.tooltipDot, { backgroundColor: color }]} />
+                  <Text style={[styles.tooltipLabel, { color: colors.outline }]}>{label}:</Text>
+                  <Text style={[styles.tooltipValue, { color: colors.onSurface }]}>
+                    ${formatNumber(selectedPoint[key] || 0)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </TouchableOpacity>
+        )}
+      </View>
     );
   };
 
@@ -1008,7 +1446,7 @@ const InformeVentasContent = () => {
                     </View>
                     <View style={styles.legendItem}>
                       <View style={[styles.legendColor, { backgroundColor: '#F44336' }]} />
-                      <Text style={[styles.legendText, { color: colors.onSurface }]}>Costos</Text>
+                      <Text style={[styles.legendText, { color: colors.onSurface }]}>Costos por Salida o/y Ventas</Text>
                     </View>
                   </>
                 )}
@@ -1020,7 +1458,7 @@ const InformeVentasContent = () => {
                     </View>
                     <View style={styles.legendItem}>
                       <View style={[styles.legendColor, { backgroundColor: '#F44336' }]} />
-                      <Text style={[styles.legendText, { color: colors.onSurface }]}>Costos</Text>
+                      <Text style={[styles.legendText, { color: colors.onSurface }]}>Costos por Salida o/y Ventas</Text>
                     </View>
                   </>
                 )}
@@ -1032,7 +1470,7 @@ const InformeVentasContent = () => {
                     </View>
                     <View style={styles.legendItem}>
                       <View style={[styles.legendColor, { backgroundColor: '#F44336' }]} />
-                      <Text style={[styles.legendText, { color: colors.onSurface }]}>Costos</Text>
+                      <Text style={[styles.legendText, { color: colors.onSurface }]}>Costos por Salida o/y Ventas</Text>
                     </View>
                   </>
                 )}
@@ -1044,7 +1482,7 @@ const InformeVentasContent = () => {
                     </View>
                     <View style={styles.legendItem}>
                       <View style={[styles.legendColor, { backgroundColor: '#F44336' }]} />
-                      <Text style={[styles.legendText, { color: colors.onSurface }]}>Costos</Text>
+                      <Text style={[styles.legendText, { color: colors.onSurface }]}>Costos por Salida o/y Ventas</Text>
                     </View>
                   </>
                 )}
@@ -1056,12 +1494,64 @@ const InformeVentasContent = () => {
                     </View>
                     <View style={styles.legendItem}>
                       <View style={[styles.legendColor, { backgroundColor: '#F44336' }]} />
-                      <Text style={[styles.legendText, { color: colors.onSurface }]}>Costos</Text>
+                      <Text style={[styles.legendText, { color: colors.onSurface }]}>Costos por Salida o/y Ventas</Text>
                     </View>
                   </>
                 )}
               </View>
             </Card>
+
+            {/* Ventas por Hora */}
+            <Card style={[styles.chartCard, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Ventas por Hora del Día</Text>
+              <ScrollView 
+                horizontal={true} 
+                showsHorizontalScrollIndicator={true}
+                style={styles.chartScrollContainer}
+              >
+                <View style={styles.chartWrapper}>
+                  <HourlySalesChart
+                    data={reportData.hourlySalesData}
+                    width={800}
+                    selectedPoint={selectedHourlyPoint}
+                    setSelectedPoint={setSelectedHourlyPoint}
+                    height={300}
+                  />
+                </View>
+              </ScrollView>
+              <View style={styles.legend}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendColor, { backgroundColor: colors.primary }]} />
+                  <Text style={[styles.legendText, { color: colors.onSurface }]}>Cantidad de Ventas</Text>
+                </View>
+              </View>
+            </Card>
+
+            {/* Tooltip Modal for Hourly Chart */}
+            <Modal
+              visible={selectedHourlyPoint !== null}
+              transparent={true}
+              animationType="fade"
+              onRequestClose={() => setSelectedHourlyPoint(null)}
+            >
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => setSelectedHourlyPoint(null)}
+                style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
+              >
+                <View style={[styles.tooltipModalCard, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                  <Text style={[styles.tooltipDate, { color: colors.onSurface }]}>
+                    Hora: {selectedHourlyPoint?.hour}
+                  </Text>
+                  <View style={styles.tooltipRow}>
+                    <Text style={[styles.tooltipLabel, { color: colors.outline }]}>Ventas:</Text>
+                    <Text style={[styles.tooltipValue, { color: colors.onSurface }]}>
+                      {selectedHourlyPoint?.count}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </Modal>
 
             {/* Totals */}
             <Card style={[styles.totalsCard, { backgroundColor: colors.surface }]}>
@@ -1103,7 +1593,7 @@ const InformeVentasContent = () => {
                   
                   <View style={styles.totalRow}>
                     <View style={[styles.totalDot, { backgroundColor: '#F44336' }]} />
-                    <Text style={[styles.totalLabel, { color: colors.onSurface }]}>Costos:</Text>
+                    <Text style={[styles.totalLabel, { color: colors.onSurface }]}>Costos por Salida o/y Ventas:</Text>
                     <Text style={[styles.totalValue, { color: colors.primary }]}>
                       {formatNumber(reportData.totals.costos)} CUP
                     </Text>
@@ -1123,7 +1613,7 @@ const InformeVentasContent = () => {
                   
                   <View style={styles.totalRow}>
                     <View style={[styles.totalDot, { backgroundColor: '#F44336' }]} />
-                    <Text style={[styles.totalLabel, { color: colors.onSurface }]}>Costos:</Text>
+                    <Text style={[styles.totalLabel, { color: colors.onSurface }]}>Costos por Salida o/y Ventas:</Text>
                     <Text style={[styles.totalValue, { color: colors.primary }]}>
                       {formatNumber(reportData.totals.costos)} CUP
                     </Text>
@@ -1143,7 +1633,7 @@ const InformeVentasContent = () => {
                   
                   <View style={styles.totalRow}>
                     <View style={[styles.totalDot, { backgroundColor: '#F44336' }]} />
-                    <Text style={[styles.totalLabel, { color: colors.onSurface }]}>Costos:</Text>
+                    <Text style={[styles.totalLabel, { color: colors.onSurface }]}>Costos por Salida o/y Ventas:</Text>
                     <Text style={[styles.totalValue, { color: colors.primary }]}>
                       {formatNumber(reportData.totals.costos)} CUP
                     </Text>
@@ -1163,7 +1653,7 @@ const InformeVentasContent = () => {
                   
                   <View style={styles.totalRow}>
                     <View style={[styles.totalDot, { backgroundColor: '#F44336' }]} />
-                    <Text style={[styles.totalLabel, { color: colors.onSurface }]}>Costos:</Text>
+                    <Text style={[styles.totalLabel, { color: colors.onSurface }]}>Costos por Salida o/y Ventas:</Text>
                     <Text style={[styles.totalValue, { color: colors.primary }]}>
                       {formatNumber(reportData.totals.costos)} CUP
                     </Text>
@@ -1183,13 +1673,124 @@ const InformeVentasContent = () => {
                   
                   <View style={styles.totalRow}>
                     <View style={[styles.totalDot, { backgroundColor: '#F44336' }]} />
-                    <Text style={[styles.totalLabel, { color: colors.onSurface }]}>Costos:</Text>
+                    <Text style={[styles.totalLabel, { color: colors.onSurface }]}>Costos por Salida o/y Ventas:</Text>
                     <Text style={[styles.totalValue, { color: colors.primary }]}>
                       {formatNumber(reportData.totals.costos)} CUP
                     </Text>
                   </View>
                 </>
               )}
+            </Card>
+
+            {/* Top 5 Productos más vendidos Card */}
+            <Card style={[styles.chartCard, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Top 5 Productos más vendidos</Text>
+              <View style={styles.chartContainer}>
+                {(() => {
+                  const pieData = reportData.topProductosMasVendidos.map((producto, index) => ({
+                    value: producto.ventaCUP,
+                    color: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336'][index % 5],
+                    label: producto.nombre,
+                    displayValue: producto.ventaCUP,
+                  }));
+
+                  return (
+                    <PieChart
+                      size={200}
+                      data={pieData}
+                    />
+                  );
+                })()}
+              </View>
+              <View style={styles.productListContainer}>
+                {reportData.topProductosMasVendidos.map((producto, index) => (
+                  <View key={index} style={styles.productRow}>
+                    <View style={[styles.productColorIndicator, { backgroundColor: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336'][index % 5] }]} />
+                    <Text style={[styles.productName, { color: colors.onSurface }]} numberOfLines={1}>
+                      {producto.nombre}
+                    </Text>
+                    <View style={styles.productStatsContainer}>
+                      <Text style={[styles.productVenta, { color: colors.primary }]}>
+                        {formatNumber(producto.ventaCUP)} CUP
+                      </Text>
+                      <Text style={[styles.productCantidad, { color: colors.outline }]}>
+                        {producto.cantidad} unidades
+                      </Text>
+                      <Text style={[styles.productPorcentaje, { color: colors.outline }]}>
+                        {(producto.porcentaje || 0).toFixed(1)}% del total
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </Card>
+
+            {/* Top 10 Productos menos vendidos (por ganancias) Card */}
+            <Card style={[styles.chartCard, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Top 10 Productos menos vendidos (por ganancias)</Text>
+              <View style={styles.chartContainer}>
+                {(() => {
+                  const pieData = reportData.topProductosMenosVendidos.map((producto, index) => ({
+                    value: producto.ventaCUP,
+                    color: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336', '#795548', '#607D8B', '#8BC34A', '#FF5722', '#E91E63'][index % 10],
+                    label: producto.nombre,
+                    displayValue: producto.ventaCUP,
+                  }));
+
+                  return (
+                    <PieChart
+                      size={200}
+                      data={pieData}
+                    />
+                  );
+                })()}
+              </View>
+              <View style={styles.productListContainer}>
+                {reportData.topProductosMenosVendidos.map((producto, index) => (
+                  <View key={index} style={styles.productRow}>
+                    <View style={[styles.productColorIndicator, { backgroundColor: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336', '#795548', '#607D8B', '#8BC34A', '#FF5722', '#E91E63'][index % 10] }]} />
+                    <Text style={[styles.productName, { color: colors.onSurface }]} numberOfLines={1}>
+                      {producto.nombre}
+                    </Text>
+                    <View style={styles.productStatsContainer}>
+                      <Text style={[styles.productVenta, { color: colors.primary }]}>
+                        {formatNumber(producto.ventaCUP)} CUP
+                      </Text>
+                      <Text style={[styles.productCantidad, { color: colors.outline }]}>
+                        {producto.cantidad} unidades
+                      </Text>
+                      <Text style={[styles.productPorcentaje, { color: colors.outline }]}>
+                        {(producto.porcentajeCUP || 0).toFixed(1)}% del total
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </Card>
+
+            {/* Ganancia Bruta */}
+            <Card style={[styles.profitCard, { backgroundColor: colors.surface }]}>
+              <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Ganancia Bruta</Text>
+              <View style={styles.profitRow}>
+                <View style={styles.profitItem}>
+                  <Text style={[styles.profitLabel, { color: colors.outline }]}>CUP</Text>
+                  <Text style={[styles.profitValue, { color: colors.primary }]}>
+                    {formatNumber(calculateGananciaNeta().cup)}
+                  </Text>
+                </View>
+                <View style={styles.profitItem}>
+                  <Text style={[styles.profitLabel, { color: colors.outline }]}>USD</Text>
+                  <Text style={[styles.profitValue, { color: colors.primary }]}>
+                    {formatNumber(calculateGananciaNeta().usd)}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.utilidadContainer}>
+                <Text style={[styles.utilidadLabel, { color: colors.outline }]}>Utilidad: </Text>
+                <Text style={[styles.utilidadValue, { color: calculateUtilidadPorcentaje() >= 0 ? '#4CAF50' : '#F44336' }]}>
+                  {calculateUtilidadPorcentaje()}%
+                </Text>
+              </View>
             </Card>
           </>
         )}
@@ -1443,6 +2044,61 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(12),
     fontFamily: 'Inter',
   },
+  legendTextContainer: {
+    flexDirection: 'column',
+  },
+  legendValue: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+  },
+  legendPercentage: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+    fontWeight: '600',
+  },
+  tooltipCard: {
+    position: 'absolute',
+    padding: responsive.responsivePadding(12),
+    borderRadius: 8,
+  },
+  tooltipModalCard: {
+    padding: responsive.responsivePadding(16),
+    borderRadius: 12,
+    borderWidth: 1,
+    minWidth: 200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  tooltipDate: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  tooltipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  tooltipDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: responsive.responsiveMargin(6),
+  },
+  tooltipLabel: {
+    fontSize: responsive.responsiveFontSize(10),
+    fontFamily: 'Inter',
+    flex: 1,
+  },
+  tooltipValue: {
+    fontSize: responsive.responsiveFontSize(10),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
   totalsCard: {
     borderRadius: 16,
     padding: responsive.responsivePadding(20),
@@ -1473,6 +2129,95 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   totalValue: {
     fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    color: '#fff',
+  },
+  productListContainer: {
+    marginTop: responsive.responsiveMargin(16),
+  },
+  productRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: responsive.responsivePadding(8),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  productColorIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: responsive.responsiveMargin(12),
+  },
+  productName: {
+    flex: 1,
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+    marginRight: responsive.responsiveMargin(8),
+  },
+  productStatsContainer: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+  },
+  productVenta: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  productCantidad: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+  },
+  productPorcentaje: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+  },
+  profitCard: {
+    borderRadius: 16,
+    padding: responsive.responsivePadding(20),
+    marginBottom: responsive.responsiveMargin(16),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  profitRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: responsive.responsiveMargin(12),
+  },
+  profitItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  profitLabel: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  profitValue: {
+    fontSize: responsive.responsiveFontSize(24),
+    fontWeight: '700',
+    fontFamily: 'Inter',
+  },
+  utilidadContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: responsive.responsiveMargin(16),
+    paddingTop: responsive.responsivePadding(12),
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  utilidadLabel: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontFamily: 'Inter',
+    marginRight: responsive.responsiveMargin(8),
+  },
+  utilidadValue: {
+    fontSize: responsive.responsiveFontSize(18),
     fontWeight: '600',
     fontFamily: 'Inter',
   },

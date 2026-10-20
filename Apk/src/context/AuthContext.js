@@ -38,7 +38,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (nombre_usuario, contrasenna) => {
     try {
-      const { usuario, token: newToken } = await loginService(nombre_usuario, contrasenna);
+      const { usuario, token: newToken, message } = await loginService(nombre_usuario, contrasenna);
       
       // Check if user is inactive
       if (usuario.estado === 'Inactivo' || usuario.activo === false) {
@@ -62,7 +62,7 @@ export const AuthProvider = ({ children }) => {
         // Don't fail login if config fetch fails
       }
       
-      return { success: true };
+      return { success: true, message };
     } catch (error) {
       return {
         success: false,

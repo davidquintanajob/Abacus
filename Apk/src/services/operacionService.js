@@ -18,6 +18,7 @@ export const getOperaciones = async (filters = {}, page = 1, limit = 10) => {
     if (filters.fecha_hasta) queryParams.append('fecha_hasta', filters.fecha_hasta);
     if (filters.cantidad_min) queryParams.append('cantidad_min', filters.cantidad_min);
     if (filters.cantidad_max) queryParams.append('cantidad_max', filters.cantidad_max);
+    if (filters.is_check !== null && filters.is_check !== undefined) queryParams.append('is_check', filters.is_check);
 
     const response = await api.get(`/operacion/filter?${queryParams}`);
     return response.data;

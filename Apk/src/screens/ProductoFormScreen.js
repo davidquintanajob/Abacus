@@ -115,6 +115,9 @@ const ProductoFormContent = () => {
   const [priceInputTexts, setPriceInputTexts] = useState({});
   const [generalPriceInputTexts, setGeneralPriceInputTexts] = useState({});
   const [imagenModificada, setImagenModificada] = useState(false);
+  const [showAlertInfoModal, setShowAlertInfoModal] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImageUri, setSelectedImageUri] = useState(null);
 
   const [formData, setFormData] = useState({
     nombre: producto?.nombre || '',
@@ -706,6 +709,36 @@ const ProductoFormContent = () => {
     const porcentajeGananciaUsd = precioUsd > 0 ? (gananciaUsd / precioUsd) * 100 : 0;
 
     return {
+      gananciaCup: !isNaN(gananciaCup) ? gananciaCup : 0,
+      gananciaUsd: !isNaN(gananciaUsd) ? gananciaUsd : 0,
+      porcentajeGananciaCup: !isNaN(porcentajeGananciaCup) ? porcentajeGananciaCup : 0,
+      porcentajeGananciaUsd: !isNaN(porcentajeGananciaUsd) ? porcentajeGananciaUsd : 0
+    };
+  };
+
+  const calculateTiendaProfitMargin = (tiendaProducto) => {
+    const precioCup = tiendaProducto.precio_cup !== null && tiendaProducto.precio_cup !== ''
+      ? (typeof tiendaProducto.precio_cup === 'number' ? tiendaProducto.precio_cup : (isNaN(parseFloat(tiendaProducto.precio_cup)) ? 0 : parseFloat(tiendaProducto.precio_cup)))
+      : 0;
+    const precioUsd = tiendaProducto.precio_usd !== null && tiendaProducto.precio_usd !== ''
+      ? (typeof tiendaProducto.precio_usd === 'number' ? tiendaProducto.precio_usd : (isNaN(parseFloat(tiendaProducto.precio_usd)) ? 0 : parseFloat(tiendaProducto.precio_usd)))
+      : 0;
+    const costoCup = canViewCosts ? (tiendaProducto.costo_cup !== null && tiendaProducto.costo_cup !== ''
+      ? (typeof tiendaProducto.costo_cup === 'number' ? tiendaProducto.costo_cup : (isNaN(parseFloat(tiendaProducto.costo_cup)) ? 0 : parseFloat(tiendaProducto.costo_cup)))
+      : 0) : 0;
+    const costoUsd = canViewCosts ? (tiendaProducto.costo_usd !== null && tiendaProducto.costo_usd !== ''
+      ? (typeof tiendaProducto.costo_usd === 'number' ? tiendaProducto.costo_usd : (isNaN(parseFloat(tiendaProducto.costo_usd)) ? 0 : parseFloat(tiendaProducto.costo_usd)))
+      : 0) : 0;
+
+    const gananciaCup = precioCup - costoCup;
+    const gananciaUsd = precioUsd - costoUsd;
+
+    const porcentajeGananciaCup = precioCup > 0 ? (gananciaCup / precioCup) * 100 : 0;
+    const porcentajeGananciaUsd = precioUsd > 0 ? (gananciaUsd / precioUsd) * 100 : 0;
+
+    return {
+      gananciaCup: !isNaN(gananciaCup) ? gananciaCup : 0,
+      gananciaUsd: !isNaN(gananciaUsd) ? gananciaUsd : 0,
       porcentajeGananciaCup: !isNaN(porcentajeGananciaCup) ? porcentajeGananciaCup : 0,
       porcentajeGananciaUsd: !isNaN(porcentajeGananciaUsd) ? porcentajeGananciaUsd : 0
     };
@@ -715,30 +748,37 @@ const ProductoFormContent = () => {
     setIsSaving(true);
     if (!formData.nombre.trim()) {
       showToast({ type: 'warning', message: 'El nombre es requerido' });
+      setIsSaving(false);
       return;
     }
     if (formData.nombre.length < 3 || formData.nombre.length > 100) {
       showToast({ type: 'error', message: 'El nombre debe tener entre 3 y 100 caracteres' });
+      setIsSaving(false);
       return;
     }
     if (!formData.categoria.trim()) {
       showToast({ type: 'warning', message: 'La categoría es requerida' });
+      setIsSaving(false);
       return;
     }
     if (formData.categoria.length < 2 || formData.categoria.length > 50) {
       showToast({ type: 'error', message: 'La categoría debe tener entre 2 y 50 caracteres' });
+      setIsSaving(false);
       return;
     }
     if (!formData.sufijo.trim()) {
       showToast({ type: 'warning', message: 'El sufijo es requerido' });
+      setIsSaving(false);
       return;
     }
     if (formData.sufijo.length < 1 || formData.sufijo.length > 50) {
       showToast({ type: 'error', message: 'El sufijo debe tener entre 1 y 50 caracteres' });
+      setIsSaving(false);
       return;
     }
     if (!formData.codigoList || formData.codigoList.length === 0) {
       showToast({ type: 'warning', message: 'Debe agregar al menos un código' });
+      setIsSaving(false);
       return;
     }
     // Validate that there are no duplicate stores in productoTiendaList
@@ -746,6 +786,36 @@ const ProductoFormContent = () => {
     const uniqueTiendaIds = new Set(tiendaIds);
     if (tiendaIds.length !== uniqueTiendaIds.size) {
       showToast({ type: 'error', message: 'No se puede guardar: hay tiendas duplicadas en la lista de precios y costos' });
+      setIsSaving(false);
+      return;
+    }
+
+    // Validate that at least one price AND one cost are defined (cost must be > 0)
+    const hasAnyPrice = 
+      (formData.precio_cup_general !== null && formData.precio_cup_general !== '' && formData.precio_cup_general !== undefined) ||
+      (formData.precio_usd_general !== null && formData.precio_usd_general !== '' && formData.precio_usd_general !== undefined) ||
+      formData.productoTiendaList.some(item => 
+        (item.precio_cup !== null && item.precio_cup !== '' && item.precio_cup !== undefined) ||
+        (item.precio_usd !== null && item.precio_usd !== '' && item.precio_usd !== undefined)
+      );
+
+    const hasAnyCostGreaterThanZero = 
+      (formData.costo_cup_general !== null && formData.costo_cup_general !== '' && formData.costo_cup_general !== undefined && parseFloat(formData.costo_cup_general) > 0) ||
+      (formData.costo_usd_general !== null && formData.costo_usd_general !== '' && formData.costo_usd_general !== undefined && parseFloat(formData.costo_usd_general) > 0) ||
+      formData.productoTiendaList.some(item => 
+        (item.costo_cup !== null && item.costo_cup !== '' && item.costo_cup !== undefined && parseFloat(item.costo_cup) > 0) ||
+        (item.costo_usd !== null && item.costo_usd !== '' && item.costo_usd !== undefined && parseFloat(item.costo_usd) > 0)
+      );
+
+    if (!hasAnyPrice) {
+      showToast({ type: 'error', message: 'El producto debe tener al menos un precio definido (puede ser 0)' });
+      setIsSaving(false);
+      return;
+    }
+
+    if (!hasAnyCostGreaterThanZero) {
+      showToast({ type: 'error', message: 'El producto debe tener al menos un costo definido mayor a 0' });
+      setIsSaving(false);
       return;
     }
 
@@ -781,19 +851,20 @@ const ProductoFormContent = () => {
         id_tienda,
         precio_cup: precioCup !== null ? precioCup : 0,
         precio_usd: precioUsd !== null ? precioUsd : 0,
-        costo_cup: formData.costo_cup_general || 0,
-        costo_usd: formData.costo_usd_general || 0,
+        costo_cup: (formData.costo_cup_general !== null && formData.costo_cup_general !== '' && formData.costo_cup_general !== undefined) ? formData.costo_cup_general : null,
+        costo_usd: (formData.costo_usd_general !== null && formData.costo_usd_general !== '' && formData.costo_usd_general !== undefined) ? formData.costo_usd_general : null,
+        cantidad_alerta: null,
       }));
       
       // Update existing entries - only update prices that are defined
       formData.productoTiendaList = [
-        ...formData.productoTiendaList.map(item => ({
+        ...formData.productoTiendaList.map(item => (({
           ...item,
           ...(precioCup !== null && { precio_cup: precioCup }),
           ...(precioUsd !== null && { precio_usd: precioUsd }),
-          costo_cup: formData.costo_cup_general || 0,
-          costo_usd: formData.costo_usd_general || 0,
-        })),
+          costo_cup: (formData.costo_cup_general !== null && formData.costo_cup_general !== '' && formData.costo_cup_general !== undefined) ? formData.costo_cup_general : item.costo_cup,
+          costo_usd: (formData.costo_usd_general !== null && formData.costo_usd_general !== '' && formData.costo_usd_general !== undefined) ? formData.costo_usd_general : item.costo_usd,
+        }))),
         ...newTiendaEntries
       ];
     }
@@ -811,9 +882,9 @@ const ProductoFormContent = () => {
         ...(isEditMode && !imagenModificada ? {} : { imagen: formData.imagen }),
         productoTiendaList: (() => {
           const toFixed5 = (value) => {
-            if (value === null || value === undefined || value === '') return 0;
+            if (value === null || value === undefined || value === '') return null;
             const num = typeof value === 'number' ? value : parseFloat(value);
-            return isNaN(num) ? 0 : parseFloat(num.toFixed(5));
+            return isNaN(num) ? null : parseFloat(num.toFixed(5));
           };
 
           let baseList = [];
@@ -827,6 +898,8 @@ const ProductoFormContent = () => {
               // Only include stores that have at least one price defined (not null and not 0)
               const precioCup = specific.precio_cup !== null ? toFixed5(specific.precio_cup) : toFixed5(formData.precio_cup_general);
               const precioUsd = specific.precio_usd !== null ? toFixed5(specific.precio_usd) : toFixed5(formData.precio_usd_general);
+              const costoCup = specific.costo_cup !== null ? toFixed5(specific.costo_cup) : toFixed5(formData.costo_cup_general);
+              const costoUsd = specific.costo_usd !== null ? toFixed5(specific.costo_usd) : toFixed5(formData.costo_usd_general);
               
               // Skip if both prices are 0 or undefined
               if ((precioCup === 0 || precioCup === null || precioCup === undefined) && 
@@ -838,6 +911,9 @@ const ProductoFormContent = () => {
                 id_tienda: specific.id_tienda,
                 precio_cup: precioCup,
                 precio_usd: precioUsd,
+                ...(costoCup !== null && { costo_cup: costoCup }),
+                ...(costoUsd !== null && { costo_usd: costoUsd }),
+                ...(specific.cantidad_alerta !== null && specific.cantidad_alerta !== undefined && specific.cantidad_alerta !== '' && { cantidad_alerta: parseFloat(specific.cantidad_alerta) }),
               });
             });
           } 
@@ -845,6 +921,8 @@ const ProductoFormContent = () => {
           else if (formData.precio_cup_general !== null || formData.precio_usd_general !== null) {
             const precioCupGeneral = toFixed5(formData.precio_cup_general);
             const precioUsdGeneral = toFixed5(formData.precio_usd_general);
+            const costoCupGeneral = toFixed5(formData.costo_cup_general);
+            const costoUsdGeneral = toFixed5(formData.costo_usd_general);
             
             // Only apply general prices if at least one is defined and not 0
             if ((precioCupGeneral !== 0 && precioCupGeneral !== null && precioCupGeneral !== undefined) ||
@@ -853,19 +931,14 @@ const ProductoFormContent = () => {
                 id_tienda: tienda.id_tienda,
                 precio_cup: precioCupGeneral,
                 precio_usd: precioUsdGeneral,
+                ...(costoCupGeneral !== null && { costo_cup: costoCupGeneral }),
+                ...(costoUsdGeneral !== null && { costo_usd: costoUsdGeneral }),
+                cantidad_alerta: null,
               }));
             }
           }
           
-          // Apply global cost fields to all stores
-          const costoCup = toFixed5(formData.costo_cup_general);
-          const costoUsd = toFixed5(formData.costo_usd_general);
-          
-          return baseList.map(item => ({
-            ...item,
-            costo_cup: costoCup,
-            costo_usd: costoUsd,
-          }));
+          return baseList;
         })(),
       };
 
@@ -1579,23 +1652,35 @@ const ProductoFormContent = () => {
                     setFormData(prev => ({ ...prev, categoria: text }));
                     setCategoriaSearchText(text);
                   }}
-                  onFocus={() => !isReadOnly && setShowCategoriaDropdown(true)}
-                  onBlur={() => {
-                    setShowCategoriaDropdown(false);
-                    // Save custom category if it doesn't exist in predefined or custom categories
-                    if (formData.categoria && formData.categoria.trim() !== '') {
-                      const allCategories = [...predefinedCategories, ...customCategories];
-                      if (!allCategories.includes(formData.categoria.trim())) {
-                        saveCustomCategory(formData.categoria);
-                      }
+                  onFocus={() => {
+                    if (!isReadOnly) {
+                      setShowCategoriaDropdown(true);
+                      setCategoriaSearchText(formData.categoria);
                     }
+                  }}
+                  onBlur={() => {
+                    // Delay hiding dropdown to allow TouchableOpacity press to complete
+                    setTimeout(() => {
+                      setShowCategoriaDropdown(false);
+                      // Save custom category if it doesn't exist in predefined or custom categories
+                      if (formData.categoria && formData.categoria.trim() !== '') {
+                        const allCategories = [...predefinedCategories, ...customCategories];
+                        if (!allCategories.includes(formData.categoria.trim())) {
+                          saveCustomCategory(formData.categoria);
+                        }
+                      }
+                    }, 200);
                   }}
                   editable={!isReadOnly}
                 />
                 {!isReadOnly && (
                   <TouchableOpacity
                     style={styles.dropdownIcon}
-                    onPress={() => setShowCategoriaDropdown(!showCategoriaDropdown)}
+                    onPress={() => {
+                      setShowCategoriaDropdown(!showCategoriaDropdown);
+                      setCategoriaSearchText(formData.categoria);
+                    }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <Ionicons name={showCategoriaDropdown ? "chevron-up" : "chevron-down"} size={20} color={colors.outline} />
                   </TouchableOpacity>
@@ -1615,6 +1700,7 @@ const ProductoFormContent = () => {
                             setShowCategoriaDropdown(false);
                             setCategoriaSearchText('');
                           }}
+                          hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
                         >
                           <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{category}</Text>
                         </TouchableOpacity>
@@ -1625,20 +1711,29 @@ const ProductoFormContent = () => {
             </View>
 
             <View style={[styles.formColumn, styles.formGroup]}>
-              <Text style={[styles.label, { color: colors.outline }]}>Código interno (Sufijo) *</Text>
-              <TextInput
-                style={[
-                  styles.input, 
-                  { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
-                  isReadOnly && styles.inputDisabled
-                ]}
-                placeholderTextColor={colors.outline}
-                placeholder="Sufijo del producto"
-                value={formData.sufijo}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, sufijo: text }))}
-                editable={!isReadOnly}
-                textAlignVertical="center"
-              />
+              <Text style={[styles.label, { color: colors.outline }]}>Codigo de Lote (Sufijo)</Text>
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => {
+                  if (!isReadOnly) {
+                    // Focus the input when pressed
+                  }
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <TextInput
+                  style={[
+                    styles.input,
+                    { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                    isReadOnly && styles.inputDisabled
+                  ]}
+                  placeholderTextColor={colors.outline}
+                  placeholder="Sufijo del producto"
+                  value={formData.sufijo}
+                  onChangeText={(text) => setFormData(prev => ({ ...prev, sufijo: text }))}
+                  editable={!isReadOnly}
+                />
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -1648,16 +1743,26 @@ const ProductoFormContent = () => {
               <View style={styles.imageContainer}>
                 {formData.imagen ? (
                   <View style={styles.imagePreviewContainer}>
-                    <Image 
-                      source={{ 
-                        uri: formData.imagen.startsWith('data:') 
-                          ? formData.imagen 
-                          : (apiBaseUrl && formData.imagen.startsWith('/') 
-                              ? `${apiBaseUrl}${formData.imagen}` 
-                              : formData.imagen)
-                      }} 
-                      style={styles.imagePreview} 
-                    />
+                    <TouchableOpacity onPress={() => {
+                      const imageUri = formData.imagen.startsWith('data:') 
+                        ? formData.imagen 
+                        : (apiBaseUrl && formData.imagen.startsWith('/') 
+                            ? `${apiBaseUrl}${formData.imagen}` 
+                            : formData.imagen);
+                      setSelectedImageUri(imageUri);
+                      setShowImageModal(true);
+                    }}>
+                      <Image 
+                        source={{ 
+                          uri: formData.imagen.startsWith('data:') 
+                            ? formData.imagen 
+                            : (apiBaseUrl && formData.imagen.startsWith('/') 
+                                ? `${apiBaseUrl}${formData.imagen}` 
+                                : formData.imagen)
+                        }} 
+                        style={styles.imagePreview} 
+                      />
+                    </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.removeImageButton}
                       onPress={handleRemoveImage}
@@ -2109,6 +2214,60 @@ const ProductoFormContent = () => {
                         </View>
                       </View>
                       
+                      <View style={styles.alertField}>
+                        <View style={styles.alertLabelContainer}>
+                          <Text style={[styles.label, { color: colors.outline }]}>Cantidad Alerta</Text>
+                          <TouchableOpacity
+                            onPress={() => setShowAlertInfoModal(true)}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                          >
+                            <Ionicons 
+                              name="information-circle-outline" 
+                              size={responsive.responsiveWidth(18)} 
+                              color={colors.primary} 
+                            />
+                          </TouchableOpacity>
+                        </View>
+                        <TextInput
+                          style={[
+                            styles.input, 
+                            { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant },
+                            isReadOnly && styles.inputDisabled
+                          ]}
+                          value={
+                            tiendaProducto.cantidad_alerta !== null && tiendaProducto.cantidad_alerta !== '' && !isNaN(parseFloat(tiendaProducto.cantidad_alerta))
+                              ? String(tiendaProducto.cantidad_alerta)
+                              : ''
+                          }
+                          onChangeText={(text) => {
+                            handleTiendaProductoChange(index, 'cantidad_alerta', text === '' ? null : parseFloat(text));
+                          }}
+                          keyboardType="decimal-pad"
+                            editable={!isViewMode || canEditProduct}
+                          placeholder="Opcional"
+                          placeholderTextColor={colors.outline}
+                        />
+                      </View>
+                      
+                      {(!isViewMode || canEditProduct) && !isOfflineMode && !isAddMode && (
+                        <View style={styles.tiendaProfitContainer}>
+                          <Text style={[styles.tiendaProfitLabel, { color: colors.outline }]}>Ganancia</Text>
+                          <View style={styles.tiendaProfitValues}>
+                            <Text style={[styles.profitMarginValue, { color: calculateTiendaProfitMargin(tiendaProducto).porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                              {calculateTiendaProfitMargin(tiendaProducto).porcentajeGananciaCup.toFixed(2)}%
+                            </Text>
+                            <Text style={[styles.profitValueText, { color: colors.outline }]}>|</Text>
+                            <Text style={[styles.profitValueText, { color: colors.onSurface }]}>
+                              {calculateTiendaProfitMargin(tiendaProducto).gananciaCup.toFixed(2)} CUP
+                            </Text>
+                            <Text style={[styles.profitValueText, { color: colors.outline }]}>|</Text>
+                            <Text style={[styles.profitValueText, { color: colors.onSurface }]}>
+                              {calculateTiendaProfitMargin(tiendaProducto).gananciaUsd.toFixed(2)} USD
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+                      
                       {(!isViewMode || canEditProduct) && (
                         <TouchableOpacity
                           style={[styles.removeButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
@@ -2178,11 +2337,6 @@ const ProductoFormContent = () => {
                               </Text>
                             </View>
                           </View>
-                          {tiendaProducto.cantidad_alerta !== null && tiendaProducto.cantidad_alerta !== undefined && (
-                            <Text style={[styles.stockAlertText, { color: colors.outline }]}>
-                              Alerta: {tiendaProducto.cantidad_alerta !== null && tiendaProducto.cantidad_alerta !== undefined && !isNaN(parseFloat(tiendaProducto.cantidad_alerta)) ? parseFloat(tiendaProducto.cantidad_alerta).toFixed(2) : '0.00'}
-                            </Text>
-                          )}
                         </View>
                       );
                     })
@@ -2207,12 +2361,20 @@ const ProductoFormContent = () => {
             </View>
           )}
 
-          {(!isViewMode || canEditProduct) && !isOfflineMode && (
+          {(!isViewMode || canEditProduct) && !isOfflineMode && isAddMode && (
             <View style={styles.profitMarginContainer}>
-              <Text style={[styles.profitMarginLabel, { color: colors.outline }]}>% Ganancia</Text>
-              <View style={[styles.profitBadge, { backgroundColor: calculateProfitMargin().porcentajeGananciaCup >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: calculateProfitMargin().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+              <Text style={[styles.profitMarginLabel, { color: colors.outline }]}>Ganancia</Text>
+              <View style={styles.profitValuesContainer}>
                 <Text style={[styles.profitMarginValue, { color: calculateProfitMargin().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
                   {calculateProfitMargin().porcentajeGananciaCup.toFixed(2)}%
+                </Text>
+                <Text style={[styles.profitValueText, { color: colors.outline }]}>|</Text>
+                <Text style={[styles.profitValueText, { color: colors.onSurface }]}>
+                  {calculateProfitMargin().gananciaCup.toFixed(2)} CUP
+                </Text>
+                <Text style={[styles.profitValueText, { color: colors.outline }]}>|</Text>
+                <Text style={[styles.profitValueText, { color: colors.onSurface }]}>
+                  {calculateProfitMargin().gananciaUsd.toFixed(2)} USD
                 </Text>
               </View>
             </View>
@@ -2470,6 +2632,84 @@ const ProductoFormContent = () => {
                 )}
               </ScrollView>
             </Card>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Alert Info Modal */}
+      {showAlertInfoModal && (
+        <Modal
+          visible={showAlertInfoModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowAlertInfoModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowAlertInfoModal(false)}
+          >
+            <View style={[styles.modalContent, { backgroundColor: colors.surface }]} activeOpacity={1}>
+              <View style={styles.modalHeader}>
+                <View style={styles.modalHeaderLeft}>
+                  <Ionicons 
+                    name="information-circle" 
+                    size={responsive.responsiveWidth(28)} 
+                    color={colors.primary} 
+                  />
+                  <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Cantidad de Alerta</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setShowAlertInfoModal(false)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons 
+                    name="close" 
+                    size={responsive.responsiveWidth(24)} 
+                    color={colors.outline} 
+                  />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.modalBody}>
+                <Text style={[styles.modalText, { color: colors.onSurface }]}>
+                  El número que ingreses en el campo "Cantidad Alerta" se usará para alertarte cuando el stock de este producto en esta tienda sea igual o menor a esta cantidad.
+                </Text>
+                <Text style={[styles.modalText, { color: colors.onSurface }]}>
+                  Por ejemplo, si estableces el valor en 10, recibirás una alerta cuando el stock del producto en esta tienda sea de 10 unidades o menos.
+                </Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+
+      {/* Image Preview Modal */}
+      {showImageModal && selectedImageUri && (
+        <Modal
+          visible={showImageModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowImageModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.imageModalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowImageModal(false)}
+          >
+            <View style={styles.imageModalContent} activeOpacity={1}>
+              <TouchableOpacity
+                style={styles.imageModalCloseButton}
+                onPress={() => setShowImageModal(false)}
+              >
+                <Ionicons name="close" size={responsive.responsiveWidth(28)} color="#fff" />
+              </TouchableOpacity>
+              <Image
+                source={{ uri: selectedImageUri }}
+                style={styles.imageModalImage}
+                resizeMode="contain"
+              />
+            </View>
           </TouchableOpacity>
         </Modal>
       )}
@@ -2882,6 +3122,16 @@ const createStyles = (responsive) => StyleSheet.create({
     flex: 1,
     minWidth: '45%',
   },
+  alertField: {
+    marginTop: responsive.responsiveMargin(16),
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  alertLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: responsive.responsiveMargin(8),
+  },
   tiendaProductoItem: {
     padding: responsive.responsivePadding(16),
     borderRadius: 8,
@@ -3014,7 +3264,26 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(18),
     fontWeight: '700',
     fontFamily: 'Hanken Grotesk',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: responsive.responsiveMargin(16),
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(12),
+  },
+  modalBody: {
+    marginBottom: responsive.responsiveMargin(20),
+  },
+  modalText: {
+    fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+    lineHeight: responsive.fontSizes.body * 1.5,
+    marginBottom: responsive.responsiveMargin(12),
   },
   modalDescription: {
     fontSize: responsive.fontSizes.body,
@@ -3309,9 +3578,9 @@ const createStyles = (responsive) => StyleSheet.create({
     borderRadius: 8,
   },
   profitMarginContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
     paddingVertical: responsive.responsivePadding(8),
     paddingHorizontal: responsive.responsivePadding(12),
     borderRadius: 8,
@@ -3332,5 +3601,56 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.bodySmall,
     fontWeight: '600',
     fontFamily: 'Inter',
+  },
+  profitValuesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(8),
+  },
+  profitValueText: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+  },
+  tiendaProfitContainer: {
+    flexDirection: 'column',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    paddingVertical: responsive.responsivePadding(6),
+    paddingHorizontal: responsive.responsivePadding(10),
+    borderRadius: 8,
+    marginTop: responsive.responsiveMargin(8),
+  },
+  tiendaProfitLabel: {
+    fontSize: responsive.fontSizes.bodySmall,
+    fontWeight: '500',
+    fontFamily: 'Inter',
+  },
+  tiendaProfitValues: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(6),
+  },
+  imageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageModalContent: {
+    width: '90%',
+    height: '80%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageModalCloseButton: {
+    position: 'absolute',
+    top: responsive.responsiveMargin(20),
+    right: responsive.responsiveMargin(20),
+    zIndex: 1,
+  },
+  imageModalImage: {
+    width: '100%',
+    height: '100%',
   },
 });

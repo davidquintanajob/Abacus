@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Activi
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
+import { WebView } from 'react-native-webview';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { Header } from '../components/layout/Header';
@@ -27,6 +28,10 @@ import { storageService } from '../services/storageService';
 import configService from '../services/configService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as XLSX from 'xlsx';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
 
 const VentasContent = () => {
   const navigation = useNavigation();
@@ -48,6 +53,15 @@ const VentasContent = () => {
   const [selectedCuenta, setSelectedCuenta] = useState(null);
   const [completeUserData, setCompleteUserData] = useState(null);
   const [tiendaCuentasConfig, setTiendaCuentasConfig] = useState({});
+  const [showOrderSelectionModal, setShowOrderSelectionModal] = useState(false);
+  const [selectedOrderField, setSelectedOrderField] = useState('fecha_hora');
+  const [isExporting, setIsExporting] = useState(false);
+  const [showComprobanteModal, setShowComprobanteModal] = useState(false);
+  const [comprobanteSaleItems, setComprobanteSaleItems] = useState([]);
+  const [comprobanteConfig, setComprobanteConfig] = useState({
+    logo: null,
+    nombreNegocio: '',
+  });
 
   const [isInitialized, setIsInitialized] = useState(false);
   const [userTiendaReady, setUserTiendaReady] = useState(false);
@@ -312,6 +326,7 @@ const VentasContent = () => {
   // Filter states
   const [filters, setFilters] = useState({ 
     nota: '', 
+    is_nota: null,
     fecha_desde: formattedDate, 
     fecha_hasta: formattedDate, 
     id_tienda: '', 
@@ -461,7 +476,6 @@ const VentasContent = () => {
             // Refresh cuentas when returning from edit/create
             fetchCuentas();
           } catch (error) {
-            console.error('Error restoring filters:', error);
             fetchVentas();
             fetchCuentas();
           }
@@ -508,7 +522,6 @@ const VentasContent = () => {
       }
       setHasLoadedAllTiendas(true);
     } catch (error) {
-      console.error('Error fetching tiendas:', error);
       showToast({ type: 'error', message: 'Error al cargar tiendas' });
     } finally {
       setIsLoadingTiendas(false);
@@ -530,7 +543,6 @@ const VentasContent = () => {
       setUsers(allUsers);
       setHasLoadedAllUsers(true);
     } catch (error) {
-      console.error('Error fetching users:', error);
       showToast({ type: 'error', message: 'Error al cargar usuarios' });
     } finally {
       setIsLoadingUsers(false);
@@ -554,7 +566,6 @@ const VentasContent = () => {
       setServicios(allServicios);
       setHasLoadedAllServicios(true);
     } catch (error) {
-      console.error('Error fetching servicios:', error);
       showToast({ type: 'error', message: 'Error al cargar servicios' });
     } finally {
       setIsLoadingServicios(false);
@@ -597,7 +608,7 @@ const VentasContent = () => {
 
       setCuentas(allCuentas);
     } catch (error) {
-      console.error('Error fetching cuentas:', error);
+      // Error fetching cuentas
     }
   }, [filters.id_tienda, tiendaCuentasConfig, isOfflineMode]);
 
@@ -609,7 +620,7 @@ const VentasContent = () => {
       const data = await getUsuarioById(user.id_usuario);
       setCompleteUserData(data);
     } catch (error) {
-      console.error('Error fetching complete user data:', error);
+      // Error fetching complete user data
     }
   };
 
@@ -622,8 +633,11 @@ const VentasContent = () => {
       if (config && config.tiendaCuentasConfig) {
         setTiendaCuentasConfig(config.tiendaCuentasConfig);
       }
+      if (config && config.comprobanteConfig) {
+        setComprobanteConfig(config.comprobanteConfig);
+      }
     } catch (error) {
-      console.error('Error fetching tienda cuentas config:', error);
+      // Error fetching tienda cuentas config
     }
   };
 
@@ -692,45 +706,32 @@ const VentasContent = () => {
         data = await getVentas(adjustedFilters, pagination.currentPage, pagination.limit);
       }
 
-      console.log('[VentasScreen] Total ventas fetched:', (data.data || []).length);
-      console.log('[VentasScreen] Ventas with is_deuda:', (data.data || []).filter(v => v.is_deuda).length);
-
       // Cargar información completa para ventas que son deudas
       const ventasWithDeudaInfo = await Promise.all(
         (data.data || []).map(async (venta) => {
-          console.log('[VentasScreen] Processing venta:', venta.id_lista_venta, 'is_deuda:', venta.is_deuda, 'id_deuda:', venta.id_deuda);
           if (venta.is_deuda) {
             try {
               // Obtener venta completa con getVentaById para obtener id_deuda
-              console.log('[VentasScreen] Fetching full venta data for:', venta.id_lista_venta);
               const ventaCompleta = await getVentaById(venta.id_lista_venta);
-              console.log('[VentasScreen] Full venta data:', ventaCompleta);
-              console.log('[VentasScreen] Full venta data - is_deuda:', ventaCompleta.is_deuda, 'deuda:', ventaCompleta.deuda, 'id_deuda:', ventaCompleta.id_deuda);
               
               if (ventaCompleta.deuda) {
-                console.log('[VentasScreen] Using deuda from ventaCompleta');
                 const deudaData = ventaCompleta.deuda;
-                console.log('[VentasScreen] Deuda data:', deudaData);
                 
                 // Load cliente information separately if not included or if nombre is missing
                 if (deudaData.id_cliente && (!deudaData.cliente || !deudaData.cliente.nombre)) {
                   try {
                     const clienteData = await getClienteById(deudaData.id_cliente);
-                    console.log('[VentasScreen] Cliente loaded:', clienteData);
                     deudaData.cliente = clienteData;
                   } catch (error) {
-                    console.error('Error loading cliente for deuda:', error);
+                    // Error loading cliente for deuda
                   }
                 }
                 
-                console.log('[VentasScreen] Cliente from deuda:', deudaData?.cliente);
                 return { ...venta, deuda: deudaData };
               } else {
-                console.log('[VentasScreen] Venta is_deuda but no deuda found');
                 return venta;
               }
             } catch (error) {
-              console.error('Error fetching full venta data:', venta.id_lista_venta, error);
               return venta;
             }
           }
@@ -748,7 +749,6 @@ const VentasContent = () => {
 
       await AsyncStorage.setItem('ventas_filters', JSON.stringify(effectiveFilters));
     } catch (error) {
-      console.error('Error fetching ventas:', error);
       setError(error.message);
       showToast({ type: 'error', message: 'Error al cargar ventas' });
     } finally {
@@ -763,13 +763,14 @@ const VentasContent = () => {
   };
 
   const handleClearFilters = () => {
-    const defaultFilters = { 
-      nota: '', 
-      fecha_desde: '', 
-      fecha_hasta: '', 
-      id_tienda: user?.id_tienda ? user.id_tienda.toString() : '', 
-      id_usuario: '', 
-      cantidad_min: '', 
+    const defaultFilters = {
+      nota: '',
+      is_nota: null,
+      fecha_desde: '',
+      fecha_hasta: '',
+      id_tienda: user?.id_tienda ? user.id_tienda.toString() : '',
+      id_usuario: '',
+      cantidad_min: '',
       cantidad_max: '',
       forma_cobro: '',
       tipo_cuenta: '',
@@ -781,12 +782,433 @@ const VentasContent = () => {
     fetchVentas();
   };
 
+  const formatComprobanteNumber = (num) => {
+    const formatted = parseFloat(num).toFixed(2);
+    const withoutZeros = formatted.endsWith('.00') ? formatted.slice(0, -3) : formatted;
+    const parts = withoutZeros.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return parts.join('.');
+  };
+
+  const handleShowComprobante = (venta) => {
+    // Extract sale items from venta
+    const saleItems = venta.ventas?.map(v => ({
+      nombre: v.servicioTienda?.servicio?.nombre || 'N/A',
+      cantidad: v.cantidad || 0,
+      precio_cup: v.precio_cobrado_cup || 0,
+      precio_usd: v.precio_cobrado_usd || 0,
+    })) || [];
+
+    setComprobanteSaleItems(saleItems);
+    setShowComprobanteModal(true);
+  };
+
+  const handleGenerateComprobante = async () => {
+    try {
+      const totalCUP = comprobanteSaleItems.reduce((sum, item) => sum + (item.cantidad * item.precio_cup), 0);
+      const totalUSD = comprobanteSaleItems.reduce((sum, item) => sum + (item.cantidad * item.precio_usd), 0);
+
+      let logoBase64 = '';
+      if (comprobanteConfig.logo) {
+        logoBase64 = comprobanteConfig.logo;
+      }
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Comprobante de Pago</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              font-size: 12px;
+              padding: 20px;
+              max-width: 300px;
+              margin: 0 auto;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 20px;
+            }
+            .business-name {
+              font-weight: bold;
+              font-size: 16px;
+              margin-bottom: 5px;
+            }
+            .text {
+              margin: 5px 0;
+            }
+            .text-centered {
+              text-align: center;
+            }
+            .table {
+              width: 100%;
+              margin: 15px 0;
+            }
+            .table-row {
+              display: flex;
+              justify-content: space-between;
+              padding: 5px 0;
+            }
+            .table-column {
+              flex: 1;
+            }
+            .table-column-bold {
+              font-weight: bold;
+            }
+            .line {
+              border-top: 1px solid #000;
+              margin: 10px 0;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            ${logoBase64 ? `
+              <svg width="100" height="100" viewBox="0 0 100 100" style="margin: 0 auto 10px;">
+                <defs>
+                  <filter id="grayscale">
+                    <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0"/>
+                  </filter>
+                </defs>
+                <image href="${logoBase64}" width="100" height="100" filter="url(#grayscale)"/>
+              </svg>
+            ` : ''}
+            ${comprobanteConfig.nombreNegocio ? `<div class="business-name">${comprobanteConfig.nombreNegocio}</div>` : ''}
+            <div class="text">DEPENDIENTE: ${user?.nombre_natural || 'N/A'}</div>
+            <div class="text">${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+          </div>
+          <div class="table">
+            <div class="table-row">
+              <div class="table-column table-column-bold">Servicio/Producto</div>
+              <div class="table-column table-column-bold">Cant</div>
+              <div class="table-column table-column-bold">Total</div>
+            </div>
+            <div class="line"></div>
+            ${comprobanteSaleItems.map(item => `
+              <div class="table-row">
+                <div class="table-column">${item.nombre}</div>
+                <div class="table-column">${item.cantidad}</div>
+                <div class="table-column">$${formatComprobanteNumber(item.cantidad * item.precio_cup)}</div>
+              </div>
+            `).join('')}
+            <div class="table-row">
+              <div class="table-column table-column-bold">TOTAL</div>
+              <div class="table-column"></div>
+              <div class="table-column table-column-bold">$${formatComprobanteNumber(totalCUP)}</div>
+            </div>
+            <div class="line"></div>
+            <div class="text-centered text">¡Gracias por su compra!</div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      const { uri } = await Print.printToFileAsync({ html });
+
+      Alert.alert(
+        'Comprobante Generado',
+        '¿Qué deseas hacer con el comprobante?',
+        [
+          {
+            text: 'CERRAR',
+            style: 'cancel',
+            onPress: () => {
+              setShowComprobanteModal(false);
+            }
+          },
+          {
+            text: 'GUARDAR',
+            onPress: async () => {
+              if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri, {
+                  mimeType: 'application/pdf',
+                  dialogTitle: 'Guardar comprobante',
+                });
+              }
+              setShowComprobanteModal(false);
+            }
+          },
+          {
+            text: 'COMPARTIR',
+            onPress: async () => {
+              if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri, {
+                  mimeType: 'application/pdf',
+                  dialogTitle: 'Compartir comprobante',
+                });
+              }
+              setShowComprobanteModal(false);
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al generar comprobante' });
+    }
+  };
+
+  // Function to fetch all ventas for export (without pagination)
+  const fetchAllVentasForExport = async () => {
+    try {
+      const effectiveFilters = { ...filters };
+      
+      const userRole = user?.rol?.toLowerCase();
+      const canViewAllVentas = 
+        userRole === 'administrador' ||
+        (userRole === 'dependiente' && ventaAccessLevels?.dependiente === 'all_stores') ||
+        (userRole === 'almacenero' && ventaAccessLevels?.almacenero === 'all_stores') ||
+        (userRole === 'económico' && ventaAccessLevels?.economico === 'all_stores');
+
+      if (!canViewAllVentas && user?.id_tienda) {
+        effectiveFilters.id_tienda = user.id_tienda.toString();
+      }
+
+      const adjustedFilters = adjustFiltersForCubaTimezone(effectiveFilters);
+
+      let allVentas = [];
+      let page = 1;
+      const limit = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        let data;
+        if (isOfflineMode) {
+          data = await storageService.getVentas(adjustedFilters, page, limit);
+        } else {
+          data = await getVentas(adjustedFilters, page, limit);
+        }
+
+        allVentas = [...allVentas, ...(data.data || [])];
+        hasMore = (data.data || []).length === limit && (data.pagination?.currentPage < data.pagination?.totalPages);
+        page++;
+      }
+
+      return allVentas;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // Function to export ventas to Excel
+  const exportVentasToExcel = async () => {
+    try {
+      setIsExporting(true);
+      setShowOrderSelectionModal(false);
+
+      const allVentas = await fetchAllVentasForExport();
+
+      // Fetch complete venta data for each venta to get usuario, forma_cobro, and cuenta
+      const ventasWithFullData = await Promise.all(
+        allVentas.map(async (venta) => {
+          try {
+            const ventaCompleta = await getVentaById(venta.id_lista_venta);
+
+            // Load cliente information separately if not included or if nombre is missing
+            if (ventaCompleta.deuda && ventaCompleta.deuda.id_cliente && (!ventaCompleta.deuda.cliente || !ventaCompleta.deuda.cliente.nombre)) {
+              try {
+                const clienteData = await getClienteById(ventaCompleta.deuda.id_cliente);
+                ventaCompleta.deuda.cliente = clienteData;
+              } catch (error) {
+                // Error loading cliente for deuda
+              }
+            }
+
+            return ventaCompleta;
+          } catch (error) {
+            return venta;
+          }
+        })
+      );
+
+      // Sort ventas based on selected order field
+      const sortedVentas = [...ventasWithFullData].sort((a, b) => {
+        switch (selectedOrderField) {
+          case 'fecha_hora':
+            return new Date(a.fecha) - new Date(b.fecha);
+          case 'nombre_producto':
+            const productA = a.ventas?.[0]?.servicioTienda?.servicio?.nombre || '';
+            const productB = b.ventas?.[0]?.servicioTienda?.servicio?.nombre || '';
+            return productA.localeCompare(productB);
+          case 'forma_cobro':
+            return (a.forma_cobro || '').localeCompare(b.forma_cobro || '');
+          case 'nombre_usuario':
+            return (a.usuario?.nombre_natural || '').localeCompare(b.usuario?.nombre_natural || '');
+          default:
+            return 0;
+        }
+      });
+
+      // Prepare data for Excel - show individual sales instead of lista_venta
+      const data = [];
+      sortedVentas.forEach(venta => {
+        // Tienda from ventas array
+        const tienda = venta.ventas?.[0]?.servicioTienda?.tienda;
+        const tiendaNombre = tienda?.nombre || '-';
+
+        // Usuario from operaciones or from venta.id_usuario
+        const usuario = venta.operaciones?.[0]?.usuario || venta.usuario;
+        const usuarioNombre = usuario?.nombre_natural || '-';
+
+        // Cliente from deuda - use same logic as VentasScreen.js
+        const cliente = venta.deuda?.cliente?.nombre || '-';
+
+        // Debt status
+        const tieneDeuda = venta.is_deuda ? 'Sí' : 'No';
+
+        // Split fecha and hora
+        const fechaHora = venta.fecha_hora || '-';
+        let fecha = '-';
+        let hora = '-';
+        if (fechaHora !== '-') {
+          const dateObj = new Date(fechaHora);
+          fecha = dateObj.toLocaleDateString('es-ES');
+          hora = dateObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Determine if sale is only in CUP or only in USD
+        const hasCUP = (venta.cantidad_cobrada_efectivo_cup > 0 || venta.cantidad_cobrada_transferencia_cup > 0);
+        const hasUSD = (venta.cantidad_cobrada_efectivo_usd > 0 || venta.cantidad_cobrada_transferencia_usd > 0);
+
+        // Get individual ventas (products sold)
+        const ventasIndividuales = venta.ventas || [];
+        ventasIndividuales.forEach(v => {
+          const row = {};
+          row['Fecha'] = fecha;
+          row['Hora'] = hora;
+          row['Tienda'] = tiendaNombre;
+          row['Usuario'] = usuarioNombre;
+          row['Cliente'] = cliente;
+          row['Tiene Deuda'] = tieneDeuda;
+
+          // Producto
+          const producto = v.servicioTienda?.servicio?.nombre || '-';
+          row['Producto'] = producto;
+          row['Cantidad'] = v.cantidad || 0;
+
+          // Forma de cobro - derive from which cantidad is > 0
+          let formaCobro = '-';
+          if (venta.cantidad_cobrada_efectivo_cup > 0) formaCobro = 'Efectivo CUP';
+          else if (venta.cantidad_cobrada_efectivo_usd > 0) formaCobro = 'Efectivo USD';
+          else if (venta.cantidad_cobrada_transferencia_cup > 0) formaCobro = 'Transferencia CUP';
+          else if (venta.cantidad_cobrada_transferencia_usd > 0) formaCobro = 'Transferencia USD';
+          row['Forma de Cobro'] = formaCobro;
+
+          // Cuenta from operaciones
+          const cuenta = venta.operaciones?.[0]?.cuenta;
+          row['Cuenta'] = cuenta?.nombre || '-';
+
+          // Precios - remove .00 decimals for whole numbers
+          const formatNumber = (num) => {
+            if (num === null || num === undefined || num === 0) return 0;
+            const formatted = parseFloat(num).toFixed(2);
+            return formatted.endsWith('.00') ? parseFloat(formatted).toString() : formatted;
+          };
+
+          // If sale is only in CUP, show 0 for USD fields
+          // If sale is only in USD, show 0 for CUP fields
+          // If sale has both, show actual values
+          const precioCUP = hasCUP ? (v.precio_cobrado_cup || 0) : 0;
+          const precioUSD = hasUSD ? (v.precio_cobrado_usd || 0) : 0;
+          const totalCUP = hasCUP ? (precioCUP * v.cantidad) : 0;
+          const totalUSD = hasUSD ? (precioUSD * v.cantidad) : 0;
+
+          row['Precio CUP'] = formatNumber(precioCUP);
+          row['Precio USD'] = formatNumber(precioUSD);
+          row['Total CUP'] = formatNumber(totalCUP);
+          row['Total USD'] = formatNumber(totalUSD);
+
+          row['Nota'] = venta.nota || '-';
+
+          data.push(row);
+        });
+      });
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(data);
+      XLSX.utils.book_append_sheet(wb, ws, 'Ventas');
+
+      // Generate file
+      const excelBase64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+      
+      // Save file
+      const date = new Date();
+      const formattedDate = `${date.getDate().toString().padStart(2, '0')}_${(date.getMonth() + 1).toString().padStart(2, '0')}_${date.getFullYear()}`;
+      const fileName = `Ventas_${formattedDate}.xlsx`;
+      const downloadDir = FileSystem.documentDirectory;
+      const fileUri = `${downloadDir}${fileName}`;
+      
+      await FileSystem.writeAsStringAsync(fileUri, excelBase64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      // Show share alert
+      Alert.alert(
+        'Excel Generado',
+        'El archivo Excel ha sido generado exitosamente.',
+        [
+          {
+            text: 'Cancelar',
+            style: 'cancel',
+          },
+          {
+            text: 'Compartir',
+            onPress: async () => {
+              try {
+                if (await Sharing.isAvailableAsync()) {
+                  await Sharing.shareAsync(fileUri, {
+                    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    dialogTitle: 'Compartir Excel',
+                    UTI: 'com.microsoft.excel.xls',
+                  });
+                } else {
+                  showToast({ type: 'error', message: 'Compartir no está disponible en este dispositivo' });
+                }
+              } catch (error) {
+                showToast({ type: 'error', message: 'Error al compartir el archivo' });
+              }
+            },
+          },
+          {
+            text: 'Guardar',
+            onPress: () => {
+              showToast({ type: 'success', message: `Archivo guardado en: ${fileUri}` });
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al exportar ventas: ' + error.message });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const canEditDeleteVenta = (venta) => {
+    const userRole = user?.rol?.toLowerCase();
+    const isAdmin = userRole === 'administrador';
+    const ventaUserId = venta.operaciones?.[0]?.id_usuario;
+    return isAdmin || ventaUserId === user?.id_usuario;
+  };
+
   const handleEdit = (venta) => {
+    if (!canEditDeleteVenta(venta)) {
+      showToast({ type: 'error', message: 'No tienes permiso para editar esta venta' });
+      return;
+    }
+
     const mode = canManageVentas ? 'edit' : 'view';
     navigation.navigate('VentaEdit', { venta, mode });
   };
 
   const handleDelete = (venta) => {
+    if (!canEditDeleteVenta(venta)) {
+      showToast({ type: 'error', message: 'No tienes permiso para eliminar esta venta' });
+      return;
+    }
+
     Alert.alert(
       'Eliminar Venta',
       '¿Estás seguro de que quieres eliminar esta venta? Esta acción no se puede deshacer.',
@@ -821,7 +1243,7 @@ const VentasContent = () => {
   };
 
   const handleVentaPress = (venta) => {
-    const mode = canManageVentas ? 'edit' : 'view';
+    const mode = canEditDeleteVenta(venta) ? 'edit' : 'view';
     navigation.navigate('VentaEdit', { venta, mode });
   };
 
@@ -936,7 +1358,7 @@ const VentasContent = () => {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} animated={true} />
-      
+
       <Toast
         visible={toast.visible}
         type={toast.type}
@@ -1013,6 +1435,59 @@ const VentasContent = () => {
               value={filters.nota}
               onChangeText={(text) => setFilters(prev => ({ ...prev, nota: text }))}
             />
+          </View>
+
+          <View style={styles.filterGroup}>
+            <Text style={[styles.label, { color: colors.outline }]}>Solo ventas con nota</Text>
+            <View style={styles.switchContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.switchOption,
+                  { borderColor: colors.outlineVariant },
+                  filters.is_nota === true && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => {
+                  const newIsNota = filters.is_nota === true ? null : true;
+                  const updatedFilters = { ...filters, is_nota: newIsNota };
+                  setFilters(updatedFilters);
+                  setPagination(prev => ({ ...prev, currentPage: 1 }));
+                  fetchVentas(null, updatedFilters);
+                }}
+              >
+                <Text style={[styles.switchOptionText, { color: filters.is_nota === true ? '#fff' : colors.outline }]}>Sí</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.switchOption,
+                  { borderColor: colors.outlineVariant },
+                  filters.is_nota === false && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => {
+                  const newIsNota = filters.is_nota === false ? null : false;
+                  const updatedFilters = { ...filters, is_nota: newIsNota };
+                  setFilters(updatedFilters);
+                  setPagination(prev => ({ ...prev, currentPage: 1 }));
+                  fetchVentas(null, updatedFilters);
+                }}
+              >
+                <Text style={[styles.switchOptionText, { color: filters.is_nota === false ? '#fff' : colors.outline }]}>No</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.switchOption,
+                  { borderColor: colors.outlineVariant },
+                  filters.is_nota === null && { backgroundColor: colors.primary, borderColor: colors.primary }
+                ]}
+                onPress={() => {
+                  const updatedFilters = { ...filters, is_nota: null };
+                  setFilters(updatedFilters);
+                  setPagination(prev => ({ ...prev, currentPage: 1 }));
+                  fetchVentas(null, updatedFilters);
+                }}
+              >
+                <Text style={[styles.switchOptionText, { color: filters.is_nota === null ? '#fff' : colors.outline }]}>Todos</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.filterGroup}>
@@ -1449,6 +1924,21 @@ const VentasContent = () => {
                   )}
                 </View>
               </View>
+
+              <TouchableOpacity
+                style={[styles.exportButton, { backgroundColor: colors.primary }]}
+                onPress={() => setShowOrderSelectionModal(true)}
+                disabled={isExporting}
+              >
+                {isExporting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="download-outline" size={20} color="#fff" />
+                    <Text style={styles.exportButtonText}>Exportar Ventas en Excel</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </>
           )}
 
@@ -1745,10 +2235,10 @@ const VentasContent = () => {
                       )}
                       <View style={styles.cantidadRow}>
                         {(() => {
-                          const totalCUP = venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_cup || 0) * (v.cantidad || 0)), 0) || 0;
-                          const totalUSD = venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_usd || 0) * (v.cantidad || 0)), 0) || 0;
-                          const paidInCUP = (parseFloat(venta.cantidad_cobrada_efectivo_cup || 0) + parseFloat(venta.cantidad_cobrada_transferencia_cup || 0)) > 0;
-                          const paidInUSD = (parseFloat(venta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(venta.cantidad_cobrada_transferencia_usd || 0)) > 0;
+                          const totalCUP = (parseFloat(venta.cantidad_cobrada_efectivo_cup || 0) + parseFloat(venta.cantidad_cobrada_transferencia_cup || 0));
+                          const totalUSD = (parseFloat(venta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(venta.cantidad_cobrada_transferencia_usd || 0));
+                          const paidInCUP = totalCUP > 0;
+                          const paidInUSD = totalUSD > 0;
 
                           return (
                             <>
@@ -1784,32 +2274,49 @@ const VentasContent = () => {
                     </View>
                     {canManageVentas && (
                       <View style={styles.ventaActions}>
+                        {canEditDeleteVenta(venta) && (
+                          <TouchableOpacity
+                            style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleEdit(venta);
+                            }}
+                          >
+                            <Image
+                              source={require('../../assets/editar.png')}
+                              style={styles.actionIconSmall}
+                              resizeMode="contain"
+                            />
+                          </TouchableOpacity>
+                        )}
                         <TouchableOpacity
-                          style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                          style={[styles.actionButtonSmall, styles.printButtonSmall, { backgroundColor: isDarkMode ? '#FFC107' : '#FFF9C4' }]}
                           onPress={(e) => {
                             e.stopPropagation();
-                            handleEdit(venta);
+                            handleShowComprobante(venta);
                           }}
                         >
                           <Image
-                            source={require('../../assets/editar.png')}
+                            source={require('../../assets/impresora.png')}
                             style={styles.actionIconSmall}
                             resizeMode="contain"
                           />
                         </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleDelete(venta);
-                          }}
-                        >
-                          <Image
-                            source={require('../../assets/basura.png')}
-                            style={styles.actionIconSmall}
-                            resizeMode="contain"
-                          />
-                        </TouchableOpacity>
+                        {canEditDeleteVenta(venta) && (
+                          <TouchableOpacity
+                            style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleDelete(venta);
+                            }}
+                          >
+                            <Image
+                              source={require('../../assets/basura.png')}
+                              style={styles.actionIconSmall}
+                              resizeMode="contain"
+                            />
+                          </TouchableOpacity>
+                        )}
                       </View>
                     )}
                   </Card>
@@ -1885,16 +2392,14 @@ const VentasContent = () => {
                         )}
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
                           {(() => {
-                            const totalCUP = venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_cup || 0) * (v.cantidad || 0)), 0) || 0;
-                            const paidInCUP = (parseFloat(venta.cantidad_cobrada_efectivo_cup || 0) + parseFloat(venta.cantidad_cobrada_transferencia_cup || 0)) > 0;
-                            return paidInCUP ? `$${totalCUP.toFixed(2)}` : '-';
+                            const totalCUP = (parseFloat(venta.cantidad_cobrada_efectivo_cup || 0) + parseFloat(venta.cantidad_cobrada_transferencia_cup || 0));
+                            return totalCUP > 0 ? `$${totalCUP.toFixed(2)}` : '-';
                           })()}
                         </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100), textAlign: 'center' }]}>
                           {(() => {
-                            const totalUSD = venta.ventas?.reduce((sum, v) => sum + ((v.precio_cobrado_usd || 0) * (v.cantidad || 0)), 0) || 0;
-                            const paidInUSD = (parseFloat(venta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(venta.cantidad_cobrada_transferencia_usd || 0)) > 0;
-                            return paidInUSD ? `$${totalUSD.toFixed(2)}` : '-';
+                            const totalUSD = (parseFloat(venta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(venta.cantidad_cobrada_transferencia_usd || 0));
+                            return totalUSD > 0 ? `$${totalUSD.toFixed(2)}` : '-';
                           })()}
                         </Text>
                         <View style={[styles.tableCellWithFlags, { width: responsive.responsiveWidth(200) }]}>
@@ -1917,24 +2422,37 @@ const VentasContent = () => {
                         {canManageVentas && (
                           <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(100) }]}>
                             <View style={styles.tableActionsRow}>
+                              {canEditDeleteVenta(venta) && (
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableEditButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleEdit(venta);
+                                  }}
+                                >
+                                  <Ionicons name="create-outline" size={responsive.responsiveWidth(18)} color={colors.primary} />
+                                </TouchableOpacity>
+                              )}
                               <TouchableOpacity
-                                style={[styles.tableActionButton, styles.tableEditButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
+                                style={[styles.tableActionButton, styles.tablePrintButton, { backgroundColor: isDarkMode ? '#FFC107' : '#FFF9C4' }]}
                                 onPress={(e) => {
                                   e.stopPropagation();
-                                  handleEdit(venta);
+                                  handleShowComprobante(venta);
                                 }}
                               >
-                                <Ionicons name="create-outline" size={responsive.responsiveWidth(18)} color={colors.primary} />
+                                <Ionicons name="print-outline" size={responsive.responsiveWidth(18)} color={isDarkMode ? '#fff' : colors.primary} />
                               </TouchableOpacity>
-                              <TouchableOpacity
-                                style={[styles.tableActionButton, styles.tableDeleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
-                                onPress={(e) => {
-                                  e.stopPropagation();
-                                  handleDelete(venta);
-                                }}
-                              >
-                                <Ionicons name="trash-outline" size={responsive.responsiveWidth(18)} color={colors.error} />
-                              </TouchableOpacity>
+                              {canEditDeleteVenta(venta) && (
+                                <TouchableOpacity
+                                  style={[styles.tableActionButton, styles.tableDeleteButton, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(venta);
+                                  }}
+                                >
+                                  <Ionicons name="trash-outline" size={responsive.responsiveWidth(18)} color={colors.error} />
+                                </TouchableOpacity>
+                              )}
                             </View>
                           </View>
                         )}
@@ -1984,7 +2502,7 @@ const VentasContent = () => {
         onRequestClose={() => setShowQRModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.surface }]} >
+          <View style={[styles.qrModalContent, { backgroundColor: colors.surface }]} >
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
                 Realizar transferencia por Transfermovil
@@ -2020,6 +2538,160 @@ const VentasContent = () => {
                 </Text>
               </View>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Order Selection Modal for Excel Export */}
+      <Modal
+        visible={showOrderSelectionModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowOrderSelectionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.orderModalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                Ordenar por
+              </Text>
+              <TouchableOpacity onPress={() => setShowOrderSelectionModal(false)}>
+                <Ionicons name="close" size={responsive.responsiveWidth(24)} color={colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.orderOptionsScroll}>
+              {[
+                { value: 'fecha_hora', label: 'Fecha y Hora' },
+                { value: 'nombre_producto', label: 'Nombre de Producto' },
+                { value: 'forma_cobro', label: 'Forma de Cobro' },
+                { value: 'nombre_usuario', label: 'Nombre de Usuario' },
+              ].map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.orderOptionItem,
+                    { 
+                      backgroundColor: colors.surfaceVariant,
+                      borderColor: selectedOrderField === option.value ? colors.primary : 'transparent',
+                      borderWidth: 2,
+                    }
+                  ]}
+                  onPress={() => setSelectedOrderField(option.value)}
+                >
+                  <View style={[styles.radioButton, { borderColor: colors.outlineVariant }]}>
+                    {selectedOrderField === option.value && (
+                      <View style={[styles.radioButtonInner, { backgroundColor: colors.primary }]} />
+                    )}
+                  </View>
+                  <Text style={[styles.orderOptionText, { color: colors.onSurface }]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={[styles.exportConfirmButton, { backgroundColor: colors.primary }]}
+              onPress={exportVentasToExcel}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={[styles.exportConfirmButtonText, { color: '#fff' }]}>Generar Excel</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Comprobante Modal */}
+      <Modal
+        visible={showComprobanteModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowComprobanteModal(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface, padding: responsive.responsiveWidth(20) }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>Comprobante</Text>
+              <TouchableOpacity onPress={() => setShowComprobanteModal(false)}>
+                <Ionicons name="close" size={24} color={colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.modalScrollContent}>
+                <Text style={[styles.modalDescription, { color: colors.outline }]}>
+                  Se generará un PDF con el comprobante de la venta.
+                </Text>
+                <View style={[styles.comprobantePreview, { backgroundColor: '#fff', borderColor: '#000' }]}>
+                  {comprobanteConfig.logo && (
+                    <View style={styles.comprobanteLogoContainer}>
+                      <View style={styles.comprobanteLogo}>
+                        <WebView
+                          source={{
+                            html: `
+                              <svg viewBox="0 0 100 100" style="width: 100%; height: 100%;">
+                                <defs>
+                                  <filter id="grayscale">
+                                    <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0"/>
+                                  </filter>
+                                </defs>
+                                <image href="${comprobanteConfig.logo}" width="100" height="100" filter="url(#grayscale)" preserveAspectRatio="xMidYMid meet"/>
+                              </svg>
+                            `
+                          }}
+                          style={{ width: '100%', height: '100%' }}
+                          scrollEnabled={false}
+                        />
+                      </View>
+                    </View>
+                  )}
+                  <Text style={styles.comprobanteNegocioName}>
+                    {comprobanteConfig.nombreNegocio || 'Nombre del Negocio'}
+                  </Text>
+                  <Text style={[styles.comprobanteText, styles.comprobanteTextCentered]}>DEPENDIENTE: {user?.nombre_natural || 'N/A'}</Text>
+                  <Text style={[styles.comprobanteText, styles.comprobanteTextCentered]}>
+                    {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  </Text>
+                  <View style={styles.comprobanteTableHeader}>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Servicio/Producto</Text>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Cant</Text>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>Total</Text>
+                  </View>
+                  <View style={styles.comprobanteLine} />
+                  {comprobanteSaleItems.map((item, index) => (
+                    <View key={index} style={styles.comprobanteTableRow}>
+                      <Text style={styles.comprobanteTableColumn}>{item.nombre}</Text>
+                      <Text style={styles.comprobanteTableColumn}>{item.cantidad}</Text>
+                      <Text style={styles.comprobanteTableColumn}>${formatComprobanteNumber(item.cantidad * item.precio_cup)}</Text>
+                    </View>
+                  ))}
+                  <View style={styles.comprobanteTableRow}>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>TOTAL</Text>
+                    <Text style={styles.comprobanteTableColumn}></Text>
+                    <Text style={[styles.comprobanteTableColumn, styles.comprobanteTableColumnBold]}>${formatComprobanteNumber(comprobanteSaleItems.reduce((sum, item) => sum + (item.cantidad * item.precio_cup), 0))}</Text>
+                  </View>
+                  <View style={styles.comprobanteLine} />
+                  <Text style={[styles.comprobanteText, styles.comprobanteTextCentered]}>¡Gracias por su compra!</Text>
+                </View>
+              </View>
+            </ScrollView>
+
+            <View style={[styles.modalFooter, { justifyContent: 'center' }]}>
+              <TouchableOpacity
+                style={[styles.shareButton, { backgroundColor: colors.primary }]}
+                onPress={handleGenerateComprobante}
+              >
+                <Ionicons name="share-outline" size={responsive.responsiveWidth(20)} color="#fff" />
+                <Text style={[styles.shareButtonText, { color: '#fff' }]}>Generar y Compartir PDF</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -2085,6 +2757,23 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   filterRow: {
     flexDirection: 'row',
+  },
+  switchContainer: {
+    flexDirection: 'row',
+    gap: responsive.responsiveWidth(8),
+  },
+  switchOption: {
+    paddingHorizontal: responsive.responsivePadding(12),
+    paddingVertical: responsive.responsivePadding(8),
+    borderRadius: 8,
+    borderWidth: 1,
+    minWidth: responsive.responsiveWidth(60),
+    alignItems: 'center',
+  },
+  switchOptionText: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+    fontWeight: '500',
   },
   label: {
     fontSize: responsive.fontSizes.bodySmall,
@@ -2570,6 +3259,31 @@ const createStyles = (responsive) => StyleSheet.create({
     padding: responsive.responsivePadding(24),
     width: '100%',
     maxWidth: responsive.responsiveWidth(350),
+    height: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  orderModalContent: {
+    borderRadius: 16,
+    padding: responsive.responsivePadding(24),
+    width: '100%',
+    maxWidth: responsive.responsiveWidth(350),
+    maxHeight: '50%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  qrModalContent: {
+    borderRadius: 16,
+    padding: responsive.responsivePadding(24),
+    width: '100%',
+    maxWidth: responsive.responsiveWidth(350),
+    maxHeight: '70%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
@@ -2587,6 +3301,86 @@ const createStyles = (responsive) => StyleSheet.create({
     fontWeight: '700',
     fontFamily: 'Hanken Grotesk',
     flex: 1,
+  },
+  modalScroll: {
+    flex: 1,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    paddingBottom: responsive.responsiveHeight(8),
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    paddingTop: responsive.responsiveHeight(16),
+    borderTopWidth: 1,
+  },
+  modalDescription: {
+    fontSize: responsive.responsiveWidth(14),
+    textAlign: 'center',
+    marginBottom: responsive.responsiveHeight(16),
+  },
+  comprobantePreview: {
+    flex: 1,
+    padding: responsive.responsiveWidth(20),
+    borderRadius: responsive.responsiveWidth(8),
+    borderWidth: 1,
+  },
+  comprobanteLogo: {
+    width: responsive.responsiveWidth(80),
+    height: responsive.responsiveHeight(80),
+    alignSelf: 'center',
+  },
+  comprobanteLogoContainer: {
+    alignItems: 'center',
+    marginBottom: responsive.responsiveHeight(10),
+  },
+  comprobanteNegocioName: {
+    fontSize: responsive.responsiveWidth(18),
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: responsive.responsiveHeight(10),
+  },
+  comprobanteText: {
+    fontSize: responsive.responsiveWidth(12),
+    marginBottom: responsive.responsiveHeight(5),
+  },
+  comprobanteTextCentered: {
+    textAlign: 'center',
+  },
+  comprobanteTableHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: responsive.responsiveHeight(5),
+  },
+  comprobanteTableColumn: {
+    flex: 1,
+    fontSize: responsive.responsiveWidth(12),
+  },
+  comprobanteTableColumnBold: {
+    fontWeight: 'bold',
+  },
+  comprobanteLine: {
+    height: 1,
+    backgroundColor: '#000',
+    marginVertical: responsive.responsiveHeight(10),
+  },
+  comprobanteTableRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: responsive.responsiveHeight(5),
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: responsive.responsivePadding(12),
+    borderRadius: responsive.responsiveWidth(12),
+    marginTop: responsive.responsiveHeight(16),
+  },
+  shareButtonText: {
+    fontSize: responsive.responsiveWidth(16),
+    fontWeight: '600',
+    marginLeft: responsive.responsiveWidth(8),
   },
   qrContainer: {
     alignItems: 'center',
@@ -2614,5 +3408,61 @@ const createStyles = (responsive) => StyleSheet.create({
     fontWeight: '500',
     fontFamily: 'Inter',
     textAlign: 'center',
+  },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: responsive.responsiveMargin(8),
+    paddingVertical: responsive.responsivePadding(14),
+    borderRadius: 8,
+    marginTop: responsive.responsiveMargin(16),
+  },
+  exportButtonText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    color: '#fff',
+  },
+  orderOptionsScroll: {
+    maxHeight: responsive.responsiveHeight(200),
+    marginBottom: responsive.responsiveMargin(16),
+  },
+  orderOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: responsive.responsiveMargin(12),
+    paddingVertical: responsive.responsivePadding(12),
+    paddingHorizontal: responsive.responsivePadding(16),
+    borderRadius: 8,
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  radioButton: {
+    width: responsive.responsiveWidth(20),
+    height: responsive.responsiveWidth(20),
+    borderRadius: 10,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  radioButtonInner: {
+    width: responsive.responsiveWidth(10),
+    height: responsive.responsiveWidth(10),
+    borderRadius: 5,
+  },
+  orderOptionText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontFamily: 'Inter',
+    flex: 1,
+  },
+  exportConfirmButton: {
+    paddingVertical: responsive.responsivePadding(14),
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  exportConfirmButtonText: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Inter',
   },
 });

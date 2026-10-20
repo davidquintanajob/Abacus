@@ -53,6 +53,7 @@ const OperacionFormContent = () => {
     cambio_moneda: '',
     cuenta: null,
     usuario: null,
+    is_check: true, // Default to checked for new operations
   });
 
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -103,6 +104,7 @@ const OperacionFormContent = () => {
             cambio_moneda: completeOperacion.cambio_moneda?.toString() || '',
             cuenta: completeOperacion.cuenta,
             usuario: completeOperacion.usuario,
+            is_check: completeOperacion.is_check !== undefined ? completeOperacion.is_check : true,
           });
           
           if (completeOperacion.cuenta) {
@@ -214,6 +216,7 @@ const OperacionFormContent = () => {
         fecha_hora: formData.fecha_hora,
         motivo: formData.motivo.trim(),
         cambio_moneda: parseFloat(formData.cambio_moneda),
+        is_check: isAdmin ? formData.is_check : true, // Only admins can set is_check, default to true
       };
 
       // Always use the logged-in user for id_usuario
@@ -479,6 +482,20 @@ const OperacionFormContent = () => {
                   />
                 </View>
 
+                {/* Check - Solo para administradores */}
+                {isAdmin && (
+                  <View style={styles.formGroup}>
+                    <Text style={[styles.label, { color: colors.outline }]}>Checkear Operación</Text>
+                    <TouchableOpacity
+                      style={[styles.switchContainer, { backgroundColor: formData.is_check ? colors.primary : colors.outlineVariant }]}
+                      onPress={() => !isReadOnly && setFormData(prev => ({ ...prev, is_check: !prev.is_check }))}
+                      disabled={isReadOnly}
+                    >
+                      <View style={[styles.switchThumb, { transform: [{ translateX: formData.is_check ? responsive.responsiveWidth(20) : 0 }] }]} />
+                    </TouchableOpacity>
+                  </View>
+                )}
+
 
                 {/* Info de Cuenta */}
                 {formData.cuenta && (
@@ -720,6 +737,24 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(14),
     fontWeight: '600',
     fontFamily: 'JetBrains Mono',
+  },
+  switchContainer: {
+    width: responsive.responsiveWidth(50),
+    height: responsive.responsiveHeight(26),
+    borderRadius: 13,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  switchThumb: {
+    width: responsive.responsiveWidth(22),
+    height: responsive.responsiveHeight(22),
+    borderRadius: 11,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
 });
 

@@ -153,10 +153,10 @@ const PasswordRecoveryContent = () => {
               style={[styles.callButton, { backgroundColor: '#EF4444' }]}
               activeOpacity={0.8}
             >
-              <Ionicons 
-                name="call-outline" 
-                size={responsive.responsiveWidth(24)} 
-                color="#fff" 
+              <Ionicons
+                name="call-outline"
+                size={responsive.responsiveWidth(24)}
+                color="#fff"
                 style={styles.callIcon}
               />
               <Text style={[styles.callButtonText, { color: '#fff' }]}>

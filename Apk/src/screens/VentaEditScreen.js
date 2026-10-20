@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Keyboard, Dimensions, Image, Vibration, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { Header } from '../components/layout/Header';
@@ -14,7 +15,7 @@ import { getVentaById, updateVenta } from '../services/ventaService';
 import { getTiendas } from '../services/tiendaService';
 import { getApiBaseUrl } from '../services/api';
 import { getUsuarios } from '../services/usuarioService';
-import { getServicios } from '../services/servicioService';
+import { getServicios, getServicioByCodigo } from '../services/servicioService';
 import { getCuentas } from '../services/cuentaService';
 import configService from '../services/configService';
 import { Toast } from '../components/common/Toast';
@@ -22,6 +23,7 @@ import { useToast } from '../hooks/useToast';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { CameraView, Camera } from 'expo-camera';
 import { ALLOWED_BARCODE_TYPES } from '../barcode/config/BarcodeTypes';
+import BarcodeEngine from '../barcode/BarcodeEngine';
 
 const VentaEditContent = () => {
   const navigation = useNavigation();
@@ -42,12 +44,224 @@ const VentaEditContent = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isFetchingVenta, setIsFetchingVenta] = useState(false);
 
+  // Barcode Engine
+  const barcodeEngineRef = useRef(null);
+
   // Camera state (disabled by default)
   const [permission, setPermission] = useState(null);
   const [showCamera, setShowCamera] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [cameraKey, setCameraKey] = useState(0);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [lastScannedCode, setLastScannedCode] = useState(null);
+  const [lastScannedTimestamp, setLastScannedTimestamp] = useState(null);
+  const [isPreferenceLoaded, setIsPreferenceLoaded] = useState(false);
+
+  // Load scanner preference from AsyncStorage
+  useEffect(() => {
+    const loadScannerPreference = async () => {
+      try {
+        const savedScannerState = await AsyncStorage.getItem('scannerEnabled');
+        if (savedScannerState !== null) {
+          const enabled = savedScannerState === 'true';
+          setShowCamera(enabled);
+          setIsScanning(enabled);
+        }
+        setIsPreferenceLoaded(true);
+      } catch (error) {
+        console.error('Error loading scanner preference:', error);
+        setIsPreferenceLoaded(true);
+      }
+    };
+    loadScannerPreference();
+  }, []);
+
+  // Save scanner preference to AsyncStorage when it changes (only after preference is loaded)
+  useEffect(() => {
+    if (isPreferenceLoaded) {
+      const saveScannerPreference = async () => {
+        try {
+          await AsyncStorage.setItem('scannerEnabled', showCamera.toString());
+        } catch (error) {
+          console.error('Error saving scanner preference:', error);
+        }
+      };
+      saveScannerPreference();
+    }
+  }, [showCamera, isPreferenceLoaded]);
+
+  // Initialize Barcode Engine
+  useEffect(() => {
+    if (!barcodeEngineRef.current) {
+      barcodeEngineRef.current = new BarcodeEngine('SALES');
+      barcodeEngineRef.current.startSession();
+    }
+
+    return () => {
+      if (barcodeEngineRef.current) {
+        barcodeEngineRef.current.resetSession();
+      }
+    };
+  }, []);
+
+  const handleBarcodeScanned = async (scanningResult) => {
+    console.log('[VentaEditScreen] handleBarcodeScanned called, isScanning:', isScanning);
+    if (!isScanning || !barcodeEngineRef.current) {
+      console.log('[VentaEditScreen] Scanning disabled or barcode engine not ready');
+      return;
+    }
+
+    try {
+      const rawCode = scanningResult.data;
+      console.log('[VentaEditScreen] Raw code scanned:', rawCode);
+      
+      // Validate scanning result
+      if (!rawCode || typeof rawCode !== 'string') {
+        console.warn('[VentaEditScreen] Invalid scanning result:', scanningResult);
+        return;
+      }
+      
+      const currentTime = Date.now();
+
+      // If same code scanned within 2 seconds, ignore to prevent accidental duplicates
+      if (lastScannedCode === rawCode && lastScannedTimestamp && (currentTime - lastScannedTimestamp) < 2000) {
+        console.log('[VentaEditScreen] Same code scanned within 2 seconds, ignoring');
+        showToast({ type: 'warning', message: 'Espere 2 segundos antes de escanear el mismo producto' });
+        return;
+      }
+
+      // Disable scanning immediately to prevent duplicate detections
+      console.log('[VentaEditScreen] Disabling scanning to process code');
+      setIsScanning(false);
+
+      try {
+        if (!barcodeEngineRef.current) {
+          console.log('[VentaEditScreen] Barcode engine ref is null, re-enabling scanning');
+          setIsScanning(true);
+          return;
+        }
+        const result = await barcodeEngineRef.current.processScanningResult({
+          data: rawCode,
+          type: scanningResult.type
+        });
+        console.log('[VentaEditScreen] Barcode engine result:', result);
+
+        if (result && result.success) {
+          console.log('[VentaEditScreen] Barcode accepted, calling addProductByCode');
+          await addProductByCode(rawCode);
+        } else {
+          console.log('[VentaEditScreen] Barcode rejected by engine');
+        }
+
+        // Update last scanned code and timestamp
+        setLastScannedCode(rawCode);
+        setLastScannedTimestamp(currentTime);
+
+        // Re-enable scanning after 1.5 seconds
+        setTimeout(() => {
+          console.log('[VentaEditScreen] Re-enabling scanning');
+          setIsScanning(true);
+        }, 1500);
+      } catch (innerError) {
+        console.error('[VentaEditScreen] Error in barcode processing logic:', innerError);
+        showToast({ type: 'error', message: 'Error al procesar código' });
+
+        // Re-enable scanning on error
+        setTimeout(() => {
+          setIsScanning(true);
+        }, 1500);
+      }
+    } catch (error) {
+      console.error('[VentaEditScreen] Error processing barcode:', error);
+      showToast({ type: 'error', message: 'Error al procesar código' });
+
+      // Re-enable scanning on error
+      setTimeout(() => {
+        setIsScanning(true);
+      }, 1500);
+    }
+  };
+
+  const addProductByCode = async (code) => {
+    console.log('[VentaEditScreen] addProductByCode called with:', code);
+    try {
+      if (!selectedTienda) {
+        showToast({ type: 'warning', message: 'Selecciona una tienda primero' });
+        return;
+      }
+
+      // Use getServicios with codigo filter to search both services and products
+      const filters = { codigo: code, fetchProducto: true };
+      
+      const data = await getServicios(filters, 1, 10);
+      
+      const servicio = data.data?.[0];
+
+      if (!servicio) {
+        showToast({ type: 'error', message: 'Producto o servicio no encontrado' });
+        return;
+      }
+
+      // Find the servicio_tienda for the selected store
+      const servicioTienda = servicio.tiendas_servicio?.find(t => t.id_tienda === selectedTienda.id_tienda);
+
+      if (!servicioTienda) {
+        showToast({ type: 'error', message: 'Producto no disponible en esta tienda' });
+        return;
+      }
+
+      // Check if product already exists in saleItems by id_servicio
+      const existingItem = saleItems.find(
+        item => item.id_servicio === servicio.id_servicio
+      );
+
+      if (existingItem) {
+        updateItemQuantity(saleItems.indexOf(existingItem), existingItem.cantidad + 1);
+        if (Platform.OS === 'android') {
+          Vibration.vibrate(100);
+        }
+        showToast({ type: 'success', message: 'Cantidad aumentada' });
+        return;
+      }
+
+      // Build full image URL
+      let fullImageUrl = null;
+      if (servicio.producto?.imagen) {
+        const isBase64 = servicio.producto.imagen.startsWith('data:');
+        if (isBase64) {
+          fullImageUrl = servicio.producto.imagen;
+        } else {
+          const imagePath = servicio.producto.imagen.startsWith('/') ? servicio.producto.imagen : `/${servicio.producto.imagen}`;
+          const currentBaseUrl = await getApiBaseUrl();
+          fullImageUrl = currentBaseUrl ? `${currentBaseUrl}${imagePath}` : servicio.producto.imagen;
+        }
+      }
+
+      const newItem = {
+        id_servicio_tienda: servicioTienda.id_servicio_tienda,
+        id_servicio: servicio.id_servicio,
+        codigo_barras_ean: code,
+        nombre: servicio.nombre || 'Sin nombre',
+        imagen: fullImageUrl,
+        cantidad: 1,
+        precio_cup: parseFloat(servicioTienda.precio_cup || 0),
+        precio_usd: parseFloat(servicioTienda.precio_usd || 0),
+        precio_original_cup: parseFloat(servicioTienda.precio_cup || 0),
+        precio_original_usd: parseFloat(servicioTienda.precio_usd || 0),
+        esOferta: servicio.componentes?.length > 0,
+        componentes: [],
+      };
+
+      setSaleItems(prev => [...prev, newItem]);
+      if (Platform.OS === 'android') {
+        Vibration.vibrate(100);
+      }
+      showToast({ type: 'success', message: 'Producto agregado correctamente' });
+    } catch (error) {
+      console.error('[VentaEditScreen] Error in addProductByCode:', error);
+      showToast({ type: 'error', message: 'Error al agregar producto' });
+    }
+  };
 
   // SalesScreen-like state
   const [selectedTienda, setSelectedTienda] = useState(null);
@@ -495,8 +709,19 @@ const VentaEditContent = () => {
   const handleSavePriceEdit = () => {
     if (editingItemIndex !== null) {
       const newItems = [...saleItems];
-      newItems[editingItemIndex].precio_cup = parseFloat(editingItemPrices.cup) || 0;
-      newItems[editingItemIndex].precio_usd = parseFloat(editingItemPrices.usd) || 0;
+      const item = newItems[editingItemIndex];
+      
+      // Promediar el nuevo precio con el precio original
+      const newPriceCUP = parseFloat(editingItemPrices.cup) || 0;
+      const newPriceUSD = parseFloat(editingItemPrices.usd) || 0;
+      
+      const originalPriceCUP = item.precio_original_cup || item.precio_cup || 0;
+      const originalPriceUSD = item.precio_original_usd || item.precio_usd || 0;
+      
+      // Calcular promedio
+      newItems[editingItemIndex].precio_cup = roundTo5Decimals((originalPriceCUP + newPriceCUP) / 2);
+      newItems[editingItemIndex].precio_usd = roundTo5Decimals((originalPriceUSD + newPriceUSD) / 2);
+      
       setSaleItems(newItems);
     }
     setShowPriceEditModal(false);
@@ -654,12 +879,12 @@ const VentaEditContent = () => {
       // Check if paid amount differs from total (using tolerance for rounding discrepancies)
       const tolerance = 0.1;
       const amountDifference = Math.abs(totalPaidCUP - totalOriginalCUP);
-      
+
       // If the amount paid differs significantly from the total, require a note
-      if (amountDifference > tolerance && (!formData.nota || formData.nota.trim() === '')) {
-        showToast({ 
-          type: 'warning', 
-          message: 'Debes agregar una nota explicando por qué se está cobrando un valor diferente al total' 
+      if (amountDifference > tolerance && (!ventaNota || ventaNota.trim() === '')) {
+        showToast({
+          type: 'warning',
+          message: 'Debes agregar una nota explicando por qué se está cobrando un valor diferente al total'
         });
         setIsSaving(false);
         return;
@@ -695,7 +920,7 @@ const VentaEditContent = () => {
 
       const ventaData = {
         fecha_hora: formData.fecha_hora,
-        nota: formData.nota || null,
+        nota: ventaNota || null,
         cantidad_cobrada_efectivo_cup: efectivoCup,
         cantidad_cobrada_efectivo_usd: efectivoUsd,
         cantidad_cobrada_transferencia_cup: transferenciaCup,
@@ -704,7 +929,8 @@ const VentaEditContent = () => {
         id_cuenta_efectivo_usd: selectedCuentas.efectivo_usd?.id_cuenta,
         id_cuenta_transferencia_cup: selectedCuentas.transferencia_cup?.id_cuenta,
         id_cuenta_transferencia_usd: selectedCuentas.transferencia_usd?.id_cuenta,
-        id_usuario: user?.id_usuario || formData.id_usuario,
+        // If user is admin, update venta user to admin. Otherwise, keep original user.
+        id_usuario: user?.rol?.toLowerCase() === 'administrador' ? user?.id_usuario : formData.id_usuario,
         cambio_moneda: cambio,
         ventas: ventasConAjuste,
         is_deuda: venta?.is_deuda || false, // Maintain deuda status
@@ -845,21 +1071,7 @@ const VentaEditContent = () => {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
         <StatusBar style={isDarkMode ? 'light' : 'dark'} />
-        {/* Header */}
-        <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.outlineVariant }]}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={colors.primary} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.primary }]}>Editar Venta</Text>
-          <TouchableOpacity onPress={() => setShowCamera(!showCamera)} style={styles.cameraToggle}>
-            <Ionicons name="barcode" size={24} color={colors.primary} />
-            <Text style={[styles.cameraToggleText, { color: colors.primary }]}>
-              {showCamera ? "Escáner activo" : "Escáner desactivado"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
+        <View style={[styles.flex1, { justifyContent: 'center', alignItems: 'center' }]}>
           <Text style={[styles.loadingText, { color: colors.outline }]}>
             Cargando datos...
           </Text>
@@ -887,7 +1099,9 @@ const VentaEditContent = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.primary }]}>Editar Venta</Text>
+        <Text style={[styles.headerTitle, { color: colors.primary }]}>
+          {isViewMode ? 'Información de Venta' : 'Editar Venta'}
+        </Text>
         <TouchableOpacity onPress={() => setShowCamera(!showCamera)} style={styles.cameraToggle}>
           <Ionicons name="barcode" size={24} color={colors.primary} />
           <Text style={[styles.cameraToggleText, { color: colors.primary }]}>
@@ -918,6 +1132,7 @@ const VentaEditContent = () => {
                 barcodeScannerSettings={{
                   barcodeTypes: ALLOWED_BARCODE_TYPES,
                 }}
+                onBarcodeScanned={isScanning ? handleBarcodeScanned : undefined}
               />
               <View style={styles.cameraOverlay}>
                 <View style={[styles.corner, styles.topLeft]} />
@@ -938,8 +1153,9 @@ const VentaEditContent = () => {
             </View>
 
             <TouchableOpacity
-              style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-              onPress={() => setShowTiendaSelector(!showTiendaSelector)}
+              style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant, opacity: isViewMode ? 0.6 : 1 }]}
+              onPress={() => !isViewMode && setShowTiendaSelector(!showTiendaSelector)}
+              disabled={isViewMode}
             >
               <Text style={[styles.dropdownText, { color: selectedTienda ? colors.onSurface : colors.outline }]}>
                 {selectedTienda?.nombre || 'Seleccionar tienda...'}
@@ -975,7 +1191,7 @@ const VentaEditContent = () => {
                   <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Buscar producto</Text>
                 </View>
 
-                <View style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                <View style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant, opacity: isViewMode ? 0.6 : 1 }]}>
                   <Ionicons name="search" size={responsive.responsiveWidth(20)} color={colors.outline} />
                   <TextInput
                     style={[styles.searchInput, { color: colors.onSurface }]}
@@ -983,6 +1199,7 @@ const VentaEditContent = () => {
                     placeholderTextColor={colors.outline}
                     value={searchText}
                     onChangeText={setSearchText}
+                    editable={!isViewMode}
                   />
                 </View>
               </>
@@ -1040,10 +1257,10 @@ const VentaEditContent = () => {
               saleItems.map((item, index) => (
                 <TouchableOpacity
                   key={index}
-                  style={[styles.itemCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant, opacity: venta?.is_deuda ? 0.7 : 1 }]}
-                  onPress={() => !venta?.is_deuda && handleOpenPriceEditModal(index)}
-                  activeOpacity={venta?.is_deuda ? 1 : 0.7}
-                  disabled={venta?.is_deuda}
+                  style={[styles.itemCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant, opacity: (venta?.is_deuda || isViewMode) ? 0.7 : 1 }]}
+                  onPress={() => !venta?.is_deuda && !isViewMode && handleOpenPriceEditModal(index)}
+                  activeOpacity={(venta?.is_deuda || isViewMode) ? 1 : 0.7}
+                  disabled={venta?.is_deuda || isViewMode}
                 >
                   {item.imagen && (
                     <Image
@@ -1078,17 +1295,17 @@ const VentaEditContent = () => {
                   </View>
                   <View style={styles.itemActions}>
                     <TouchableOpacity
-                      style={[styles.quantityButton, { backgroundColor: venta?.is_deuda ? colors.outlineVariant : colors.primaryContainer }]}
-                      onPress={() => !venta?.is_deuda && updateItemQuantity(index, item.cantidad - 1)}
-                      disabled={venta?.is_deuda}
+                      style={[styles.quantityButton, { backgroundColor: (venta?.is_deuda || isViewMode) ? colors.outlineVariant : colors.primaryContainer, opacity: isViewMode ? 0.6 : 1 }]}
+                      onPress={() => !venta?.is_deuda && !isViewMode && updateItemQuantity(index, item.cantidad - 1)}
+                      disabled={venta?.is_deuda || isViewMode}
                     >
                       <Ionicons name="remove" size={responsive.responsiveWidth(16)} color={isDark ? colors.primary : '#fff'} />
                     </TouchableOpacity>
                     <TextInput
-                      style={[styles.quantityInput, { color: colors.onSurface }]}
+                      style={[styles.quantityInput, { color: colors.onSurface, opacity: isViewMode ? 0.6 : 1 }]}
                       value={item.cantidad === 0 ? '' : item.cantidad.toString()}
                       onChangeText={(text) => {
-                        if (venta?.is_deuda) return;
+                        if (venta?.is_deuda || isViewMode) return;
                         if (text === '') {
                           updateItemQuantity(index, 0);
                           return;
@@ -1099,28 +1316,29 @@ const VentaEditContent = () => {
                         }
                       }}
                       onBlur={() => {
-                        if (venta?.is_deuda) return;
+                        if (venta?.is_deuda || isViewMode) return;
                         if (item.cantidad === 0) {
                           updateItemQuantity(index, 1);
                         }
                       }}
                       keyboardType="number-pad"
+                      editable={!isViewMode}
                       textAlign="center"
                       editable={!venta?.is_deuda}
                     />
                     <TouchableOpacity
-                      style={[styles.quantityButton, { backgroundColor: venta?.is_deuda ? colors.outlineVariant : colors.primary }]}
-                      onPress={() => !venta?.is_deuda && updateItemQuantity(index, item.cantidad + 1)}
-                      disabled={venta?.is_deuda}
+                      style={[styles.quantityButton, { backgroundColor: (venta?.is_deuda || isViewMode) ? colors.outlineVariant : colors.primary, opacity: isViewMode ? 0.6 : 1 }]}
+                      onPress={() => !venta?.is_deuda && !isViewMode && updateItemQuantity(index, item.cantidad + 1)}
+                      disabled={venta?.is_deuda || isViewMode}
                     >
                       <Ionicons name="add" size={responsive.responsiveWidth(16)} color="#fff" />
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.deleteButton, { backgroundColor: venta?.is_deuda ? colors.outlineVariant : colors.errorContainer }]}
-                      onPress={() => !venta?.is_deuda && confirmDeleteItem(index)}
-                      disabled={venta?.is_deuda}
+                      style={[styles.deleteButton, { backgroundColor: (venta?.is_deuda || isViewMode) ? colors.outlineVariant : colors.errorContainer, opacity: isViewMode ? 0.6 : 1 }]}
+                      onPress={() => !venta?.is_deuda && !isViewMode && confirmDeleteItem(index)}
+                      disabled={venta?.is_deuda || isViewMode}
                     >
-                      <Ionicons name="close" size={responsive.responsiveWidth(16)} color={venta?.is_deuda ? colors.outline : colors.error} />
+                      <Ionicons name="close" size={responsive.responsiveWidth(16)} color={(venta?.is_deuda || isViewMode) ? colors.outline : colors.error} />
                     </TouchableOpacity>
                   </View>
                 </TouchableOpacity>
@@ -1149,11 +1367,14 @@ const VentaEditContent = () => {
 
                     <View style={styles.paymentInputRow}>
                       <TouchableOpacity
-                        style={[styles.cuentaSelector, { backgroundColor: colors.background, borderColor: colors.outlineVariant, flex: 0.6 }]}
+                        style={[styles.cuentaSelector, { backgroundColor: colors.background, borderColor: colors.outlineVariant, flex: 0.6, opacity: isViewMode ? 0.6 : 1 }]}
                         onPress={() => {
-                          setSelectorTipoCuenta(tipo);
-                          setShowCuentaSelector(true);
+                          if (!isViewMode) {
+                            setSelectorTipoCuenta(tipo);
+                            setShowCuentaSelector(true);
+                          }
                         }}
+                        disabled={isViewMode}
                       >
                         <Text style={[styles.cuentaSelectorText, { color: selectedCuenta ? colors.onSurface : colors.outline }]} numberOfLines={1}>
                           {selectedCuenta?.nombre || 'Seleccionar cuenta...'}
@@ -1164,23 +1385,26 @@ const VentaEditContent = () => {
                       <View style={{ flex: 0.4, marginTop: (tipo === 'efectivo_usd' || tipo === 'transferencia_usd') ? responsive.responsiveHeight(8) : 0 }}>
                         <TextInput
                           style={[
-                            styles.paymentInput, 
-                            { 
-                              backgroundColor: colors.background, 
-                              color: colors.onSurface, 
+                            styles.paymentInput,
+                            {
+                              backgroundColor: colors.background,
+                              color: colors.onSurface,
                               borderColor: colors.outlineVariant,
-                              fontSize: responsive.responsiveWidth(14)
+                              fontSize: responsive.responsiveWidth(14),
+                              opacity: isViewMode ? 0.6 : 1
                             }
                           ]}
                           placeholder={show5Decimals ? "0.00000" : "0.00"}
                           placeholderTextColor={colors.outline}
                           value={getPaymentDisplayValue(tipo)}
                           onChangeText={(text) => {
+                            if (isViewMode) return;
                             const sanitizedText = text.replace(/-/g, '');
                             setPaymentAmounts(prev => ({ ...prev, [tipo]: sanitizedText }));
                           }}
-                          onFocus={() => setFocusedPaymentField(tipo)}
+                          onFocus={() => !isViewMode && setFocusedPaymentField(tipo)}
                           onBlur={() => {
+                            if (isViewMode) return;
                             setFocusedPaymentField(null);
                             // Format the value when field loses focus
                             const value = paymentAmounts[tipo];
@@ -1193,6 +1417,7 @@ const VentaEditContent = () => {
                             }
                           }}
                           keyboardType="decimal-pad"
+                          editable={!isViewMode}
                         />
                         {(tipo === 'efectivo_usd' || tipo === 'transferencia_usd') && (
                           <Text style={[styles.conversionText, { color: colors.outline, fontSize: responsive.responsiveWidth(8) }]}>
@@ -1268,8 +1493,9 @@ const VentaEditContent = () => {
                 <TouchableOpacity
                   style={[styles.navigateButton, { backgroundColor: colors.primary }]}
                   onPress={() => {
-                    console.log('[VentaEdit] Navigating to DeudaForm with deuda:', venta.deuda);
-                    navigation.navigate('DeudaForm', { deuda: venta.deuda, mode: 'edit' });
+                    if (venta.deuda) {
+                      navigation.navigate('DeudaForm', { deuda: venta.deuda, mode: 'edit' });
+                    }
                   }}
                 >
                   <Ionicons name="arrow-forward" size={responsive.responsiveWidth(16)} color="#fff" />
@@ -1279,75 +1505,73 @@ const VentaEditContent = () => {
 
             {/* Deuda Information - Only show if venta has deuda */}
             {venta?.is_deuda && venta?.deuda && (
-              <>
-                <View style={styles.deudaInfoCard}>
-                  <View style={styles.deudaInfoRow}>
-                    <View style={styles.deudaInfoItem}>
-                      <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Fecha de creación</Text>
-                      <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
-                        {new Date(venta.deuda.fecha_hora).toLocaleDateString()}
-                      </Text>
-                    </View>
-                    <View style={styles.deudaInfoItem}>
-                      <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Cliente</Text>
-                      <Text style={[styles.deudaInfoValue, { color: colors.primary }]}>
-                        {venta.deuda.cliente?.nombre || 'N/A'}
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  <View style={styles.deudaInfoRow}>
-                    <View style={styles.deudaInfoItem}>
-                      <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Monto total</Text>
-                      <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
-                        {venta.deuda.monto_cup > 0 ? `$${venta.deuda.monto_cup} CUP` : ''}
-                        {venta.deuda.monto_usd > 0 ? `$${venta.deuda.monto_usd} USD` : ''}
-                      </Text>
-                    </View>
-                    <View style={styles.deudaInfoItem}>
-                      <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Cantidad pagada</Text>
-                      <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
-                        {(() => {
-                          const pagadoCup = venta.deuda.monto_restante_cup !== undefined 
-                            ? venta.deuda.monto_cup - venta.deuda.monto_restante_cup 
-                            : 0;
-                          const pagadoUsd = venta.deuda.monto_restante_usd !== undefined 
-                            ? venta.deuda.monto_usd - venta.deuda.monto_restante_usd 
-                            : 0;
-                          
-                          let parts = [];
-                          if (pagadoCup > 0) parts.push(`(${pagadoCup.toFixed(2)}) CUP`);
-                          if (pagadoUsd > 0) parts.push(`(${pagadoUsd.toFixed(2)}) USD`);
-                          
-                          return parts.join(' ');
-                        })()}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.deudaInfoRow}>
-                    <View style={styles.deudaInfoItem}>
-                      <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Restante</Text>
-                      <Text style={[
-                        styles.deudaInfoValue, 
-                        { 
-                          color: (venta.deuda.monto_restante_cup > 0 || venta.deuda.monto_restante_usd > 0) 
-                            ? colors.error 
-                            : '#4CAF50',
-                          fontWeight: '700'
-                        }
-                      ]}>
-                        {venta.deuda.monto_restante_cup > 0 ? `$${venta.deuda.monto_restante_cup.toFixed(2)} CUP` : ''}
-                        {venta.deuda.monto_restante_usd > 0 ? `$${venta.deuda.monto_restante_usd.toFixed(2)} USD` : ''}
-                        {(venta.deuda.monto_restante_cup === 0 || venta.deuda.monto_restante_cup === undefined) &&
-                         (venta.deuda.monto_restante_usd === 0 || venta.deuda.monto_restante_usd === undefined) ? 'Saldada' : ''}
-                      </Text>
-                    </View>
-                  </View>
+              <View style={styles.deudaInfoContainer}>
+                <View style={styles.deudaInfoItem}>
+                  <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Fecha de creación</Text>
+                  <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
+                    {venta.deuda.fecha_hora ? new Date(venta.deuda.fecha_hora).toLocaleDateString() : 'N/A'}
+                  </Text>
                 </View>
-              </>
+                <View style={styles.deudaInfoItem}>
+                  <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Cliente</Text>
+                  <Text style={[styles.deudaInfoValue, { color: colors.primary }]}>
+                    {venta.deuda.cliente?.nombre || 'N/A'}
+                  </Text>
+                </View>
+              </View>
             )}
 
+            {venta?.is_deuda && venta?.deuda && (
+              <View style={styles.deudaInfoContainer}>
+                <View style={styles.deudaInfoItem}>
+                  <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Monto total</Text>
+                  <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
+                    {venta.deuda.monto_cup > 0 ? `$${venta.deuda.monto_cup} CUP` : ''}
+                    {venta.deuda.monto_usd > 0 ? `$${venta.deuda.monto_usd} USD` : ''}
+                  </Text>
+                </View>
+                <View style={styles.deudaInfoItem}>
+                  <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Cantidad pagada</Text>
+                  <Text style={[styles.deudaInfoValue, { color: colors.onSurface }]}>
+                    {(() => {
+                      const pagadoCup = venta.deuda.monto_restante_cup !== undefined 
+                        ? venta.deuda.monto_cup - venta.deuda.monto_restante_cup 
+                        : 0;
+                      const pagadoUsd = venta.deuda.monto_restante_usd !== undefined 
+                        ? venta.deuda.monto_usd - venta.deuda.monto_restante_usd 
+                        : 0;
+                      
+                      let parts = [];
+                      if (pagadoCup > 0) parts.push(`$${pagadoCup.toFixed(2)} CUP`);
+                      if (pagadoUsd > 0) parts.push(`$${pagadoUsd.toFixed(2)} USD`);
+                      return parts.join(' + ') || '$0.00';
+                    })()}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {venta?.is_deuda && venta?.deuda && (
+              <View style={styles.deudaInfoContainer}>
+                <View style={styles.deudaInfoItem}>
+                  <Text style={[styles.deudaInfoLabel, { color: colors.outline }]}>Restante</Text>
+                  <Text style={[
+                    styles.deudaInfoValue, 
+                    { 
+                      color: (venta.deuda.monto_restante_cup > 0 || venta.deuda.monto_restante_usd > 0) 
+                        ? colors.error 
+                        : '#4CAF50',
+                      fontWeight: '700'
+                    }
+                  ]}>
+                    {venta.deuda.monto_restante_cup > 0 ? `$${venta.deuda.monto_restante_cup.toFixed(2)} CUP` : ''}
+                    {venta.deuda.monto_restante_usd > 0 ? `$${venta.deuda.monto_restante_usd.toFixed(2)} USD` : ''}
+                    {(venta.deuda.monto_restante_cup === 0 || venta.deuda.monto_restante_cup === undefined) &&
+                     (venta.deuda.monto_restante_usd === 0 || venta.deuda.monto_restante_usd === undefined) ? 'Saldada' : ''}
+                  </Text>
+                </View>
+              </View>
+            )}
             {/* Usuario - Only show if NOT a deuda */}
             {!venta?.is_deuda && (
               <View style={styles.formGroup}>
@@ -1378,38 +1602,36 @@ const VentaEditContent = () => {
                   />
                 </View>
                 <View style={[styles.formGroup, { flex: 1, marginLeft: responsive.responsiveWidth(8) }]}>
-                  <Text style={[styles.label, { color: colors.outline }]}>Fecha *</Text>
-                  <TouchableOpacity
-                    style={[styles.dropdown, { backgroundColor: colors.surfaceVariant, borderColor: colors.outlineVariant }]}
-                    onPress={() => setShowDatePicker(true)}
-                  >
+                  <Text style={[styles.label, { color: colors.outline }]}>Fecha</Text>
+                  <View style={[styles.dropdown, { backgroundColor: colors.surfaceVariant, borderColor: colors.outlineVariant }]}>
                     <Text style={[styles.dropdownText, { color: formData.fecha_hora ? colors.onSurface : colors.outline }]}>
-                      {formData.fecha_hora ? new Date(formData.fecha_hora).toLocaleString() : 'Seleccionar fecha'}
+                      {formData.fecha_hora ? new Date(formData.fecha_hora).toLocaleDateString() : ''}
                     </Text>
-                    <Ionicons name="calendar-outline" size={responsive.responsiveWidth(20)} color={colors.outline} />
-                  </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             )}
           </Card>
 
           {/* Submit Button */}
-          <TouchableOpacity
-            style={[styles.submitButton, { backgroundColor: colors.primary }]}
-            onPress={handleSave}
-            disabled={isSaving || saleItems.length === 0}
-          >
-            {isSaving ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={responsive.responsiveWidth(20)} color="#fff" />
-                <Text style={[styles.submitButtonText, { color: '#fff' }]}>
-                  Actualizar Venta
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {!isViewMode && (
+            <TouchableOpacity
+              style={[styles.submitButton, { backgroundColor: colors.primary }]}
+              onPress={handleSave}
+              disabled={isSaving || saleItems.length === 0}
+            >
+              {isSaving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={responsive.responsiveWidth(20)} color="#fff" />
+                  <Text style={[styles.submitButtonText, { color: '#fff' }]}>
+                    Actualizar Venta
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
       </ScrollView>
 
       {/* Cuenta Selector Modal */}

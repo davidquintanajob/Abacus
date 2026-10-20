@@ -12,7 +12,7 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease --no-configure-on-demand"
+        "gradleCommand": ":app:assembleRelease --no-configure-on-demand -PreactNativeArchitecturesEnabled=false -PreactNativeArchitectures=arm64-v8a"
       }
     },
     "production": {

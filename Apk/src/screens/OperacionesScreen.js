@@ -12,7 +12,7 @@ import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
 import { useViewMode } from '../context/ViewModeContext';
-import { getOperaciones, deleteOperacion, createOperacion } from '../services/operacionService';
+import { getOperaciones, deleteOperacion, createOperacion, updateOperacion } from '../services/operacionService';
 import { getCuentas } from '../services/cuentaService';
 import configService from '../services/configService';
 import { getUsuarios } from '../services/usuarioService';
@@ -46,6 +46,7 @@ const OperacionesContent = () => {
   const filtersRef = useRef(filters);
   const userTiendaRef = useRef(user?.id_tienda);
   const hasUserInteractedWithTiendaFilter = useRef(false);
+  const isUserPageChange = useRef(false);
 
   useEffect(() => {
     isInitializedRef.current = isInitialized;
@@ -112,17 +113,18 @@ const OperacionesContent = () => {
   };
 
   // Filter states
-  const [filters, setFilters] = useState({ 
+  const [filters, setFilters] = useState({
     id_cuenta: null,
     id_usuario: null,
-    nombre_cuenta: '', 
-    nombre_usuario: '', 
+    nombre_cuenta: '',
+    nombre_usuario: '',
     id_tienda: '',
     tipo_operacion: '',
-    fecha_desde: formattedDate, 
-    fecha_hasta: formattedDate, 
-    cantidad_min: '', 
-    cantidad_max: '' 
+    fecha_desde: formattedDate,
+    fecha_hasta: formattedDate,
+    cantidad_min: '',
+    cantidad_max: '',
+    is_check: null
   });
   const [cuentas, setCuentas] = useState([]);
   const [users, setUsers] = useState([]);
@@ -199,40 +201,6 @@ const OperacionesContent = () => {
       setIsInitialized(true);
     }
   }, [user?.id_tienda]);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      if (isFirstFocus.current) {
-        isFirstFocus.current = false;
-        return;
-      }
-      if (isInitializedRef.current) {
-        const restoreFilters = async () => {
-          try {
-            const savedFilters = await AsyncStorage.getItem('operaciones_filters');
-            if (savedFilters) {
-              const parsedFilters = JSON.parse(savedFilters);
-              setFilters(parsedFilters);
-              fetchOperaciones(null, parsedFilters);
-            } else {
-              // Only restore user's tienda filter if it's empty and user has a tienda
-              const shouldRestore = !filtersRef.current.id_tienda && userTiendaRef.current;
-              if (shouldRestore) {
-                setFilters(prev => ({ ...prev, id_tienda: userTiendaRef.current.toString() }));
-                fetchOperaciones(userTiendaRef.current.toString());
-              } else {
-                fetchOperaciones();
-              }
-            }
-          } catch (error) {
-            console.error('Error restoring filters:', error);
-            fetchOperaciones();
-          }
-        };
-        restoreFilters();
-      }
-    }, [])
-  );
 
   const fetchAllCuentas = async () => {
     try {
@@ -406,8 +374,9 @@ const OperacionesContent = () => {
   }, [isInitialized]);
 
   useEffect(() => {
-    if (hasDoneInitialFetch.current) {
+    if (hasDoneInitialFetch.current && isUserPageChange.current) {
       fetchOperaciones();
+      isUserPageChange.current = false;
     }
   }, [pagination.currentPage]);
 
@@ -418,19 +387,20 @@ const OperacionesContent = () => {
   };
 
   const handleClearFilters = () => {
-    const clearedFilters = { 
+    const clearedFilters = {
       id_cuenta: null,
       id_usuario: null,
-      nombre_cuenta: '', 
-      nombre_usuario: '', 
+      nombre_cuenta: '',
+      nombre_usuario: '',
       id_tienda: '',
       tipo_operacion: '',
-      fecha_desde: formattedDate, 
-      fecha_hasta: formattedDate, 
-      cantidad_min: '', 
-      cantidad_max: '' 
+      fecha_desde: formattedDate,
+      fecha_hasta: formattedDate,
+      cantidad_min: '',
+      cantidad_max: '',
+      is_check: null
     };
-    
+
     hasUserInteractedWithTiendaFilter.current = true;
     setFilters(clearedFilters);
     setCuentaSearchText('');
@@ -438,7 +408,7 @@ const OperacionesContent = () => {
     setTiendaSearchText('');
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
-    
+
     // Send cleared filters directly to API to avoid state issues
     fetchOperaciones(clearedFilters);
   };
@@ -468,6 +438,27 @@ const OperacionesContent = () => {
         },
       ]
     );
+  };
+
+  const handleToggleCheck = async (operacion) => {
+    if (!isAdmin) {
+      showToast({ type: 'error', message: 'Solo los administradores pueden cambiar el estado de check' });
+      return;
+    }
+    if (isOfflineMode) {
+      showToast({ type: 'warning', message: 'No disponible en modo offline' });
+      return;
+    }
+    try {
+      const updatedOperacion = {
+        is_check: !operacion.is_check
+      };
+      await updateOperacion(operacion.id_operacion, updatedOperacion);
+      showToast({ type: 'success', message: 'Estado de check actualizado correctamente' });
+      fetchOperaciones();
+    } catch (err) {
+      showToast({ type: 'error', message: err.message, code: err.code });
+    }
   };
 
   const handleOperacionPress = (operacion) => {
@@ -659,15 +650,15 @@ const OperacionesContent = () => {
 
   const handleNextPage = () => {
     if (pagination.currentPage < pagination.totalPages) {
+      isUserPageChange.current = true;
       setPagination(prev => ({ ...prev, currentPage: prev.currentPage + 1 }));
-      fetchOperaciones();
     }
   };
 
   const handlePrevPage = () => {
     if (pagination.currentPage > 1) {
+      isUserPageChange.current = true;
       setPagination(prev => ({ ...prev, currentPage: prev.currentPage - 1 }));
-      fetchOperaciones();
     }
   };
 
@@ -737,7 +728,7 @@ const OperacionesContent = () => {
     <>
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Header 
-          title="Operaciones"
+          title="Abacus"
           onMenuPress={() => setSidebarOpen(true)}
           onThemePress={toggleTheme}
           onSettingsPress={undefined}
@@ -1080,6 +1071,59 @@ const OperacionesContent = () => {
                 )}
               </View>
 
+              <View style={styles.filterGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Solo operaciones chequeadas</Text>
+                <View style={styles.switchContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.switchOption,
+                      { borderColor: colors.outlineVariant },
+                      filters.is_check === true && { backgroundColor: colors.primary, borderColor: colors.primary }
+                    ]}
+                    onPress={() => {
+                      const newIsCheck = filters.is_check === true ? null : true;
+                      const updatedFilters = { ...filters, is_check: newIsCheck };
+                      setFilters(updatedFilters);
+                      setPagination(prev => ({ ...prev, currentPage: 1 }));
+                      fetchOperaciones(null, updatedFilters);
+                    }}
+                  >
+                    <Text style={[styles.switchOptionText, { color: filters.is_check === true ? '#fff' : colors.outline }]}>Sí</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.switchOption,
+                      { borderColor: colors.outlineVariant },
+                      filters.is_check === false && { backgroundColor: colors.primary, borderColor: colors.primary }
+                    ]}
+                    onPress={() => {
+                      const newIsCheck = filters.is_check === false ? null : false;
+                      const updatedFilters = { ...filters, is_check: newIsCheck };
+                      setFilters(updatedFilters);
+                      setPagination(prev => ({ ...prev, currentPage: 1 }));
+                      fetchOperaciones(null, updatedFilters);
+                    }}
+                  >
+                    <Text style={[styles.switchOptionText, { color: filters.is_check === false ? '#fff' : colors.outline }]}>No</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.switchOption,
+                      { borderColor: colors.outlineVariant },
+                      filters.is_check === null && { backgroundColor: colors.primary, borderColor: colors.primary }
+                    ]}
+                    onPress={() => {
+                      const updatedFilters = { ...filters, is_check: null };
+                      setFilters(updatedFilters);
+                      setPagination(prev => ({ ...prev, currentPage: 1 }));
+                      fetchOperaciones(null, updatedFilters);
+                    }}
+                  >
+                    <Text style={[styles.switchOptionText, { color: filters.is_check === null ? '#fff' : colors.outline }]}>Todos</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
               <View style={styles.filterRow}>
                 <View style={[styles.filterGroup, { flex: 1, marginRight: responsive.responsiveMargin(8) }]}>
                   <Text style={[styles.label, { color: colors.outline }]}>Cantidad Mínima</Text>
@@ -1301,6 +1345,15 @@ const OperacionesContent = () => {
                   activeOpacity={0.7}
                 >
                   <Card style={[styles.operacionCard, { backgroundColor: colors.surface }]}>
+                    {(operacion.tipo_operacion === 'Ingreso' || operacion.tipo_operacion === 'Retiro') && (
+                      <View style={[styles.checkFlag, { backgroundColor: operacion.is_check ? '#4CAF50' : '#FFC107' }]}>
+                        <Ionicons
+                          name={operacion.is_check ? "checkmark" : "alert"}
+                          size={responsive.responsiveWidth(14)}
+                          color="#fff"
+                        />
+                      </View>
+                    )}
                     <View style={styles.operacionInfo}>
                       <View style={styles.operacionHeader}>
                         <Text style={[styles.operacionCuenta, { color: colors.onSurface }]} numberOfLines={2} ellipsizeMode="tail">
@@ -1334,6 +1387,21 @@ const OperacionesContent = () => {
                     </View>
                     {canManageOperaciones && (
                       <View style={styles.operacionActions}>
+                        {isAdmin && !operacion.is_check && (operacion.tipo_operacion === 'Ingreso' || operacion.tipo_operacion === 'Retiro') && (
+                          <TouchableOpacity
+                            style={[styles.actionButtonSmall, styles.checkButtonSmall, { backgroundColor: isDarkMode ? 'rgba(76, 175, 80, 0.2)' : '#E8F5E9' }]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleToggleCheck(operacion);
+                            }}
+                          >
+                            <Ionicons
+                              name="checkmark-outline"
+                              size={responsive.responsiveWidth(20)}
+                              color="#4CAF50"
+                            />
+                          </TouchableOpacity>
+                        )}
                         <TouchableOpacity
                           style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
                           onPress={(e) => {
@@ -1341,11 +1409,7 @@ const OperacionesContent = () => {
                             handleOperacionPress(operacion);
                           }}
                         >
-                          <Image
-                            source={require('../../assets/editar.png')}
-                            style={styles.actionIconSmall}
-                            resizeMode="contain"
-                          />
+                          <Ionicons name="create-outline" size={responsive.responsiveWidth(20)} color={colors.primary} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={[styles.actionButtonSmall, styles.deleteButtonSmall, { backgroundColor: isDarkMode ? colors.errorContainer : '#FFEBEE' }]}
@@ -1354,11 +1418,7 @@ const OperacionesContent = () => {
                             handleDelete(operacion);
                           }}
                         >
-                          <Image
-                            source={require('../../assets/basura.png')}
-                            style={styles.actionIconSmall}
-                            resizeMode="contain"
-                          />
+                          <Ionicons name="trash-outline" size={responsive.responsiveWidth(20)} color={colors.error} />
                         </TouchableOpacity>
                       </View>
                     )}
@@ -1369,6 +1429,7 @@ const OperacionesContent = () => {
               <ScrollView horizontal showsHorizontalScrollIndicator={true} style={styles.tableScrollView}>
                 <View style={styles.tableContainer}>
                   <View style={[styles.tableHeader, { backgroundColor: colors.primary }]}>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(50) }]}></Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Fecha</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(200) }]}>Cuenta</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Tipo</Text>
@@ -1377,7 +1438,7 @@ const OperacionesContent = () => {
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Usuario</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(200) }]}>Motivo</Text>
                     {canManageOperaciones && (
-                      <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Acciones</Text>
+                      <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(140) }]}>Acciones</Text>
                     )}
                   </View>
                   {operaciones.map((operacion, index) => {
@@ -1389,6 +1450,15 @@ const OperacionesContent = () => {
                         activeOpacity={0.7}
                       >
                         <View style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? colors.surface : colors.surfaceVariant }]}>
+                          <View style={[styles.tableCellWithFlags, { width: responsive.responsiveWidth(50) }]}>
+                            <View style={styles.tableFlagsContainer}>
+                              {(operacion.tipo_operacion === 'Ingreso' || operacion.tipo_operacion === 'Retiro') && (
+                                <View style={[styles.tableCheckFlag, { backgroundColor: operacion.is_check ? '#4CAF50' : '#FFC107' }]}>
+                                  <Ionicons name={operacion.is_check ? "checkmark" : "alert"} size={responsive.responsiveWidth(12)} color="#fff" />
+                                </View>
+                              )}
+                            </View>
+                          </View>
                           <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
                             {new Date(operacion.fecha_hora).toLocaleDateString()}
                           </Text>
@@ -1409,8 +1479,19 @@ const OperacionesContent = () => {
                             {operacion.motivo || '-'}
                           </Text>
                           {canManageOperaciones && (
-                            <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(100) }]}>
+                            <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(140) }]}>
                               <View style={styles.tableActionsRow}>
+                                {isAdmin && !operacion.is_check && (operacion.tipo_operacion === 'Ingreso' || operacion.tipo_operacion === 'Retiro') && (
+                                  <TouchableOpacity
+                                    style={[styles.tableActionButton, styles.tableCheckButton, { backgroundColor: isDarkMode ? 'rgba(76, 175, 80, 0.2)' : '#E8F5E9' }]}
+                                    onPress={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleCheck(operacion);
+                                    }}
+                                  >
+                                    <Ionicons name="checkmark-outline" size={responsive.responsiveWidth(18)} color="#4CAF50" />
+                                  </TouchableOpacity>
+                                )}
                                 <TouchableOpacity
                                   style={[styles.tableActionButton, styles.tableEditButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
                                   onPress={(e) => {
@@ -2157,6 +2238,8 @@ const createStyles = (responsive) => StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
+    position: 'relative',
+    overflow: 'visible',
     shadowRadius: 4,
     elevation: 2,
   },
@@ -2364,6 +2447,66 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(14),
     fontWeight: '600',
     fontFamily: 'Inter',
+  },
+  checkFlag: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    width: responsive.responsiveWidth(24),
+    height: responsive.responsiveHeight(24),
+    borderRadius: responsive.responsiveWidth(12),
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  operacionFlagsContainer: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    zIndex: 1,
+  },
+  checkButtonSmall: {
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  switchContainer: {
+    flexDirection: 'row',
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  switchOption: {
+    flex: 1,
+    paddingVertical: responsive.responsivePadding(8),
+    paddingHorizontal: responsive.responsivePadding(12),
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  switchOptionText: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '500',
+    fontFamily: 'Inter',
+  },
+  tableCellWithFlags: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: responsive.responsivePadding(8),
+  },
+  tableFlagsContainer: {
+    flexDirection: 'row',
+    gap: responsive.responsiveMargin(4),
+    marginRight: responsive.responsiveMargin(6),
+  },
+  tableCheckFlag: {
+    width: responsive.responsiveWidth(18),
+    height: responsive.responsiveHeight(18),
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tableCheckButton: {
+    padding: responsive.responsivePadding(6),
+    borderRadius: 4,
   },
 });
 

@@ -44,6 +44,22 @@ const configService = {
       return configData;
     }
   },
+
+  // Obtener resumen de consumo de datos del usuario
+  getAuditLogSummary: async (idUsuario, fechaDesde, fechaHasta) => {
+    try {
+      const response = await api.get('/config/audit-logs/summary', {
+        params: {
+          id_usuario: idUsuario,
+          fecha_desde: fechaDesde,
+          fecha_hasta: fechaHasta,
+        },
+      });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
 };
 
 export default configService;

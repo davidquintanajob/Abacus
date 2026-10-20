@@ -12,7 +12,8 @@ import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
 import { useViewMode } from '../context/ViewModeContext';
-import { getProductos, getProductoByCodigo, deleteProducto } from '../services/productoService';
+import { getProductos, getProductoByCodigo, deleteProducto, getProductosEnAlerta } from '../services/productoService';
+import { getTiendas } from '../services/tiendaService';
 import configService from '../services/configService';
 import { getApiBaseUrl } from '../services/api';
 import ExportService from '../services/ExportService';
@@ -124,6 +125,8 @@ const ProductosContent = () => {
   const [showInventoryOptionsModal, setShowInventoryOptionsModal] = useState(false);
   const [showCodesOptionsModal, setShowCodesOptionsModal] = useState(false);
   const [showFieldSelectionModal, setShowFieldSelectionModal] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImageUri, setSelectedImageUri] = useState(null);
   const [exportType, setExportType] = useState(null); // 'inventory_excel', 'inventory_pdf', 'barcode', 'qr'
   const [isExporting, setIsExporting] = useState(false);
   const [apiBaseUrl, setApiBaseUrl] = useState('');
@@ -146,11 +149,6 @@ const ProductosContent = () => {
   const isAdmin = user?.rol === 'Administrador';
   const canEdit = isAdmin;
 
-  useEffect(() => {
-    loadApiBaseUrl();
-  }, []);
-
-  // Restore saved state only on initial load (before setting default filters)
   useEffect(() => {
     const restoreState = async () => {
       try {
@@ -187,7 +185,6 @@ const ProductosContent = () => {
           setIsInitialized(true);
         }
       } catch (error) {
-        console.error('Error restoring state:', error);
         await AsyncStorage.removeItem('productos_state');
         await AsyncStorage.removeItem('productos_from_form');
         setUserTiendaReady(true);
@@ -196,6 +193,10 @@ const ProductosContent = () => {
     };
     restoreState();
   }, [user?.id_tienda]);
+
+  useEffect(() => {
+    loadApiBaseUrl();
+  }, []);
 
   // Single API call when all data is ready
   useEffect(() => {
@@ -230,6 +231,41 @@ const ProductosContent = () => {
       setHasShownOfflineToast(false);
     }
   }, [isOfflineMode]);
+
+  // Mostrar toast de productos en alerta de stock
+  useEffect(() => {
+    const fetchStockAlerts = async () => {
+      if (isOfflineMode) return;
+      
+      try {
+        // Check if user can view all stores based on permissions
+        const userRole = user?.rol?.toLowerCase();
+        const canViewAllStores = 
+          userRole === 'administrador' ||
+          (userRole === 'dependiente' && permissions?.dependiente) ||
+          (userRole === 'almacenero' && permissions?.almacenero) ||
+          (userRole === 'económico' && permissions?.economico);
+        
+        // Pass id_tienda only if user cannot view all stores
+        const productosEnAlerta = await getProductosEnAlerta(canViewAllStores ? undefined : user?.id_tienda);
+        
+        if (productosEnAlerta && productosEnAlerta.length > 0) {
+          const nombresProductos = productosEnAlerta.map(p => p.nombre || 'Producto desconocido');
+          const message = `Productos en alerta de stock: ${nombresProductos.join(', ')}`;
+          
+          showToast({
+            type: 'warning',
+            message: message,
+            duration: 6000
+          });
+        }
+      } catch (error) {
+        // Error fetching stock alerts
+      }
+    };
+
+    fetchStockAlerts();
+  }, [user?.id_tienda, isOfflineMode, permissions]);
 
   const fetchAllTiendas = async () => {
     try {
@@ -2335,14 +2371,19 @@ const ProductosContent = () => {
                     <Card style={[styles.productoCard, { backgroundColor: colors.surface }]}>
                       <View style={styles.productoImageContainer}>
                         {fullImageUrl ? (
-                          <Image
-                            source={{ uri: fullImageUrl }}
-                            style={styles.productoImage}
-                            resizeMode="cover"
-                            onError={(error) => {
-                              console.log('Error loading image for product:', producto.nombre, 'URL:', fullImageUrl, 'Error:', error.nativeEvent);
-                            }}
-                          />
+                          <TouchableOpacity onPress={() => {
+                            setSelectedImageUri(fullImageUrl);
+                            setShowImageModal(true);
+                          }}>
+                            <Image
+                              source={{ uri: fullImageUrl }}
+                              style={styles.productoImage}
+                              resizeMode="cover"
+                              onError={(error) => {
+                                console.log('Error loading image for product:', producto.nombre, 'URL:', fullImageUrl, 'Error:', error.nativeEvent);
+                              }}
+                            />
+                          </TouchableOpacity>
                         ) : (
                           <View style={[styles.productoImage, styles.productoImagePlaceholder, { backgroundColor: colors.surfaceVariant }]}>
                             <Ionicons name="cube-outline" size={responsive.responsiveWidth(30)} color={colors.outline} />
@@ -2761,10 +2802,40 @@ const ProductosContent = () => {
                 style={[styles.exportConfirmButton, { backgroundColor: colors.primary }]}
                 onPress={handleExport}
               >
-                <Text style={[styles.exportConfirmButtonText, { color: '#fff' }]}>Generar Exportación</Text>
+                <Text style={[styles.exportConfirmButtonText, { color: '#fff' }]}>Exportar</Text>
               </TouchableOpacity>
             </View>
           </View>
+        </Modal>
+      )}
+
+      {/* Image Preview Modal */}
+      {showImageModal && selectedImageUri && (
+        <Modal
+          visible={showImageModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowImageModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.imageModalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowImageModal(false)}
+          >
+            <View style={styles.imageModalContent} activeOpacity={1}>
+              <TouchableOpacity
+                style={styles.imageModalCloseButton}
+                onPress={() => setShowImageModal(false)}
+              >
+                <Ionicons name="close" size={responsive.responsiveWidth(28)} color="#fff" />
+              </TouchableOpacity>
+              <Image
+                source={{ uri: selectedImageUri }}
+                style={styles.imageModalImage}
+                resizeMode="contain"
+              />
+            </View>
+          </TouchableOpacity>
         </Modal>
       )}
 
@@ -3233,9 +3304,32 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.body,
     fontFamily: 'Inter',
   },
-  paginationSubtext: {
+  loadingModalSubtext: {
     fontSize: responsive.fontSizes.bodySmall,
-    marginTop: responsive.responsiveMargin(2),
+    marginTop: responsive.responsiveMargin(8),
+    color: '#666',
+  },
+  imageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageModalContent: {
+    width: '90%',
+    height: '80%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageModalCloseButton: {
+    position: 'absolute',
+    top: responsive.responsiveMargin(20),
+    right: responsive.responsiveMargin(20),
+    zIndex: 1,
+  },
+  imageModalImage: {
+    width: '100%',
+    height: '100%',
   },
   tableScrollView: {
     marginBottom: responsive.responsiveMargin(16),
