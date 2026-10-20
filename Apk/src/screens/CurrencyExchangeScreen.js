@@ -327,45 +327,46 @@ const CurrencyExchangeContent = () => {
       productos.forEach(producto => {
         if (producto.tiendas_servicio && producto.tiendas_servicio.length > 0) {
           // Tenemos tiendas_servicio, calcular precios
-          // Según el backend: si tipoDatoModificar='usd', actualizamos USD basándonos en CUP
-          // Si tipoDatoModificar='cup', actualizamos CUP basándonos en USD
-
-          // Campo de referencia para el cálculo
-          const refPrecioField = currencyModalConfig.tipoDatoModificar === 'usd' ? 'precio_cup' : 'precio_usd';
-          const refCostoField = currencyModalConfig.tipoDatoModificar === 'usd' ? 'costo_cup' : 'costo_usd';
-
-          // Campo a mostrar como precio actual (el que se va a actualizar)
-          const currentPrecioField = currencyModalConfig.tipoDatoModificar === 'usd' ? 'precio_usd' : 'precio_cup';
-          const currentCostoField = currencyModalConfig.tipoDatoModificar === 'usd' ? 'costo_usd' : 'costo_cup';
+          // Calcular ambos precios (USD y CUP) independientemente de la opción seleccionada
 
           producto.tiendas_servicio.forEach(ts => {
-            const refPrice = parseFloat(ts[refPrecioField]) || 0;
-            const refCost = parseFloat(ts[refCostoField]) || 0;
+            const precioCUP = parseFloat(ts.precio_cup) || 0;
+            const precioUSD = parseFloat(ts.precio_usd) || 0;
+            const costoCUP = parseFloat(ts.costo_cup) || 0;
+            const costoUSD = parseFloat(ts.costo_usd) || 0;
 
-            const currentPrice = parseFloat(ts[currentPrecioField]) || 0;
-            const currentCost = parseFloat(ts[currentCostoField]) || 0;
+            // Calcular nuevos precios basándose en la configuración
+            // Si tipoDatoModificar='usd', actualizamos USD basándonos en CUP
+            // Si tipoDatoModificar='cup', actualizamos CUP basándonos en USD
+            let newPrecioCUP, newPrecioUSD, newCostoCUP, newCostoUSD;
 
-            const newPrice = calculateNewPrice(
-              refPrice,
-              currencyModalConfig.tipoDatoModificar,
-              rate,
-              currencyModalConfig.redondeo_exeso
-            );
-
-            const newCost = calculateNewPrice(
-              refCost,
-              currencyModalConfig.tipoDatoModificar,
-              rate,
-              currencyModalConfig.redondeo_exeso
-            );
+            if (currencyModalConfig.tipoDatoModificar === 'usd') {
+              // Actualizar USD basándose en CUP
+              newPrecioUSD = calculateNewPrice(precioCUP, 'usd', rate, currencyModalConfig.redondeo_exeso);
+              newCostoUSD = calculateNewPrice(costoCUP, 'usd', rate, currencyModalConfig.redondeo_exeso);
+              // CUP se mantiene igual
+              newPrecioCUP = precioCUP;
+              newCostoCUP = costoCUP;
+            } else {
+              // Actualizar CUP basándose en USD
+              newPrecioCUP = calculateNewPrice(precioUSD, 'cup', rate, currencyModalConfig.redondeo_exceso);
+              newCostoCUP = calculateNewPrice(costoUSD, 'cup', rate, currencyModalConfig.redondeo_exeso);
+              // USD se mantiene igual
+              newPrecioUSD = precioUSD;
+              newCostoUSD = costoUSD;
+            }
 
             itemsWithNewPrices.push({
               ...producto,
               tiendaNombre: ts.tienda?.nombre || 'Tienda desconocida',
-              currentPrice,
-              currentCost,
-              newPrice,
-              newCost,
+              currentPrecioCUP: precioCUP,
+              currentPrecioUSD: precioUSD,
+              currentCostoCUP: costoCUP,
+              currentCostoUSD: costoUSD,
+              newPrecioCUP,
+              newPrecioUSD,
+              newCostoCUP,
+              newCostoUSD,
             });
           });
         } else {
@@ -373,10 +374,14 @@ const CurrencyExchangeContent = () => {
           itemsWithNewPrices.push({
             ...producto,
             tiendaNombre: 'Sin datos de tienda',
-            currentPrice: null,
-            currentCost: null,
-            newPrice: null,
-            newCost: null,
+            currentPrecioCUP: null,
+            currentPrecioUSD: null,
+            currentCostoCUP: null,
+            currentCostoUSD: null,
+            newPrecioCUP: null,
+            newPrecioUSD: null,
+            newCostoCUP: null,
+            newCostoUSD: null,
           });
         }
       });
@@ -3914,17 +3919,29 @@ const CurrencyExchangeContent = () => {
                     <View key={`${item.id_servicio}-${item.tiendaNombre}-${index}`} style={[styles.previewItem, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
                       <Text style={[styles.previewItemName, { color: colors.onSurface }]}>{item.nombre}</Text>
                       <Text style={[styles.previewItemCategory, { color: colors.outline }]}>{item.categoria}</Text>
-                      {item.currentPrice !== null ? (
+                      {item.currentPrecioCUP !== null && item.currentPrecioCUP !== undefined ? (
                         <>
                           <Text style={[styles.previewItemTienda, { color: colors.outline }]}>{item.tiendaNombre}</Text>
                           <View style={styles.previewItemDetails}>
-                            <View style={styles.previewItemDetail}>
-                              <Text style={[styles.previewItemLabel, { color: colors.outline }]}>Precio actual:</Text>
-                              <Text style={[styles.previewItemValue, { color: colors.onSurface }]}>{item.currentPrice.toFixed(2)}</Text>
+                            <View style={styles.previewItemRow}>
+                              <View style={styles.previewItemDetail}>
+                                <Text style={[styles.previewItemLabel, { color: colors.outline }]}>Precio actual CUP:</Text>
+                                <Text style={[styles.previewItemValue, { color: colors.onSurface }]}>{item.currentPrecioCUP.toFixed(2)}</Text>
+                              </View>
+                              <View style={styles.previewItemDetail}>
+                                <Text style={[styles.previewItemLabel, { color: colors.outline }]}>Nuevo precio CUP:</Text>
+                                <Text style={[styles.previewItemValue, { color: colors.primary }]}>{item.newPrecioCUP !== undefined ? item.newPrecioCUP.toFixed(5) : 'N/A'}</Text>
+                              </View>
                             </View>
-                            <View style={styles.previewItemDetail}>
-                              <Text style={[styles.previewItemLabel, { color: colors.outline }]}>Nuevo precio:</Text>
-                              <Text style={[styles.previewItemValue, { color: colors.primary }]}>{item.newPrice.toFixed(2)}</Text>
+                            <View style={styles.previewItemRow}>
+                              <View style={styles.previewItemDetail}>
+                                <Text style={[styles.previewItemLabel, { color: colors.outline }]}>Precio actual USD:</Text>
+                                <Text style={[styles.previewItemValue, { color: colors.onSurface }]}>{item.currentPrecioUSD.toFixed(2)}</Text>
+                              </View>
+                              <View style={styles.previewItemDetail}>
+                                <Text style={[styles.previewItemLabel, { color: colors.outline }]}>Nuevo precio USD:</Text>
+                                <Text style={[styles.previewItemValue, { color: colors.primary }]}>{item.newPrecioUSD !== undefined ? item.newPrecioUSD.toFixed(5) : 'N/A'}</Text>
+                              </View>
                             </View>
                           </View>
                         </>
@@ -5065,6 +5082,10 @@ const createStyles = (responsive) => StyleSheet.create({
     fontStyle: 'italic',
   },
   previewItemDetails: {
+    flexDirection: 'column',
+    gap: responsive.responsiveMargin(8),
+  },
+  previewItemRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: responsive.responsiveMargin(16),

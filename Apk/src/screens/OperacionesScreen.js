@@ -451,7 +451,6 @@ const OperacionesContent = () => {
     }
     try {
       const updatedOperacion = {
-        ...operacion,
         is_check: !operacion.is_check
       };
       await updateOperacion(operacion.id_operacion, updatedOperacion);
@@ -1346,7 +1345,7 @@ const OperacionesContent = () => {
                   activeOpacity={0.7}
                 >
                   <Card style={[styles.operacionCard, { backgroundColor: colors.surface }]}>
-                    {(operacion.tipo_operacion === 'Ingreso' || operacion.tipo_operacion === 'Retiro' || operacion.tipo_operacion === 'Ingreso por Venta' || operacion.tipo_operacion === 'Pago de deuda') && (
+                    {(operacion.tipo_operacion === 'Ingreso' || operacion.tipo_operacion === 'Retiro') && (
                       <View style={[styles.checkFlag, { backgroundColor: operacion.is_check ? '#4CAF50' : '#FFC107' }]}>
                         <Ionicons
                           name={operacion.is_check ? "checkmark" : "alert"}
@@ -1388,7 +1387,7 @@ const OperacionesContent = () => {
                     </View>
                     {canManageOperaciones && (
                       <View style={styles.operacionActions}>
-                        {isAdmin && !operacion.is_check && (
+                        {isAdmin && !operacion.is_check && (operacion.tipo_operacion === 'Ingreso' || operacion.tipo_operacion === 'Retiro') && (
                           <TouchableOpacity
                             style={[styles.actionButtonSmall, styles.checkButtonSmall, { backgroundColor: isDarkMode ? 'rgba(76, 175, 80, 0.2)' : '#E8F5E9' }]}
                             onPress={(e) => {
@@ -1453,7 +1452,7 @@ const OperacionesContent = () => {
                         <View style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? colors.surface : colors.surfaceVariant }]}>
                           <View style={[styles.tableCellWithFlags, { width: responsive.responsiveWidth(50) }]}>
                             <View style={styles.tableFlagsContainer}>
-                              {(operacion.tipo_operacion === 'Ingreso' || operacion.tipo_operacion === 'Retiro' || operacion.tipo_operacion === 'Ingreso por Venta' || operacion.tipo_operacion === 'Pago de deuda') && (
+                              {(operacion.tipo_operacion === 'Ingreso' || operacion.tipo_operacion === 'Retiro') && (
                                 <View style={[styles.tableCheckFlag, { backgroundColor: operacion.is_check ? '#4CAF50' : '#FFC107' }]}>
                                   <Ionicons name={operacion.is_check ? "checkmark" : "alert"} size={responsive.responsiveWidth(12)} color="#fff" />
                                 </View>
@@ -1482,7 +1481,7 @@ const OperacionesContent = () => {
                           {canManageOperaciones && (
                             <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(140) }]}>
                               <View style={styles.tableActionsRow}>
-                                {isAdmin && !operacion.is_check && (
+                                {isAdmin && !operacion.is_check && (operacion.tipo_operacion === 'Ingreso' || operacion.tipo_operacion === 'Retiro') && (
                                   <TouchableOpacity
                                     style={[styles.tableActionButton, styles.tableCheckButton, { backgroundColor: isDarkMode ? 'rgba(76, 175, 80, 0.2)' : '#E8F5E9' }]}
                                     onPress={(e) => {
