@@ -389,6 +389,7 @@ const startApp = async () => {
     const { MovimientoLista } = require("./models/movimiento_lista.js");
     const { Movimiento } = require("./models/movimiento.js");
     const { MovimientoEntrada } = require("./models/movimiento_entrada.js");
+    const { MovimientoMovimiento } = require("./models/movimiento_movimiento.js");
     const { Deuda } = require("./models/deuda.js");
     const { PagoDeuda } = require("./models/pago_deuda.js");
     const { Notificacion } = require("./models/notificacion.js");
@@ -414,6 +415,7 @@ const startApp = async () => {
       MovimientoLista,
       Movimiento,
       MovimientoEntrada,
+      MovimientoMovimiento,
       Deuda,
       PagoDeuda,
       Notificacion

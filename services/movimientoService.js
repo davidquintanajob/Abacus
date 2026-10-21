@@ -1,6 +1,7 @@
 const { Movimiento } = require("../models/movimiento");
 const { MovimientoLista } = require("../models/movimiento_lista");
 const { MovimientoEntrada } = require("../models/movimiento_entrada");
+const { MovimientoMovimiento } = require("../models/movimiento_movimiento");
 const { Entrada } = require("../models/entrada");
 const { ServicioTienda } = require("../models/servicio_tienda");
 const { Servicio } = require("../models/servicio");
@@ -175,7 +176,7 @@ const getEntradasDisponibles = async (id_servicio_tienda, isVencible, transactio
 };
 
 /**
- * Descuenta la cantidad de un movimiento de las entradas disponibles del origen.
+ * Descuenta primero de las entradas y luego de los movimientos recibidos en origen.
  */
 const descontarEntradasParaMovimiento = async (id_movimiento, id_servicio_tienda_origen, cantidadTotal, transaction) => {
   const st = await ServicioTienda.findByPk(id_servicio_tienda_origen, {
@@ -215,7 +216,48 @@ const descontarEntradasParaMovimiento = async (id_movimiento, id_servicio_tienda
   }
 
   if (cantidadPendiente > 0) {
-    throwError("No hay suficiente cantidad en las entradas para cubrir el movimiento.", 400);
+    const movimientosOrigen = await Movimiento.findAll({
+      where: {
+        id_tienda_destino: st.id_tienda,
+        id_servicio: st.id_servicio,
+        cantidad_restante: { [Op.gt]: 0 },
+      },
+      include: [{
+        model: MovimientoLista,
+        as: "movimientoLista",
+        required: true,
+        where: { estado: true },
+      }],
+      order: [
+        [{ model: MovimientoLista, as: "movimientoLista" }, "fecha_hora", "ASC"],
+        ["id_movimiento", "ASC"],
+      ],
+      transaction,
+    });
+
+    for (const movimientoOrigen of movimientosOrigen) {
+      if (cantidadPendiente <= 0) break;
+      const disponible = parseFloat(movimientoOrigen.cantidad_restante);
+      const cantidadAUsar = Math.min(disponible, cantidadPendiente);
+
+      await movimientoOrigen.update(
+        { cantidad_restante: disponible - cantidadAUsar },
+        { transaction }
+      );
+      await MovimientoMovimiento.create(
+        {
+          id_movimiento,
+          id_movimiento_origen: movimientoOrigen.id_movimiento,
+          cantidad: cantidadAUsar,
+        },
+        { transaction }
+      );
+      cantidadPendiente -= cantidadAUsar;
+    }
+  }
+
+  if (cantidadPendiente > 0) {
+    throwError("No hay suficiente cantidad en las entradas y movimientos para cubrir el movimiento.", 400);
   }
 };
 
@@ -251,8 +293,35 @@ const revertirMovimientoEntradas = async (id_movimiento, transaction) => {
     await me.destroy({ transaction });
   }
 
+  const movimientosOrigen = await MovimientoMovimiento.findAll({
+    where: { id_movimiento },
+    transaction,
+  });
+  for (const mm of movimientosOrigen) {
+    if (cantidadPendiente <= 0) {
+      await mm.destroy({ transaction });
+      continue;
+    }
+    const movimientoOrigen = await Movimiento.findByPk(mm.id_movimiento_origen, { transaction });
+    if (!movimientoOrigen) {
+      throwError(
+        "No se puede revertir el movimiento porque uno de sus movimientos de origen ya no existe.",
+        400
+      );
+    }
+    const cantidadADevolver = Math.min(parseFloat(mm.cantidad), cantidadPendiente);
+    await movimientoOrigen.update(
+      {
+        cantidad_restante: parseFloat(movimientoOrigen.cantidad_restante || 0) + cantidadADevolver,
+      },
+      { transaction }
+    );
+    cantidadPendiente -= cantidadADevolver;
+    await mm.destroy({ transaction });
+  }
+
   if (cantidadPendiente > 0) {
-    throwError("No se puede revertir el movimiento: sus entradas de origen no cubren la cantidad restante.", 400);
+    throwError("No se puede revertir el movimiento: sus fuentes de origen no cubren la cantidad restante.", 400);
   }
 };
 

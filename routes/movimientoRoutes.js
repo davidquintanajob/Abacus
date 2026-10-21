@@ -172,7 +172,7 @@ router.get("/movimiento/:id", authenticate(), movimientoController.getMovimiento
  *       - Si `estado` es `true`, el origen debe tener stock suficiente para cada movimiento.
  *
  *       **3. Comportamiento según `estado`:**
- *       - **`estado = true`**: se aplica toda la lógica (descuento de entradas, resta del origen, suma al destino).
+ *       - **`estado = true`**: se descuenta primero de las entradas y luego de movimientos recibidos disponibles; se resta el stock del origen y se suma al destino.
  *       - **`estado = false`**: solo se crean los registros sin modificar inventario.
  *
  *       **4. Respuesta:** Lista de movimientos con todas las relaciones.

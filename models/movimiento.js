@@ -147,6 +147,14 @@ Movimiento.associate = function (models) {
     foreignKey: "id_movimiento",
     as: "ventaMovimientos",
   });
+  Movimiento.hasMany(models.MovimientoMovimiento, {
+    foreignKey: "id_movimiento",
+    as: "movimientosOrigen",
+  });
+  Movimiento.hasMany(models.MovimientoMovimiento, {
+    foreignKey: "id_movimiento_origen",
+    as: "movimientosConsumidos",
+  });
 };
 
 module.exports = { Movimiento };
