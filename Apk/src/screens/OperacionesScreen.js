@@ -1298,7 +1298,7 @@ const OperacionesContent = () => {
               </TouchableOpacity>
             )}
           </View>
-          {!isOfflineMode && isAdmin && (
+          {!isOfflineMode && canManageOperaciones && (
             <TouchableOpacity
               style={[styles.actionButton, styles.fullWidthButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
               onPress={handleTransfer}

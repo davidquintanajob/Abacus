@@ -491,7 +491,7 @@ const MovimientosContent = () => {
       return false;
     }
 
-    // Admin always sees complete button for pending movements
+    // Admin always sees complete button for pending movements (regardless of tienda)
     if (isAdmin) {
       return true;
     }
@@ -500,7 +500,7 @@ const MovimientosContent = () => {
       return false;
     }
 
-    const canManage = 
+    const canManage =
       userRole === 'dependiente' ? movimientoManagePermissions.dependiente :
       userRole === 'almacenero' ? movimientoManagePermissions.almacenero :
       userRole === 'económico' ? movimientoManagePermissions.economico : false;
@@ -509,14 +509,16 @@ const MovimientosContent = () => {
       return false;
     }
 
-    const accessLevel = 
+    const accessLevel =
       userRole === 'dependiente' ? movimientoAccessLevels.dependiente :
       userRole === 'almacenero' ? movimientoAccessLevels.almacenero :
       userRole === 'económico' ? movimientoAccessLevels.economico : 'none';
 
+    // Get destino tienda ID for non-admin users
+    const destinoTiendaId = movimiento.movimientos?.[0]?.servicioTiendaDestino?.tienda?.id_tienda;
+
     // If user has "own_store" access, only show complete button if their tienda is destino
     if (accessLevel === 'own_store' && userTiendaId) {
-      const destinoTiendaId = movimiento.movimientos?.[0]?.servicioTiendaDestino?.tienda?.id_tienda;
       return destinoTiendaId === userTiendaId;
     }
 

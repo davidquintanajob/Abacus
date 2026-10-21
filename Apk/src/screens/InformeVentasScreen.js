@@ -270,6 +270,17 @@ const InformeVentasContent = () => {
       setLoadingProgress(80);
       setLoadingMessage('Procesando datos...');
 
+      console.log('=== INFORME VENTAS - DATOS CRUDOS ===');
+      console.log('Total ventas obtenidas:', allVentas.length);
+      console.log('Muestra de datos de la primera venta:', JSON.stringify(allVentas[0], null, 2));
+
+      // Log Coca-Cola sale specifically
+      const cocaColaSale = allVentas.find(v => v.id_lista_venta === 568);
+      if (cocaColaSale) {
+        console.log('=== DATOS COCA-COLA (ID 568) ===');
+        console.log('Venta completa:', JSON.stringify(cocaColaSale, null, 2));
+      }
+
       // Group sales by date
       const salesByDate = new Map();
 
@@ -282,7 +293,8 @@ const InformeVentasContent = () => {
             ventasCupTransferencia: 0,
             ventasUsdEfectivo: 0,
             ventasUsdTransferencia: 0,
-            costos: 0,
+            costosCUP: 0,
+            costosUSD: 0,
           });
         }
 
@@ -305,12 +317,37 @@ const InformeVentasContent = () => {
           dayData.ventasUsdTransferencia += parseFloat(listaVenta.cantidad_cobrada_transferencia_usd || 0);
         }
 
-        // Calculate costs from ventas (always include costs regardless of forma_cobro filter)
+        // Calculate costs from ventas (distribute proportionally based on payment received)
+        // Use same logic as InformeGeneralScreen
+        const totalPrecioCobradoCUP = listaVenta.ventas?.reduce((sum, v) => sum + (parseFloat(v.precio_cobrado_cup || 0) * parseFloat(v.cantidad || 0)), 0) || 0;
+        const totalPrecioCobradoUSD = listaVenta.ventas?.reduce((sum, v) => sum + (parseFloat(v.precio_cobrado_usd || 0) * parseFloat(v.cantidad || 0)), 0) || 0;
+
+        const totalIngresoCUP = parseFloat(listaVenta.cantidad_cobrada_efectivo_cup || 0) + parseFloat(listaVenta.cantidad_cobrada_transferencia_cup || 0);
+        const totalIngresoUSD = parseFloat(listaVenta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(listaVenta.cobrada_transferencia_usd || 0);
+
+        const isCUPSale = totalIngresoCUP > 0;
+        const isUSDSale = totalIngresoUSD > 0;
+
         for (const venta of listaVenta.ventas || []) {
           const cantidad = parseFloat(venta.cantidad || 0);
-          const costoCUP = parseFloat(venta.costo_original_cup || 0);
-          const costoUSD = parseFloat(venta.costo_original_usd || 0);
-          dayData.costos += costoCUP * cantidad;
+          const costoOriginalCUP = parseFloat(venta.costo_original_cup || 0);
+          const costoOriginalUSD = parseFloat(venta.costo_original_usd || 0);
+
+          // Distribute costs proportionally based on income currency
+          if (isCUPSale && !isUSDSale) {
+            // CUP only sale - add CUP costs
+            dayData.costosCUP += costoOriginalCUP * cantidad;
+          } else if (isUSDSale && !isCUPSale) {
+            // USD only sale - add USD costs
+            dayData.costosUSD += costoOriginalUSD * cantidad;
+          } else if (isCUPSale && isUSDSale) {
+            // Mixed sale - assign each cost to its corresponding currency
+            const porcentajeCobroCUP = totalPrecioCobradoCUP > 0 ? totalIngresoCUP / totalPrecioCobradoCUP : 0;
+            const porcentajeCobroUSD = totalPrecioCobradoUSD > 0 ? totalIngresoUSD / totalPrecioCobradoUSD : 0;
+
+            dayData.costosCUP += (costoOriginalCUP * cantidad) * porcentajeCobroCUP;
+            dayData.costosUSD += (costoOriginalUSD * cantidad) * porcentajeCobroUSD;
+          }
         }
       }
 
@@ -329,13 +366,34 @@ const InformeVentasContent = () => {
         ventasCupTransferencia: chartData.reduce((sum, d) => sum + d.ventasCupTransferencia, 0),
         ventasUsdEfectivo: chartData.reduce((sum, d) => sum + d.ventasUsdEfectivo, 0),
         ventasUsdTransferencia: chartData.reduce((sum, d) => sum + d.ventasUsdTransferencia, 0),
-        costos: chartData.reduce((sum, d) => sum + d.costos, 0),
+        costosCUP: chartData.reduce((sum, d) => sum + d.costosCUP, 0),
+        costosUSD: chartData.reduce((sum, d) => sum + d.costosUSD, 0),
       };
+
+      console.log('=== TOTALES CALCULADOS ===');
+      console.log('Ventas CUP Efectivo:', totals.ventasCupEfectivo);
+      console.log('Ventas CUP Transferencia:', totals.ventasCupTransferencia);
+      console.log('Ventas USD Efectivo:', totals.ventasUsdEfectivo);
+      console.log('Ventas USD Transferencia:', totals.ventasUsdTransferencia);
+      console.log('Costos CUP:', totals.costosCUP);
+      console.log('Costos USD:', totals.costosUSD);
 
       // Calculate product sales and profits
       const productosVentas = new Map();
 
       for (const listaVenta of allVentas) {
+        // Get exchange rate from operations (use 815 as default if not available)
+        const cambioMoneda = listaVenta.operaciones?.[0]?.cambio_moneda ? parseFloat(listaVenta.operaciones[0].cambio_moneda) : 815;
+
+        const totalIngresoCUP = parseFloat(listaVenta.cantidad_cobrada_efectivo_cup || 0) + parseFloat(listaVenta.cantidad_cobrada_transferencia_cup || 0);
+        const totalIngresoUSD = parseFloat(listaVenta.cantidad_cobrada_efectivo_usd || 0) + parseFloat(listaVenta.cantidad_cobrada_transferencia_usd || 0);
+
+        const isCUPSale = totalIngresoCUP > 0;
+        const isUSDSale = totalIngresoUSD > 0;
+
+        console.log(`[InformeVentas] Procesando venta ID ${listaVenta.id_lista_venta}: isCUPSale=${isCUPSale}, isUSDSale=${isUSDSale}`);
+        console.log(`[InformeVentas] Total Ingreso CUP=${totalIngresoCUP}, Total Ingreso USD=${totalIngresoUSD}`);
+
         for (const venta of listaVenta.ventas || []) {
           const productoNombre = venta.servicioTienda?.servicio?.nombre || 'Producto desconocido';
           const cantidad = parseFloat(venta.cantidad || 0);
@@ -343,29 +401,122 @@ const InformeVentasContent = () => {
           const precioCobradoUSD = parseFloat(venta.precio_cobrado_usd || 0);
           const costoOriginalCUP = parseFloat(venta.costo_original_cup || 0);
           const costoOriginalUSD = parseFloat(venta.costo_original_usd || 0);
-          
-          const ventaCUP = precioCobradoCUP * cantidad;
-          const ventaUSD = precioCobradoUSD * cantidad;
-          const costoCUP = costoOriginalCUP * cantidad;
-          const costoUSD = costoOriginalUSD * cantidad;
-          const gananciaCUP = ventaCUP - costoCUP;
-          const gananciaUSD = ventaUSD - costoUSD;
+
+          console.log(`[InformeVentas] Producto: ${productoNombre}, Cantidad: ${cantidad}`);
+          console.log(`[InformeVentas] Datos crudos - precio_cobrado_cup: ${venta.precio_cobrado_cup}, precio_cobrado_usd: ${venta.precio_cobrado_usd}`);
+          console.log(`[InformeVentas] Datos crudos - costo_original_cup: ${venta.costo_original_cup}, costo_original_usd: ${venta.costo_original_usd}`);
+          console.log(`[InformeVentas] Datos parseados - precioCobradoCUP: ${precioCobradoCUP}, precioCobradoUSD: ${precioCobradoUSD}`);
+          console.log(`[InformeVentas] Datos parseados - costoOriginalCUP: ${costoOriginalCUP}, costoOriginalUSD: ${costoOriginalUSD}`);
+
+          const ventaPrecioCobradoCUP = precioCobradoCUP * cantidad;
+          const ventaPrecioCobradoUSD = precioCobradoUSD * cantidad;
+          const costoTotalCUP = costoOriginalCUP * cantidad;
+          const costoTotalUSD = costoOriginalUSD * cantidad;
+
+          console.log(`[InformeVentas] Precio por producto - CUP: ${ventaPrecioCobradoCUP.toFixed(2)}, USD: ${ventaPrecioCobradoUSD.toFixed(2)}`);
+          console.log(`[InformeVentas] Costo por producto - CUP: ${costoTotalCUP.toFixed(2)}, USD: ${costoTotalUSD.toFixed(2)}`);
+
+          // For sales calculation: use actual received income
+          // For single-product sales, all income goes to that product
+          // For multi-product sales, distribute proportionally
+          let ingresoVentaCUP, ingresoVentaUSD;
+
+          if (listaVenta.ventas.length === 1) {
+            // Single product sale - all income goes to this product
+            ingresoVentaCUP = totalIngresoCUP;
+            ingresoVentaUSD = totalIngresoUSD;
+          } else {
+            // Multi-product sale - distribute proportionally by price
+            const totalPrecioCUP = listaVenta.ventas.reduce((sum, v) => sum + (parseFloat(v.precio_cobrado_cup || 0) * parseFloat(v.cantidad || 0)), 0);
+            const totalPrecioUSD = listaVenta.ventas.reduce((sum, v) => sum + (parseFloat(v.precio_cobrado_usd || 0) * parseFloat(v.cantidad || 0)), 0);
+
+            const proporcionCUP = totalPrecioCUP > 0 ? ventaPrecioCobradoCUP / totalPrecioCUP : 0;
+            const proporcionUSD = totalPrecioUSD > 0 ? ventaPrecioCobradoUSD / totalPrecioUSD : 0;
+
+            ingresoVentaCUP = totalIngresoCUP * proporcionCUP;
+            ingresoVentaUSD = totalIngresoUSD * proporcionUSD;
+          }
+
+          console.log(`[InformeVentas] Ingreso por producto - CUP: ${ingresoVentaCUP.toFixed(2)}, USD: ${ingresoVentaUSD.toFixed(2)}`);
+
+          // Distribute costs based on income currency
+          let costoAsignadoCUP = 0;
+          let costoAsignadoUSD = 0;
+
+          if (isCUPSale && !isUSDSale) {
+            // CUP only sale - assign CUP costs
+            costoAsignadoCUP = costoTotalCUP;
+          } else if (isUSDSale && !isCUPSale) {
+            // USD only sale - assign USD costs
+            costoAsignadoUSD = costoTotalUSD;
+          } else if (isCUPSale && isUSDSale) {
+            // Mixed sale - assign each cost to its corresponding currency
+            // Calculate payment percentage for each currency
+            const totalPrecioCUP = listaVenta.ventas.reduce((sum, v) => sum + (parseFloat(v.precio_cobrado_cup || 0) * parseFloat(v.cantidad || 0)), 0);
+            const totalPrecioUSD = listaVenta.ventas.reduce((sum, v) => sum + (parseFloat(v.precio_cobrado_usd || 0) * parseFloat(v.cantidad || 0)), 0);
+
+            const porcentajeCobroCUP = totalPrecioCUP > 0 ? totalIngresoCUP / totalPrecioCUP : 0;
+            const porcentajeCobroUSD = totalPrecioUSD > 0 ? totalIngresoUSD / totalPrecioUSD : 0;
+
+            costoAsignadoCUP = costoTotalCUP * porcentajeCobroCUP;
+            costoAsignadoUSD = costoTotalUSD * porcentajeCobroUSD;
+          }
+
+          console.log(`[InformeVentas] Costos asignados - CUP: ${costoAsignadoCUP.toFixed(2)}, USD: ${costoAsignadoUSD.toFixed(2)}`);
+
+          // Calculate separate profits for each currency
+          const gananciaCUP = ingresoVentaCUP - costoAsignadoCUP;
+          const gananciaUSD = ingresoVentaUSD - costoAsignadoUSD;
+
+          console.log(`[InformeVentas] Ganancia por moneda - CUP: ${gananciaCUP.toFixed(2)}, USD: ${gananciaUSD.toFixed(2)}`);
+
+          // Convert USD to CUP for total calculation
+          // For sales (Top 5): always convert income to CUP
+          // For profits (Top 10): calculate profit in each currency, then convert to CUP
+          let ventaTotalCUP, gananciaTotalCUP;
+
+          if (isUSDSale && !isCUPSale) {
+            // USD-only sale: income is USD, convert to CUP for sales
+            ventaTotalCUP = ingresoVentaUSD * cambioMoneda;
+            // Profit is in USD, convert to CUP
+            gananciaTotalCUP = gananciaUSD * cambioMoneda;
+          } else if (isCUPSale && !isUSDSale) {
+            // CUP-only sale
+            ventaTotalCUP = ingresoVentaCUP;
+            gananciaTotalCUP = gananciaCUP;
+          } else {
+            // Mixed sale: convert both income and costs to CUP
+            ventaTotalCUP = ingresoVentaCUP + (ingresoVentaUSD * cambioMoneda);
+            const costoTotalCUPConvertido = costoAsignadoCUP + (costoAsignadoUSD * cambioMoneda);
+            gananciaTotalCUP = ventaTotalCUP - costoTotalCUPConvertido;
+          }
+
+          console.log(`[InformeVentas] Totales convertidos - Venta: ${ventaTotalCUP.toFixed(2)}, Ganancia: ${gananciaTotalCUP.toFixed(2)}`);
 
           if (!productosVentas.has(productoNombre)) {
             productosVentas.set(productoNombre, { ventaCUP: 0, ventaUSD: 0, gananciaCUP: 0, gananciaUSD: 0, cantidad: 0 });
           }
-          
+
           const productoData = productosVentas.get(productoNombre);
-          productoData.ventaCUP += ventaCUP;
-          productoData.ventaUSD += ventaUSD;
-          productoData.gananciaCUP += gananciaCUP;
-          productoData.gananciaUSD += gananciaUSD;
+          productoData.ventaCUP += ventaTotalCUP; // Total in CUP (converted)
+          productoData.ventaUSD += ingresoVentaUSD; // Keep original USD for reference
+          productoData.gananciaCUP += gananciaTotalCUP; // Total profit in CUP
+          productoData.gananciaUSD += 0; // Not used
           productoData.cantidad += cantidad;
         }
       }
 
       const totalVentasCUP = totals.ventasCupEfectivo + totals.ventasCupTransferencia;
       const totalVentasUSD = totals.ventasUsdEfectivo + totals.ventasUsdTransferencia;
+
+      // Calculate total sales in CUP (converted) for percentage calculation
+      // Use average exchange rate of 815 (from operations data)
+      const totalVentasCUPConvertido = totalVentasCUP + (totalVentasUSD * 815);
+
+      console.log('=== TOTAL VENTAS ===');
+      console.log('Total Ventas CUP:', totalVentasCUP);
+      console.log('Total Ventas USD:', totalVentasUSD);
+      console.log('Total Ventas CUP Convertido:', totalVentasCUPConvertido);
 
       // Group sales by hour (0-23)
       const salesByHour = new Map();
@@ -398,19 +549,26 @@ const InformeVentasContent = () => {
         totalUSD: data.totalUSD,
       }));
 
-      // Top 5 productos más vendidos (por ventas en CUP)
+      // Top 5 productos más vendidos (por ventas en CUP convertidas)
       const topProductosMasVendidos = Array.from(productosVentas.entries())
         .map(([nombre, data]) => ({
           nombre,
-          ventaCUP: data.ventaCUP,
+          ventaCUP: data.ventaCUP, // Already converted to CUP
+          ventaUSD: data.ventaUSD,
           cantidad: data.cantidad,
-          porcentaje: totalVentasCUP > 0 ? (data.ventaCUP / totalVentasCUP) * 100 : 0,
+          porcentaje: totalVentasCUPConvertido > 0 ? (data.ventaCUP / totalVentasCUPConvertido) * 100 : 0,
         }))
         .sort((a, b) => b.ventaCUP - a.ventaCUP)
         .slice(0, 5);
 
+      console.log('=== TOP 5 PRODUCTOS MÁS VENDIDOS ===');
+      topProductosMasVendidos.forEach((p, i) => {
+        console.log(`${i + 1}. ${p.nombre}: Venta CUP (convertida)=${p.ventaCUP.toFixed(2)}, Cantidad=${p.cantidad}, Porcentaje=${p.porcentaje.toFixed(2)}%`);
+      });
+
       // Top 10 productos menos vendidos (por ganancias)
-      const topProductosMenosVendidos = Array.from(productosVentas.entries())
+      // Show 10 products with lowest profit (not just negative)
+      const allProductos = Array.from(productosVentas.entries())
         .map(([nombre, data]) => ({
           nombre,
           ventaCUP: data.ventaCUP,
@@ -418,11 +576,28 @@ const InformeVentasContent = () => {
           gananciaCUP: data.gananciaCUP,
           gananciaUSD: data.gananciaUSD,
           cantidad: data.cantidad,
-          porcentajeCUP: totalVentasCUP > 0 ? (data.ventaCUP / totalVentasCUP) * 100 : 0,
-          porcentajeUSD: totalVentasUSD > 0 ? (data.ventaUSD / totalVentasUSD) * 100 : 0,
-        }))
-        .sort((a, b) => a.gananciaCUP - b.gananciaCUP)
-        .slice(0, 10);
+        }));
+
+      // Sort by profit (lowest first)
+      const sortedByProfit = allProductos.sort((a, b) => a.gananciaCUP - b.gananciaCUP);
+
+      // Take top 10 with lowest profit
+      const topProductosMenosVendidos = sortedByProfit.slice(0, 10);
+
+      // Calculate total profit for percentage calculation
+      const totalGanancia = allProductos.reduce((sum, p) => sum + p.gananciaCUP, 0);
+
+      // Calculate percentage for each product based on its contribution to total profit
+      topProductosMenosVendidos.forEach(p => {
+        p.porcentajeGanancia = totalGanancia !== 0 ? (p.gananciaCUP / totalGanancia) * 100 : 0;
+      });
+
+      console.log('=== TOP 10 PRODUCTOS MENOS VENDIDOS (POR GANANCIA) ===');
+      console.log('Total ganancia:', totalGanancia.toFixed(2));
+      console.log('Cantidad de productos:', topProductosMenosVendidos.length);
+      topProductosMenosVendidos.forEach((p, i) => {
+        console.log(`${i + 1}. ${p.nombre}: Ganancia CUP=${p.gananciaCUP.toFixed(2)}, Porcentaje=${p.porcentajeGanancia.toFixed(2)}%`);
+      });
 
       setLoadingProgress(100);
       setLoadingMessage('Generando informe...');
@@ -447,24 +622,32 @@ const InformeVentasContent = () => {
   };
 
   const calculateGananciaNeta = () => {
-    if (!reportData || !reportData.totals) return { cup: 0, usd: 0 };
+    if (!reportData || !reportData.totals) return { cup: 0, usd: 0, cupSinPerdidas: 0, usdSinPerdidas: 0 };
     const ventasCupEfectivo = reportData.totals.ventasCupEfectivo || 0;
     const ventasCupTransferencia = reportData.totals.ventasCupTransferencia || 0;
     const ventasUsdEfectivo = reportData.totals.ventasUsdEfectivo || 0;
     const ventasUsdTransferencia = reportData.totals.ventasUsdTransferencia || 0;
-    const costos = reportData.totals.costos || 0;
-    
-    const gananciaCUP = (ventasCupEfectivo + ventasCupTransferencia) - costos;
-    const gananciaUSD = ventasUsdEfectivo + ventasUsdTransferencia;
-    return { cup: gananciaCUP, usd: gananciaUSD };
+    const costosCUP = reportData.totals.costosCUP || 0;
+    const costosUSD = reportData.totals.costosUSD || 0;
+
+    // Ganancia sin pérdidas (bruta)
+    const gananciaCUPSinPerdidas = (ventasCupEfectivo + ventasCupTransferencia) - costosCUP;
+    const gananciaUSDSinPerdidas = (ventasUsdEfectivo + ventasUsdTransferencia) - costosUSD;
+
+    // Ganancia con pérdidas (asumiendo que no hay pérdidas en este informe de ventas)
+    // En InformeVentas no se calculan pérdidas, así que es igual a la ganancia bruta
+    const gananciaCUP = gananciaCUPSinPerdidas;
+    const gananciaUSD = gananciaUSDSinPerdidas;
+
+    return { cup: gananciaCUP, usd: gananciaUSD, cupSinPerdidas: gananciaCUPSinPerdidas, usdSinPerdidas: gananciaUSDSinPerdidas };
   };
 
   const calculateUtilidadPorcentaje = () => {
     if (!reportData || !reportData.totals) return '0.00';
     const gananciaNeta = calculateGananciaNeta();
-    const costosTotalesCUP = reportData.totals.costos || 0;
+    const costosTotalesCUP = reportData.totals.costosCUP + (reportData.totals.costosUSD * 815); // Use 815 as exchange rate
     if (costosTotalesCUP === 0) return '0.00';
-    const utilidad = (gananciaNeta.cup / costosTotalesCUP) * 100;
+    const utilidad = (gananciaNeta.cupSinPerdidas / costosTotalesCUP) * 100;
     return isNaN(utilidad) ? '0.00' : utilidad.toFixed(2);
   };
 
@@ -698,34 +881,42 @@ const InformeVentasContent = () => {
         { key: 'ventasCupTransferencia', color: '#2196F3', label: 'Transferencia CUP' },
         { key: 'ventasUsdEfectivo', color: '#FF9800', label: 'Efectivo USD' },
         { key: 'ventasUsdTransferencia', color: '#9C27B0', label: 'Transferencia USD' },
-        { key: 'costos', color: '#F44336', label: 'Costos' },
+        { key: 'costosCUP', color: '#F44336', label: 'Costos CUP' },
       ];
     } else if (formaCobroFilter === 'Efectivo CUP') {
       metricsToShow = [
         { key: 'ventasCupEfectivo', color: '#4CAF50', label: 'Efectivo CUP' },
-        { key: 'costos', color: '#F44336', label: 'Costos' },
+        { key: 'costosCUP', color: '#F44336', label: 'Costos CUP' },
       ];
     } else if (formaCobroFilter === 'Efectivo USD') {
       metricsToShow = [
         { key: 'ventasUsdEfectivo', color: '#FF9800', label: 'Efectivo USD' },
-        { key: 'costos', color: '#F44336', label: 'Costos' },
+        { key: 'costosUSD', color: '#F44336', label: 'Costos USD' },
       ];
     } else if (formaCobroFilter === 'Transferencia CUP') {
       metricsToShow = [
         { key: 'ventasCupTransferencia', color: '#2196F3', label: 'Transferencia CUP' },
-        { key: 'costos', color: '#F44336', label: 'Costos' },
+        { key: 'costosCUP', color: '#F44336', label: 'Costos CUP' },
       ];
     } else if (formaCobroFilter === 'Transferencia USD') {
       metricsToShow = [
         { key: 'ventasUsdTransferencia', color: '#9C27B0', label: 'Transferencia USD' },
-        { key: 'costos', color: '#F44336', label: 'Costos' },
+        { key: 'costosUSD', color: '#F44336', label: 'Costos USD' },
       ];
     }
 
     // Find max value for Y axis based on visible metrics
+    // Convert USD values to CUP for proper scaling (using 300 as exchange rate)
     const maxValue = Math.max(
       ...data.map(d => Math.max(
-        ...metricsToShow.map(m => d[m.key] || 0)
+        ...metricsToShow.map(m => {
+          const value = d[m.key] || 0;
+          // Convert USD values to CUP for scaling
+          if (m.key.includes('Usd') || m.key.includes('USD')) {
+            return value * 300;
+          }
+          return value;
+        })
       ))
     );
 
@@ -734,8 +925,10 @@ const InformeVentasContent = () => {
     // Handle single data point case
     const xStep = data.length > 1 ? chartWidth / (data.length - 1) : 0;
 
-    const getY = (value) => {
-      return padding + chartHeight - (value / yMax) * chartHeight;
+    const getY = (value, key) => {
+      // Convert USD values to CUP for proper positioning
+      const scaledValue = (key && (key.includes('Usd') || key.includes('USD'))) ? value * 300 : value;
+      return padding + chartHeight - (scaledValue / yMax) * chartHeight;
     };
 
     const getX = (index) => {
@@ -875,21 +1068,21 @@ const InformeVentasContent = () => {
             // Generate smooth bezier curve path
             const pathData = data.map((d, i) => {
               const x = getX(i);
-              const y = getY(d[key]);
+              const y = getY(d[key], key);
               return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
             }).join(' ');
 
             // Generate smooth bezier curve for the line
             const smoothPathData = (() => {
               if (data.length < 3) return pathData;
-              
-              let path = `M ${getX(0)} ${getY(data[0][key])}`;
-              
+
+              let path = `M ${getX(0)} ${getY(data[0][key], key)}`;
+
               for (let i = 0; i < data.length - 1; i++) {
                 const x0 = getX(i);
-                const y0 = getY(data[i][key]);
+                const y0 = getY(data[i][key], key);
                 const x1 = getX(i + 1);
-                const y1 = getY(data[i + 1][key]);
+                const y1 = getY(data[i + 1][key], key);
                 
                 // Control points for bezier curve
                 const cp1x = x0 + (x1 - x0) * 0.5;
@@ -924,7 +1117,7 @@ const InformeVentasContent = () => {
                 {/* Points for each data point */}
                 {data.map((d, i) => {
                   const x = getX(i);
-                  const y = getY(d[key]);
+                  const y = getY(d[key], key);
                   return (
                     <Circle
                       key={i}
@@ -975,10 +1168,9 @@ const InformeVentasContent = () => {
               <Text style={[styles.tooltipDate, { color: colors.onSurface }]}>
                 {selectedPoint.date}
               </Text>
-              {metricsToShow.map(({ key, color, label }) => (
+              {metricsToShow.map(({ key, color }) => (
                 <View key={key} style={styles.tooltipRow}>
                   <View style={[styles.tooltipDot, { backgroundColor: color }]} />
-                  <Text style={[styles.tooltipLabel, { color: colors.outline }]}>{label}:</Text>
                   <Text style={[styles.tooltipValue, { color: colors.onSurface }]}>
                     ${formatNumber(selectedPoint[key] || 0)}
                   </Text>
@@ -1595,7 +1787,7 @@ const InformeVentasContent = () => {
                     <View style={[styles.totalDot, { backgroundColor: '#F44336' }]} />
                     <Text style={[styles.totalLabel, { color: colors.onSurface }]}>Costos por Salida o/y Ventas:</Text>
                     <Text style={[styles.totalValue, { color: colors.primary }]}>
-                      {formatNumber(reportData.totals.costos)} CUP
+                      {formatNumber(reportData.totals.costosCUP)} CUP
                     </Text>
                   </View>
                 </>
@@ -1615,7 +1807,7 @@ const InformeVentasContent = () => {
                     <View style={[styles.totalDot, { backgroundColor: '#F44336' }]} />
                     <Text style={[styles.totalLabel, { color: colors.onSurface }]}>Costos por Salida o/y Ventas:</Text>
                     <Text style={[styles.totalValue, { color: colors.primary }]}>
-                      {formatNumber(reportData.totals.costos)} CUP
+                      {formatNumber(reportData.totals.costosCUP)} CUP
                     </Text>
                   </View>
                 </>
@@ -1635,7 +1827,7 @@ const InformeVentasContent = () => {
                     <View style={[styles.totalDot, { backgroundColor: '#F44336' }]} />
                     <Text style={[styles.totalLabel, { color: colors.onSurface }]}>Costos por Salida o/y Ventas:</Text>
                     <Text style={[styles.totalValue, { color: colors.primary }]}>
-                      {formatNumber(reportData.totals.costos)} CUP
+                      {formatNumber(reportData.totals.costosCUP)} CUP
                     </Text>
                   </View>
                 </>
@@ -1655,7 +1847,7 @@ const InformeVentasContent = () => {
                     <View style={[styles.totalDot, { backgroundColor: '#F44336' }]} />
                     <Text style={[styles.totalLabel, { color: colors.onSurface }]}>Costos por Salida o/y Ventas:</Text>
                     <Text style={[styles.totalValue, { color: colors.primary }]}>
-                      {formatNumber(reportData.totals.costos)} CUP
+                      {formatNumber(reportData.totals.costosCUP)} CUP
                     </Text>
                   </View>
                 </>
@@ -1675,7 +1867,7 @@ const InformeVentasContent = () => {
                     <View style={[styles.totalDot, { backgroundColor: '#F44336' }]} />
                     <Text style={[styles.totalLabel, { color: colors.onSurface }]}>Costos por Salida o/y Ventas:</Text>
                     <Text style={[styles.totalValue, { color: colors.primary }]}>
-                      {formatNumber(reportData.totals.costos)} CUP
+                      {formatNumber(reportData.totals.costosCUP)} CUP
                     </Text>
                   </View>
                 </>
@@ -1731,10 +1923,10 @@ const InformeVentasContent = () => {
               <View style={styles.chartContainer}>
                 {(() => {
                   const pieData = reportData.topProductosMenosVendidos.map((producto, index) => ({
-                    value: producto.ventaCUP,
+                    value: producto.gananciaCUP,
                     color: ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336', '#795548', '#607D8B', '#8BC34A', '#FF5722', '#E91E63'][index % 10],
                     label: producto.nombre,
-                    displayValue: producto.ventaCUP,
+                    displayValue: producto.gananciaCUP,
                   }));
 
                   return (
@@ -1753,14 +1945,14 @@ const InformeVentasContent = () => {
                       {producto.nombre}
                     </Text>
                     <View style={styles.productStatsContainer}>
-                      <Text style={[styles.productVenta, { color: colors.primary }]}>
-                        {formatNumber(producto.ventaCUP)} CUP
+                      <Text style={[styles.productVenta, { color: producto.gananciaCUP >= 0 ? colors.primary : '#F44336' }]}>
+                        {formatNumber(producto.gananciaCUP)} CUP
                       </Text>
                       <Text style={[styles.productCantidad, { color: colors.outline }]}>
                         {producto.cantidad} unidades
                       </Text>
                       <Text style={[styles.productPorcentaje, { color: colors.outline }]}>
-                        {(producto.porcentajeCUP || 0).toFixed(1)}% del total
+                        {producto.porcentajeGanancia.toFixed(1)}%
                       </Text>
                     </View>
                   </View>
@@ -1775,13 +1967,13 @@ const InformeVentasContent = () => {
                 <View style={styles.profitItem}>
                   <Text style={[styles.profitLabel, { color: colors.outline }]}>CUP</Text>
                   <Text style={[styles.profitValue, { color: colors.primary }]}>
-                    {formatNumber(calculateGananciaNeta().cup)}
+                    {formatNumber(calculateGananciaNeta().cupSinPerdidas)}
                   </Text>
                 </View>
                 <View style={styles.profitItem}>
                   <Text style={[styles.profitLabel, { color: colors.outline }]}>USD</Text>
                   <Text style={[styles.profitValue, { color: colors.primary }]}>
-                    {formatNumber(calculateGananciaNeta().usd)}
+                    {formatNumber(calculateGananciaNeta().usdSinPerdidas)}
                   </Text>
                 </View>
               </View>
@@ -2058,8 +2250,11 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   tooltipCard: {
     position: 'absolute',
-    padding: responsive.responsivePadding(12),
+    padding: responsive.responsivePadding(10),
     borderRadius: 8,
+    borderWidth: 1,
+    minWidth: 140,
+    zIndex: 100,
   },
   tooltipModalCard: {
     padding: responsive.responsivePadding(16),
@@ -2200,6 +2395,11 @@ const createStyles = (responsive) => StyleSheet.create({
   profitValue: {
     fontSize: responsive.responsiveFontSize(24),
     fontWeight: '700',
+    fontFamily: 'Inter',
+  },
+  profitValueSmall: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontWeight: '500',
     fontFamily: 'Inter',
   },
   utilidadContainer: {
