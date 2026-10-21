@@ -103,6 +103,8 @@ const InformeGeneralContent = () => {
       const productosGanancia = new Map();
 
       for (const listaVenta of ventas) {
+        console.log('[Informe] Procesando listaVenta ID:', listaVenta.id_lista_venta);
+
         // Income from ListaVenta (amount collected)
         const efectivoCUP = parseFloat(listaVenta.cantidad_cobrada_efectivo_cup || 0);
         const efectivoUSD = parseFloat(listaVenta.cantidad_cobrada_efectivo_usd || 0);
@@ -111,6 +113,8 @@ const InformeGeneralContent = () => {
 
         const totalIngresoCUP = efectivoCUP + transferenciaCUP;
         const totalIngresoUSD = efectivoUSD + transferenciaUSD;
+
+        console.log('[Informe] Ingresos - CUP:', totalIngresoCUP, 'USD:', totalIngresoUSD);
 
         ingresosVentasCUP += totalIngresoCUP;
         ingresosVentasUSD += totalIngresoUSD;
@@ -128,9 +132,13 @@ const InformeGeneralContent = () => {
           totalPrecioCobradoUSD += precioCobradoUSD * cantidad;
         }
 
+        console.log('[Informe] Total precio cobrado - CUP:', totalPrecioCobradoCUP, 'USD:', totalPrecioCobradoUSD);
+
         // Determine the currency of this sale based on actual income
         const isCUPSale = totalIngresoCUP > 0;
         const isUSDSale = totalIngresoUSD > 0;
+
+        console.log('[Informe] Tipo de venta - isCUPSale:', isCUPSale, 'isUSDSale:', isUSDSale);
 
         // Distribute actual income proportionally among products
         for (const venta of listaVenta.ventas || []) {
@@ -140,12 +148,43 @@ const InformeGeneralContent = () => {
           const precioCobradoCUP = parseFloat(venta.precio_cobrado_cup || 0);
           const precioCobradoUSD = parseFloat(venta.precio_cobrado_usd || 0);
 
-          // Only add cost in the currency of the actual payment
-          if (isCUPSale) {
-            costosVentasCUP += costoOriginalCUP * cantidad;
-          }
-          if (isUSDSale) {
-            costosVentasUSD += costoOriginalUSD * cantidad;
+          console.log('[Informe] Producto:', venta.servicioTienda?.servicio?.nombre, 'Cantidad:', cantidad);
+          console.log('[Informe] Costos - CUP:', costoOriginalCUP, 'USD:', costoOriginalUSD);
+          console.log('[Informe] Precios cobrados - CUP:', precioCobradoCUP, 'USD:', precioCobradoUSD);
+
+          // Distribute costs proportionally based on income currency
+          // If sale is CUP only, add CUP costs
+          // If sale is USD only, add USD costs
+          // If sale is mixed, assign each cost to its corresponding currency income
+          if (isCUPSale && !isUSDSale) {
+            // CUP only sale - add CUP costs
+            const costoTotalCUP = costoOriginalCUP * cantidad;
+            costosVentasCUP += costoTotalCUP;
+            console.log('[Informe] Venta CUP only - Agregando costo CUP:', costoTotalCUP);
+          } else if (isUSDSale && !isCUPSale) {
+            // USD only sale - add USD costs
+            const costoTotalUSD = costoOriginalUSD * cantidad;
+            costosVentasUSD += costoTotalUSD;
+            console.log('[Informe] Venta USD only - Agregando costo USD:', costoTotalUSD);
+          } else if (isCUPSale && isUSDSale) {
+            // Mixed sale - assign each cost to its corresponding currency
+            // Calculate percentage of expected price received in each currency
+            const porcentajeCobroCUP = totalPrecioCobradoCUP > 0 ? totalIngresoCUP / totalPrecioCobradoCUP : 0;
+            const porcentajeCobroUSD = totalPrecioCobradoUSD > 0 ? totalIngresoUSD / totalPrecioCobradoUSD : 0;
+
+            const costoTotalCUP = costoOriginalCUP * cantidad;
+            const costoTotalUSD = costoOriginalUSD * cantidad;
+
+            // Assign CUP cost based on CUP payment percentage
+            const costoCUPAsignado = costoTotalCUP * porcentajeCobroCUP;
+            // Assign USD cost based on USD payment percentage
+            const costoUSDAsignado = costoTotalUSD * porcentajeCobroUSD;
+
+            costosVentasCUP += costoCUPAsignado;
+            costosVentasUSD += costoUSDAsignado;
+
+            console.log('[Informe] Venta mixta - % cobro CUP:', porcentajeCobroCUP, '% cobro USD:', porcentajeCobroUSD);
+            console.log('[Informe] Costo CUP asignado:', costoCUPAsignado, 'Costo USD asignado:', costoUSDAsignado);
           }
 
           // Calculate profit per product using actual distributed income
@@ -158,37 +197,70 @@ const InformeGeneralContent = () => {
           const proporcionCUP = totalPrecioCobradoCUP > 0 ? ventaPrecioCobradoCUP / totalPrecioCobradoCUP : 0;
           const proporcionUSD = totalPrecioCobradoUSD > 0 ? ventaPrecioCobradoUSD / totalPrecioCobradoUSD : 0;
 
+          console.log('[Informe] Proporciones - CUP:', proporcionCUP, 'USD:', proporcionUSD);
+
           // Actual income for this product
           const ingresoVentaCUP = totalIngresoCUP * proporcionCUP;
           const ingresoVentaUSD = totalIngresoUSD * proporcionUSD;
 
-          // Calculate profit using the same logic as "Ganancia Neta"
+          console.log('[Informe] Ingreso por producto - CUP:', ingresoVentaCUP, 'USD:', ingresoVentaUSD);
+
+          // Calculate profit using the assigned costs
           let gananciaVenta = 0;
-          if (isCUPSale) {
+          if (isCUPSale && !isUSDSale) {
+            // CUP only sale
             const costoVentaCUP = costoOriginalCUP * cantidad;
             gananciaVenta = ingresoVentaCUP - costoVentaCUP;
-          }
-          if (isUSDSale) {
+            console.log('[Informe] Ganancia venta CUP only:', gananciaVenta);
+          } else if (isUSDSale && !isCUPSale) {
+            // USD only sale
             const costoVentaUSD = costoOriginalUSD * cantidad;
             const gananciaVentaUSD = ingresoVentaUSD - costoVentaUSD;
             // Convert USD profit to CUP for total calculation
             gananciaVenta = gananciaVentaUSD * cambioMoneda;
+            console.log('[Informe] Ganancia venta USD only:', gananciaVentaUSD, 'Convertida a CUP:', gananciaVenta);
+          } else if (isCUPSale && isUSDSale) {
+            // Mixed sale - calculate profit for each currency and sum them
+            const porcentajeCobroCUP = totalPrecioCobradoCUP > 0 ? totalIngresoCUP / totalPrecioCobradoCUP : 0;
+            const porcentajeCobroUSD = totalPrecioCobradoUSD > 0 ? totalIngresoUSD / totalPrecioCobradoUSD : 0;
+
+            const costoTotalCUP = costoOriginalCUP * cantidad;
+            const costoTotalUSD = costoOriginalUSD * cantidad;
+
+            const costoCUPAsignado = costoTotalCUP * porcentajeCobroCUP;
+            const costoUSDAsignado = costoTotalUSD * porcentajeCobroUSD;
+
+            const gananciaVentaCUP = ingresoVentaCUP - costoCUPAsignado;
+            const gananciaVentaUSD = ingresoVentaUSD - costoUSDAsignado;
+
+            // Sum both profits (convert USD to CUP)
+            gananciaVenta = gananciaVentaCUP + (gananciaVentaUSD * cambioMoneda);
+
+            console.log('[Informe] Ganancia venta mixta - CUP:', gananciaVentaCUP, 'USD:', gananciaVentaUSD, 'Total CUP:', gananciaVenta);
           }
 
           const currentGanancia = productosGanancia.get(productoNombre) || 0;
           productosGanancia.set(productoNombre, currentGanancia + gananciaVenta);
+          console.log('[Informe] Ganancia acumulada para', productoNombre, ':', currentGanancia + gananciaVenta);
         }
       }
+
+      console.log('[Informe] Totales finales - Ingresos CUP:', ingresosVentasCUP, 'Ingresos USD:', ingresosVentasUSD);
+      console.log('[Informe] Totales finales - Costos CUP:', costosVentasCUP, 'Costos USD:', costosVentasUSD);
 
       // Calculate losses from salidas (costo_cup/usd is already total cost, not unit cost)
       // Only consider CUP losses since USD is equivalent to CUP
       let perdidasSalidasCUP = 0;
       let perdidasSalidasUSD = 0;
 
+      console.log('[Informe] Procesando salidas, total:', salidas.length);
+
       for (const salida of salidas) {
         const cantidad = parseFloat(salida.cantidad_total || 1); // Use cantidad_total from API
         const costoCUP = parseFloat(salida.costo_cup || 0);
         const costoUSD = parseFloat(salida.costo_usd || 0);
+
+        console.log('[Informe] Salida - Cantidad:', cantidad, 'Costo CUP:', costoCUP, 'Costo USD:', costoUSD);
 
         // Only add CUP cost to losses (USD cost is equivalent, not separate)
         // Multiply by cantidad to get total loss for all units
@@ -197,17 +269,27 @@ const InformeGeneralContent = () => {
         perdidasSalidasUSD = 0;
       }
 
+      console.log('[Informe] Totales finales - Pérdidas CUP:', perdidasSalidasCUP, 'Pérdidas USD:', perdidasSalidasUSD);
+
       // Convert only USD income to CUP for total calculation (costs stay in their currency)
       const ingresosTotalesCUP = ingresosVentasCUP + (ingresosVentasUSD * cambioMoneda);
-      const gananciaNetaCUP = ingresosTotalesCUP - costosVentasCUP - perdidasSalidasCUP;
-      
+      const gananciaNetaCUP = ingresosVentasCUP - costosVentasCUP - perdidasSalidasCUP;
+
       // Ganancia USD should be only from USD sales (not conversion of CUP profit)
       // USD losses are 0 since they're equivalent to CUP losses
       const gananciaNetaUSD = ingresosVentasUSD - costosVentasUSD;
 
+      console.log('[Informe] Ganancia Neta CUP:', gananciaNetaCUP, 'Ganancia Neta USD:', gananciaNetaUSD);
+
       // Ganancia neta total en CUP (base para calcular % por producto)
+      // Debe incluir costos USD convertidos a CUP para que el cálculo sea correcto
       const ingresosTotalesCUPCalc = ingresosVentasCUP + (ingresosVentasUSD * cambioMoneda);
-      const gananciaNetaTotalCUP = ingresosTotalesCUPCalc - costosVentasCUP - perdidasSalidasCUP;
+      const costosTotalesCUPCalc = costosVentasCUP + (costosVentasUSD * cambioMoneda);
+      const gananciaNetaTotalCUP = ingresosTotalesCUPCalc - costosTotalesCUPCalc - perdidasSalidasCUP;
+
+      console.log('[Informe] Ingresos totales CUP (convertidos):', ingresosTotalesCUPCalc);
+      console.log('[Informe] Costos totales CUP (convertidos):', costosTotalesCUPCalc);
+      console.log('[Informe] Ganancia Neta Total CUP (para productos):', gananciaNetaTotalCUP);
 
       // Get top 5 products by profit, including their % of net profit
       const allProductos = Array.from(productosGanancia.entries())
@@ -259,12 +341,17 @@ const InformeGeneralContent = () => {
   };
 
   const calculateGananciaNeta = () => {
-    if (!reportData) return { cup: 0, usd: 0 };
-    // Ganancia Neta CUP = Ingresos Ventas CUP - Costos Ventas CUP - Pérdidas Salidas CUP
+    if (!reportData) return { cup: 0, usd: 0, cupSinPerdidas: 0, usdSinPerdidas: 0 };
+    // Ganancia Neta CUP (con pérdidas) = Ingresos Ventas CUP - Costos Ventas CUP - Pérdidas Salidas CUP
     const gananciaCUP = reportData.ingresosVentasCUP - reportData.costosVentasCUP - reportData.perdidasSalidasCUP;
-    // Ganancia Neta USD = Ingresos Ventas USD - Costos Ventas USD (no USD losses since they're equivalent to CUP)
-    const gananciaUSD = reportData.ingresosVentasUSD - reportData.costosVentasUSD;
-    return { cup: gananciaCUP, usd: gananciaUSD };
+    // Ganancia Neta CUP (sin pérdidas) = Ingresos Ventas CUP - Costos Ventas CUP
+    const gananciaCUPSinPerdidas = reportData.ingresosVentasCUP - reportData.costosVentasCUP;
+    // Ganancia Neta USD (con pérdidas) = Ingresos Ventas USD - Costos Ventas USD - Pérdidas Salidas convertidas a USD
+    const perdidasSalidasUSD = reportData.perdidasSalidasCUP / reportData.cambioMoneda;
+    const gananciaUSD = reportData.ingresosVentasUSD - reportData.costosVentasUSD - perdidasSalidasUSD;
+    // Ganancia Neta USD (sin pérdidas) = Ingresos Ventas USD - Costos Ventas USD
+    const gananciaUSDSinPerdidas = reportData.ingresosVentasUSD - reportData.costosVentasUSD;
+    return { cup: gananciaCUP, usd: gananciaUSD, cupSinPerdidas: gananciaCUPSinPerdidas, usdSinPerdidas: gananciaUSDSinPerdidas };
   };
 
   const calculateUtilidadPorcentaje = () => {
@@ -434,14 +521,16 @@ const InformeGeneralContent = () => {
                   const ventasCUP = reportData.ingresosVentasCUP;
                   const ventasUSD = reportData.ingresosVentasUSD * reportData.cambioMoneda;
                   const perdidas = reportData.perdidasSalidasCUP; // Only CUP losses, USD losses are equivalent
-                  const costos = reportData.costosVentasCUP; // Only CUP costs, no USD conversion
-                  const total = ventasCUP + ventasUSD + perdidas + costos;
+                  const costosCUP = reportData.costosVentasCUP;
+                  const costosUSD = reportData.costosVentasUSD * reportData.cambioMoneda;
+                  const total = ventasCUP + ventasUSD + perdidas + costosCUP + costosUSD;
 
                   const pieData = [
                     { value: ventasCUP, color: '#4CAF50', label: 'Ventas CUP', displayValue: reportData.ingresosVentasCUP, currency: 'CUP' },
                     { value: ventasUSD, color: '#2196F3', label: 'Ventas USD', displayValue: reportData.ingresosVentasUSD, currency: 'USD' },
                     { value: perdidas, color: '#F44336', label: 'Pérdidas', displayValue: perdidas, currency: 'CUP' },
-                    { value: costos, color: '#FF9800', label: 'Costos', displayValue: costos, currency: 'CUP' },
+                    { value: costosCUP, color: '#FF9800', label: 'Costos CUP', displayValue: costosCUP, currency: 'CUP' },
+                    { value: costosUSD, color: '#9C27B0', label: 'Costos USD', displayValue: reportData.costosVentasUSD, currency: 'USD' },
                   ];
 
                   return (
@@ -482,13 +571,19 @@ const InformeGeneralContent = () => {
                 <View style={styles.profitItem}>
                   <Text style={[styles.profitLabel, { color: colors.outline }]}>CUP</Text>
                   <Text style={[styles.profitValue, { color: colors.primary }]}>
-                    {formatNumber(calculateGananciaNeta().cup)}
+                    {formatNumber(calculateGananciaNeta().cupSinPerdidas)}
+                  </Text>
+                  <Text style={[styles.profitValueSmall, { color: colors.outline }]}>
+                    (con pérdidas: {formatNumber(calculateGananciaNeta().cup)})
                   </Text>
                 </View>
                 <View style={styles.profitItem}>
                   <Text style={[styles.profitLabel, { color: colors.outline }]}>USD</Text>
                   <Text style={[styles.profitValue, { color: colors.primary }]}>
-                    {formatNumber(calculateGananciaNeta().usd)}
+                    {formatNumber(calculateGananciaNeta().usdSinPerdidas)}
+                  </Text>
+                  <Text style={[styles.profitValueSmall, { color: colors.outline }]}>
+                    (con pérdidas: {formatNumber(calculateGananciaNeta().usd)})
                   </Text>
                 </View>
               </View>
@@ -715,6 +810,11 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(24),
     fontWeight: '700',
     fontFamily: 'Hanken Grotesk',
+  },
+  profitValueSmall: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(4),
   },
   utilidadContainer: {
     flexDirection: 'row',

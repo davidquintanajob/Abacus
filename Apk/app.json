@@ -1,8 +1,8 @@
 {
   "expo": {
     "name": "Abacus",
-    "slug": "abacus",
-    "version": "1.1.1",
+    "slug": "Abacus",
+    "version": "1.1.2",
     "icon": "./assets/Sin título-2.png",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -15,7 +15,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "7bb4fcc1-72bc-4152-b249-a7f1aa7426e4"
+        "projectId": "357feb20-6aee-44dc-988c-a663a554b63e"
       }
     },
     "plugins": [
