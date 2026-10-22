@@ -1,4 +1,6 @@
 pluginManagement {
+
+
   def reactNativeGradlePlugin = new File(
     providers.exec {
       workingDir(rootDir)
@@ -20,6 +22,12 @@ pluginManagement {
 plugins {
   id("com.facebook.react.settings")
   id("expo-autolinking-settings")
+}
+
+// Regenerate autolinking on Linux (EAS) to avoid stale Windows-path cache
+def autolinkingCacheDir = new File(rootDir, "build/generated/autolinking")
+if (!System.getProperty("os.name").toLowerCase().contains("windows")) {
+  autolinkingCacheDir.deleteDir()
 }
 
 extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
