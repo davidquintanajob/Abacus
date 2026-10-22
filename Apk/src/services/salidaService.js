@@ -1,11 +1,16 @@
 import api from './api';
 
-export const getSalidas = async (filters = {}, page = 1, limit = 10) => {
+export const getSalidas = async (filters = {}, page = undefined, limit = undefined) => {
   try {
-    const queryParams = new URLSearchParams({
-      limit: limit.toString(),
-      page: page.toString(),
-    });
+    const queryParams = new URLSearchParams();
+
+    // Only add limit and page if they are provided
+    if (limit !== undefined) {
+      queryParams.append('limit', limit.toString());
+    }
+    if (page !== undefined) {
+      queryParams.append('page', page.toString());
+    }
 
     // Add filters
     if (filters.id_servicio_tienda) queryParams.append('id_servicio_tienda', filters.id_servicio_tienda);

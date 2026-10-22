@@ -215,23 +215,12 @@ const InformeVentasContent = () => {
       }
 
 
-      // Fetch all ventas with high limit to get all data
-      let allVentas = [];
-      let page = 1;
-      const limit = 10000;
-      let hasMore = true;
+      // Fetch all ventas without limit to get all data
+      const ventasData = await getVentas(apiFilters);
+      let allVentas = ventasData.data || [];
 
-      while (hasMore) {
-        const ventasData = await getVentas(apiFilters, page, limit);
-        const ventas = ventasData.data || [];
-        allVentas = [...allVentas, ...ventas];
-
-        hasMore = ventas.length === limit && (ventasData.pagination?.currentPage < ventasData.pagination?.totalPages);
-        page++;
-
-        setLoadingProgress(20 + (page * 10));
-        setLoadingMessage(`Consultando ventas... (${allVentas.length} registros)`);
-      }
+      setLoadingProgress(40);
+      setLoadingMessage(`Consultando ventas... (${allVentas.length} registros)`);
 
       // Apply frontend filtering since backend might not be filtering correctly
       

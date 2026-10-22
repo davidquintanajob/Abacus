@@ -53,7 +53,7 @@ const OperacionFormContent = () => {
     cambio_moneda: '',
     cuenta: null,
     usuario: null,
-    is_check: true, // Default to checked for new operations
+    is_check: false, // Always default to unchecked for new operations
   });
 
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -104,7 +104,7 @@ const OperacionFormContent = () => {
             cambio_moneda: completeOperacion.cambio_moneda?.toString() || '',
             cuenta: completeOperacion.cuenta,
             usuario: completeOperacion.usuario,
-            is_check: completeOperacion.is_check !== undefined ? completeOperacion.is_check : true,
+            is_check: completeOperacion.is_check !== undefined ? completeOperacion.is_check : false,
           });
           
           if (completeOperacion.cuenta) {
@@ -216,7 +216,7 @@ const OperacionFormContent = () => {
         fecha_hora: formData.fecha_hora,
         motivo: formData.motivo.trim(),
         cambio_moneda: parseFloat(formData.cambio_moneda),
-        is_check: isAdmin ? formData.is_check : true, // Only admins can set is_check, default to true
+        is_check: false, // Always false - check must be done manually in OperacionesScreen
       };
 
       // Always use the logged-in user for id_usuario
@@ -489,7 +489,7 @@ const OperacionFormContent = () => {
                     <TouchableOpacity
                       style={[styles.switchContainer, { backgroundColor: formData.is_check ? colors.primary : colors.outlineVariant }]}
                       onPress={() => !isReadOnly && setFormData(prev => ({ ...prev, is_check: !prev.is_check }))}
-                      disabled={isReadOnly}
+                      disabled={true} // Always disabled - check must be done manually in OperacionesScreen
                     >
                       <View style={[styles.switchThumb, { transform: [{ translateX: formData.is_check ? responsive.responsiveWidth(20) : 0 }] }]} />
                     </TouchableOpacity>

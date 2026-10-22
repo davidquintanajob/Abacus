@@ -73,15 +73,15 @@ const InformeGeneralContent = () => {
       setLoadingProgress(20);
       setLoadingMessage('Consultando ventas...');
 
-      // Fetch ventas with date filter
-      const ventasData = await getVentas({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta }, 1, 1000);
+      // Fetch ventas with date filter (no limit to get all records)
+      const ventasData = await getVentas({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta });
       const ventas = ventasData.data || [];
 
       setLoadingProgress(50);
       setLoadingMessage('Consultando salidas...');
 
-      // Fetch salidas with date filter
-      const salidasData = await getSalidas({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta }, 1, 1000);
+      // Fetch salidas with date filter (no limit to get all records)
+      const salidasData = await getSalidas({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta });
       const salidas = salidasData.data || [];
 
       setLoadingProgress(70);
