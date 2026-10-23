@@ -5,6 +5,10 @@ const { Tienda } = require("../models/tienda");
 const { Codigo } = require("../models/codigo");
 const { Entrada } = require("../models/entrada");
 const { Salida } = require("../models/salida");
+const { Venta } = require("../models/venta");
+const { ListaVenta } = require("../models/lista_venta");
+const { Movimiento } = require("../models/movimiento");
+const { MovimientoLista } = require("../models/movimiento_lista");
 const { Op, Sequelize } = require("sequelize");
 const fs = require("fs");
 const path = require("path");
@@ -741,11 +745,301 @@ const deleteProducto = async (id) => {
   }
 };
 
+/**
+ * Devuelve el seguimiento del inventario de un producto (id_servicio) en una tienda
+ * (id_tienda) en el rango [fecha_desde, fecha_hasta], agrupando movimientos
+ * consecutivos del mismo tipo de efecto sobre el stock.
+ *
+ * Tipos considerados:
+ *  - entrada     → suma stock  (Entrada)
+ *  - salida      → resta stock (Salida, con motivo)
+ *  - venta       → resta stock (Venta vía ListaVenta.fecha_hora)
+ *  - movimiento  → transferencia entre tiendas (Movimiento vía MovimientoLista.fecha_hora)
+ *                  subtipo "entrada" si la tienda evaluada es destino,
+ *                  subtipo "salida"  si es origen.
+ */
+const getSeguimientoInventario = async (id_servicio, id_tienda, fecha_desde, fecha_hasta) => {
+  // 1) Verificar que sea un producto (herencia Servicio → Producto)
+  const producto = await Producto.findByPk(id_servicio, {
+    include: [{ model: Servicio, as: "servicio" }],
+  });
+  if (!producto || !producto.servicio) {
+    throwError("El servicio especificado no es un producto", 404);
+  }
+
+  // 2) Verificar la tienda
+  const tienda = await Tienda.findByPk(id_tienda);
+  if (!tienda) {
+    throwError(`La tienda con id ${id_tienda} no existe`, 404);
+  }
+
+  // 3) Verificar que el producto esté asociado a la tienda
+  const st = await ServicioTienda.findOne({
+    where: { id_servicio, id_tienda },
+  });
+  if (!st) {
+    throwError("El producto no está asociado a la tienda especificada", 404);
+  }
+
+  // 4) Validar fechas
+  const desde = new Date(fecha_desde);
+  const hasta = new Date(fecha_hasta);
+  if (isNaN(desde.getTime())) {
+    throwError("'fecha_desde' no es una fecha válida", 400);
+  }
+  if (isNaN(hasta.getTime())) {
+    throwError("'fecha_hasta' no es una fecha válida", 400);
+  }
+  if (desde > hasta) {
+    throwError("'fecha_desde' no puede ser mayor que 'fecha_hasta'", 400);
+  }
+
+  // Si fecha_hasta viene como YYYY-MM-DD, incluir todo el día
+  const hastaFilter = new Date(hasta);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(fecha_hasta).trim())) {
+    hastaFilter.setHours(23, 59, 59, 999);
+  }
+
+  const fechaFilter = { [Op.between]: [desde, hastaFilter] };
+
+  // 5) Entradas
+  const entradas = await Entrada.findAll({
+    where: { id_servicio_tienda: st.id_servicio_tienda, fecha: fechaFilter },
+    order: [["fecha", "ASC"]],
+  });
+
+  // 6) Salidas
+  const salidas = await Salida.findAll({
+    where: { id_servicio_tienda: st.id_servicio_tienda, fecha: fechaFilter },
+    order: [["fecha", "ASC"]],
+  });
+
+  // 7) Ventas (la fecha viene de ListaVenta.fecha_hora)
+  const ventas = await Venta.findAll({
+    where: { id_servicio_tienda: st.id_servicio_tienda },
+    include: [
+      {
+        model: ListaVenta,
+        as: "listaVenta",
+        required: true,
+        where: { fecha_hora: fechaFilter },
+      },
+    ],
+    order: [[{ model: ListaVenta, as: "listaVenta" }, "fecha_hora", "ASC"]],
+  });
+
+  // 8) Movimientos entre tiendas (filtrados por id_servicio y por origen/destino)
+  const movimientos = await Movimiento.findAll({
+    where: {
+      id_servicio,
+      [Op.or]: [
+        { id_tienda_origen: id_tienda },
+        { id_tienda_destino: id_tienda },
+      ],
+    },
+    include: [
+      {
+        model: MovimientoLista,
+        as: "movimientoLista",
+        required: true,
+        where: { fecha_hora: fechaFilter },
+      },
+      { model: Tienda, as: "tiendaOrigen" },
+      { model: Tienda, as: "tiendaDestino" },
+    ],
+    order: [[{ model: MovimientoLista, as: "movimientoLista" }, "fecha_hora", "ASC"]],
+  });
+
+  // 9) Normalizar todos los eventos en una lista homogénea
+  const eventos = [];
+
+  for (const e of entradas) {
+    eventos.push({
+      fecha: new Date(e.fecha),
+      tipo: "entrada",
+      cantidad: Number(e.cantidad_entrada),
+      delta: Number(e.cantidad_entrada),
+      detalle: {
+        codigo_lote: e.codigo_lote,
+        nombre_proveedor: e.nombre_proveedor,
+        fecha_vencimiento: e.fecha_vencimiento,
+      },
+    });
+  }
+
+  for (const s of salidas) {
+    eventos.push({
+      fecha: new Date(s.fecha),
+      tipo: "salida",
+      cantidad: Number(s.cantidad_total),
+      delta: -Number(s.cantidad_total),
+      detalle: {
+        motivo: s.descripcion,
+        tipo_salida: s.tipo_salida,
+      },
+    });
+  }
+
+  for (const v of ventas) {
+    eventos.push({
+      fecha: new Date(v.listaVenta.fecha_hora),
+      tipo: "venta",
+      cantidad: Number(v.cantidad),
+      delta: -Number(v.cantidad),
+      detalle: {
+        id_venta: v.id_venta,
+        id_lista_venta: v.id_lista_venta,
+      },
+    });
+  }
+
+  for (const m of movimientos) {
+    const esDestino = m.id_tienda_destino === id_tienda;
+    const cantidad = Number(m.cantidad);
+    eventos.push({
+      fecha: new Date(m.movimientoLista.fecha_hora),
+      tipo: "movimiento",
+      subtipo: esDestino ? "entrada" : "salida",
+      cantidad,
+      delta: esDestino ? cantidad : -cantidad,
+      detalle: {
+        direccion: esDestino ? "entrada" : "salida",
+        id_tienda_origen: m.id_tienda_origen,
+        id_tienda_destino: m.id_tienda_destino,
+        tienda_origen: m.tiendaOrigen ? m.tiendaOrigen.nombre : null,
+        tienda_destino: m.tiendaDestino ? m.tiendaDestino.nombre : null,
+        tipo_movimiento: m.movimientoLista.tipo_movimiento,
+        nota: m.nota,
+      },
+    });
+  }
+
+  // 10) Ordenar cronológicamente
+  eventos.sort((a, b) => a.fecha - b.fecha);
+
+  // 11) Agrupar consecutivos del mismo tipo (movimiento se distingue por dirección)
+  const grupos = [];
+  let actual = null;
+
+  for (const ev of eventos) {
+    const key = ev.tipo === "movimiento" ? `movimiento:${ev.subtipo}` : ev.tipo;
+    if (actual && actual._key === key) {
+      actual.fecha_fin = ev.fecha;
+      actual.cantidad_total += Math.abs(ev.cantidad);
+      actual.efecto_numerico += ev.delta;
+      actual.cantidad_registros += 1;
+      actual._eventos.push(ev);
+    } else {
+      actual = {
+        _key: key,
+        tipo: ev.tipo,
+        subtipo: ev.subtipo || null,
+        fecha_inicio: ev.fecha,
+        fecha_fin: ev.fecha,
+        cantidad_total: Math.abs(ev.cantidad),
+        efecto_numerico: ev.delta,
+        cantidad_registros: 1,
+        _eventos: [ev],
+      };
+      grupos.push(actual);
+    }
+  }
+
+  // 12) Dar formato final a cada grupo
+  const seguimiento = grupos.map((g, idx) => {
+    const item = {
+      orden: idx + 1,
+      tipo: g.tipo,
+      subtipo: g.subtipo,
+      fecha_inicio: g.fecha_inicio,
+      fecha_fin: g.fecha_fin,
+      cantidad_total: g.cantidad_total,
+      efecto_numerico: g.efecto_numerico,
+      cantidad_registros: g.cantidad_registros,
+    };
+
+    if (g.tipo === "entrada") {
+      item.detalles = g._eventos.map((e) => ({
+        fecha: e.fecha,
+        codigo_lote: e.detalle.codigo_lote,
+        proveedor: e.detalle.nombre_proveedor,
+        fecha_vencimiento: e.detalle.fecha_vencimiento,
+        cantidad: e.cantidad,
+      }));
+    } else if (g.tipo === "salida") {
+      item.detalles = g._eventos.map((e) => ({
+        fecha: e.fecha,
+        motivo: e.detalle.motivo,
+        tipo_salida: e.detalle.tipo_salida,
+        cantidad: e.cantidad,
+      }));
+    } else if (g.tipo === "venta") {
+      item.detalles = g._eventos.map((e) => ({
+        fecha: e.fecha,
+        id_venta: e.detalle.id_venta,
+        id_lista_venta: e.detalle.id_lista_venta,
+        cantidad: e.cantidad,
+      }));
+    } else if (g.tipo === "movimiento") {
+      item.detalles = g._eventos.map((e) => ({
+        fecha: e.fecha,
+        direccion: e.detalle.direccion,
+        id_tienda_origen: e.detalle.id_tienda_origen,
+        tienda_origen: e.detalle.tienda_origen,
+        id_tienda_destino: e.detalle.id_tienda_destino,
+        tienda_destino: e.detalle.tienda_destino,
+        tipo_movimiento: e.detalle.tipo_movimiento,
+        nota: e.detalle.nota,
+        cantidad: e.cantidad,
+      }));
+      item.tiendas_destino = [
+        ...new Set(
+          g._eventos
+            .filter((e) => e.detalle.direccion === "entrada")
+            .map((e) => e.detalle.tienda_destino)
+            .filter(Boolean)
+        ),
+      ];
+      item.tiendas_origen = [
+        ...new Set(
+          g._eventos
+            .filter((e) => e.detalle.direccion === "salida")
+            .map((e) => e.detalle.tienda_origen)
+            .filter(Boolean)
+        ),
+      ];
+    }
+
+    return item;
+  });
+
+  return {
+    producto: {
+      id_servicio: producto.id_servicio,
+      nombre: producto.servicio.nombre,
+      sufijo: producto.sufijo,
+      unidad_medida: producto.unidad_medida,
+    },
+    tienda: {
+      id_tienda: tienda.id_tienda,
+      nombre: tienda.nombre,
+    },
+    rango: {
+      desde: desde,
+      hasta: hastaFilter,
+    },
+    stock_actual: st.cantidad !== null && st.cantidad !== undefined ? Number(st.cantidad) : null,
+    total_grupos: seguimiento.length,
+    seguimiento,
+  };
+};
+
 module.exports = {
   createProducto,
   getProductoById,
   getProductosEnAlerta,
   filterProductos,
   updateProducto,
-  deleteProducto, // <-- exportar
+  deleteProducto,
+  getSeguimientoInventario,
 };

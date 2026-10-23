@@ -12,6 +12,125 @@ const authenticate = require("../helpers/authenticate");
 
 /**
  * @swagger
+ * /producto/{id}/seguimiento-inventario:
+ *   get:
+ *     summary: Seguimiento del inventario de un producto en una tienda
+ *     description: >
+ *       Devuelve el historial de movimientos del inventario de un producto (id_servicio)
+ *       en una tienda (id_tienda) dentro del rango [fecha_desde, fecha_hasta].
+ *       Los movimientos consecutivos del mismo tipo (entrada, salida, venta o movimiento
+ *       entre tiendas) se agrupan en un solo bloque con su rango de fechas y cantidades
+ *       acumuladas. Cada grupo se interrumpe cuando aparece un tipo distinto.
+ *
+ *       - `entrada`: suma stock (incluye lote y proveedor).
+ *       - `salida`: resta stock (incluye motivo y tipo de salida).
+ *       - `venta`: resta stock (incluye id_venta).
+ *       - `movimiento`: transferencia entre tiendas. Se indica `subtipo` = `entrada`
+ *         si la tienda evaluada fue destino, o `salida` si fue origen, además de la
+ *         tienda origen/destino involucrada.
+ *     tags: [Productos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: id_servicio del producto
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: id_tienda
+ *         required: true
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: fecha_desde
+ *         required: true
+ *         description: Fecha inicial (YYYY-MM-DD o ISO 8601)
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: fecha_hasta
+ *         required: true
+ *         description: Fecha final (YYYY-MM-DD o ISO 8601). Si es YYYY-MM-DD se incluye todo el día.
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Seguimiento generado correctamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 producto:
+ *                   type: object
+ *                   properties:
+ *                     id_servicio: { type: integer }
+ *                     nombre: { type: string }
+ *                     sufijo: { type: string }
+ *                     unidad_medida: { type: string, nullable: true }
+ *                 tienda:
+ *                   type: object
+ *                   properties:
+ *                     id_tienda: { type: integer }
+ *                     nombre: { type: string }
+ *                 rango:
+ *                   type: object
+ *                   properties:
+ *                     desde: { type: string, format: date-time }
+ *                     hasta: { type: string, format: date-time }
+ *                 stock_actual:
+ *                   type: number
+ *                   nullable: true
+ *                 total_grupos:
+ *                   type: integer
+ *                 seguimiento:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       orden: { type: integer }
+ *                       tipo:
+ *                         type: string
+ *                         enum: [entrada, salida, venta, movimiento]
+ *                       subtipo:
+ *                         type: string
+ *                         nullable: true
+ *                         enum: [entrada, salida]
+ *                       fecha_inicio: { type: string, format: date-time }
+ *                       fecha_fin: { type: string, format: date-time }
+ *                       cantidad_total: { type: number }
+ *                       efecto_numerico:
+ *                         type: number
+ *                         description: Efecto neto sobre el stock (positivo suma, negativo resta)
+ *                       cantidad_registros: { type: integer }
+ *                       detalles:
+ *                         type: array
+ *                         items: { type: object }
+ *                       tiendas_destino:
+ *                         type: array
+ *                         nullable: true
+ *                         items: { type: string }
+ *                       tiendas_origen:
+ *                         type: array
+ *                         nullable: true
+ *                         items: { type: string }
+ *       400:
+ *         description: Parámetros inválidos
+ *       404:
+ *         description: Producto, tienda o asociación no encontrados
+ */
+router.get(
+  "/producto/:id/seguimiento-inventario",
+  authenticate(),
+  productoController.getSeguimientoInventario
+);
+
+/**
+ * @swagger
  * /producto/filter:
  *   get:
  *     summary: Filtrar productos con paginación

@@ -296,11 +296,52 @@ const deleteProducto = async (req, res) => {
   }
 };
 
+const getSeguimientoInventario = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { id_tienda, fecha_desde, fecha_hasta } = req.query;
+
+    const errors = [];
+    if (id_tienda === undefined) errors.push("id_tienda es requerido");
+    if (!fecha_desde) errors.push("fecha_desde es requerido");
+    if (!fecha_hasta) errors.push("fecha_hasta es requerido");
+
+    const idServicio = parseInt(id, 10);
+    if (isNaN(idServicio) || idServicio < 1) {
+      errors.push("El id del producto debe ser un número entero positivo");
+    }
+
+    let parsedIdTienda;
+    if (id_tienda !== undefined) {
+      parsedIdTienda = parseInt(id_tienda, 10);
+      if (isNaN(parsedIdTienda) || parsedIdTienda < 1) {
+        errors.push("'id_tienda' debe ser un número entero positivo");
+      }
+    }
+
+    if (errors.length > 0) {
+      throwError("Datos inválidos", 400, errors);
+    }
+
+    const result = await productoService.getSeguimientoInventario(
+      idServicio,
+      parsedIdTienda,
+      fecha_desde,
+      fecha_hasta
+    );
+
+    res.status(200).json(result);
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
 module.exports = {
   createProducto,
   getProductoById,
   getProductosEnAlerta,
   filterProductos,
   updateProducto,
-  deleteProducto, // <-- exportar
+  deleteProducto,
+  getSeguimientoInventario,
 };
