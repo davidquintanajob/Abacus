@@ -20,11 +20,16 @@ const TOAST_CONFIG = {
     icon: XCircle,
     label: 'Error',
   },
+  info: {
+    background: '#2563EB',
+    icon: AlertTriangle,
+    label: 'Info',
+  },
 };
 
 interface ToastProps {
   visible: boolean;
-  type?: 'success' | 'warning' | 'error';
+  type?: 'success' | 'warning' | 'error' | 'info';
   message: string;
   code?: number | null;
   duration?: number;

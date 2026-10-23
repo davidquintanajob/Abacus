@@ -23,7 +23,7 @@ interface SidebarProps {
 export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverTriggered = false, onSidebarEnter, onSidebarLeave }: SidebarProps) => {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, logout } = useAuth();
+  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels, movimientoAccessLevels, logout } = useAuth();
   const { toast, showToast, hideToast } = useToast();
   const { showConfirmDialog, hideConfirmDialog } = useConfirmDialog();
   const { isLoading: isNavigating, setLoading: setNavigating } = useNavigationLoading();
@@ -48,9 +48,21 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverT
 
   const canAccessOperaciones = 
     isAdmin ||
-    (userRole === 'dependiente' && operacionAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'dependiente' && operacionAccessLevels?. dependiente !== 'none') ||
     (userRole === 'almacenero' && operacionAccessLevels?.almacenero !== 'none') ||
     (userRole === 'económico' && operacionAccessLevels?.economico !== 'none');
+
+  const canAccessVentas =
+    isAdmin ||
+    (userRole === 'dependiente' && ventaAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'almacenero' && ventaAccessLevels?.almacenero !== 'none') ||
+    (userRole === 'económico' && ventaAccessLevels?.economico !== 'none');
+
+  const canAccessMovimientos =
+    isAdmin ||
+    (userRole === 'dependiente' && movimientoAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'almacenero' && movimientoAccessLevels?.almacenero !== 'none') ||
+    (userRole === 'económico' && movimientoAccessLevels?.economico !== 'none');
 
   const menuItems = [
     { icon: '/icon-panel.png', label: 'Panel', route: 'Home' },
@@ -59,6 +71,8 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverT
     ...(canAccessEntradas ? [{ icon: '/icon-entradas.png', label: 'Entradas', route: 'Entradas' }] : []),
     ...(canAccessSalidas ? [{ icon: '/icon-salidas.png', label: 'Salidas', route: 'Salidas' }] : []),
     ...(canAccessOperaciones ? [{ icon: '/icon-operaciones.png', label: 'Operaciones', route: 'Operaciones' }] : []),
+    ...(canAccessVentas ? [{ icon: '/icon-ventas.png', label: 'Ventas', route: 'Ventas' }] : []),
+    ...(canAccessMovimientos ? [{ icon: '/moving.png', label: 'Movimientos', route: 'Movimientos' }] : []),
     ...(isAdmin ? [{ icon: '/icon-tiendas.png', label: 'Tiendas', route: 'Tiendas' }] : []),
     ...(isAdmin ? [{ icon: '/icon-usuarios.png', label: 'Usuarios', route: 'Usuarios' }] : []),
     ...(isAdmin ? [{ icon: '/icon-admin.png', label: 'Configuraciones del Admin', route: 'CurrencyExchange' }] : []),
@@ -97,6 +111,8 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverT
       'Entradas': '/entradas',
       'Salidas': '/salidas',
       'Operaciones': '/operaciones',
+      'Ventas': '/ventas',
+      'Movimientos': '/movimientos',
       'Tiendas': '/tiendas',
       'Usuarios': '/usuarios',
       'CurrencyExchange': '/configuracion',

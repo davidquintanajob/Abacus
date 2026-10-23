@@ -10,7 +10,9 @@ import { SidebarNavigation } from '../../components/layout/SidebarNavigation';
 import { Toast } from '../../components/common/Toast';
 import { configService } from '../../services/configService';
 import { exchangeRateService } from '../../services/exchangeRateService';
-import { RefreshCw, Info, ChevronUp, ChevronDown, Package, Lock, Store, Globe, X } from 'lucide-react';
+import { getTiendas } from '../../services/tiendaService';
+import { getCuentas } from '../../services/cuentaService';
+import { RefreshCw, Info, ChevronUp, ChevronDown, ChevronLeft, Plus, Package, Lock, Store, Globe, X, Settings, ArrowRightLeft } from 'lucide-react';
 
 export default function ConfiguracionPage() {
   const { colors, isDark, toggleTheme } = useTheme();
@@ -41,6 +43,18 @@ export default function ConfiguracionPage() {
   const [showEntradaManage, setShowEntradaManage] = useState(false);
   const [showSalidaManage, setShowSalidaManage] = useState(false);
   const [showOperacionManage, setShowOperacionManage] = useState(false);
+  const [showVentaPermissions, setShowVentaPermissions] = useState(false);
+  const [showVentaManage, setShowVentaManage] = useState(false);
+  const [showMovimientoPermissions, setShowMovimientoPermissions] = useState(false);
+  const [showMovimientoManage, setShowMovimientoManage] = useState(false);
+  const [showSalesConfigurations, setShowSalesConfigurations] = useState(false);
+  const [showComprobanteConfig, setShowComprobanteConfig] = useState(false);
+  const [showSalesConfigModal, setShowSalesConfigModal] = useState(false);
+  const [showComprobanteConfigModal, setShowComprobanteConfigModal] = useState(false);
+  const [selectedTienda, setSelectedTienda] = useState<any>(null);
+  const [availableTiendas, setAvailableTiendas] = useState<any[]>([]);
+  const [availableCuentas, setAvailableCuentas] = useState<any[]>([]);
+  const [tiendaCuentasSelection, setTiendaCuentasSelection] = useState<any>({});
   const [entradaAccessLevels, setEntradaAccessLevels] = useState({
     dependiente: 'none',
     almacenero: 'none',
@@ -71,6 +85,47 @@ export default function ConfiguracionPage() {
     almacenero: false,
     economico: false,
   });
+  const [ventaAccessLevels, setVentaAccessLevels] = useState({
+    dependiente: 'none',
+    almacenero: 'none',
+    economico: 'none',
+  });
+  const [ventaManagePermissions, setVentaManagePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
+  const [cuentaChangePermissions, setCuentaChangePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
+  const [movimientoAccessLevels, setMovimientoAccessLevels] = useState({
+    dependiente: 'none',
+    almacenero: 'none',
+    economico: 'none',
+  });
+  const [movimientoManagePermissions, setMovimientoManagePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
+  const [priceChangePermissions, setPriceChangePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
+  const [comprobanteConfig, setComprobanteConfig] = useState<{
+    logo: string | null | undefined;
+    nombreNegocio: string;
+  }>({
+    logo: null,
+    nombreNegocio: '',
+  });
+  const [tiendaCuentasConfig, setTiendaCuentasConfig] = useState<any>({});
+  const [showTiendaSelection, setShowTiendaSelection] = useState(true);
+  const [showCuentaSelector, setShowCuentaSelector] = useState(false);
+  const [selectorTipoCuenta, setSelectorTipoCuenta] = useState('');
   const [applyWeightedAverageCost, setApplyWeightedAverageCost] = useState(false);
   const [autoApplySuggestedCost, setAutoApplySuggestedCost] = useState({
     dependiente: false,
@@ -146,6 +201,57 @@ export default function ConfiguracionPage() {
           economico: data.operacionManagePermissions.economico || false,
         });
       }
+      if (data.ventaAccessLevels) {
+        setVentaAccessLevels({
+          dependiente: data.ventaAccessLevels.dependiente || 'none',
+          almacenero: data.ventaAccessLevels.almacenero || 'none',
+          economico: data.ventaAccessLevels.economico || 'none',
+        });
+      }
+      if (data.ventaManagePermissions) {
+        setVentaManagePermissions({
+          dependiente: data.ventaManagePermissions.dependiente || false,
+          almacenero: data.ventaManagePermissions.almacenero || false,
+          economico: data.ventaManagePermissions.economico || false,
+        });
+      }
+      if (data.cuentaChangePermissions) {
+        setCuentaChangePermissions({
+          dependiente: data.cuentaChangePermissions.dependiente || false,
+          almacenero: data.cuentaChangePermissions.almacenero || false,
+          economico: data.cuentaChangePermissions.economico || false,
+        });
+      }
+      if (data.movimientoAccessLevels) {
+        setMovimientoAccessLevels({
+          dependiente: data.movimientoAccessLevels.dependiente || 'none',
+          almacenero: data.movimientoAccessLevels.almacenero || 'none',
+          economico: data.movimientoAccessLevels.economico || 'none',
+        });
+      }
+      if (data.movimientoManagePermissions) {
+        setMovimientoManagePermissions({
+          dependiente: data.movimientoManagePermissions.dependiente || false,
+          almacenero: data.movimientoManagePermissions.almacenero || false,
+          economico: data.movimientoManagePermissions.economico || false,
+        });
+      }
+      if (data.priceChangePermissions) {
+        setPriceChangePermissions({
+          dependiente: data.priceChangePermissions.dependiente || false,
+          almacenero: data.priceChangePermissions.almacenero || false,
+          economico: data.priceChangePermissions.economico || false,
+        });
+      }
+      if (data.comprobanteConfig) {
+        setComprobanteConfig({
+          logo: data.comprobanteConfig.logo ?? null,
+          nombreNegocio: data.comprobanteConfig.nombreNegocio ?? '',
+        });
+      }
+      if (data.tiendaCuentasConfig) {
+        setTiendaCuentasConfig(data.tiendaCuentasConfig);
+      }
       if (data.autoApplySuggestedCost) {
         setAutoApplySuggestedCost({
           dependiente: data.autoApplySuggestedCost.dependiente || false,
@@ -200,9 +306,15 @@ export default function ConfiguracionPage() {
         entradaAccessLevels: entradaAccessLevels,
         salidaAccessLevels: salidaAccessLevels,
         operacionAccessLevels: operacionAccessLevels,
+        ventaAccessLevels: ventaAccessLevels,
         entradaManagePermissions: entradaManagePermissions,
         salidaManagePermissions: salidaManagePermissions,
         operacionManagePermissions: operacionManagePermissions,
+        ventaManagePermissions: ventaManagePermissions,
+        cuentaChangePermissions: cuentaChangePermissions,
+        priceChangePermissions: priceChangePermissions,
+        comprobanteConfig: comprobanteConfig,
+        tiendaCuentasConfig: tiendaCuentasConfig,
         applyWeightedAverageCost: applyWeightedAverageCost,
         autoApplySuggestedCost: autoApplySuggestedCost,
         showEntradaModalAfterProductCreation: showEntradaModalAfterProductCreation,
@@ -343,6 +455,114 @@ export default function ConfiguracionPage() {
     }
   };
 
+  const updateVentaAccessLevel = async (role: 'dependiente' | 'almacenero' | 'economico', level: string) => {
+    const newLevels = { ...ventaAccessLevels, [role]: level };
+    setVentaAccessLevels(newLevels);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        ventaAccessLevels: newLevels,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Nivel de acceso actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar nivel de acceso' });
+      setVentaAccessLevels(ventaAccessLevels);
+    }
+  };
+
+  const toggleVentaManagePermission = async (role: 'dependiente' | 'almacenero' | 'economico') => {
+    const newPermissions = { ...ventaManagePermissions, [role]: !ventaManagePermissions[role] };
+    setVentaManagePermissions(newPermissions);
+
+    try {
+      const updatedConfig = {
+        ...config,
+        ventaManagePermissions: newPermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Permiso de gestión actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de gestión' });
+      setVentaManagePermissions(ventaManagePermissions);
+    }
+  };
+
+  const updateMovimientoAccessLevel = async (role: 'dependiente' | 'almacenero' | 'economico', level: string) => {
+    const newLevels = { ...movimientoAccessLevels, [role]: level };
+    setMovimientoAccessLevels(newLevels);
+
+    try {
+      const updatedConfig = {
+        ...config,
+        movimientoAccessLevels: newLevels,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Nivel de acceso a movimientos actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar nivel de acceso a movimientos' });
+      setMovimientoAccessLevels(movimientoAccessLevels);
+    }
+  };
+
+  const toggleMovimientoManagePermission = async (role: 'dependiente' | 'almacenero' | 'economico') => {
+    const newPermissions = { ...movimientoManagePermissions, [role]: !movimientoManagePermissions[role] };
+    setMovimientoManagePermissions(newPermissions);
+
+    try {
+      const updatedConfig = {
+        ...config,
+        movimientoManagePermissions: newPermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Permiso de gestión de movimientos actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de gestión de movimientos' });
+      setMovimientoManagePermissions(movimientoManagePermissions);
+    }
+  };
+
+  const toggleCuentaChangePermission = async (role: 'dependiente' | 'almacenero' | 'economico') => {
+    const newPermissions = { ...cuentaChangePermissions, [role]: !cuentaChangePermissions[role] };
+    setCuentaChangePermissions(newPermissions);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        cuentaChangePermissions: newPermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Permiso de cambio de cuenta actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de cambio de cuenta' });
+      setCuentaChangePermissions(cuentaChangePermissions);
+    }
+  };
+
+  const togglePriceChangePermission = async (role: 'dependiente' | 'almacenero' | 'economico') => {
+    const newPermissions = { ...priceChangePermissions, [role]: !priceChangePermissions[role] };
+    setPriceChangePermissions(newPermissions);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        priceChangePermissions: newPermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Permiso de cambio de precio actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de cambio de precio' });
+      setPriceChangePermissions(priceChangePermissions);
+    }
+  };
+
   const toggleAutoApplySuggestedCost = async (role: 'dependiente' | 'almacenero' | 'economico') => {
     const newAutoApply = { ...autoApplySuggestedCost, [role]: !autoApplySuggestedCost[role] };
     setAutoApplySuggestedCost(newAutoApply);
@@ -410,6 +630,81 @@ export default function ConfiguracionPage() {
 
   const handleProfilePress = () => {
     // Profile
+  };
+
+  const handleOpenSalesConfigModal = async () => {
+    try {
+      setShowSalesConfigModal(true);
+      const tiendasData = await getTiendas({}, 1, 1000);
+      setAvailableTiendas(tiendasData.data || []);
+      const cuentasData = await getCuentas({}, 1, 1000);
+      setAvailableCuentas(cuentasData.data || []);
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al cargar datos' });
+    }
+  };
+
+  const handleSaveTiendaCuentas = async () => {
+    try {
+      const updatedConfig = {
+        ...config,
+        tiendaCuentasConfig: {
+          ...tiendaCuentasConfig,
+          [selectedTienda.id_tienda]: tiendaCuentasSelection
+        }
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      setTiendaCuentasConfig(updatedConfig.tiendaCuentasConfig);
+      showToast({ type: 'success', message: 'Configuración guardada correctamente' });
+      setShowSalesConfigModal(false);
+      setShowTiendaSelection(true);
+      setSelectedTienda(null);
+      setTiendaCuentasSelection({});
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al guardar configuración' });
+    }
+  };
+
+  const handleOpenCuentaSelector = (tipoCuenta: string) => {
+    if (!tipoCuenta) {
+      showToast({ type: 'error', message: 'Tipo de cuenta no especificado' });
+      return;
+    }
+    setSelectorTipoCuenta(tipoCuenta);
+    setShowCuentaSelector(true);
+  };
+
+  const handleSelectCuenta = (cuenta: any) => {
+    const currentSelection = tiendaCuentasSelection[selectorTipoCuenta] || [];
+    if (currentSelection.length >= 4) {
+      showToast({ type: 'warning', message: 'Máximo 4 cuentas por tipo' });
+      return;
+    }
+    if (currentSelection.some((c: any) => c.id_cuenta === cuenta.id_cuenta)) {
+      showToast({ type: 'warning', message: 'Cuenta ya seleccionada' });
+      return;
+    }
+    setTiendaCuentasSelection((prev: any) => ({
+      ...prev,
+      [selectorTipoCuenta]: [...currentSelection, cuenta]
+    }));
+    setShowCuentaSelector(false);
+  };
+
+  const handleSaveComprobanteConfig = async () => {
+    try {
+      const updatedConfig = {
+        ...config,
+        comprobanteConfig: comprobanteConfig
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Configuración de comprobante guardada correctamente' });
+      setShowComprobanteConfigModal(false);
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al guardar configuración' });
+    }
   };
 
   return (
@@ -1573,6 +1868,573 @@ export default function ConfiguracionPage() {
                 )}
               </div>
 
+              {/* Configuraciones de Ventas */}
+              <div 
+                className="rounded-2xl p-5 mb-6 shadow-lg"
+                style={{ backgroundColor: colors.surface }}
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-2">
+                    <div style={{ width: '24px', height: '24px', filter: isDarkMode ? 'invert(1)' : 'none' }}>
+                      <img
+                        src="/sales-config.png"
+                        alt="Configuraciones de Ventas"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <h2 
+                      className="text-lg font-bold"
+                      style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                    >
+                      Configuraciones de Ventas
+                    </h2>
+                  </div>
+                  <button
+                    className="w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                    style={{ 
+                      backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                      borderColor: colors.primary 
+                    }}
+                    onClick={() => setShowSalesConfigurations(!showSalesConfigurations)}
+                  >
+                    {showSalesConfigurations ? <ChevronUp size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                  </button>
+                </div>
+
+                {showSalesConfigurations && (
+                  <>
+                    {/* Configurar Cuentas para Ventas */}
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-2" style={{ color: colors.onSurface }}>Configurar Cuentas para Ventas</h3>
+                      <p className="text-sm mb-3" style={{ color: colors.outline }}>
+                        Configura hasta 4 cuentas por tipo de cuenta para cada tienda. Estas cuentas se usarán por defecto al realizar ventas.
+                      </p>
+                      <div className="flex justify-center">
+                        <button
+                          className="rounded-lg px-4 py-2 flex items-center gap-2 transition-colors hover:opacity-90"
+                          style={{ backgroundColor: colors.primary, color: '#fff' }}
+                          onClick={handleOpenSalesConfigModal}
+                        >
+                          <Settings size={20} />
+                          <span>Configurar Cuentas</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Cambio de Cuenta en Ventas */}
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-2" style={{ color: colors.onSurface }}>Cambio de Cuenta en Ventas</h3>
+                      <p className="text-sm mb-3" style={{ color: colors.outline }}>
+                        Configura qué roles pueden cambiar la cuenta seleccionada al momento de realizar una venta
+                      </p>
+
+                      {['dependiente', 'almacenero', 'economico'].map((role) => (
+                        <div key={role} className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.background }}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>{role}</span>
+                            <button
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                              style={{ backgroundColor: colors.primary, color: '#fff' }}
+                              onClick={() => setInfoModal({
+                                title: `Cambio de Cuenta - ${role}`,
+                                content: 'Cuando está activo, los usuarios con rol ' + role + ' pueden cambiar la cuenta seleccionada al momento de realizar una venta.'
+                              })}
+                            >
+                              !
+                            </button>
+                          </div>
+                          <button
+                            className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                            style={{
+                              backgroundColor: cuentaChangePermissions[role as keyof typeof cuentaChangePermissions] ? colors.primary : colors.outlineVariant,
+                            }}
+                            onClick={() => toggleCuentaChangePermission(role as 'dependiente' | 'almacenero' | 'economico')}
+                          >
+                            <div 
+                              className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                              style={{
+                                transform: cuentaChangePermissions[role as keyof typeof cuentaChangePermissions] ? 'translateX(24px)' : 'translateX(0)',
+                                backgroundColor: cuentaChangePermissions[role as keyof typeof cuentaChangePermissions] ? '#fff' : colors.outline,
+                              }}
+                            />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Cambio de Precio en Ventas */}
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-2" style={{ color: colors.onSurface }}>Cambio de Precio en Ventas</h3>
+                      <p className="text-sm mb-3" style={{ color: colors.outline }}>
+                        Configura qué roles pueden cambiar el precio de los productos al momento de realizar una venta
+                      </p>
+
+                      {['dependiente', 'almacenero', 'economico'].map((role) => (
+                        <div key={role} className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.background }}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>{role}</span>
+                            <button
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                              style={{ backgroundColor: colors.primary, color: '#fff' }}
+                              onClick={() => setInfoModal({
+                                title: `Cambio de Precio - ${role}`,
+                                content: 'Cuando está activo, los usuarios con rol ' + role + ' pueden cambiar el precio de los productos al momento de realizar una venta.'
+                              })}
+                            >
+                              !
+                            </button>
+                          </div>
+                          <button
+                            className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                            style={{
+                              backgroundColor: priceChangePermissions[role as keyof typeof priceChangePermissions] ? colors.primary : colors.outlineVariant,
+                            }}
+                            onClick={() => togglePriceChangePermission(role as 'dependiente' | 'almacenero' | 'economico')}
+                          >
+                            <div 
+                              className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                              style={{
+                                transform: priceChangePermissions[role as keyof typeof priceChangePermissions] ? 'translateX(24px)' : 'translateX(0)',
+                                backgroundColor: priceChangePermissions[role as keyof typeof priceChangePermissions] ? '#fff' : colors.outline,
+                              }}
+                            />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Configuración de Comprobante */}
+                    <div>
+                      <h3 className="font-semibold mb-2" style={{ color: colors.onSurface }}>Configuración de Comprobante</h3>
+                      <p className="text-sm mb-3" style={{ color: colors.outline }}>
+                        Personaliza el logo y nombre del negocio que aparecerán en los comprobantes de venta
+                      </p>
+                      <div className="flex justify-center">
+                        <button
+                          className="rounded-lg px-4 py-2 flex items-center gap-2 transition-colors hover:opacity-90"
+                          style={{ backgroundColor: colors.primary, color: '#fff' }}
+                          onClick={() => setShowComprobanteConfigModal(true)}
+                        >
+                          <Settings size={20} />
+                          <span>Configurar</span>
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Permisos de Movimientos */}
+              <div
+                className="rounded-2xl p-5 mb-6 shadow-lg"
+                style={{ backgroundColor: colors.surface }}
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-3">
+                    <div style={{ width: '24px', height: '24px', filter: isDarkMode ? 'invert(1)' : 'none' }}>
+                      <img
+                        src="/lanza-libre.svg"
+                        alt="Permisos de Movimientos"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <h2
+                      className="text-lg font-bold"
+                      style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                    >
+                      Permisos de Movimientos
+                    </h2>
+                  </div>
+                  <button
+                    className="w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                    style={{
+                      backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                      borderColor: colors.primary
+                    }}
+                    onClick={() => setShowMovimientoPermissions(!showMovimientoPermissions)}
+                  >
+                    {showMovimientoPermissions ? <ChevronUp size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                  </button>
+                </div>
+
+                {showMovimientoPermissions && (
+                  <>
+                    <div className="space-y-4">
+                      {['dependiente', 'almacenero', 'economico'].map((role) => (
+                        <div key={role} className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.background }}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>{role}</span>
+                            <button
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                              style={{ backgroundColor: colors.primary, color: '#fff' }}
+                              onClick={() => setInfoModal({
+                                title: `Acceso Movimientos - ${role.charAt(0).toUpperCase() + role.slice(1)}`,
+                                content: 'Sin acceso: No puede ver movimientos. Mi tienda: Solo puede ver movimientos de su tienda (origen o destino). Todas: Puede ver movimientos de todas las tiendas.'
+                              })}
+                            >
+                              !
+                            </button>
+                          </div>
+                          <div className="flex gap-2">
+                            {['none', 'own_store', 'all_stores'].map((level) => (
+                              <button
+                                key={level}
+                                className={`w-10 h-10 rounded-lg flex items-center justify-center border-2 transition-colors`}
+                                style={{
+                                  backgroundColor: movimientoAccessLevels[role as keyof typeof movimientoAccessLevels] === level ? colors.primary : 'transparent',
+                                  borderColor: movimientoAccessLevels[role as keyof typeof movimientoAccessLevels] === level ? colors.primary : colors.outlineVariant,
+                                }}
+                                onClick={() => updateMovimientoAccessLevel(role as 'dependiente' | 'almacenero' | 'economico', level)}
+                              >
+                                {level === 'none' && <Lock size={18} style={{ color: movimientoAccessLevels[role as keyof typeof movimientoAccessLevels] === level ? '#fff' : colors.onSurface }} />}
+                                {level === 'own_store' && <Store size={18} style={{ color: movimientoAccessLevels[role as keyof typeof movimientoAccessLevels] === level ? '#fff' : colors.onSurface }} />}
+                                {level === 'all_stores' && <Globe size={18} style={{ color: movimientoAccessLevels[role as keyof typeof movimientoAccessLevels] === level ? '#fff' : colors.onSurface }} />}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {(movimientoAccessLevels.dependiente !== 'none' || movimientoAccessLevels.almacenero !== 'none' || movimientoAccessLevels.economico !== 'none') && (
+                      <div className="mt-4 p-4 rounded-lg" style={{ backgroundColor: colors.background }}>
+                        <div className="flex justify-between items-center mb-3">
+                          <h3 className="font-semibold" style={{ color: colors.onSurface }}>Gestión de Movimientos</h3>
+                          <button
+                            className="w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                            style={{
+                              backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                              borderColor: colors.primary
+                            }}
+                            onClick={() => setShowMovimientoManage(!showMovimientoManage)}
+                          >
+                            {showMovimientoManage ? <ChevronUp size={16} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={16} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                          </button>
+                        </div>
+                        <p className="text-sm mb-3" style={{ color: colors.outline }}>
+                          Configura qué roles pueden crear, editar y eliminar movimientos (solo visible para roles con acceso)
+                        </p>
+                        {showMovimientoManage && (
+                          <>
+                            {movimientoAccessLevels.dependiente !== 'none' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Dependiente</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Movimientos - Dependiente',
+                                      content: 'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar movimientos. Cuando está desactivado, solo pueden ver la información sin poder gestionar movimientos.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: movimientoManagePermissions.dependiente ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => toggleMovimientoManagePermission('dependiente')}
+                                >
+                                  <div
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: movimientoManagePermissions.dependiente ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: movimientoManagePermissions.dependiente ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {movimientoAccessLevels.almacenero !== 'none' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Almacenero</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Movimientos - Almacenero',
+                                      content: 'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar movimientos. Cuando está desactivado, solo pueden ver la información sin poder gestionar movimientos.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: movimientoManagePermissions.almacenero ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => toggleMovimientoManagePermission('almacenero')}
+                                >
+                                  <div
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: movimientoManagePermissions.almacenero ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: movimientoManagePermissions.almacenero ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {movimientoAccessLevels.economico !== 'none' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Económico</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Movimientos - Económico',
+                                      content: 'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar movimientos. Cuando está desactivado, solo pueden ver la información sin poder gestionar movimientos.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: movimientoManagePermissions.economico ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => toggleMovimientoManagePermission('economico')}
+                                >
+                                  <div
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: movimientoManagePermissions.economico ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: movimientoManagePermissions.economico ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Permisos de Ventas */}
+              <div 
+                className="rounded-2xl p-5 mb-6 shadow-lg"
+                style={{ backgroundColor: colors.surface }}
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-2">
+                    <div style={{ width: '24px', height: '24px', filter: isDarkMode ? 'invert(1)' : 'none' }}>
+                      <img
+                        src="/icon-ventas.png"
+                        alt="Permisos de Ventas"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <h2 
+                      className="text-lg font-bold"
+                      style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                    >
+                      Permisos de Ventas
+                    </h2>
+                  </div>
+                  <button
+                    className="w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                    style={{ 
+                      backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                      borderColor: colors.primary 
+                    }}
+                    onClick={() => setShowVentaPermissions(!showVentaPermissions)}
+                  >
+                    {showVentaPermissions ? <ChevronUp size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                  </button>
+                </div>
+
+                {showVentaPermissions && (
+                  <>
+                    <p className="text-sm mb-4" style={{ color: colors.outline }}>
+                      Configura el nivel de acceso a las ventas para cada rol
+                    </p>
+
+                    <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: colors.background }}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Lock size={16} style={{ color: colors.outline }} />
+                        <span className="text-sm" style={{ color: colors.outline }}><strong>Sin acceso:</strong> No puede ver la pantalla de Ventas ni ninguna venta del sistema</span>
+                      </div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Store size={16} style={{ color: colors.outline }} />
+                        <span className="text-sm" style={{ color: colors.outline }}><strong>Mi tienda:</strong> Puede ver la pantalla de Ventas pero solo las ventas de su tienda</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Globe size={16} style={{ color: colors.outline }} />
+                        <span className="text-sm" style={{ color: colors.outline }}><strong>Todas las tiendas:</strong> Puede ver la pantalla de Ventas y las ventas de todas las tiendas</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {['dependiente', 'almacenero', 'economico'].map((role) => (
+                        <div key={role} className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.background }}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>{role}</span>
+                            <button
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                              style={{ backgroundColor: colors.primary, color: '#fff' }}
+                              onClick={() => setInfoModal({
+                                title: `Acceso a Ventas - ${role}`,
+                                content: 'Define si los usuarios con rol ' + role + ' no tienen acceso a ventas, solo pueden ver las de su tienda, o pueden ver las de todas las tiendas.'
+                              })}
+                            >
+                              !
+                            </button>
+                          </div>
+                          <div className="flex gap-2">
+                            {['none', 'own_store', 'all_stores'].map((level) => (
+                              <button
+                                key={level}
+                                className={`w-10 h-10 rounded-lg flex items-center justify-center border-2 transition-colors`}
+                                style={{
+                                  backgroundColor: ventaAccessLevels[role as keyof typeof ventaAccessLevels] === level ? colors.primary : 'transparent',
+                                  borderColor: ventaAccessLevels[role as keyof typeof ventaAccessLevels] === level ? colors.primary : colors.outlineVariant,
+                                }}
+                                onClick={() => updateVentaAccessLevel(role as 'dependiente' | 'almacenero' | 'economico', level)}
+                              >
+                                {level === 'none' && <Lock size={18} style={{ color: ventaAccessLevels[role as keyof typeof ventaAccessLevels] === level ? '#fff' : colors.onSurface }} />}
+                                {level === 'own_store' && <Store size={18} style={{ color: ventaAccessLevels[role as keyof typeof ventaAccessLevels] === level ? '#fff' : colors.onSurface }} />}
+                                {level === 'all_stores' && <Globe size={18} style={{ color: ventaAccessLevels[role as keyof typeof ventaAccessLevels] === level ? '#fff' : colors.onSurface }} />}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {(ventaAccessLevels.dependiente !== 'none' || ventaAccessLevels.almacenero !== 'none' || ventaAccessLevels.economico !== 'none') && (
+                      <div className="mt-4 p-4 rounded-lg" style={{ backgroundColor: colors.background }}>
+                        <div className="flex justify-between items-center mb-3">
+                          <h3 className="font-semibold" style={{ color: colors.onSurface }}>Gestión de Ventas</h3>
+                          <button
+                            className="w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                            style={{ 
+                              backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                              borderColor: colors.primary 
+                            }}
+                            onClick={() => setShowVentaManage(!showVentaManage)}
+                          >
+                            {showVentaManage ? <ChevronUp size={16} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={16} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                          </button>
+                        </div>
+                        {showVentaManage && (
+                          <>
+                            <p className="text-sm mb-3" style={{ color: colors.outline }}>
+                              Configura qué roles pueden crear, editar y eliminar ventas (solo visible para roles con acceso)
+                            </p>
+                            {ventaAccessLevels.dependiente !== 'none' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Dependiente</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Ventas - Dependiente',
+                                      content: 'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar ventas. Cuando está desactivado, solo pueden ver la información sin poder gestionar ventas.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: ventaManagePermissions.dependiente ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => toggleVentaManagePermission('dependiente')}
+                                >
+                                  <div 
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: ventaManagePermissions.dependiente ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: ventaManagePermissions.dependiente ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {ventaAccessLevels.almacenero !== 'none' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Almacenero</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Ventas - Almacenero',
+                                      content: 'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar ventas. Cuando está desactivado, solo pueden ver la información sin poder gestionar ventas.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: ventaManagePermissions.almacenero ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => toggleVentaManagePermission('almacenero')}
+                                >
+                                  <div 
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: ventaManagePermissions.almacenero ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: ventaManagePermissions.almacenero ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {ventaAccessLevels.economico !== 'none' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Económico</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Ventas - Económico',
+                                      content: 'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar ventas. Cuando está desactivado, solo pueden ver la información sin poder gestionar ventas.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: ventaManagePermissions.economico ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => toggleVentaManagePermission('economico')}
+                                >
+                                  <div 
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: ventaManagePermissions.economico ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: ventaManagePermissions.economico ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
               {/* Info Modal */}
               {infoModal && (
                 <div 
@@ -1612,6 +2474,414 @@ export default function ConfiguracionPage() {
                     >
                       Entendido
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Sales Config Modal */}
+              {showSalesConfigModal && (
+                <div 
+                  className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+                  onClick={() => setShowSalesConfigModal(false)}
+                >
+                  <div 
+                    className="rounded-2xl p-6 max-w-2xl w-full shadow-lg max-h-[90vh] overflow-y-auto"
+                    style={{ backgroundColor: colors.surface }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 
+                        className="text-lg font-bold"
+                        style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                      >
+                        Configurar Cuentas por Tienda
+                      </h3>
+                      <button
+                        className="p-2 rounded-lg transition-colors hover:opacity-80"
+                        style={{ backgroundColor: colors.background, color: colors.onSurface }}
+                        onClick={() => {
+                          setShowSalesConfigModal(false);
+                          setShowTiendaSelection(true);
+                          setSelectedTienda(null);
+                          setTiendaCuentasSelection({});
+                        }}
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+
+                    {!showTiendaSelection ? (
+                      <>
+                        {/* Vista de configuración de tienda seleccionada */}
+                        <div className="flex items-center gap-3 mb-4">
+                          <button
+                            onClick={() => {
+                              setShowTiendaSelection(true);
+                              setSelectedTienda(null);
+                              setTiendaCuentasSelection({});
+                            }}
+                            className="p-2 rounded-lg transition-colors hover:opacity-80"
+                            style={{ backgroundColor: colors.background, color: colors.primary }}
+                          >
+                            <ChevronLeft size={20} />
+                          </button>
+                          <h4 
+                            className="text-base font-semibold"
+                            style={{ color: colors.onSurface }}
+                          >
+                            {selectedTienda?.nombre}
+                          </h4>
+                        </div>
+
+                        <div className="space-y-4">
+                          {[
+                            { tipo: 'efectivo_cup', label: 'Efectivo CUP', icon: '💵', color: '#4CAF50' },
+                            { tipo: 'efectivo_usd', label: 'Efectivo USD', icon: '💲', color: '#2196F3' },
+                            { tipo: 'transferencia_cup', label: 'Transferencia CUP', icon: '🔄', color: '#FF9800' },
+                            { tipo: 'transferencia_usd', label: 'Transferencia USD', icon: '💳', color: '#9C27B0' }
+                          ].map((config) => (
+                            <div key={config.tipo} className="rounded-lg p-4 border" style={{ backgroundColor: colors.background, borderColor: colors.outlineVariant }}>
+                              <div className="flex justify-between items-center mb-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-2xl">{config.icon}</span>
+                                  <span className="font-semibold" style={{ color: colors.onSurface }}>{config.label}</span>
+                                </div>
+                                <span className="text-sm" style={{ color: colors.outline }}>
+                                  {(tiendaCuentasSelection[config.tipo] || []).length}/4
+                                </span>
+                              </div>
+
+                              <div className="space-y-2 mb-3">
+                                {(tiendaCuentasSelection[config.tipo] || []).length === 0 ? (
+                                  <p className="text-sm text-center py-2" style={{ color: colors.outline }}>
+                                    No hay cuentas seleccionadas
+                                  </p>
+                                ) : (
+                                  (tiendaCuentasSelection[config.tipo] || []).map((cuenta: any, index: number) => (
+                                    <div key={cuenta.id_cuenta} className="flex justify-between items-center p-2 rounded" style={{ backgroundColor: colors.surface }}>
+                                      <span className="text-sm" style={{ color: colors.onSurface }}>{cuenta.nombre}</span>
+                                      <button
+                                        onClick={() => {
+                                          const newSelection = [...(tiendaCuentasSelection[config.tipo] || [])];
+                                          newSelection.splice(index, 1);
+                                          setTiendaCuentasSelection((prev: any) => ({
+                                            ...prev,
+                                            [config.tipo]: newSelection
+                                          }));
+                                        }}
+                                        className="p-1 rounded"
+                                        style={{ backgroundColor: `${config.color}20`, color: config.color }}
+                                      >
+                                        <X size={16} />
+                                      </button>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+
+                              {(tiendaCuentasSelection[config.tipo] || []).length < 4 && (
+                                <button
+                                  onClick={() => handleOpenCuentaSelector(config.tipo)}
+                                  className="w-full py-2 rounded-lg flex items-center justify-center gap-2 transition-colors hover:opacity-80"
+                                  style={{ backgroundColor: `${config.color}20`, border: `1px solid ${config.color}`, color: config.color }}
+                                >
+                                  <Plus size={16} />
+                                  <span className="text-sm">Agregar cuenta {config.label}</span>
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex gap-4 mt-6">
+                          <button
+                            className="flex-1 rounded-lg px-4 py-2 transition-colors hover:opacity-90"
+                            style={{ backgroundColor: colors.surface, border: `1px solid ${colors.outlineVariant}`, color: colors.onSurface }}
+                            onClick={() => {
+                              setShowSalesConfigModal(false);
+                              setShowTiendaSelection(true);
+                              setSelectedTienda(null);
+                              setTiendaCuentasSelection({});
+                            }}
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            className="flex-1 rounded-lg px-4 py-2 transition-colors hover:opacity-90"
+                            style={{ backgroundColor: colors.primary, color: '#fff' }}
+                            onClick={handleSaveTiendaCuentas}
+                          >
+                            Guardar
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Vista de selección de tienda */}
+                        <p className="text-sm mb-4" style={{ color: colors.outline }}>
+                          Selecciona una tienda para configurar sus cuentas por defecto
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          {availableTiendas.map((tienda: any) => {
+                            const hasConfig = tiendaCuentasConfig[tienda.id_tienda];
+                            const hasCuentas = Object.keys(hasConfig || {}).some(tipo => (hasConfig[tipo] || []).length > 0);
+                            const isSelected = hasConfig && hasCuentas;
+
+                            return (
+                              <button
+                                key={tienda.id_tienda}
+                                onClick={() => {
+                                  setSelectedTienda(tienda);
+                                  setTiendaCuentasSelection(tiendaCuentasConfig[tienda.id_tienda] || {});
+                                  setShowTiendaSelection(false);
+                                }}
+                                className="p-4 rounded-lg flex items-center justify-between transition-colors hover:opacity-80"
+                                style={{
+                                  backgroundColor: isSelected ? colors.primary : colors.background,
+                                  borderColor: isSelected ? colors.primary : colors.outlineVariant,
+                                  borderWidth: '1px'
+                                }}
+                              >
+                                <span className="font-medium" style={{ color: isSelected ? '#fff' : colors.onSurface }}>
+                                  {tienda.nombre}
+                                </span>
+                                {isSelected && <span>✓</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Cuenta Selector Modal */}
+              {showCuentaSelector && (
+                <div 
+                  className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+                  onClick={() => setShowCuentaSelector(false)}
+                >
+                  <div 
+                    className="rounded-2xl p-6 max-w-md w-full shadow-lg max-h-[90vh] overflow-y-auto"
+                    style={{ backgroundColor: colors.surface }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 
+                        className="text-lg font-bold"
+                        style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                      >
+                        Seleccionar Cuenta
+                      </h3>
+                      <button
+                        className="p-2 rounded-lg transition-colors hover:opacity-80"
+                        style={{ backgroundColor: colors.background, color: colors.onSurface }}
+                        onClick={() => setShowCuentaSelector(false)}
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+
+                    <p className="text-sm mb-4" style={{ color: colors.outline }}>
+                      Selecciona una cuenta de tipo: {selectorTipoCuenta.replace('_', ' ').toUpperCase()}
+                    </p>
+
+                    <div className="space-y-2">
+                      {(() => {
+                        // Mapeo de tipos internos a tipos del backend
+                        const tipoMapping: { [key: string]: string } = {
+                          'efectivo_cup': 'Efectivo CUP',
+                          'efectivo_usd': 'Efectivo USD',
+                          'transferencia_cup': 'Transferencia CUP',
+                          'transferencia_usd': 'Transferencia USD',
+                        };
+                        
+                        const tipoBuscado = tipoMapping[selectorTipoCuenta];
+                        const filteredCuentas = availableCuentas.filter((cuenta: any) => cuenta.tipo_cuenta === tipoBuscado);
+                        
+                        console.log('Selector tipo cuenta:', selectorTipoCuenta);
+                        console.log('Tipo buscado:', tipoBuscado);
+                        console.log('Available cuentas:', availableCuentas);
+                        console.log('Filtered cuentas:', filteredCuentas);
+                        
+                        return filteredCuentas.map((cuenta: any) => (
+                          <button
+                            key={cuenta.id_cuenta}
+                            onClick={() => handleSelectCuenta(cuenta)}
+                            className="w-full p-3 rounded-lg flex items-center justify-between transition-colors hover:opacity-80"
+                            style={{ backgroundColor: colors.background, borderColor: colors.outlineVariant, borderWidth: '1px' }}
+                          >
+                            <span className="font-medium" style={{ color: colors.onSurface }}>
+                              {cuenta.nombre}
+                            </span>
+                            {cuenta.num_cuenta && (
+                              <span className="text-sm" style={{ color: colors.outline }}>
+                                {cuenta.num_cuenta}
+                              </span>
+                            )}
+                          </button>
+                        ));
+                      })()}
+                    </div>
+
+                    {(() => {
+                        // Mapeo de tipos internos a tipos del backend
+                        const tipoMapping: { [key: string]: string } = {
+                          'efectivo_cup': 'Efectivo CUP',
+                          'efectivo_usd': 'Efectivo USD',
+                          'transferencia_cup': 'Transferencia CUP',
+                          'transferencia_usd': 'Transferencia USD',
+                        };
+                        
+                        const tipoBuscado = tipoMapping[selectorTipoCuenta];
+                        const filteredCuentas = availableCuentas.filter((cuenta: any) => cuenta.tipo_cuenta === tipoBuscado);
+                        
+                        return filteredCuentas.length === 0 && (
+                          <p className="text-center py-4" style={{ color: colors.outline }}>
+                            No hay cuentas disponibles de este tipo
+                          </p>
+                        );
+                      })()}
+                  </div>
+                </div>
+              )}
+
+              {/* Comprobante Config Modal */}
+              {showComprobanteConfigModal && (
+                <div 
+                  className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+                  onClick={() => setShowComprobanteConfigModal(false)}
+                >
+                  <div 
+                    className="rounded-2xl p-6 max-w-lg w-full shadow-lg max-h-[90vh] overflow-y-auto"
+                    style={{ backgroundColor: colors.surface }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 
+                        className="text-lg font-bold"
+                        style={{ color: colors.onSurface, fontFamily: 'Hanken Grotesk, sans-serif' }}
+                      >
+                        Configuración de Comprobante
+                      </h3>
+                      <button
+                        className="p-2 rounded-lg transition-colors hover:opacity-80"
+                        style={{ backgroundColor: colors.background, color: colors.onSurface }}
+                        onClick={() => setShowComprobanteConfigModal(false)}
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm mb-2" style={{ color: colors.outline }}>Nombre del Negocio</label>
+                        <input
+                          type="text"
+                          className="w-full px-4 py-2 rounded-lg"
+                          style={{ backgroundColor: colors.background, color: colors.onSurface, border: `1px solid ${colors.outlineVariant}` }}
+                          value={comprobanteConfig.nombreNegocio}
+                          onChange={(e) => setComprobanteConfig(prev => ({ ...prev, nombreNegocio: e.target.value }))}
+                          placeholder="Ej: Mi Tienda"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm mb-2" style={{ color: colors.outline }}>Logo (opcional)</label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="w-full px-4 py-2 rounded-lg"
+                          style={{ backgroundColor: colors.background, color: colors.onSurface, border: `1px solid ${colors.outlineVariant}` }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setComprobanteConfig(prev => ({ ...prev, logo: reader.result as string }));
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </div>
+
+                      <div className="mt-6">
+                        <h4 className="text-sm font-semibold mb-3" style={{ color: colors.onSurface }}>Previsualización</h4>
+                        <div 
+                          className="rounded-lg p-4 border-2"
+                          style={{ backgroundColor: '#fff', borderColor: '#000' }}
+                        >
+                          {comprobanteConfig.logo && (
+                            <div className="flex justify-center mb-3">
+                              <img 
+                                src={comprobanteConfig.logo} 
+                                alt="Logo" 
+                                className="w-24 h-24 object-contain"
+                                style={{ filter: 'grayscale(100%)' }}
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            </div>
+                          )}
+                          <div className="text-center mb-2" style={{ color: '#000', fontWeight: 'bold', fontSize: '16px' }}>
+                            {comprobanteConfig.nombreNegocio || 'Nombre del Negocio'}
+                          </div>
+                          <div className="text-center mb-1" style={{ color: '#000', fontSize: '12px' }}>
+                            DEPENDIENTE: {user?.nombre_natural || 'Juan Pérez'}
+                          </div>
+                          <div className="text-center mb-3" style={{ color: '#000', fontSize: '12px' }}>
+                            {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          </div>
+                          
+                          <div className="flex justify-between text-xs font-semibold mb-1" style={{ color: '#000' }}>
+                            <span>Servicio/Producto</span>
+                            <span>Cant</span>
+                            <span>Total</span>
+                          </div>
+                          <div className="border-b border-black mb-1"></div>
+                          <div className="flex justify-between text-xs mb-1" style={{ color: '#000' }}>
+                            <span>Producto 1</span>
+                            <span>1</span>
+                            <span>${formatCurrency(10)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs mb-1" style={{ color: '#000' }}>
+                            <span>Producto 2</span>
+                            <span>2</span>
+                            <span>${formatCurrency(30)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs font-semibold mb-1" style={{ color: '#000' }}>
+                            <span>TOTAL</span>
+                            <span></span>
+                            <span>${formatCurrency(40)}</span>
+                          </div>
+                          <div className="border-b border-black mb-2"></div>
+                          <div className="text-center" style={{ color: '#000', fontSize: '12px' }}>
+                            ¡Gracias por su compra!
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-4 mt-6">
+                      <button
+                        className="flex-1 rounded-lg px-4 py-2 transition-colors hover:opacity-90"
+                        style={{ backgroundColor: colors.surface, border: `1px solid ${colors.outlineVariant}`, color: colors.onSurface }}
+                        onClick={() => setShowComprobanteConfigModal(false)}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        className="flex-1 rounded-lg px-4 py-2 transition-colors hover:opacity-90"
+                        style={{ backgroundColor: colors.primary, color: '#fff' }}
+                        onClick={handleSaveComprobanteConfig}
+                      >
+                        Guardar
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

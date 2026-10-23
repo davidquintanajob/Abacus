@@ -16,7 +16,7 @@ interface IconStripProps {
 
 export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStripProps) => {
   const { colors, isDark } = useTheme();
-  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels } = useAuth();
+  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels, movimientoAccessLevels } = useAuth();
   const { isLoading: isNavigating, setLoading: setNavigating } = useNavigationLoading();
   const router = useRouter();
 
@@ -34,6 +34,8 @@ export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStrip
       'Entradas': '/entradas',
       'Salidas': '/salidas',
       'Operaciones': '/operaciones',
+      'Ventas': '/ventas',
+      'Movimientos': '/movimientos',
       'Tiendas': '/tiendas',
       'Usuarios': '/usuarios',
       'CurrencyExchange': '/configuracion',
@@ -65,6 +67,18 @@ export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStrip
     (userRole === 'almacenero' && operacionAccessLevels?.almacenero !== 'none') ||
     (userRole === 'económico' && operacionAccessLevels?.economico !== 'none');
 
+  const canAccessVentas =
+    isAdmin ||
+    (userRole === 'dependiente' && ventaAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'almacenero' && ventaAccessLevels?.almacenero !== 'none') ||
+    (userRole === 'económico' && ventaAccessLevels?.economico !== 'none');
+
+  const canAccessMovimientos =
+    isAdmin ||
+    (userRole === 'dependiente' && movimientoAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'almacenero' && movimientoAccessLevels?.almacenero !== 'none') ||
+    (userRole === 'económico' && movimientoAccessLevels?.economico !== 'none');
+
   let menuItems: any[] = [
     { icon: '/icon-panel.png', label: 'Panel', route: 'Home' },
     { icon: '/icon-servicios.png', label: 'Servicios y Ofertas', route: 'Servicios' },
@@ -79,6 +93,12 @@ export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStrip
   }
   if (canAccessOperaciones) {
     menuItems.push({ icon: '/icon-operaciones.png', label: 'Operaciones', route: 'Operaciones' });
+  }
+  if (canAccessVentas) {
+    menuItems.push({ icon: '/icon-ventas.png', label: 'Ventas', route: 'Ventas' });
+  }
+  if (canAccessMovimientos) {
+    menuItems.push({ icon: '/moving.png', label: 'Movimientos', route: 'Movimientos' });
   }
   if (isAdmin) {
     menuItems.push({ icon: '/icon-tiendas.png', label: 'Tiendas', route: 'Tiendas' });

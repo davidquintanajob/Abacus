@@ -146,6 +146,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       almacenero: false,
       economico: false,
     },
+    ventaAccessLevels: config?.ventaAccessLevels || {
+      dependiente: 'none',
+      almacenero: 'none',
+      economico: 'none',
+    },
+    ventaManagePermissions: config?.ventaManagePermissions || {
+      dependiente: false,
+      almacenero: false,
+      economico: false,
+    },
+    movimientoAccessLevels: config?.movimientoAccessLevels || {
+      dependiente: 'none',
+      almacenero: 'none',
+      economico: 'none',
+    },
+    movimientoManagePermissions: config?.movimientoManagePermissions || {
+      dependiente: false,
+      almacenero: false,
+      economico: false,
+    },
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

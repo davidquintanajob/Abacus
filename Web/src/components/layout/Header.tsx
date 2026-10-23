@@ -4,7 +4,7 @@ import React from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '../../context/ThemeContext';
-import { Menu, ArrowLeft, Moon, Sun, Bell, User, WifiOff, Grid, List } from 'lucide-react';
+import { Menu, ArrowLeft, Moon, Sun, Bell, User, WifiOff, Grid, List, Barcode } from 'lucide-react';
 
 interface HeaderProps {
   onMenuPress?: () => void;
@@ -22,6 +22,10 @@ interface HeaderProps {
   currentRoute?: string;
   showMinimalHeader?: boolean;
   onLogoPress?: () => void;
+  showScannerButton?: boolean;
+  onScannerPress?: () => void;
+  scannerActive?: boolean;
+  hideUserIcon?: boolean;
 }
 
 export const Header = ({
@@ -39,7 +43,11 @@ export const Header = ({
   viewMode = 'table',
   currentRoute = 'Home',
   showMinimalHeader = false,
-  onLogoPress
+  onLogoPress,
+  showScannerButton = false,
+  onScannerPress,
+  scannerActive = false,
+  hideUserIcon = false,
 }: HeaderProps) => {
   const router = useRouter();
   const { colors } = useTheme();
@@ -136,7 +144,24 @@ export const Header = ({
             )}
           </button>
         )}
-        {!showMinimalHeader && currentRoute !== 'Profile' && (
+        {showScannerButton && onScannerPress && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onScannerPress}
+              className="p-1 md:p-2 rounded-full hover:bg-black/5 transition-colors"
+              title={scannerActive ? "Ocultar escáner" : "Mostrar escáner"}
+            >
+              <Barcode size={24} className="md:w-8 md:h-8 lg:w-9 lg:h-9" style={{ color: scannerActive ? colors.secondary : colors.primary }} />
+            </button>
+            <span 
+              className="text-xs md:text-sm hidden sm:block"
+              style={{ color: scannerActive ? colors.secondary : colors.primary }}
+            >
+              {scannerActive ? "Escaner activo" : "Escaner desactivado"}
+            </span>
+          </div>
+        )}
+        {!hideUserIcon && !showMinimalHeader && currentRoute !== 'Profile' && (
           <button
             onClick={handleProfilePress}
             className="p-1 md:p-2 rounded-full hover:bg-black/5 transition-colors"

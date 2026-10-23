@@ -61,8 +61,13 @@ export interface Config {
     almacenero?: boolean;
     economico?: boolean;
   };
+  priceChangePermissions?: {
+    dependiente?: boolean;
+    almacenero?: boolean;
+    economico?: boolean;
+  };
   comprobanteConfig?: {
-    logo?: string | null;
+    logo?: string | null | undefined;
     nombreNegocio?: string;
   };
   prioritizeWifiConnection?: boolean;
