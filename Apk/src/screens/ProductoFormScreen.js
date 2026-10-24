@@ -1286,7 +1286,7 @@ const ProductoFormContent = () => {
 
       const assets = await MediaLibrary.getAssetsAsync({
         mediaType: 'photo',
-        first: 50,
+        first: 1000,
         sortBy: MediaLibrary.SortBy.creationTime,
       });
       setMediaAssets(assets.assets);
@@ -1317,7 +1317,8 @@ const ProductoFormContent = () => {
 
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.8,
+        quality: 0.5,
+        skipProcessing: true,
         base64: true,
       });
 
@@ -2568,6 +2569,7 @@ const ProductoFormContent = () => {
               ref={cameraRef}
               style={StyleSheet.absoluteFillObject}
               facing="back"
+              enableHighQualityFrameRate={false}
               onCameraReady={() => { setCameraReady(true); }}
             />
           </View>
@@ -3268,7 +3270,7 @@ const createStyles = (responsive) => StyleSheet.create({
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     marginBottom: responsive.responsiveMargin(16),
   },
   modalHeaderLeft: {

@@ -312,7 +312,7 @@ export const Sidebar = ({ isOpen = false, onClose, navigation, currentRoute = 'H
               {isSyncing ? 'Sincronizando...' : 'Cerrar Sesión'}
             </Text>
           </TouchableOpacity>
-          <Text style={[styles.version, { color: colors.outline }]}>v1.1.2</Text>
+          <Text style={[styles.version, { color: colors.outline }]}>v1.1.3</Text>
         </View>
       </Animated.View>
     </>
