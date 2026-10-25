@@ -73,15 +73,16 @@ const InformeGeneralContent = () => {
       setLoadingProgress(20);
       setLoadingMessage('Consultando ventas...');
 
-      // Fetch ventas with date filter (no limit to get all records)
-      const ventasData = await getVentas({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta });
+      // Fetch ventas with date filter (use high limit to get all records)
+      const ventasData = await getVentas({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta }, undefined, 1000000);
       const ventas = ventasData.data || [];
+      const ventasSummary = ventasData.summary || {};
 
       setLoadingProgress(50);
       setLoadingMessage('Consultando salidas...');
 
-      // Fetch salidas with date filter (no limit to get all records)
-      const salidasData = await getSalidas({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta });
+      // Fetch salidas with date filter (use high limit to get all records)
+      const salidasData = await getSalidas({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta }, undefined, 1000000);
       const salidas = salidasData.data || [];
 
       setLoadingProgress(70);
@@ -94,18 +95,21 @@ const InformeGeneralContent = () => {
       setLoadingProgress(85);
       setLoadingMessage('Calculando datos...');
 
-      // Calculate sales income from ListaVenta (cash + transfers)
-      let ingresosVentasCUP = 0;
-      let ingresosVentasUSD = 0;
+      // Use backend summary for sales income (matches VentasScreen)
+      const ingresosVentasCUP = parseFloat(ventasSummary.total_efectivo_cup || 0) + parseFloat(ventasSummary.total_transferencia_cup || 0);
+      const ingresosVentasUSD = parseFloat(ventasSummary.total_efectivo_usd || 0) + parseFloat(ventasSummary.total_transferencia_usd || 0);
+
       let costosVentasCUP = 0;
       let costosVentasUSD = 0;
 
       const productosGanancia = new Map();
 
+      console.log('[Informe] Ingresos desde backend summary - CUP:', ingresosVentasCUP, 'USD:', ingresosVentasUSD);
+
       for (const listaVenta of ventas) {
         console.log('[Informe] Procesando listaVenta ID:', listaVenta.id_lista_venta);
 
-        // Income from ListaVenta (amount collected)
+        // Income from ListaVenta (amount collected) - for cost distribution
         const efectivoCUP = parseFloat(listaVenta.cantidad_cobrada_efectivo_cup || 0);
         const efectivoUSD = parseFloat(listaVenta.cantidad_cobrada_efectivo_usd || 0);
         const transferenciaCUP = parseFloat(listaVenta.cantidad_cobrada_transferencia_cup || 0);
@@ -114,10 +118,7 @@ const InformeGeneralContent = () => {
         const totalIngresoCUP = efectivoCUP + transferenciaCUP;
         const totalIngresoUSD = efectivoUSD + transferenciaUSD;
 
-        console.log('[Informe] Ingresos - CUP:', totalIngresoCUP, 'USD:', totalIngresoUSD);
-
-        ingresosVentasCUP += totalIngresoCUP;
-        ingresosVentasUSD += totalIngresoUSD;
+        console.log('[Informe] Ingresos por venta - CUP:', totalIngresoCUP, 'USD:', totalIngresoUSD);
 
         // Calculate total expected income from ventas (based on precio_cobrado)
         let totalPrecioCobradoCUP = 0;

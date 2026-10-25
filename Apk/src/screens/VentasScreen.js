@@ -44,6 +44,7 @@ const VentasContent = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [ventas, setVentas] = useState([]);
   const [summary, setSummary] = useState(null);
   const [pagination, setPagination] = useState({ currentPage: 1, limit: 10, totalPages: 1, totalItems: 0 });
@@ -757,6 +758,13 @@ const VentasContent = () => {
     }
   };
 
+  // Check if initial data is loaded (ventas, summary, and cuentas)
+  useEffect(() => {
+    if (hasDoneInitialFetch.current && !isLoading && summary) {
+      setIsInitialLoading(false);
+    }
+  }, [summary, isLoading]);
+
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     fetchVentas();
@@ -1368,6 +1376,26 @@ const VentasContent = () => {
         onHide={hideToast}
         toastKey={toast.key}
       />
+
+      {/* Initial Loading Modal */}
+      <Modal
+        visible={isInitialLoading}
+        transparent={true}
+        animationType="fade"
+        statusBarTranslucent={true}
+      >
+        <View style={styles.initialLoadingOverlay}>
+          <View style={[styles.initialLoadingModal, { backgroundColor: colors.surface }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.initialLoadingText, { color: colors.onSurface }]}>
+              Cargando información...
+            </Text>
+            <Text style={[styles.initialLoadingSubtext, { color: colors.outline }]}>
+              Ventas, resumen y cuentas
+            </Text>
+          </View>
+        </View>
+      </Modal>
       
       <Header 
         onMenuPress={() => setSidebarOpen(true)}
@@ -2981,6 +3009,33 @@ const createStyles = (responsive) => StyleSheet.create({
   loadingText: {
     marginTop: responsive.responsiveMargin(16),
     fontSize: responsive.fontSizes.body,
+    fontFamily: 'Inter',
+  },
+  initialLoadingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  initialLoadingModal: {
+    borderRadius: 16,
+    padding: responsive.responsivePadding(32),
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  initialLoadingText: {
+    marginTop: responsive.responsiveMargin(16),
+    fontSize: responsive.responsiveFontSize(18),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  initialLoadingSubtext: {
+    marginTop: responsive.responsiveMargin(8),
+    fontSize: responsive.responsiveFontSize(14),
     fontFamily: 'Inter',
   },
   errorCard: {
