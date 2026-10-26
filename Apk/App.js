@@ -37,6 +37,8 @@ import InformesScreen from './src/screens/InformesScreen';
 import InformeGeneralScreen from './src/screens/InformeGeneralScreen';
 import InformeVentasScreen from './src/screens/InformeVentasScreen';
 import InformeSalidasScreen from './src/screens/InformeSalidasScreen';
+import InventarioProductosScreen from './src/screens/InventarioProductosScreen';
+import InformeCuentasScreen from './src/screens/InformeCuentasScreen';
 import { MovimientosScreen } from './src/screens/MovimientosScreen';
 import { MovimientoFormScreen } from './src/screens/MovimientoFormScreen';
 import ClientesScreen from './src/screens/ClientesScreen';
@@ -92,6 +94,8 @@ const AppStack = ({ initialRoute }) => (
     <Stack.Screen name="InformeGeneral" component={InformeGeneralScreen} />
     <Stack.Screen name="InformeVentas" component={InformeVentasScreen} />
     <Stack.Screen name="InformeSalidas" component={InformeSalidasScreen} />
+    <Stack.Screen name="InventarioProductos" component={InventarioProductosScreen} />
+    <Stack.Screen name="InformeCuentas" component={InformeCuentasScreen} />
     <Stack.Screen name="Movimientos" component={MovimientosScreen} />
     <Stack.Screen name="MovimientoForm" component={MovimientoFormScreen} />
     <Stack.Screen name="Clientes" component={ClientesScreen} />

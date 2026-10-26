@@ -824,6 +824,11 @@ const ProductoFormContent = () => {
       (formData.precio_cup_general !== null && formData.precio_cup_general !== '') ||
       (formData.precio_usd_general !== null && formData.precio_usd_general !== '');
 
+    // Check if general costs are defined
+    const hasAnyGeneralCost = 
+      (formData.costo_cup_general !== null && formData.costo_cup_general !== '') ||
+      (formData.costo_usd_general !== null && formData.costo_usd_general !== '');
+
     if (hasAnyGeneralPrice && formData.productoTiendaList.length > 0) {
       const precioCup = formData.precio_cup_general !== null && formData.precio_cup_general !== ''
         ? (typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : (isNaN(parseFloat(formData.precio_cup_general)) ? 0 : parseFloat(formData.precio_cup_general)))
@@ -846,7 +851,7 @@ const ProductoFormContent = () => {
       // Find missing tienda IDs
       const missingTiendaIds = activeTiendaIds.filter(id => !existingTiendaIds.includes(id));
       
-      // Create new entries for missing tiendas
+      // Create new entries for missing tiendas (only when prices are defined)
       const newTiendaEntries = missingTiendaIds.map(id_tienda => ({
         id_tienda,
         precio_cup: precioCup !== null ? precioCup : 0,
@@ -856,17 +861,41 @@ const ProductoFormContent = () => {
         cantidad_alerta: null,
       }));
       
-      // Update existing entries - only update prices that are defined
+      // Update existing entries - update prices if defined, update costs if defined
+      const updatedList = formData.productoTiendaList.map(item => {
+        const updatedItem = { ...item };
+        if (precioCup !== null) {
+          updatedItem.precio_cup = precioCup;
+        }
+        if (precioUsd !== null) {
+          updatedItem.precio_usd = precioUsd;
+        }
+        // Update costs if general costs are defined, otherwise keep existing
+        if (formData.costo_cup_general !== null && formData.costo_cup_general !== '' && formData.costo_cup_general !== undefined) {
+          updatedItem.costo_cup = formData.costo_cup_general;
+        }
+        if (formData.costo_usd_general !== null && formData.costo_usd_general !== '' && formData.costo_usd_general !== undefined) {
+          updatedItem.costo_usd = formData.costo_usd_general;
+        }
+        return updatedItem;
+      });
+      
       formData.productoTiendaList = [
-        ...formData.productoTiendaList.map(item => (({
-          ...item,
-          ...(precioCup !== null && { precio_cup: precioCup }),
-          ...(precioUsd !== null && { precio_usd: precioUsd }),
-          costo_cup: (formData.costo_cup_general !== null && formData.costo_cup_general !== '' && formData.costo_cup_general !== undefined) ? formData.costo_cup_general : item.costo_cup,
-          costo_usd: (formData.costo_usd_general !== null && formData.costo_usd_general !== '' && formData.costo_usd_general !== undefined) ? formData.costo_usd_general : item.costo_usd,
-        }))),
+        ...updatedList,
         ...newTiendaEntries
       ];
+    } else if (hasAnyGeneralCost && formData.productoTiendaList.length > 0) {
+      // Only update costs in existing tiendas (don't create new entries)
+      formData.productoTiendaList = formData.productoTiendaList.map(item => {
+        const updatedItem = { ...item };
+        if (formData.costo_cup_general !== null && formData.costo_cup_general !== '' && formData.costo_cup_general !== undefined) {
+          updatedItem.costo_cup = formData.costo_cup_general;
+        }
+        if (formData.costo_usd_general !== null && formData.costo_usd_general !== '' && formData.costo_usd_general !== undefined) {
+          updatedItem.costo_usd = formData.costo_usd_general;
+        }
+        return updatedItem;
+      });
     }
 
     try {
@@ -901,10 +930,13 @@ const ProductoFormContent = () => {
               const costoCup = specific.costo_cup !== null ? toFixed5(specific.costo_cup) : toFixed5(formData.costo_cup_general);
               const costoUsd = specific.costo_usd !== null ? toFixed5(specific.costo_usd) : toFixed5(formData.costo_usd_general);
               
-              // Skip if both prices are 0 or undefined
-              if ((precioCup === 0 || precioCup === null || precioCup === undefined) && 
-                  (precioUsd === 0 || precioUsd === null || precioUsd === undefined)) {
-                return;
+              // In edit mode, include all existing stores even if price is 0 (to avoid deletion)
+              // In add mode, skip if both prices are 0 or undefined
+              if (!isEditMode) {
+                if ((precioCup === 0 || precioCup === null || precioCup === undefined) && 
+                    (precioUsd === 0 || precioUsd === null || precioUsd === undefined)) {
+                  return;
+                }
               }
               
               baseList.push({
@@ -1278,21 +1310,39 @@ const ProductoFormContent = () => {
   const handlePickFromGallery = async () => {
     setShowImagePickerModal(false);
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        showToast({ type: 'error', message: 'Se requiere permiso para acceder a la galería' });
+        showToast({ type: 'error', message: 'Se necesita permiso para acceder a la galería' });
         return;
       }
 
-      const assets = await MediaLibrary.getAssetsAsync({
-        mediaType: 'photo',
-        first: 1000,
-        sortBy: MediaLibrary.SortBy.creationTime,
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
       });
-      setMediaAssets(assets.assets);
-      setGalleryModalVisible(true);
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        // Store as a base64 data URI
+        if (asset.base64) {
+          const ext = (asset.uri.split('.').pop() || 'jpeg').toLowerCase();
+          const mime = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+          const dataUri = `data:${mime};base64,${asset.base64}`;
+          setFormData(prev => ({ ...prev, imagen: dataUri }));
+          setImagenModificada(true);
+          showToast({ type: 'success', message: 'Imagen seleccionada correctamente' });
+        } else {
+          // Fallback to URI if base64 unavailable
+          setFormData(prev => ({ ...prev, imagen: asset.uri }));
+          setImagenModificada(true);
+          showToast({ type: 'success', message: 'Imagen seleccionada correctamente' });
+        }
+      }
     } catch (error) {
-      showToast({ type: 'error', message: 'Error al cargar la galería' });
+      showToast({ type: 'error', message: 'Error al seleccionar imagen' });
     }
   };
 

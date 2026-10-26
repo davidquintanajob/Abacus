@@ -55,22 +55,22 @@ const InformesContent = () => {
       available: true,
     },
     {
-      id: 'cuentas',
-      title: 'Informe de Cuentas',
-      subtitle: 'Estado y movimientos de cuentas',
-      icon: 'wallet-outline',
-      color: '#FF9800',
-      route: null,
-      available: false,
-    },
-    {
       id: 'inventario',
       title: 'Inventario de Productos',
       subtitle: 'Stock y valor de inventario',
       icon: 'cube-outline',
       color: '#9C27B0',
-      route: null,
-      available: false,
+      route: 'InventarioProductos',
+      available: true,
+    },
+    {
+      id: 'cuentas',
+      title: 'Informe de Cuentas',
+      subtitle: 'Estado y movimientos de cuentas',
+      icon: 'wallet-outline',
+      color: '#FF9800',
+      route: 'InformeCuentas',
+      available: true,
     },
   ];
 

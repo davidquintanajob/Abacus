@@ -1284,24 +1284,30 @@ const SalesContent = () => {
   };
 
   const handleSubmitSale = async () => {
+    setIsSubmitting(true);
+    
     if (saleItems.length === 0) {
       showToast({ type: 'warning', message: 'Agrega al menos un producto' });
+      setIsSubmitting(false);
       return;
     }
 
     if (!selectedTienda) {
       showToast({ type: 'warning', message: 'Selecciona una tienda' });
+      setIsSubmitting(false);
       return;
     }
 
     if (!config || !config.cupToUsdRate) {
       showToast({ type: 'warning', message: 'Cargando configuración, por favor espera...' });
       await loadConfig();
+      setIsSubmitting(false);
       return;
     }
 
     if (!user || !user.id_usuario) {
       showToast({ type: 'warning', message: 'Usuario no disponible, por favor recarga la página' });
+      setIsSubmitting(false);
       return;
     }
 
@@ -1309,19 +1315,23 @@ const SalesContent = () => {
     if (isDeudaMode) {
       if (!deudaCliente) {
         showToast({ type: 'warning', message: 'Selecciona un cliente para la deuda' });
+        setIsSubmitting(false);
         return;
       }
       if (deudaPagoInicial.activo) {
         if (!deudaPagoInicial.cantidad_pagada || parseFloat(deudaPagoInicial.cantidad_pagada) <= 0) {
           showToast({ type: 'warning', message: 'Ingresa un monto válido para el pago inicial' });
+          setIsSubmitting(false);
           return;
         }
         if (!deudaPagoInicial.forma_pago) {
           showToast({ type: 'warning', message: 'Selecciona la forma de pago del pago inicial' });
+          setIsSubmitting(false);
           return;
         }
         if (!deudaPagoInicial.id_cuenta_operacion) {
           showToast({ type: 'warning', message: 'Selecciona la cuenta para el pago inicial' });
+          setIsSubmitting(false);
           return;
         }
       }
@@ -1479,6 +1489,8 @@ const SalesContent = () => {
   };
 
   const processSale = async (efectivoCup, efectivoUsd, transferenciaCup, transferenciaUsd, totalOriginalCUP, totalOriginalUSD) => {
+    setIsSubmitting(true);
+    
     try {
       // Check if there are pending price changes and no reason/motivo provided
       if (priceChangePending && (!ventaNota || ventaNota.trim() === '')) {
@@ -1494,8 +1506,6 @@ const SalesContent = () => {
       if (priceChangePending && ventaNota && ventaNota.trim() !== '') {
         setPriceChangePending(false);
       }
-
-      setIsSubmitting(true);
 
       // ── DEUDA MODE ────────────────────────────────────────────────────────
       if (isDeudaMode) {
@@ -2914,6 +2924,26 @@ const SalesContent = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Modal de Procesamiento */}
+      <Modal
+        visible={isSubmitting}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={[styles.processingModalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.7)' }]}>
+          <View style={[styles.processingModalContent, { backgroundColor: colors.surface }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.processingModalText, { color: colors.onSurface }]}>
+              Procesando venta...
+            </Text>
+            <Text style={[styles.processingModalSubtext, { color: colors.outline }]}>
+              Por favor espere, esto puede tomar unos segundos
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -3704,6 +3734,30 @@ const createStyles = (responsive) => StyleSheet.create({
     paddingHorizontal: responsive.responsivePadding(12),
     paddingVertical: responsive.responsivePadding(8),
     fontSize: responsive.responsiveWidth(13),
+  },
+  processingModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  processingModalContent: {
+    padding: responsive.responsivePadding(32),
+    borderRadius: 16,
+    alignItems: 'center',
+    minWidth: responsive.responsiveWidth(280),
+  },
+  processingModalText: {
+    fontSize: responsive.responsiveFontSize(18),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(16),
+    textAlign: 'center',
+  },
+  processingModalSubtext: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(8),
+    textAlign: 'center',
   },
 });
 

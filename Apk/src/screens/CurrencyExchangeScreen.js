@@ -336,24 +336,24 @@ const CurrencyExchangeContent = () => {
             const costoUSD = parseFloat(ts.costo_usd) || 0;
 
             // Calcular nuevos precios basándose en la configuración
-            // Si tipoDatoModificar='usd', actualizamos USD basándonos en CUP
-            // Si tipoDatoModificar='cup', actualizamos CUP basándonos en USD
+            // Si tipoDatoModificar='usd', actualizamos CUP basándonos en USD (basar conversión en USD)
+            // Si tipoDatoModificar='cup', actualizamos USD basándonos en CUP (basar conversión en CUP)
             let newPrecioCUP, newPrecioUSD, newCostoCUP, newCostoUSD;
 
             if (currencyModalConfig.tipoDatoModificar === 'usd') {
-              // Actualizar USD basándose en CUP
+              // Basar conversión en USD: actualizar CUP basándose en USD
+              newPrecioCUP = calculateNewPrice(precioUSD, 'cup', rate, currencyModalConfig.redondeo_exeso);
+              newCostoCUP = calculateNewPrice(costoUSD, 'cup', rate, currencyModalConfig.redondeo_exeso);
+              // USD se mantiene igual
+              newPrecioUSD = precioUSD;
+              newCostoUSD = costoUSD;
+            } else {
+              // Basar conversión en CUP: actualizar USD basándose en CUP
               newPrecioUSD = calculateNewPrice(precioCUP, 'usd', rate, currencyModalConfig.redondeo_exeso);
               newCostoUSD = calculateNewPrice(costoCUP, 'usd', rate, currencyModalConfig.redondeo_exeso);
               // CUP se mantiene igual
               newPrecioCUP = precioCUP;
               newCostoCUP = costoCUP;
-            } else {
-              // Actualizar CUP basándose en USD
-              newPrecioCUP = calculateNewPrice(precioUSD, 'cup', rate, currencyModalConfig.redondeo_exceso);
-              newCostoCUP = calculateNewPrice(costoUSD, 'cup', rate, currencyModalConfig.redondeo_exeso);
-              // USD se mantiene igual
-              newPrecioUSD = precioUSD;
-              newCostoUSD = costoUSD;
             }
 
             itemsWithNewPrices.push({
@@ -4251,14 +4251,17 @@ const CurrencyExchangeContent = () => {
                       <WebView
                         source={{
                           html: `
-                            <svg viewBox="0 0 100 100" style="width: 100%; height: 100%;">
-                              <defs>
-                                <filter id="grayscale">
-                                  <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0"/>
-                                </filter>
-                              </defs>
-                              <image href="${comprobanteConfig.logo}" width="100" height="100" filter="url(#grayscale)" preserveAspectRatio="xMidYMid meet"/>
-                            </svg>
+                            <html>
+                              <head>
+                                <style>
+                                  body { margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; height: 100vh; background: transparent; }
+                                  img { max-width: 100%; max-height: 100%; object-fit: contain; filter: grayscale(100%); }
+                                </style>
+                              </head>
+                              <body>
+                                <img src="${comprobanteConfig.logo}" />
+                              </body>
+                            </html>
                           `
                         }}
                         style={{ width: '100%', height: '100%' }}
@@ -4287,14 +4290,17 @@ const CurrencyExchangeContent = () => {
                         <WebView
                           source={{
                             html: `
-                              <svg viewBox="0 0 100 100" style="width: 100%; height: 100%;">
-                                <defs>
-                                  <filter id="grayscale">
-                                    <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0"/>
-                                  </filter>
-                                </defs>
-                                <image href="${comprobanteConfig.logo}" width="100" height="100" filter="url(#grayscale)" preserveAspectRatio="xMidYMid meet"/>
-                              </svg>
+                              <html>
+                                <head>
+                                  <style>
+                                    body { margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; height: 100vh; background: transparent; }
+                                    img { max-width: 100%; max-height: 100%; object-fit: contain; filter: grayscale(100%); }
+                                  </style>
+                                </head>
+                                <body>
+                                  <img src="${comprobanteConfig.logo}" />
+                                </body>
+                              </html>
                             `
                           }}
                           style={{ width: '100%', height: '100%' }}

@@ -283,25 +283,32 @@ const SalidaFormContent = () => {
   };
 
   const handleSave = async () => {
+    setIsSaving(true);
+    
     // Validaciones
     if (!formData.producto) {
       showToast({ type: 'warning', message: 'Debe seleccionar un producto' });
+      setIsSaving(false);
       return;
     }
     if (!formData.tienda) {
       showToast({ type: 'warning', message: 'Debe seleccionar una tienda' });
+      setIsSaving(false);
       return;
     }
     if (!formData.cantidad_total || parseFloat(formData.cantidad_total) <= 0) {
       showToast({ type: 'warning', message: 'La cantidad debe ser mayor que 0' });
+      setIsSaving(false);
       return;
     }
     if (!formData.descripcion || formData.descripcion.trim() === '') {
       showToast({ type: 'warning', message: 'Debe ingresar una descripción' });
+      setIsSaving(false);
       return;
     }
     if (!formData.tipo_salida || formData.tipo_salida.trim() === '') {
       showToast({ type: 'warning', message: 'Debe ingresar el tipo de salida' });
+      setIsSaving(false);
       return;
     }
 
@@ -312,6 +319,7 @@ const SalidaFormContent = () => {
 
     if (!productoTienda) {
       showToast({ type: 'warning', message: 'El producto no tiene relación con esta tienda. Primero debe agregar el producto a la tienda mediante una entrada.' });
+      setIsSaving(false);
       return;
     }
 
@@ -939,6 +947,26 @@ const SalidaFormContent = () => {
         </Card>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Modal de Procesamiento */}
+      <Modal
+        visible={isSaving}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={[styles.processingModalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.7)' }]}>
+          <View style={[styles.processingModalContent, { backgroundColor: colors.surface }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.processingModalText, { color: colors.onSurface }]}>
+              Procesando salida...
+            </Text>
+            <Text style={[styles.processingModalSubtext, { color: colors.outline }]}>
+              Por favor espere, esto puede tomar unos segundos
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1173,5 +1201,29 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.body,
     fontWeight: '600',
     fontFamily: 'Inter',
+  },
+  processingModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  processingModalContent: {
+    padding: responsive.responsivePadding(32),
+    borderRadius: 16,
+    alignItems: 'center',
+    minWidth: responsive.responsiveWidth(280),
+  },
+  processingModalText: {
+    fontSize: responsive.responsiveFontSize(18),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(16),
+    textAlign: 'center',
+  },
+  processingModalSubtext: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(8),
+    textAlign: 'center',
   },
 });

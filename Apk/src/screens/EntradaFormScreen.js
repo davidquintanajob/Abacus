@@ -466,6 +466,8 @@ const EntradaFormContent = () => {
   };
 
   const handleSave = async () => {
+    setIsSaving(true);
+    
     // Validaciones para modo múltiple
     if (isMultipleMode) {
       // Filter out empty entries (without product selected)
@@ -473,6 +475,7 @@ const EntradaFormContent = () => {
       
       if (validEntradas.length === 0) {
         showToast({ type: 'warning', message: 'Debe agregar al menos un producto' });
+        setIsSaving(false);
         return;
       }
       
@@ -481,14 +484,17 @@ const EntradaFormContent = () => {
         const entrada = validEntradas[i];
         if (!entrada.cantidad_entrada || parseFloat(entrada.cantidad_entrada) <= 0) {
           showToast({ type: 'warning', message: `La cantidad del producto ${i + 1} debe ser mayor que 0` });
+          setIsSaving(false);
           return;
         }
         if (entrada.costo_usd !== '' && parseFloat(entrada.costo_usd) < 0) {
           showToast({ type: 'warning', message: `El costo USD del producto ${i + 1} debe ser mayor o igual a 0` });
+          setIsSaving(false);
           return;
         }
         if (entrada.costo_cup !== '' && parseFloat(entrada.costo_cup) < 0) {
           showToast({ type: 'warning', message: `El costo CUP del producto ${i + 1} debe ser mayor o igual a 0` });
+          setIsSaving(false);
           return;
         }
         
@@ -500,10 +506,12 @@ const EntradaFormContent = () => {
         if (!productoTienda) {
           if (!entrada.precio_cup || entrada.precio_cup === '') {
             showToast({ type: 'warning', message: `Debe ingresar el precio CUP del producto ${i + 1} para esta tienda` });
+            setIsSaving(false);
             return;
           }
           if (!entrada.precio_usd || entrada.precio_usd === '') {
             showToast({ type: 'warning', message: `Debe ingresar el precio USD del producto ${i + 1} para esta tienda` });
+            setIsSaving(false);
             return;
           }
         }
@@ -511,33 +519,40 @@ const EntradaFormContent = () => {
         // Validar fecha de vencimiento
         if (entrada.producto.producto?.isVencible && !entrada.fecha_vencimiento) {
           showToast({ type: 'warning', message: `El producto ${i + 1} requiere fecha de vencimiento` });
+          setIsSaving(false);
           return;
         }
       }
       
       checkAndShowCostSuggestionMultiple();
+      setIsSaving(false);
       return;
     }
     
     // Validaciones para modo individual
     if (!formData.producto) {
       showToast({ type: 'warning', message: 'Debe seleccionar un producto' });
+      setIsSaving(false);
       return;
     }
     if (!formData.tienda) {
       showToast({ type: 'warning', message: 'Debe seleccionar una tienda' });
+      setIsSaving(false);
       return;
     }
     if (!formData.cantidad_entrada || parseFloat(formData.cantidad_entrada) <= 0) {
       showToast({ type: 'warning', message: 'La cantidad debe ser mayor que 0' });
+      setIsSaving(false);
       return;
     }
     if (formData.costo_usd !== '' && parseFloat(formData.costo_usd) < 0) {
       showToast({ type: 'warning', message: 'El costo USD debe ser mayor o igual a 0' });
+      setIsSaving(false);
       return;
     }
     if (formData.costo_cup !== '' && parseFloat(formData.costo_cup) < 0) {
       showToast({ type: 'warning', message: 'El costo CUP debe ser mayor o igual a 0' });
+      setIsSaving(false);
       return;
     }
 
@@ -550,10 +565,12 @@ const EntradaFormContent = () => {
     if (!productoTienda && formData.producto && formData.tienda) {
       if (!formData.precio_cup || formData.precio_cup === '') {
         showToast({ type: 'warning', message: 'Debe ingresar el precio CUP del producto para esta tienda' });
+        setIsSaving(false);
         return;
       }
       if (!formData.precio_usd || formData.precio_usd === '') {
         showToast({ type: 'warning', message: 'Debe ingresar el precio USD del producto para esta tienda' });
+        setIsSaving(false);
         return;
       }
     }
@@ -561,6 +578,7 @@ const EntradaFormContent = () => {
     // Validar fecha de vencimiento si el producto es vencible
     if (formData.producto.producto?.isVencible && !formData.fecha_vencimiento) {
       showToast({ type: 'warning', message: 'El producto requiere fecha de vencimiento' });
+      setIsSaving(false);
       return;
     }
 
@@ -3020,6 +3038,26 @@ const EntradaFormContent = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Modal de Procesamiento */}
+      <Modal
+        visible={isSaving}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={[styles.processingModalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.7)' }]}>
+          <View style={[styles.processingModalContent, { backgroundColor: colors.surface }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.processingModalText, { color: colors.onSurface }]}>
+              {isMultipleMode ? 'Procesando entradas múltiples...' : 'Procesando entrada...'}
+            </Text>
+            <Text style={[styles.processingModalSubtext, { color: colors.outline }]}>
+              Por favor espere, esto puede tomar unos segundos
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -3579,5 +3617,29 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(14),
     fontWeight: '600',
     fontFamily: 'Inter',
+  },
+  processingModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  processingModalContent: {
+    padding: responsive.responsivePadding(32),
+    borderRadius: 16,
+    alignItems: 'center',
+    minWidth: responsive.responsiveWidth(280),
+  },
+  processingModalText: {
+    fontSize: responsive.responsiveFontSize(18),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(16),
+    textAlign: 'center',
+  },
+  processingModalSubtext: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(8),
+    textAlign: 'center',
   },
 });

@@ -56,19 +56,21 @@ const MovimientosContent = () => {
   // Filter states
   const getCubaDate = () => {
     const now = new Date();
-    // Use local date directly (system should already be in Cuba time UTC-4)
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
+    // Use UTC methods to avoid timezone issues
+    const year = now.getUTCFullYear();
+    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(now.getUTCDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
-  
+
   const getCubaDateDaysAgo = (daysAgo) => {
     const now = new Date();
-    now.setDate(now.getDate() - daysAgo);
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
+    // Use UTC methods to avoid timezone issues
+    const utcDate = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const newDate = new Date(utcDate - (daysAgo * 24 * 60 * 60 * 1000));
+    const year = newDate.getUTCFullYear();
+    const month = String(newDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(newDate.getUTCDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
   

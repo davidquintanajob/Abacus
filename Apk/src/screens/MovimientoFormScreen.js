@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -422,24 +422,28 @@ const MovimientoFormContent = () => {
   };
 
   const handleSave = async () => {
+    setIsSaving(true);
+    
     if (!formData.id_tienda_origen) {
       showToast({ type: 'warning', message: 'Debe seleccionar la tienda de origen' });
+      setIsSaving(false);
       return;
     }
     if (!formData.id_tienda_destino) {
       showToast({ type: 'warning', message: 'Debe seleccionar la tienda de destino' });
+      setIsSaving(false);
       return;
     }
     if (!formData.tipo_movimiento) {
       showToast({ type: 'warning', message: 'Debe seleccionar el tipo de movimiento' });
+      setIsSaving(false);
       return;
     }
     if (formData.movimientos.length === 0) {
       showToast({ type: 'warning', message: 'Debe agregar al menos un producto al movimiento' });
+      setIsSaving(false);
       return;
     }
-
-    setIsSaving(true);
     try {
       // Preparar movimientos según la API del backend
       // Solo enviamos id_servicio, cantidad y nota en cada movimiento
@@ -761,6 +765,26 @@ const MovimientoFormContent = () => {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Modal de Procesamiento */}
+      <Modal
+        visible={isSaving}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={[styles.processingModalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.7)' }]}>
+          <View style={[styles.processingModalContent, { backgroundColor: colors.surface }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.processingModalText, { color: colors.onSurface }]}>
+              Procesando movimiento...
+            </Text>
+            <Text style={[styles.processingModalSubtext, { color: colors.outline }]}>
+              Por favor espere, esto puede tomar unos segundos
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -818,4 +842,28 @@ const createStyles = (responsive) => StyleSheet.create({
   cancelButtonText: { fontSize: responsive.fontSizes.body, fontWeight: '500', fontFamily: 'Inter' },
   saveButton: { flex: 1, paddingVertical: responsive.responsivePadding(14), borderRadius: 8, alignItems: 'center' },
   saveButtonText: { fontSize: responsive.fontSizes.body, fontWeight: '500', fontFamily: 'Inter' },
+  processingModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  processingModalContent: {
+    padding: responsive.responsivePadding(32),
+    borderRadius: 16,
+    alignItems: 'center',
+    minWidth: responsive.responsiveWidth(280),
+  },
+  processingModalText: {
+    fontSize: responsive.responsiveFontSize(18),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(16),
+    textAlign: 'center',
+  },
+  processingModalSubtext: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(8),
+    textAlign: 'center',
+  },
 });

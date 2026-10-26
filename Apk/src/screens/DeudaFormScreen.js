@@ -284,25 +284,30 @@ const DeudaFormScreen = () => {
   };
 
   const handleSave = async () => {
+    setIsSaving(true);
+    
     if (!formData.monto_cup && !formData.monto_usd) {
       showToast({ type: 'warning', message: 'Debe ingresar al menos un monto (CUP o USD)' });
+      setIsSaving(false);
       return;
     }
     if (formData.monto_cup && (isNaN(formData.monto_cup) || parseFloat(formData.monto_cup) < 0)) {
       showToast({ type: 'warning', message: 'El monto CUP debe ser un número no negativo' });
+      setIsSaving(false);
       return;
     }
     if (formData.monto_usd && (isNaN(formData.monto_usd) || parseFloat(formData.monto_usd) < 0)) {
       showToast({ type: 'warning', message: 'El monto USD debe ser un número no negativo' });
+      setIsSaving(false);
       return;
     }
     if (!cliente && !formData.id_cliente) {
       showToast({ type: 'warning', message: 'Debe seleccionar un cliente para la deuda' });
+      setIsSaving(false);
       return;
     }
 
     try {
-      setIsSaving(true);
       const deudaData = {
         monto_cup: formData.monto_cup ? parseFloat(formData.monto_cup) : 0,
         monto_usd: formData.monto_usd ? parseFloat(formData.monto_usd) : 0,
@@ -785,6 +790,26 @@ const DeudaFormScreen = () => {
         onHide={hideToast}
         toastKey={toast.key}
       />
+
+      {/* Modal de Procesamiento */}
+      <Modal
+        visible={isSaving}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={[styles.processingModalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.7)' }]}>
+          <View style={[styles.processingModalContent, { backgroundColor: colors.surface }]}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.processingModalText, { color: colors.onSurface }]}>
+              Procesando deuda...
+            </Text>
+            <Text style={[styles.processingModalSubtext, { color: colors.outline }]}>
+              Por favor espere, esto puede tomar unos segundos
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   </>
   );
@@ -1113,6 +1138,30 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.fontSizes.body,
     fontWeight: '600',
     fontFamily: 'Inter',
+  },
+  processingModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  processingModalContent: {
+    padding: responsive.responsivePadding(32),
+    borderRadius: 16,
+    alignItems: 'center',
+    minWidth: responsive.responsiveWidth(280),
+  },
+  processingModalText: {
+    fontSize: responsive.responsiveFontSize(18),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(16),
+    textAlign: 'center',
+  },
+  processingModalSubtext: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(8),
+    textAlign: 'center',
   },
 });
 

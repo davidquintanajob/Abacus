@@ -1048,6 +1048,13 @@ const VentasContent = () => {
         }
       });
 
+      // Format number helper function
+      const formatNumber = (num) => {
+        if (num === null || num === undefined || num === 0) return 0;
+        const formatted = parseFloat(num).toFixed(2);
+        return formatted.endsWith('.00') ? parseFloat(formatted).toString() : formatted;
+      };
+
       // Prepare data for Excel - show individual sales instead of lista_venta
       const data = [];
       sortedVentas.forEach(venta => {
@@ -1092,7 +1099,9 @@ const VentasContent = () => {
 
           // Producto
           const producto = v.servicioTienda?.servicio?.nombre || '-';
+          const categoria = v.servicioTienda?.servicio?.categoria || '-';
           row['Producto'] = producto;
+          row['Categoria'] = categoria;
           row['Cantidad'] = v.cantidad || 0;
 
           // Forma de cobro - derive from which cantidad is > 0
@@ -1106,13 +1115,6 @@ const VentasContent = () => {
           // Cuenta from operaciones
           const cuenta = venta.operaciones?.[0]?.cuenta;
           row['Cuenta'] = cuenta?.nombre || '-';
-
-          // Precios - remove .00 decimals for whole numbers
-          const formatNumber = (num) => {
-            if (num === null || num === undefined || num === 0) return 0;
-            const formatted = parseFloat(num).toFixed(2);
-            return formatted.endsWith('.00') ? parseFloat(formatted).toString() : formatted;
-          };
 
           // If sale is only in CUP, show 0 for USD fields
           // If sale is only in USD, show 0 for CUP fields
@@ -1133,10 +1135,60 @@ const VentasContent = () => {
         });
       });
 
-      // Create workbook and worksheet
+      // Create workbook and worksheet for individual sales
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(data);
       XLSX.utils.book_append_sheet(wb, ws, 'Ventas');
+
+      // Create second sheet with products grouped by ID
+      const productsMap = new Map();
+
+      sortedVentas.forEach(venta => {
+        const ventasIndividuales = venta.ventas || [];
+        ventasIndividuales.forEach(v => {
+          const productoId = v.servicioTienda?.servicio?.id_servicio;
+          const productoNombre = v.servicioTienda?.servicio?.nombre || '-';
+          const precioCUP = v.precio_cobrado_cup || 0;
+          const cantidad = v.cantidad || 0;
+          const totalCUP = precioCUP * cantidad;
+
+          if (productoId) {
+            if (!productsMap.has(productoId)) {
+              productsMap.set(productoId, {
+                producto: productoNombre,
+                totalVentas: 0,
+                sumaPrecios: 0,
+                sumaTotalCUP: 0
+              });
+            }
+
+            const productData = productsMap.get(productoId);
+            productData.totalVentas += cantidad;
+            // Add price for each unit sold (if quantity > 1, add price that many times)
+            productData.sumaPrecios += precioCUP * cantidad;
+            productData.sumaTotalCUP += totalCUP;
+          }
+        });
+      });
+
+      // Calculate average price and prepare data for second sheet
+      const productsData = [];
+      productsMap.forEach((data, productoId) => {
+        // Average price = sum of all individual unit prices / total quantity sold
+        const precioPromedio = data.totalVentas > 0 ? data.sumaPrecios / data.totalVentas : 0;
+        const row = {};
+        row['Producto'] = data.producto;
+        row['Precio Promedio'] = formatNumber(precioPromedio);
+        row['Total Cobrado'] = formatNumber(data.sumaTotalCUP);
+        productsData.push(row);
+      });
+
+      // Sort by product name
+      productsData.sort((a, b) => a['Producto'].localeCompare(b['Producto']));
+
+      // Add second sheet
+      const wsProducts = XLSX.utils.json_to_sheet(productsData);
+      XLSX.utils.book_append_sheet(wb, wsProducts, 'Productos Agrupados');
 
       // Generate file
       const excelBase64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
