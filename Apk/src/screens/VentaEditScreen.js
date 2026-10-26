@@ -1335,7 +1335,7 @@ const VentaEditContent = () => {
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.deleteButton, { backgroundColor: (venta?.is_deuda || isViewMode) ? colors.outlineVariant : colors.errorContainer, opacity: isViewMode ? 0.6 : 1 }]}
-                      onPress={() => !venta?.is_deuda && !isViewMode && confirmDeleteItem(index)}
+                      onPress={() => !venta?.is_deuda && !isViewMode && removeItem(index)}
                       disabled={venta?.is_deuda || isViewMode}
                     >
                       <Ionicons name="close" size={responsive.responsiveWidth(16)} color={(venta?.is_deuda || isViewMode) ? colors.outline : colors.error} />
