@@ -1089,6 +1089,10 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   tableContainer: {
     minWidth: '100%',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    overflow: 'hidden',
   },
   tableHeader: {
     flexDirection: 'row',
@@ -1099,8 +1103,8 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   tableHeaderText: {
     fontSize: responsive.responsiveFontSize(14),
-    fontWeight: '600',
-    fontFamily: 'Inter',
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
   },
   tableRow: {
     flexDirection: 'row',
