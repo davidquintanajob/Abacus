@@ -14,13 +14,18 @@ export const getClientes = async (filters: any = {}, page: number = 1, limit: nu
     // Add filters
     if (filters.nombre) queryParams.append('nombre', filters.nombre);
     if (filters.telefono) queryParams.append('telefono', filters.telefono);
+    if (filters.direccion) queryParams.append('direccion', filters.direccion);
+    if (filters.tipo_cliente) queryParams.append('tipo_cliente', filters.tipo_cliente);
+    if (filters.tiene_deuda !== '' && filters.tiene_deuda !== undefined) {
+      queryParams.append('tiene_deuda', String(filters.tiene_deuda));
+    }
     if (filters.id_tienda) queryParams.append('id_tienda', filters.id_tienda);
 
     const response = await api.get(`/cliente/filter?${queryParams}`);
     return response.data;
   } catch (error: any) {
-    const errorMessage = error.response?.data?.errors?.[0] || 
-                        error.response?.data?.message || 
+    const errorMessage = error.response?.data?.errors?.[0] ||
+                        error.response?.data?.message ||
                         error.message ||
                         'Error al obtener clientes';
     const err = new Error(errorMessage) as ApiError;

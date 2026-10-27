@@ -166,6 +166,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       almacenero: false,
       economico: false,
     },
+    deudaAccessLevels: config?.deudaAccessLevels || {
+      dependiente: 'none',
+      almacenero: 'none',
+      economico: 'none',
+    },
+    deudaManagePermissions: config?.deudaManagePermissions || {
+      dependiente: false,
+      almacenero: false,
+      economico: false,
+    },
+    clienteManagePermissions: config?.clienteManagePermissions || {
+      dependiente: false,
+      almacenero: false,
+      economico: false,
+    },
+    deudaConfigPermissions: config?.deudaConfigPermissions || {
+      dependiente: false,
+      almacenero: false,
+      economico: false,
+    },
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

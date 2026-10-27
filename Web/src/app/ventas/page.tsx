@@ -27,7 +27,7 @@ import { Search, ChevronLeft, ChevronRight, FileText, Printer, Trash2, Edit, Dow
 const VentasPage = () => {
   const router = useRouter();
   const { colors, isDark, toggleTheme } = useTheme();
-  const { token, user, ventaAccessLevels, ventaManagePermissions } = useAuth();
+  const { token, user, ventaAccessLevels, ventaManagePermissions, deudaManagePermissions, clienteManagePermissions } = useAuth();
   const { viewMode, toggleViewMode } = useViewMode();
   const { toast, showToast, hideToast } = useToast();
   const { confirm } = useConfirmDialog();
@@ -233,6 +233,22 @@ const VentasPage = () => {
     } catch (error) {
       console.error('Error loading tienda cuentas config:', error);
     }
+  };
+
+  const hasDeudaPermissions = () => {
+    const userRole = user?.rol?.toLowerCase();
+    return userRole === 'administrador' ||
+           (userRole === 'dependiente' && deudaManagePermissions?.dependiente) ||
+           (userRole === 'almacenero' && deudaManagePermissions?.almacenero) ||
+           (userRole === 'económico' && deudaManagePermissions?.economico);
+  };
+
+  const hasClientePermissions = () => {
+    const userRole = user?.rol?.toLowerCase();
+    return userRole === 'administrador' ||
+           (userRole === 'dependiente' && clienteManagePermissions?.dependiente) ||
+           (userRole === 'almacenero' && clienteManagePermissions?.almacenero) ||
+           (userRole === 'económico' && clienteManagePermissions?.economico);
   };
 
   // Reload cuentas when tienda filter or tiendaCuentasConfig changes
@@ -910,8 +926,8 @@ const VentasPage = () => {
         }}>
 
       {/* Page Title */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ 
+      <div style={{ marginBottom: '24px' }} className={isDesktop ? '' : 'text-center'}>
+        <h1 style={{
           fontSize: isMobile ? '24px' : isTablet ? '28px' : '32px',
           fontWeight: 'bold',
           color: colors.onSurface,

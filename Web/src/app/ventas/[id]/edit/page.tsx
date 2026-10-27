@@ -249,6 +249,22 @@ const VentasEditPage = () => {
     loadCuentaConfig();
   }, [selectedTienda]);
 
+  const hasDeudaPermissions = () => {
+    const userRole = user?.rol?.toLowerCase();
+    return userRole === 'administrador' ||
+           (userRole === 'dependiente' && deudaManagePermissions?.dependiente) ||
+           (userRole === 'almacenero' && deudaManagePermissions?.almacenero) ||
+           (userRole === 'económico' && deudaManagePermissions?.economico);
+  };
+
+  const hasClientePermissions = () => {
+    const userRole = user?.rol?.toLowerCase();
+    return userRole === 'administrador' ||
+           (userRole === 'dependiente' && clienteManagePermissions?.dependiente) ||
+           (userRole === 'almacenero' && clienteManagePermissions?.almacenero) ||
+           (userRole === 'económico' && clienteManagePermissions?.economico);
+  };
+
   // Load scanner preference from localStorage
   useEffect(() => {
     const loadScannerPreference = () => {

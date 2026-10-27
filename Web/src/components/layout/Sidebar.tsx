@@ -23,7 +23,7 @@ interface SidebarProps {
 export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverTriggered = false, onSidebarEnter, onSidebarLeave }: SidebarProps) => {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels, movimientoAccessLevels, logout } = useAuth();
+  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels, movimientoAccessLevels, deudaAccessLevels, clienteManagePermissions, logout } = useAuth();
   const { toast, showToast, hideToast } = useToast();
   const { showConfirmDialog, hideConfirmDialog } = useConfirmDialog();
   const { isLoading: isNavigating, setLoading: setNavigating } = useNavigationLoading();
@@ -64,6 +64,14 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverT
     (userRole === 'almacenero' && movimientoAccessLevels?.almacenero !== 'none') ||
     (userRole === 'económico' && movimientoAccessLevels?.economico !== 'none');
 
+  const canAccessClientes = isAdmin || clienteManagePermissions === true;
+
+  const canAccessDeudas =
+    isAdmin ||
+    (userRole === 'dependiente' && deudaAccessLevels?.dependiente === 'ambos') ||
+    (userRole === 'almacenero' && deudaAccessLevels?.almacenero === 'ambos') ||
+    (userRole === 'económico' && deudaAccessLevels?.economico === 'ambos');
+
   const menuItems = [
     { icon: '/icon-panel.png', label: 'Panel', route: 'Home' },
     { icon: '/icon-servicios.png', label: 'Servicios y Ofertas', route: 'Servicios' },
@@ -73,6 +81,8 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverT
     ...(canAccessOperaciones ? [{ icon: '/icon-operaciones.png', label: 'Operaciones', route: 'Operaciones' }] : []),
     ...(canAccessVentas ? [{ icon: '/icon-ventas.png', label: 'Ventas', route: 'Ventas' }] : []),
     ...(canAccessMovimientos ? [{ icon: '/moving.png', label: 'Movimientos', route: 'Movimientos' }] : []),
+    ...(canAccessDeudas ? [{ icon: '/debt-recovery.png', label: 'Deudas', route: 'Deudas' }] : []),
+    ...(canAccessClientes ? [{ icon: '/customer-search.png', label: 'Clientes', route: 'Clientes' }] : []),
     ...(isAdmin ? [{ icon: '/icon-tiendas.png', label: 'Tiendas', route: 'Tiendas' }] : []),
     ...(isAdmin ? [{ icon: '/icon-usuarios.png', label: 'Usuarios', route: 'Usuarios' }] : []),
     ...(isAdmin ? [{ icon: '/icon-admin.png', label: 'Configuraciones del Admin', route: 'CurrencyExchange' }] : []),
@@ -113,6 +123,8 @@ export const Sidebar = ({ isOpen = false, onClose, currentRoute = 'Home', hoverT
       'Operaciones': '/operaciones',
       'Ventas': '/ventas',
       'Movimientos': '/movimientos',
+      'Deudas': '/deudas',
+      'Clientes': '/clientes',
       'Tiendas': '/tiendas',
       'Usuarios': '/usuarios',
       'CurrencyExchange': '/configuracion',

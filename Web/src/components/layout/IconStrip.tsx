@@ -16,7 +16,7 @@ interface IconStripProps {
 
 export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStripProps) => {
   const { colors, isDark } = useTheme();
-  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels, movimientoAccessLevels } = useAuth();
+  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels, movimientoAccessLevels, deudaAccessLevels } = useAuth();
   const { isLoading: isNavigating, setLoading: setNavigating } = useNavigationLoading();
   const router = useRouter();
 
@@ -36,6 +36,7 @@ export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStrip
       'Operaciones': '/operaciones',
       'Ventas': '/ventas',
       'Movimientos': '/movimientos',
+      'Deudas': '/deudas',
       'Tiendas': '/tiendas',
       'Usuarios': '/usuarios',
       'CurrencyExchange': '/configuracion',
@@ -79,6 +80,12 @@ export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStrip
     (userRole === 'almacenero' && movimientoAccessLevels?.almacenero !== 'none') ||
     (userRole === 'económico' && movimientoAccessLevels?.economico !== 'none');
 
+  const canAccessDeudas =
+    isAdmin ||
+    (userRole === 'dependiente' && deudaAccessLevels?.dependiente === 'ambos') ||
+    (userRole === 'almacenero' && deudaAccessLevels?.almacenero === 'ambos') ||
+    (userRole === 'económico' && deudaAccessLevels?.economico === 'ambos');
+
   let menuItems: any[] = [
     { icon: '/icon-panel.png', label: 'Panel', route: 'Home' },
     { icon: '/icon-servicios.png', label: 'Servicios y Ofertas', route: 'Servicios' },
@@ -99,6 +106,9 @@ export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStrip
   }
   if (canAccessMovimientos) {
     menuItems.push({ icon: '/moving.png', label: 'Movimientos', route: 'Movimientos' });
+  }
+  if (canAccessDeudas) {
+    menuItems.push({ icon: '/debt-recovery.png', label: 'Deudas', route: 'Deudas' });
   }
   if (isAdmin) {
     menuItems.push({ icon: '/icon-tiendas.png', label: 'Tiendas', route: 'Tiendas' });

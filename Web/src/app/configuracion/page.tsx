@@ -12,7 +12,33 @@ import { configService } from '../../services/configService';
 import { exchangeRateService } from '../../services/exchangeRateService';
 import { getTiendas } from '../../services/tiendaService';
 import { getCuentas } from '../../services/cuentaService';
-import { RefreshCw, Info, ChevronUp, ChevronDown, ChevronLeft, Plus, Package, Lock, Store, Globe, X, Settings, ArrowRightLeft } from 'lucide-react';
+import { RefreshCw, Info, ChevronUp, ChevronDown, ChevronLeft, Plus, Package, Lock, Store, Globe, X, Settings, ArrowRightLeft, User, Users } from 'lucide-react';
+
+const DeudaClienteAccessLevelSwitch = ({ value, onChange, colors }: { value: string; onChange: (level: string) => void; colors: any }) => {
+  const levels = [
+    { key: 'none', label: 'No ver', icon: Lock },
+    { key: 'clientes', label: 'Ver clientes', icon: User },
+    { key: 'ambos', label: 'Ver ambos', icon: Users },
+  ];
+
+  return (
+    <div className="flex gap-2">
+      {levels.map((level) => (
+        <button
+          key={level.key}
+          className="w-10 h-10 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+          style={{
+            backgroundColor: value === level.key ? colors.primary : 'transparent',
+            borderColor: value === level.key ? colors.primary : colors.outlineVariant,
+          }}
+          onClick={() => onChange(level.key)}
+        >
+          <level.icon size={20} color={value === level.key ? '#fff' : colors.outline} />
+        </button>
+      ))}
+    </div>
+  );
+};
 
 export default function ConfiguracionPage() {
   const { colors, isDark, toggleTheme } = useTheme();
@@ -115,6 +141,30 @@ export default function ConfiguracionPage() {
     almacenero: false,
     economico: false,
   });
+  const [deudaAccessLevels, setDeudaAccessLevels] = useState({
+    dependiente: 'none',
+    almacenero: 'none',
+    economico: 'none',
+  });
+  const [deudaManagePermissions, setDeudaManagePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
+  const [clienteManagePermissions, setClienteManagePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
+  const [deudaConfigPermissions, setDeudaConfigPermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
+  const [showDeudaPermissions, setShowDeudaPermissions] = useState(false);
+  const [showDeudaManage, setShowDeudaManage] = useState(false);
+  const [showDeudaConfig, setShowDeudaConfig] = useState(false);
+  const [showClienteManage, setShowClienteManage] = useState(false);
   const [comprobanteConfig, setComprobanteConfig] = useState<{
     logo: string | null | undefined;
     nombreNegocio: string;
@@ -236,6 +286,34 @@ export default function ConfiguracionPage() {
           economico: data.movimientoManagePermissions.economico || false,
         });
       }
+      if (data.deudaAccessLevels) {
+        setDeudaAccessLevels({
+          dependiente: data.deudaAccessLevels.dependiente || 'none',
+          almacenero: data.deudaAccessLevels.almacenero || 'none',
+          economico: data.deudaAccessLevels.economico || 'none',
+        });
+      }
+      if (data.deudaManagePermissions) {
+        setDeudaManagePermissions({
+          dependiente: data.deudaManagePermissions.dependiente || false,
+          almacenero: data.deudaManagePermissions.almacenero || false,
+          economico: data.deudaManagePermissions.economico || false,
+        });
+      }
+      if (data.clienteManagePermissions) {
+        setClienteManagePermissions({
+          dependiente: data.clienteManagePermissions.dependiente || false,
+          almacenero: data.clienteManagePermissions.almacenero || false,
+          economico: data.clienteManagePermissions.economico || false,
+        });
+      }
+      if (data.deudaConfigPermissions) {
+        setDeudaConfigPermissions({
+          dependiente: data.deudaConfigPermissions.dependiente || false,
+          almacenero: data.deudaConfigPermissions.almacenero || false,
+          economico: data.deudaConfigPermissions.economico || false,
+        });
+      }
       if (data.priceChangePermissions) {
         setPriceChangePermissions({
           dependiente: data.priceChangePermissions.dependiente || false,
@@ -307,12 +385,18 @@ export default function ConfiguracionPage() {
         salidaAccessLevels: salidaAccessLevels,
         operacionAccessLevels: operacionAccessLevels,
         ventaAccessLevels: ventaAccessLevels,
+        movimientoAccessLevels: movimientoAccessLevels,
         entradaManagePermissions: entradaManagePermissions,
         salidaManagePermissions: salidaManagePermissions,
         operacionManagePermissions: operacionManagePermissions,
         ventaManagePermissions: ventaManagePermissions,
+        movimientoManagePermissions: movimientoManagePermissions,
         cuentaChangePermissions: cuentaChangePermissions,
         priceChangePermissions: priceChangePermissions,
+        deudaAccessLevels: deudaAccessLevels,
+        deudaManagePermissions: deudaManagePermissions,
+        clienteManagePermissions: clienteManagePermissions,
+        deudaConfigPermissions: deudaConfigPermissions,
         comprobanteConfig: comprobanteConfig,
         tiendaCuentasConfig: tiendaCuentasConfig,
         applyWeightedAverageCost: applyWeightedAverageCost,
@@ -560,6 +644,78 @@ export default function ConfiguracionPage() {
     } catch (error) {
       showToast({ type: 'error', message: 'Error al actualizar permiso de cambio de precio' });
       setPriceChangePermissions(priceChangePermissions);
+    }
+  };
+
+  const updateDeudaAccessLevel = async (role: 'dependiente' | 'almacenero' | 'economico', newLevel: 'none' | 'clientes' | 'ambos') => {
+    const newDeudaAccessLevels = { ...deudaAccessLevels, [role]: newLevel };
+    setDeudaAccessLevels(newDeudaAccessLevels);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        deudaAccessLevels: newDeudaAccessLevels,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Nivel de acceso a deudas actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar nivel de acceso a deudas' });
+      setDeudaAccessLevels(deudaAccessLevels);
+    }
+  };
+
+  const toggleDeudaManagePermission = async (role: 'dependiente' | 'almacenero' | 'economico') => {
+    const newPermissions = { ...deudaManagePermissions, [role]: !deudaManagePermissions[role] };
+    setDeudaManagePermissions(newPermissions);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        deudaManagePermissions: newPermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Configuración actualizada correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar configuración' });
+      setDeudaManagePermissions(deudaManagePermissions);
+    }
+  };
+
+  const toggleClienteManagePermission = async (role: 'dependiente' | 'almacenero' | 'economico') => {
+    const newPermissions = { ...clienteManagePermissions, [role]: !clienteManagePermissions[role] };
+    setClienteManagePermissions(newPermissions);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        clienteManagePermissions: newPermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Configuración actualizada correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar configuración' });
+      setClienteManagePermissions(clienteManagePermissions);
+    }
+  };
+
+  const toggleDeudaConfigPermission = async (role: 'dependiente' | 'almacenero' | 'economico') => {
+    const newPermissions = { ...deudaConfigPermissions, [role]: !deudaConfigPermissions[role] };
+    setDeudaConfigPermissions(newPermissions);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        deudaConfigPermissions: newPermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Configuración actualizada correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar configuración' });
+      setDeudaConfigPermissions(deudaConfigPermissions);
     }
   };
 
@@ -2207,6 +2363,312 @@ export default function ConfiguracionPage() {
                                     style={{
                                       transform: movimientoManagePermissions.economico ? 'translateX(24px)' : 'translateX(0)',
                                       backgroundColor: movimientoManagePermissions.economico ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Permisos de Deudas y Clientes */}
+              <div 
+                className="rounded-2xl p-5 mb-6 shadow-lg"
+                style={{ backgroundColor: colors.surface }}
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-2">
+                    <div style={{ width: '24px', height: '24px' }}>
+                      <img
+                        src="/customer-search.png"
+                        alt="Permisos de Deudas y Clientes"
+                        className="w-full h-full object-contain"
+                        style={{ filter: isDarkMode ? 'invert(1)' : 'none' }}
+                      />
+                    </div>
+                    <h2 className="font-semibold text-lg" style={{ color: colors.onSurface }}>Permisos de Deudas y Clientes</h2>
+                  </div>
+                  <button
+                    className="w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                    style={{
+                      backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                      borderColor: colors.primary
+                    }}
+                    onClick={() => setShowDeudaPermissions(!showDeudaPermissions)}
+                  >
+                    {showDeudaPermissions ? <ChevronUp size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={18} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                  </button>
+                </div>
+
+                {showDeudaPermissions && (
+                  <>
+                    <p className="text-sm mb-4" style={{ color: colors.outline }}>
+                      Configura el nivel de acceso a deudas y clientes para cada rol (No ver, Ver clientes, Ver ambos)
+                    </p>
+                    <div className="space-y-4">
+                      {['dependiente', 'almacenero', 'economico'].map((role) => (
+                        <div key={role} className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.background }}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>{role}</span>
+                            <button
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                              style={{ backgroundColor: colors.primary, color: '#fff' }}
+                              onClick={() => setInfoModal({
+                                title: `Acceso Deudas/Clientes - ${role.charAt(0).toUpperCase() + role.slice(1)}`,
+                                content: 'No ver: No puede ver deudas ni clientes. Ver clientes: Solo puede ver clientes. Ver ambos: Puede ver deudas y clientes.'
+                              })}
+                            >
+                              !
+                            </button>
+                          </div>
+                          <DeudaClienteAccessLevelSwitch
+                            value={deudaAccessLevels[role as keyof typeof deudaAccessLevels]}
+                            onChange={(newLevel) => updateDeudaAccessLevel(role as 'dependiente' | 'almacenero' | 'economico', newLevel as 'none' | 'clientes' | 'ambos')}
+                            colors={colors}
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    {(deudaAccessLevels.dependiente !== 'none' || deudaAccessLevels.almacenero !== 'none' || deudaAccessLevels.economico !== 'none') && (
+                      <div className="mt-4 p-4 rounded-lg" style={{ backgroundColor: colors.background }}>
+                        <div className="flex justify-between items-center mb-3">
+                          <h3 className="font-semibold" style={{ color: colors.onSurface }}>Gestión de Deudas</h3>
+                          <button
+                            className="w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                            style={{
+                              backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                              borderColor: colors.primary
+                            }}
+                            onClick={() => setShowDeudaManage(!showDeudaManage)}
+                          >
+                            {showDeudaManage ? <ChevronUp size={16} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={16} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                          </button>
+                        </div>
+                        <p className="text-sm mb-3" style={{ color: colors.outline }}>
+                          Configura qué roles pueden crear, editar y eliminar deudas y pagos (solo visible para roles con acceso a deudas)
+                        </p>
+                        {showDeudaManage && (
+                          <>
+                            {deudaAccessLevels.dependiente === 'ambos' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Dependiente</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Deudas - Dependiente',
+                                      content: 'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar deudas y pagos. Cuando está desactivado, solo pueden ver la información sin poder gestionar deudas.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: deudaManagePermissions.dependiente ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => toggleDeudaManagePermission('dependiente')}
+                                >
+                                  <div
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: deudaManagePermissions.dependiente ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: deudaManagePermissions.dependiente ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {deudaAccessLevels.almacenero === 'ambos' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Almacenero</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Deudas - Almacenero',
+                                      content: 'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar deudas y pagos. Cuando está desactivado, solo pueden ver la información sin poder gestionar deudas.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: deudaManagePermissions.almacenero ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => toggleDeudaManagePermission('almacenero')}
+                                >
+                                  <div
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: deudaManagePermissions.almacenero ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: deudaManagePermissions.almacenero ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {deudaAccessLevels.economico === 'ambos' && (
+                              <div className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Económico</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Deudas - Económico',
+                                      content: 'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar deudas y pagos. Cuando está desactivado, solo pueden ver la información sin poder gestionar deudas.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: deudaManagePermissions.economico ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => toggleDeudaManagePermission('economico')}
+                                >
+                                  <div
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: deudaManagePermissions.economico ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: deudaManagePermissions.economico ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {(deudaAccessLevels.dependiente === 'clientes' || deudaAccessLevels.dependiente === 'ambos' ||
+                      deudaAccessLevels.almacenero === 'clientes' || deudaAccessLevels.almacenero === 'ambos' ||
+                      deudaAccessLevels.economico === 'clientes' || deudaAccessLevels.economico === 'ambos') && (
+                      <div className="mt-4 p-4 rounded-lg" style={{ backgroundColor: colors.background }}>
+                        <div className="flex justify-between items-center mb-3">
+                          <h3 className="font-semibold" style={{ color: colors.onSurface }}>Gestión de Clientes</h3>
+                          <button
+                            className="w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
+                            style={{
+                              backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD',
+                              borderColor: colors.primary
+                            }}
+                            onClick={() => setShowClienteManage(!showClienteManage)}
+                          >
+                            {showClienteManage ? <ChevronUp size={16} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} /> : <ChevronDown size={16} style={{ color: isDarkMode ? colors.primary : '#1976D2' }} />}
+                          </button>
+                        </div>
+                        <p className="text-sm mb-3" style={{ color: colors.outline }}>
+                          Configura qué roles pueden crear, editar y eliminar clientes (solo visible para roles con acceso a clientes)
+                        </p>
+                        {showClienteManage && (
+                          <>
+                            {(deudaAccessLevels.dependiente === 'clientes' || deudaAccessLevels.dependiente === 'ambos') && (
+                              <div className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Dependiente</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Clientes - Dependiente',
+                                      content: 'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar clientes. Cuando está desactivado, solo pueden ver la información sin poder gestionar clientes.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: clienteManagePermissions.dependiente ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => toggleClienteManagePermission('dependiente')}
+                                >
+                                  <div
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: clienteManagePermissions.dependiente ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: clienteManagePermissions.dependiente ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {(deudaAccessLevels.almacenero === 'clientes' || deudaAccessLevels.almacenero === 'ambos') && (
+                              <div className="flex justify-between items-center p-3 rounded-lg mb-2" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Almacenero</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Clientes - Almacenero',
+                                      content: 'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar clientes. Cuando está desactivado, solo pueden ver la información sin poder gestionar clientes.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: clienteManagePermissions.almacenero ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => toggleClienteManagePermission('almacenero')}
+                                >
+                                  <div
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: clienteManagePermissions.almacenero ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: clienteManagePermissions.almacenero ? '#fff' : colors.outline,
+                                    }}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {(deudaAccessLevels.economico === 'clientes' || deudaAccessLevels.economico === 'ambos') && (
+                              <div className="flex justify-between items-center p-3 rounded-lg" style={{ backgroundColor: colors.surface }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: colors.onSurface, textTransform: 'capitalize' }}>Económico</span>
+                                  <button
+                                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ backgroundColor: colors.primary, color: '#fff' }}
+                                    onClick={() => setInfoModal({
+                                      title: 'Gestión Clientes - Económico',
+                                      content: 'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar clientes. Cuando está desactivado, solo pueden ver la información sin poder gestionar clientes.'
+                                    })}
+                                  >
+                                    !
+                                  </button>
+                                </div>
+                                <button
+                                  className={`relative w-14 h-8 rounded-full transition-colors duration-200`}
+                                  style={{
+                                    backgroundColor: clienteManagePermissions.economico ? colors.primary : colors.outlineVariant,
+                                  }}
+                                  onClick={() => toggleClienteManagePermission('economico')}
+                                >
+                                  <div
+                                    className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform duration-200`}
+                                    style={{
+                                      transform: clienteManagePermissions.economico ? 'translateX(24px)' : 'translateX(0)',
+                                      backgroundColor: clienteManagePermissions.economico ? '#fff' : colors.outline,
                                     }}
                                   />
                                 </button>

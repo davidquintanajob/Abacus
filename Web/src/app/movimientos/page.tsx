@@ -445,12 +445,12 @@ export default function MovimientosPage() {
         maxWidth: isDesktop ? '1400px' : '100%',
       }}>
         {/* Page Title */}
-        <h1 
-          style={{ 
-            color: colors.onSurface, 
+        <h1
+          className={isDesktop ? '' : 'text-center'}
+          style={{
+            color: colors.onSurface,
             fontSize: isDesktop ? '32px' : isTablet ? '28px' : '24px',
             fontWeight: 'bold',
-            marginBottom: '24px',
             fontFamily: 'Hanken Grotesk, sans-serif'
           }}
         >
