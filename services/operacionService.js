@@ -11,7 +11,9 @@ const getMontoEnMonedaCuenta = (operacion, cuenta) => {
 };
 
 const actualizarFondoCuenta = async (cuentaId, delta, transaction) => {
-  const cuenta = await Cuenta.findByPk(cuentaId, { transaction });
+  const options = { transaction };
+  if (transaction) options.lock = transaction.LOCK.UPDATE;
+  const cuenta = await Cuenta.findByPk(cuentaId, options);
   if (!cuenta) throwError("Cuenta no encontrada.", 404);
   const nuevoFondo = parseFloat(cuenta.fondo) + delta;
   if (nuevoFondo < 0) {
@@ -91,6 +93,18 @@ const getOperacionById = async (id) => {
 };
 
 const updateOperacion = async (id, updateData, transaction = null) => {
+  if (!transaction) {
+    const updateTransaction = await Operacion.sequelize.transaction();
+    try {
+      const updated = await updateOperacion(id, updateData, updateTransaction);
+      await updateTransaction.commit();
+      return updated;
+    } catch (error) {
+      if (!updateTransaction.finished) await updateTransaction.rollback();
+      throw error;
+    }
+  }
+
   // Obtener la operación actual con su cuenta
   const operacion = await Operacion.findByPk(id, {
     include: [{ model: Cuenta, as: "cuenta" }],
@@ -102,15 +116,11 @@ const updateOperacion = async (id, updateData, transaction = null) => {
   const cuentaActual = operacion.cuenta;
   const montoActual = getMontoEnMonedaCuenta(operacion, cuentaActual);
 
-  // Revertir efecto de la operación actual en la cuenta
-  let deltaRevertir = 0;
+  let deltaActual = 0;
   if (operacion.tipo_operacion === "Ingreso" || operacion.tipo_operacion === "Ingreso por Venta") {
-    deltaRevertir = -montoActual;
+    deltaActual = montoActual;
   } else if (operacion.tipo_operacion === "Retiro") {
-    deltaRevertir = montoActual;
-  }
-  if (deltaRevertir !== 0) {
-    await actualizarFondoCuenta(operacion.id_cuenta, deltaRevertir, transaction);
+    deltaActual = -montoActual;
   }
 
   // Preparar nuevos datos (fusionar con los existentes)
@@ -125,47 +135,48 @@ const updateOperacion = async (id, updateData, transaction = null) => {
   if (updateData.is_check !== undefined) newData.is_check = updateData.is_check;
 
   // Validar nueva cuenta si cambia
-  let cuentaNueva = cuentaActual;
   if (updateData.id_cuenta !== undefined && updateData.id_cuenta !== operacion.id_cuenta) {
-    const cuenta = await Cuenta.findByPk(updateData.id_cuenta, { transaction });
+    const cuenta = await Cuenta.findByPk(updateData.id_cuenta, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
     if (!cuenta) throwError("La nueva cuenta especificada no existe.", 404);
-    cuentaNueva = cuenta;
   }
 
   // Determinar nuevo monto
   const nuevoMonto = parseFloat(newData.cantidad_operacion);
 
-  // Validar retiro con nuevo fondo
-  if (newData.tipo_operacion === "Retiro") {
-    // Obtener fondo actual de la cuenta (ya revertido, pero si cambió de cuenta, la cuentaNueva tiene el fondo original)
-    let fondoActual = parseFloat(cuentaNueva.fondo);
-    // Si la cuenta cambió, el fondo de la nueva cuenta no ha sido tocado aún
-    // Si no cambió, ya se revirtió, por lo que el fondo actual es el correcto para aplicar el nuevo delta.
-    // Para simplificar, calculamos el nuevo fondo hipotético después de aplicar el delta.
-    // Pero necesitamos verificar antes de aplicar.
-    if (nuevoMonto > fondoActual) {
-      throwError(
-        `No hay fondos suficientes en la cuenta "${cuentaNueva.nombre}". Saldo: ${fondoActual}, retiro solicitado: ${nuevoMonto}`,
-        400
-      );
-    }
-  }
-
-  // Aplicar nuevo efecto en la cuenta (si la cuenta cambió, se aplicará a la nueva)
   let deltaNuevo = 0;
   if (newData.tipo_operacion === "Ingreso" || newData.tipo_operacion === "Ingreso por Venta") {
     deltaNuevo = nuevoMonto;
   } else if (newData.tipo_operacion === "Retiro") {
     deltaNuevo = -nuevoMonto;
   }
-  if (deltaNuevo !== 0) {
-    await actualizarFondoCuenta(newData.id_cuenta, deltaNuevo, transaction);
+
+  if (String(operacion.id_cuenta) === String(newData.id_cuenta)) {
+    const delta = deltaNuevo - deltaActual;
+    if (delta !== 0) {
+      await actualizarFondoCuenta(operacion.id_cuenta, delta, transaction);
+    }
+  } else {
+    if (deltaActual !== 0) {
+      await actualizarFondoCuenta(operacion.id_cuenta, -deltaActual, transaction);
+    }
+    if (deltaNuevo !== 0) {
+      await actualizarFondoCuenta(newData.id_cuenta, deltaNuevo, transaction);
+    }
   }
 
   // Actualizar la operación
   await operacion.update(newData, { transaction });
 
-  return await getOperacionById(id);
+  return await Operacion.findByPk(id, {
+    include: [
+      { model: Cuenta, as: "cuenta" },
+      { model: Usuario, as: "usuario" },
+    ],
+    transaction,
+  });
 };
 
 const deleteOperacion = async (id, transaction = null) => {
