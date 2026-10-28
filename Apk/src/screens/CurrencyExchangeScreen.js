@@ -118,6 +118,16 @@ const CurrencyExchangeContent = () => {
     almacenero: false,
     economico: false,
   });
+  const [productoAccessLevels, setProductoAccessLevels] = useState({
+    dependiente: 'none',
+    almacenero: 'none',
+    economico: 'none',
+  });
+  const [productoManagePermissions, setProductoManagePermissions] = useState({
+    dependiente: false,
+    almacenero: false,
+    economico: false,
+  });
   const [entradaAccessLevels, setEntradaAccessLevels] = useState({
     dependiente: 'none',
     almacenero: 'none',
@@ -203,6 +213,8 @@ const CurrencyExchangeContent = () => {
   const [autoWithdrawOnEntry, setAutoWithdrawOnEntry] = useState(false);
   const [showEntradaModalAfterProductCreation, setShowEntradaModalAfterProductCreation] = useState(false);
   const [showPermissions, setShowPermissions] = useState(false);
+  const [showProductoPermissions, setShowProductoPermissions] = useState(false);
+  const [showProductoManage, setShowProductoManage] = useState(false);
   const [showEntradaPermissions, setShowEntradaPermissions] = useState(false);
   const [showEntradaConfig, setShowEntradaConfig] = useState(false);
   const [showEntradaManage, setShowEntradaManage] = useState(false);
@@ -487,6 +499,12 @@ const CurrencyExchangeContent = () => {
       }
       if (data.permissions) {
         setPermissions(data.permissions);
+      }
+      if (data.productoAccessLevels) {
+        setProductoAccessLevels(data.productoAccessLevels);
+      }
+      if (data.productoManagePermissions) {
+        setProductoManagePermissions(data.productoManagePermissions);
       }
       if (data.entradaAccessLevels) {
         setEntradaAccessLevels(data.entradaAccessLevels);
@@ -848,6 +866,8 @@ const CurrencyExchangeContent = () => {
         ...config,
         cupToUsdRate: rate,
         permissions: permissions,
+        productoAccessLevels: productoAccessLevels,
+        productoManagePermissions: productoManagePermissions,
         entradaAccessLevels: entradaAccessLevels,
         entradaManagePermissions: entradaManagePermissions,
         salidaAccessLevels: salidaAccessLevels,
@@ -1001,12 +1021,48 @@ const CurrencyExchangeContent = () => {
         entradaManagePermissions: newEntradaManagePermissions,
       };
       await configService.updateConfig(updatedConfig);
-      
-      await fetchConfig();
-      
+      setConfig(updatedConfig);
+      setEntradaManagePermissions(newEntradaManagePermissions);
       showToast({ type: 'success', message: 'Permiso de gestión de entradas actualizado correctamente' });
     } catch (error) {
       showToast({ type: 'error', message: 'Error al actualizar permiso de gestión de entradas' });
+      setEntradaManagePermissions(entradaManagePermissions);
+    }
+  };
+
+  const updateProductoAccessLevel = async (role, newLevel) => {
+    const newProductoAccessLevels = { ...productoAccessLevels, [role]: newLevel };
+    setProductoAccessLevels(newProductoAccessLevels);
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        productoAccessLevels: newProductoAccessLevels,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      showToast({ type: 'success', message: 'Nivel de acceso a productos actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar nivel de acceso a productos' });
+      setProductoAccessLevels(productoAccessLevels);
+    }
+  };
+
+  const toggleProductoManagePermission = async (role) => {
+    const newProductoManagePermissions = { ...productoManagePermissions, [role]: !productoManagePermissions[role] };
+    
+    try {
+      const updatedConfig = {
+        ...config,
+        productoManagePermissions: newProductoManagePermissions,
+      };
+      await configService.updateConfig(updatedConfig);
+      setConfig(updatedConfig);
+      setProductoManagePermissions(newProductoManagePermissions);
+      showToast({ type: 'success', message: 'Permiso de gestión de productos actualizado correctamente' });
+    } catch (error) {
+      showToast({ type: 'error', message: 'Error al actualizar permiso de gestión de productos' });
+      setProductoManagePermissions(productoManagePermissions);
     }
   };
 
@@ -1605,21 +1661,42 @@ const CurrencyExchangeContent = () => {
             </View>
             <TouchableOpacity 
               style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
-              onPress={() => setShowPermissions(!showPermissions)}
+              onPress={() => setShowProductoPermissions(!showProductoPermissions)}
             >
               <Ionicons 
-                name={showPermissions ? "chevron-up" : "chevron-down"} 
+                name={showProductoPermissions ? "chevron-up" : "chevron-down"} 
                 size={responsive.responsiveWidth(24)} 
                 color={isDarkMode ? colors.primary : '#1976D2'} 
               />
             </TouchableOpacity>
           </View>
 
-          {showPermissions && (
+          {showProductoPermissions && (
             <>
               <Text style={[styles.permissionsSubtitle, { color: colors.outline }]}>
-                Configura qué roles pueden ver productos y servicios de otras tiendas
+                Configura el nivel de acceso a productos y servicios para cada rol
               </Text>
+
+              <View style={styles.accessLevelExplanation}>
+                <View style={styles.accessLevelExplanationItem}>
+                  <Ionicons name="lock-closed" size={16} color={colors.outline} />
+                  <Text style={[styles.accessLevelExplanationText, { color: colors.outline }]}>
+                    <Text style={{ fontWeight: '600' }}>Sin acceso:</Text> No puede ver la pantalla de Productos/Servicios ni ningún producto del sistema
+                  </Text>
+                </View>
+                <View style={styles.accessLevelExplanationItem}>
+                  <Ionicons name="storefront" size={16} color={colors.outline} />
+                  <Text style={[styles.accessLevelExplanationText, { color: colors.outline }]}>
+                    <Text style={{ fontWeight: '600' }}>Mi tienda:</Text> Puede ver la pantalla de Productos/Servicios pero solo los de su tienda
+                  </Text>
+                </View>
+                <View style={styles.accessLevelExplanationItem}>
+                  <Ionicons name="globe" size={16} color={colors.outline} />
+                  <Text style={[styles.accessLevelExplanationText, { color: colors.outline }]}>
+                    <Text style={{ fontWeight: '600' }}>Todas las tiendas:</Text> Puede ver la pantalla de Productos/Servicios y los de todas las tiendas
+                  </Text>
+                </View>
+              </View>
 
           <View style={styles.permissionItem}>
             <View style={styles.permissionInfo}>
@@ -1629,18 +1706,18 @@ const CurrencyExchangeContent = () => {
               <TouchableOpacity 
                 style={[styles.infoButton, { backgroundColor: colors.primary }]}
                 onPress={() => showInfoModal(
-                  'Permiso Dependiente',
-                  'Cuando está activo, los usuarios con rol Dependiente pueden ver productos y servicios de todas las tiendas, no solo la suya.'
+                  'Acceso a Productos - Dependiente',
+                  'Define si los usuarios con rol Dependiente no tienen acceso a productos, solo pueden ver los de su tienda, o pueden ver los de todas las tiendas.'
                 )}
               >
                 <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
               </TouchableOpacity>
             </View>
-            <Switch
-              value={permissions.dependiente}
-              onValueChange={() => togglePermission('dependiente')}
-              trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-              thumbColor={permissions.dependiente ? '#fff' : colors.outline}
+            <AccessLevelSwitch
+              value={productoAccessLevels.dependiente}
+              onChange={(newLevel) => updateProductoAccessLevel('dependiente', newLevel)}
+              colors={colors}
+              responsive={responsive}
             />
           </View>
 
@@ -1652,18 +1729,18 @@ const CurrencyExchangeContent = () => {
               <TouchableOpacity 
                 style={[styles.infoButton, { backgroundColor: colors.primary }]}
                 onPress={() => showInfoModal(
-                  'Permiso Almacenero',
-                  'Cuando está activo, los usuarios con rol Almacenero pueden ver productos y servicios de todas las tiendas, no solo la suya.'
+                  'Acceso a Productos - Almacenero',
+                  'Define si los usuarios con rol Almacenero no tienen acceso a productos, solo pueden ver los de su tienda, o pueden ver los de todas las tiendas.'
                 )}
               >
                 <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
               </TouchableOpacity>
             </View>
-            <Switch
-              value={permissions.almacenero}
-              onValueChange={() => togglePermission('almacenero')}
-              trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-              thumbColor={permissions.almacenero ? '#fff' : colors.outline}
+            <AccessLevelSwitch
+              value={productoAccessLevels.almacenero}
+              onChange={(newLevel) => updateProductoAccessLevel('almacenero', newLevel)}
+              colors={colors}
+              responsive={responsive}
             />
           </View>
 
@@ -1675,20 +1752,119 @@ const CurrencyExchangeContent = () => {
               <TouchableOpacity 
                 style={[styles.infoButton, { backgroundColor: colors.primary }]}
                 onPress={() => showInfoModal(
-                  'Permiso Económico',
-                  'Cuando está activo, los usuarios con rol Económico pueden ver productos y servicios de todas las tiendas, no solo la suya.'
+                  'Acceso a Productos - Económico',
+                  'Define si los usuarios con rol Económico no tienen acceso a productos, solo pueden ver los de su tienda, o pueden ver los de todas las tiendas.'
                 )}
               >
                 <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
               </TouchableOpacity>
             </View>
-            <Switch
-              value={permissions.economico}
-              onValueChange={() => togglePermission('economico')}
-              trackColor={{ false: colors.outlineVariant, true: colors.primary }}
-              thumbColor={permissions.economico ? '#fff' : colors.outline}
+            <AccessLevelSwitch
+              value={productoAccessLevels.economico}
+              onChange={(newLevel) => updateProductoAccessLevel('economico', newLevel)}
+              colors={colors}
+              responsive={responsive}
             />
           </View>
+
+          {(productoAccessLevels.dependiente !== 'none' || productoAccessLevels.almacenero !== 'none' || productoAccessLevels.economico !== 'none') && (
+            <View style={styles.permissionSection}>
+              <View style={styles.permissionSectionHeader}>
+                <Text style={[styles.permissionSectionTitle, { color: colors.onSurface }]}>
+                  Gestión de Productos y Servicios
+                </Text>
+                <TouchableOpacity 
+                  style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
+                  onPress={() => setShowProductoManage(!showProductoManage)}
+                >
+                  <Ionicons 
+                    name={showProductoManage ? "chevron-up" : "chevron-down"} 
+                    size={responsive.responsiveWidth(20)} 
+                    color={isDarkMode ? colors.primary : '#1976D2'} 
+                  />
+                </TouchableOpacity>
+              </View>
+              {showProductoManage && (
+                <>
+                  <Text style={[styles.permissionSectionSubtitle, { color: colors.outline }]}>
+                    Configura qué roles pueden crear, editar y eliminar productos y servicios (solo visible para roles con acceso)
+                  </Text>
+                  {productoAccessLevels.dependiente !== 'none' && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Dependiente
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Productos - Dependiente',
+                            'Cuando está activo, los usuarios con rol Dependiente pueden crear, editar y eliminar productos y servicios. Cuando está desactivado, solo pueden ver la información sin poder modificarla.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={productoManagePermissions.dependiente}
+                        onValueChange={() => toggleProductoManagePermission('dependiente')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={productoManagePermissions.dependiente ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                  {productoAccessLevels.almacenero !== 'none' && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Almacenero
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Productos - Almacenero',
+                            'Cuando está activo, los usuarios con rol Almacenero pueden crear, editar y eliminar productos y servicios. Cuando está desactivado, solo pueden ver la información sin poder modificarla.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={productoManagePermissions.almacenero}
+                        onValueChange={() => toggleProductoManagePermission('almacenero')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={productoManagePermissions.almacenero ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                  {productoAccessLevels.economico !== 'none' && (
+                    <View style={styles.permissionItem}>
+                      <View style={styles.permissionInfo}>
+                        <Text style={[styles.permissionLabel, { color: colors.onSurface }]}>
+                          Económico
+                        </Text>
+                        <TouchableOpacity 
+                          style={[styles.infoButton, { backgroundColor: colors.primary }]}
+                          onPress={() => showInfoModal(
+                            'Gestión Productos - Económico',
+                            'Cuando está activo, los usuarios con rol Económico pueden crear, editar y eliminar productos y servicios. Cuando está desactivado, solo pueden ver la información sin poder modificarla.'
+                          )}
+                        >
+                          <Text style={[styles.infoButtonText, { color: '#fff' }]}>!</Text>
+                        </TouchableOpacity>
+                      </View>
+                      <Switch
+                        value={productoManagePermissions.economico}
+                        onValueChange={() => toggleProductoManagePermission('economico')}
+                        trackColor={{ false: colors.outlineVariant, true: colors.primary }}
+                        thumbColor={productoManagePermissions.economico ? '#fff' : colors.outline}
+                      />
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+          )}
 
             </>
           )}

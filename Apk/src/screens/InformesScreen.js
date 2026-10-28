@@ -65,9 +65,9 @@ const InformesContent = () => {
     },
     {
       id: 'cuentas',
-      title: 'Informe de Cuentas',
-      subtitle: 'Estado y movimientos de cuentas',
-      icon: 'wallet-outline',
+      title: 'Seguimiento de Productos',
+      subtitle: 'Movimientos de stock por producto en el tiempo',
+      icon: 'trending-up-outline',
       color: '#FF9800',
       route: 'InformeCuentas',
       available: true,

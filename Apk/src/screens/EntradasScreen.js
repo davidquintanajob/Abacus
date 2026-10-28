@@ -438,9 +438,9 @@ const EntradasContent = () => {
     AsyncStorage.setItem('entradas_filters', JSON.stringify(filters)).catch(err => {
       console.error('Error saving filters:', err);
     });
-    
-    // Open in edit mode if user has permissions, otherwise open in view mode
-    const openMode = canManageEntradas ? 'edit' : 'view';
+
+    // Open in edit mode if user can edit this specific entrada, otherwise open in view mode
+    const openMode = canEditOrDeleteEntrada(entrada) ? 'edit' : 'view';
     navigation.navigate('EntradaForm', { entrada, mode: openMode });
   };
 
@@ -832,6 +832,12 @@ const EntradasContent = () => {
     (userRole === 'dependiente' && entradaManagePermissions?.dependiente) ||
     (userRole === 'almacenero' && entradaManagePermissions?.almacenero) ||
     (userRole === 'económico' && entradaManagePermissions?.economico);
+
+  const canEditOrDeleteEntrada = (entrada) => {
+    if (userRole === 'administrador') return true;
+    if (!canManageEntradas) return false;
+    return entrada.id_usuario === user.id_usuario;
+  };
 
   const styles = createStyles(responsive);
 
@@ -1269,6 +1275,9 @@ const EntradasContent = () => {
                       <Text style={[styles.entradaTienda, { color: colors.outline }]}>
                         Tienda: {entrada.servicioTienda?.tienda?.nombre || 'N/A'}
                       </Text>
+                      <Text style={[styles.entradaTienda, { color: colors.outline }]}>
+                        Usuario: {entrada.usuario?.nombre_natural || 'N/A'}
+                      </Text>
                       <View style={styles.cantidadRow}>
                         <Text style={[styles.entradaCantidad, { color: colors.primary }]}>
                           Inicial: {entrada.cantidad_entrada}
@@ -1288,7 +1297,7 @@ const EntradasContent = () => {
                         Fecha: {new Date(entrada.fecha).toLocaleDateString()}
                       </Text>
                     </View>
-                    {canManageEntradas && (
+                    {canEditOrDeleteEntrada(entrada) && (
                       <View style={styles.entradaActions}>
                         <TouchableOpacity
                           style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
@@ -1328,6 +1337,7 @@ const EntradasContent = () => {
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(200) }]}>Producto</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Código Lote</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Tienda</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Usuario</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Proveedor</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80), textAlign: 'center' }]}>Inicial</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80), textAlign: 'center' }]}>Actual</Text>
@@ -1370,6 +1380,9 @@ const EntradasContent = () => {
                             {entrada.servicioTienda?.tienda?.nombre || 'N/A'}
                           </Text>
                           <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
+                            {entrada.usuario?.nombre_natural || 'N/A'}
+                          </Text>
+                          <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
                             {entrada.nombre_proveedor || '-'}
                           </Text>
                           <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(80), textAlign: 'center' }]}>
@@ -1391,7 +1404,7 @@ const EntradasContent = () => {
                           <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(120) }]}>
                             {new Date(entrada.fecha).toLocaleDateString()}
                           </Text>
-                          {canManageEntradas && (
+                          {canEditOrDeleteEntrada(entrada) && (
                             <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(100) }]}>
                               <View style={styles.tableActionsRow}>
                                 <TouchableOpacity

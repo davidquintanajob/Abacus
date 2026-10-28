@@ -418,12 +418,13 @@ const SalidasContent = () => {
       navigation.navigate('SalidaForm', { salida, mode: 'view' });
       return;
     }
-    
+
     AsyncStorage.setItem('salidas_filters', JSON.stringify(filters)).catch(err => {
       console.error('Error saving filters:', err);
     });
-    
-    const openMode = canManageSalidas ? 'edit' : 'view';
+
+    // Open in edit mode if user can edit this specific salida, otherwise open in view mode
+    const openMode = canEditOrDeleteSalida(salida) ? 'edit' : 'view';
     navigation.navigate('SalidaForm', { salida, mode: openMode });
   };
 
@@ -714,6 +715,12 @@ const SalidasContent = () => {
     (userRole === 'dependiente' && salidaManagePermissions?.dependiente) ||
     (userRole === 'almacenero' && salidaManagePermissions?.almacenero) ||
     (userRole === 'económico' && salidaManagePermissions?.economico);
+
+  const canEditOrDeleteSalida = (salida) => {
+    if (userRole === 'administrador') return true;
+    if (!canManageSalidas) return false;
+    return salida.id_usuario === user.id_usuario;
+  };
 
   const styles = createStyles(responsive);
 
@@ -1186,6 +1193,9 @@ const SalidasContent = () => {
                       <Text style={[styles.salidaTienda, { color: colors.outline }]}>
                         Tienda: {salida.servicioTienda?.tienda?.nombre || 'N/A'}
                       </Text>
+                      <Text style={[styles.salidaTienda, { color: colors.outline }]}>
+                        Usuario: {salida.usuario?.nombre_natural || 'N/A'}
+                      </Text>
                       <Text style={[styles.salidaCantidad, { color: colors.primary }]}>
                         Cantidad: {salida.cantidad_total}
                       </Text>
@@ -1198,7 +1208,7 @@ const SalidasContent = () => {
                         Fecha: {new Date(salida.fecha).toLocaleDateString()}
                       </Text>
                     </View>
-                    {canManageSalidas && (
+                    {canEditOrDeleteSalida(salida) && (
                       <View style={styles.salidaActions}>
                         <TouchableOpacity
                           style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
@@ -1238,6 +1248,7 @@ const SalidasContent = () => {
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(200) }]}>Producto</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(120) }]}>Tipo Salida</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Tienda</Text>
+                    <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(150) }]}>Usuario</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(200) }]}>Descripción</Text>
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(80), textAlign: 'center' }]}>Cantidad</Text>
                     {canManageSalidas && (
@@ -1267,6 +1278,9 @@ const SalidasContent = () => {
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
                           {salida.servicioTienda?.tienda?.nombre || 'N/A'}
                         </Text>
+                        <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(150) }]}>
+                          {salida.usuario?.nombre_natural || 'N/A'}
+                        </Text>
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(200) }]} numberOfLines={2}>
                           {salida.descripcion || '-'}
                         </Text>
@@ -1286,7 +1300,7 @@ const SalidasContent = () => {
                         <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(120) }]}>
                           {new Date(salida.fecha).toLocaleDateString()}
                         </Text>
-                        {canManageSalidas && (
+                        {canEditOrDeleteSalida(salida) && (
                           <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(100) }]}>
                             <View style={styles.tableActionsRow}>
                               <TouchableOpacity

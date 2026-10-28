@@ -23,7 +23,7 @@ const ServicioFormContent = () => {
   const route = useRoute();
   const { colors, isDark } = useTheme();
   const responsive = useResponsive();
-  const { token, user, permissions } = useAuth();
+  const { token, user, permissions, productoManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
 
@@ -164,8 +164,14 @@ const ServicioFormContent = () => {
   const isEconomico = user?.rol === 'Económico';
   const isDependiente = user?.rol === 'Dependiente';
   const isAlmacenero = user?.rol === 'Almacenero';
-  
-  const canEditService = isAdmin;
+  const userRole = user?.rol?.toLowerCase();
+
+  const canEditService =
+    isAdmin ||
+    (userRole === 'dependiente' && productoManagePermissions?.dependiente) ||
+    (userRole === 'almacenero' && productoManagePermissions?.almacenero) ||
+    (userRole === 'económico' && productoManagePermissions?.economico);
+
   const canEditCodes = isAdmin; // Only admin can edit codes
   const canViewCosts = !isDependiente && !isAlmacenero;
 

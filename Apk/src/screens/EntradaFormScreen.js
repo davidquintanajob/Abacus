@@ -1949,21 +1949,21 @@ const EntradaFormContent = () => {
                           {formData.tienda?.nombre || 'Seleccionar...'}
                         </Text>
                         {!isReadOnly && (
-                          <Ionicons 
-                            name={showTiendaDropdown ? "chevron-up" : "chevron-down"} 
-                            size={responsive.responsiveWidth(20)} 
-                            color={colors.outline} 
+                          <Ionicons
+                            name={showTiendaDropdown ? "chevron-up" : "chevron-down"}
+                            size={responsive.responsiveWidth(20)}
+                            color={colors.outline}
                           />
                         )}
                       </TouchableOpacity>
-                      
+
                       {showTiendaDropdown && !isReadOnly && (
                         <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
                           <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                            <Ionicons 
-                              name="search-outline" 
-                              size={responsive.responsiveWidth(18)} 
-                              color={colors.outline} 
+                            <Ionicons
+                              name="search-outline"
+                              size={responsive.responsiveWidth(18)}
+                              color={colors.outline}
                               style={styles.searchIcon}
                             />
                             <TextInput
@@ -1994,7 +1994,6 @@ const EntradaFormContent = () => {
                         </View>
                       )}
                     </View>
-
                     <View style={[styles.formColumn40, styles.formGroup]}>
                       <Text style={[styles.label, { color: colors.outline }]}>Cant.Entrante *</Text>
                       <TextInput
@@ -2232,6 +2231,16 @@ const EntradaFormContent = () => {
                       )}
                     </View>
                   )}
+                  {(isEditMode || isViewMode) && (
+                    <View style={styles.formGroup}>
+                      <Text style={[styles.label, { color: colors.outline }]}>Usuario</Text>
+                      <View style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                        <Text style={[styles.dropdownText, { color: colors.onSurface }]}>
+                          {entrada?.usuario?.nombre_natural || 'N/A'}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
                 </>
               )}
 
@@ -2250,21 +2259,21 @@ const EntradaFormContent = () => {
                         {formData.tienda?.nombre || 'Seleccionar...'}
                       </Text>
                       {!isReadOnly && (
-                        <Ionicons 
-                          name={showTiendaDropdown ? "chevron-up" : "chevron-down"} 
-                          size={responsive.responsiveWidth(20)} 
-                          color={colors.outline} 
+                        <Ionicons
+                          name={showTiendaDropdown ? "chevron-up" : "chevron-down"}
+                          size={responsive.responsiveWidth(20)}
+                          color={colors.outline}
                         />
                       )}
                     </TouchableOpacity>
-                    
+
                     {showTiendaDropdown && !isReadOnly && (
                       <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
                         <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                          <Ionicons 
-                            name="search-outline" 
-                            size={responsive.responsiveWidth(18)} 
-                            color={colors.outline} 
+                          <Ionicons
+                            name="search-outline"
+                            size={responsive.responsiveWidth(18)}
+                            color={colors.outline}
                             style={styles.searchIcon}
                           />
                           <TextInput

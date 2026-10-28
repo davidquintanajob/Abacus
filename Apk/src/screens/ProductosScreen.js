@@ -35,7 +35,7 @@ const ProductosContent = () => {
   const navigation = useNavigation();
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
-  const { token, user, permissions } = useAuth();
+  const { token, user, permissions, productoAccessLevels, productoManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
   const { viewMode, toggleViewMode, isChangingView } = useViewMode();
@@ -146,8 +146,27 @@ const ProductosContent = () => {
   });
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
-  const isAdmin = user?.rol === 'Administrador';
-  const canEdit = isAdmin;
+  const userRole = user?.rol?.toLowerCase();
+
+  const canViewAllProductos =
+    userRole === 'administrador' ||
+    (userRole === 'dependiente' && productoAccessLevels?.dependiente === 'all_stores') ||
+    (userRole === 'almacenero' && productoAccessLevels?.almacenero === 'all_stores') ||
+    (userRole === 'económico' && productoAccessLevels?.economico === 'all_stores');
+
+  const canViewOwnStore =
+    userRole === 'administrador' ||
+    (userRole === 'dependiente' && productoAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'almacenero' && productoAccessLevels?.almacenero !== 'none') ||
+    (userRole === 'económico' && productoAccessLevels?.economico !== 'none');
+
+  const canManageProductos =
+    userRole === 'administrador' ||
+    (userRole === 'dependiente' && productoManagePermissions?.dependiente) ||
+    (userRole === 'almacenero' && productoManagePermissions?.almacenero) ||
+    (userRole === 'económico' && productoManagePermissions?.economico);
+
+  const canViewAllStores = canViewAllProductos;
 
   useEffect(() => {
     const restoreState = async () => {
@@ -239,12 +258,7 @@ const ProductosContent = () => {
       
       try {
         // Check if user can view all stores based on permissions
-        const userRole = user?.rol?.toLowerCase();
-        const canViewAllStores = 
-          userRole === 'administrador' ||
-          (userRole === 'dependiente' && permissions?.dependiente) ||
-          (userRole === 'almacenero' && permissions?.almacenero) ||
-          (userRole === 'económico' && permissions?.economico);
+        const canViewAllStores = canViewAllProductos;
         
         // Pass id_tienda only if user cannot view all stores
         const productosEnAlerta = await getProductosEnAlerta(canViewAllStores ? undefined : user?.id_tienda);
@@ -270,12 +284,7 @@ const ProductosContent = () => {
   const fetchAllTiendas = async () => {
     try {
       setIsLoadingTiendas(true);
-      const userRole = user?.rol?.toLowerCase();
-      const canViewAllStores = 
-        userRole === 'administrador' ||
-        (userRole === 'dependiente' && permissions?.dependiente) ||
-        (userRole === 'almacenero' && permissions?.almacenero) ||
-        (userRole === 'económico' && permissions?.economico);
+      const canViewAllStores = canViewAllProductos;
 
       let allTiendas = [];
       
@@ -361,12 +370,7 @@ const ProductosContent = () => {
           const producto = await getProductoByCodigo(currentFilters.codigo);
           
           // Apply store visibility permissions
-          const userRole = user?.rol?.toLowerCase();
-          const canViewAllStores = 
-            userRole === 'administrador' ||
-            (userRole === 'dependiente' && permissions?.dependiente) ||
-            (userRole === 'almacenero' && permissions?.almacenero) ||
-            (userRole === 'económico' && permissions?.economico);
+          const canViewAllStores = canViewAllProductos;
 
           // If user cannot view all stores, check if product belongs to their store
           if (!canViewAllStores && user?.id_tienda) {
@@ -413,12 +417,7 @@ const ProductosContent = () => {
         let productos = data.data || [];
 
         // Apply store visibility permissions
-        const userRole = user?.rol?.toLowerCase();
-        const canViewAllStores = 
-          userRole === 'administrador' ||
-          (userRole === 'dependiente' && permissions?.dependiente) ||
-          (userRole === 'almacenero' && permissions?.almacenero) ||
-          (userRole === 'económico' && permissions?.economico);
+        const canViewAllStores = canViewAllProductos;
 
         // If user cannot view all stores, filter to show only products from their own store
         if (!canViewAllStores && user?.id_tienda) {
@@ -447,12 +446,7 @@ const ProductosContent = () => {
 
   const handleClearFilters = () => {
     // Check if user can view all stores
-    const userRole = user?.rol?.toLowerCase();
-    const canViewAllStores = 
-      userRole === 'administrador' ||
-      (userRole === 'dependiente' && permissions?.dependiente) ||
-      (userRole === 'almacenero' && permissions?.almacenero) ||
-      (userRole === 'económico' && permissions?.economico);
+    const canViewAllStores = canViewAllProductos;
 
     // Preserve tienda filter for users without permission
     const clearedFilters = { 
@@ -510,7 +504,7 @@ const ProductosContent = () => {
       console.error('Error saving state:', err);
     });
     
-    const mode = canEdit ? 'edit' : 'view';
+    const mode = canManageProductos ? 'edit' : 'view';
     navigation.navigate('ProductoForm', { producto, mode });
   };
 
@@ -580,12 +574,7 @@ const ProductosContent = () => {
 
   const handleBarcodeScanned = ({ data }) => {
     // Clear all fields except tienda before searching by code
-    const userRole = user?.rol?.toLowerCase();
-    const canViewAllStores = 
-      userRole === 'administrador' ||
-      (userRole === 'dependiente' && permissions?.dependiente) ||
-      (userRole === 'almacenero' && permissions?.almacenero) ||
-      (userRole === 'económico' && permissions?.economico);
+    const canViewAllStores = canViewAllProductos;
 
     const clearedFilters = { 
       nombre: '', 
@@ -639,12 +628,7 @@ const ProductosContent = () => {
       }
 
       // Apply store filter if needed
-      const userRole = user?.rol?.toLowerCase();
-      const canViewAllStores = 
-        userRole === 'administrador' ||
-        (userRole === 'dependiente' && permissions?.dependiente) ||
-        (userRole === 'almacenero' && permissions?.almacenero) ||
-        (userRole === 'económico' && permissions?.economico);
+      const canViewAllStores = canViewAllProductos;
 
       if (!canViewAllStores && user?.id_tienda) {
         allProductos = allProductos.filter(p => {
@@ -794,12 +778,7 @@ const ProductosContent = () => {
       // Create quantity breakdown sheet if cantidad is selected
       if (selectedFields.cantidad) {
         // Check if user can view all stores (dynamic check)
-        const userRole = user?.rol?.toLowerCase();
-        const canViewAllStoresExport = 
-          userRole === 'administrador' ||
-          (userRole === 'dependiente' && permissions?.dependiente) ||
-          (userRole === 'almacenero' && permissions?.almacenero) ||
-          (userRole === 'económico' && permissions?.economico);
+        const canViewAllStoresExport = canViewAllProductos;
 
         // Get all unique store names from visible tiendas
         let visibleTiendas = tiendas;
@@ -976,12 +955,7 @@ const ProductosContent = () => {
       let quantityBreakdownSection = '';
       if (selectedFields.cantidad) {
         // Check if user can view all stores (dynamic check)
-        const userRole = user?.rol?.toLowerCase();
-        const canViewAllStoresPDF = 
-          userRole === 'administrador' ||
-          (userRole === 'dependiente' && permissions?.dependiente) ||
-          (userRole === 'almacenero' && permissions?.almacenero) ||
-          (userRole === 'económico' && permissions?.economico);
+        const canViewAllStoresPDF = canViewAllProductos;
 
         // Get all unique store names from visible tiendas
         let visibleTiendas = tiendas;
@@ -1618,27 +1592,11 @@ const ProductosContent = () => {
     tienda.nombre.toLowerCase().includes(tiendaSearchText.toLowerCase())
   );
 
-  // Check if user can view all stores
-  const userRole = user?.rol?.toLowerCase();
-  const canViewAllStores = 
-    userRole === 'administrador' ||
-    (userRole === 'dependiente' && permissions?.dependiente) ||
-    (userRole === 'almacenero' && permissions?.almacenero) ||
-    (userRole === 'económico' && permissions?.economico);
-
   // Calculate total quantity for a product (with filters and permissions)
   const calculateTotalQuantity = (producto) => {
     if (!producto.tiendas_servicio || producto.tiendas_servicio.length === 0) {
       return 0;
     }
-
-    // Check if user can view all stores (dynamic check)
-    const userRole = user?.rol?.toLowerCase();
-    const canViewAllStores = 
-      userRole === 'administrador' ||
-      (userRole === 'dependiente' && permissions?.dependiente) ||
-      (userRole === 'almacenero' && permissions?.almacenero) ||
-      (userRole === 'económico' && permissions?.economico);
 
     // If a specific store filter is selected, show only that store
     if (filters.id_tienda && filters.id_tienda !== '') {
@@ -1669,12 +1627,7 @@ const ProductosContent = () => {
     }
 
     // Check if user can view all stores (dynamic check)
-    const userRole = user?.rol?.toLowerCase();
-    const canViewAllStores = 
-      userRole === 'administrador' ||
-      (userRole === 'dependiente' && permissions?.dependiente) ||
-      (userRole === 'almacenero' && permissions?.almacenero) ||
-      (userRole === 'económico' && permissions?.economico);
+    const canViewAllStores = canViewAllProductos;
 
     // Filter tiendas_servicio based on user permissions (same as Excel/PDF)
     let visibleTiendasServicio = producto.tiendas_servicio;
@@ -2310,7 +2263,7 @@ const ProductosContent = () => {
 
         {/* Action Buttons */}
         <View style={styles.actionButtonsContainer}>
-          {isAdmin && !isOfflineMode && (
+          {canManageProductos && !isOfflineMode && (
             <TouchableOpacity
               style={[styles.actionButton, { backgroundColor: colors.primary }]}
               onPress={handleAdd}
@@ -2419,7 +2372,7 @@ const ProductosContent = () => {
                           Cantidad: {formatQuantity(totalQuantity)}
                         </Text>
                       </View>
-                      {canEdit && (
+                      {canManageProductos && (
                         <View style={styles.productoActions}>
                           <TouchableOpacity
                             style={[styles.actionButtonSmall, styles.editButtonSmall, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
@@ -2502,7 +2455,7 @@ const ProductosContent = () => {
                           <Text style={[styles.tableCellText, { color: colors.onSurface, width: responsive.responsiveWidth(100) }]}>
                             {formatQuantity(totalQuantity)}
                           </Text>
-                          {canEdit && (
+                          {canManageProductos && (
                             <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(100) }]}>
                               <View style={styles.tableActionsRow}>
                                 <TouchableOpacity

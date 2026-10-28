@@ -169,6 +169,16 @@ export const AuthProvider = ({ children }) => {
       almacenero: false,
       economico: false,
     },
+    productoAccessLevels: config?.productoAccessLevels || {
+      dependiente: 'none',
+      almacenero: 'none',
+      economico: 'none',
+    },
+    productoManagePermissions: config?.productoManagePermissions || {
+      dependiente: false,
+      almacenero: false,
+      economico: false,
+    },
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

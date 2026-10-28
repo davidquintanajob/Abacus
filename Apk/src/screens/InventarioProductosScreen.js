@@ -264,6 +264,10 @@ const InventarioProductosContent = () => {
       setLoadingProgress(100);
       setLoadingMessage('Completado');
 
+      // Calculate total cost and total value across all products
+      const totalCostAll = statsArray.reduce((sum, p) => sum + p.totalCostoCUP, 0);
+      const totalValueAll = statsArray.reduce((sum, p) => sum + p.totalValorCUP, 0);
+
       setReportData({
         top5ByCost,
         otherCost,
@@ -271,7 +275,9 @@ const InventarioProductosContent = () => {
         top5ByValue,
         otherValue,
         valueChartData,
-        totalProductos: statsArray.length
+        totalProductos: statsArray.length,
+        totalCostAll,
+        totalValueAll
       });
 
     } catch (error) {
@@ -567,33 +573,52 @@ const InventarioProductosContent = () => {
                 <PieChart size={200} data={reportData.costChartData} />
               </View>
               <View style={styles.chartLegend}>
-                {reportData.top5ByCost.map((item, index) => (
-                  <View key={index} style={styles.legendItem}>
-                    <View style={[styles.legendColor, { backgroundColor: getChartColor(index) }]} />
-                    <Text style={[styles.legendText, { color: colors.onSurface }]}>
-                      {item.nombre}
-                    </Text>
-                    <View style={styles.legendValueContainer}>
-                      <Text style={[styles.legendValue, { color: colors.onSurface }]}>
-                        {formatCurrency(item.totalCostoCUP)} CUP
+                {reportData.top5ByCost.map((item, index) => {
+                  const percentage = reportData.totalCostAll > 0 ? ((item.totalCostoCUP / reportData.totalCostAll) * 100).toFixed(1) : '0.0';
+                  return (
+                    <View key={index} style={styles.legendItem}>
+                      <View style={[styles.legendColor, { backgroundColor: getChartColor(index) }]} />
+                      <Text style={[styles.legendText, { color: colors.onSurface }]}>
+                        {item.nombre}
                       </Text>
-                      <Text style={[styles.legendQuantity, { color: colors.outline }]}>
-                        {formatQuantity(item.totalCantidad)} unidades
-                      </Text>
+                      <View style={styles.legendValueContainer}>
+                        <Text style={[styles.legendValue, { color: colors.onSurface }]}>
+                          {formatCurrency(item.totalCostoCUP)} CUP
+                        </Text>
+                        <Text style={[styles.legendQuantity, { color: colors.outline }]}>
+                          {formatQuantity(item.totalCantidad)} unidades
+                        </Text>
+                        <Text style={[styles.legendPercentage, { color: colors.outline }]}>
+                          {percentage}%
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                ))}
+                  );
+                })}
                 {reportData.otherCost > 0 && (
                   <View style={styles.legendItem}>
                     <View style={[styles.legendColor, { backgroundColor: '#9E9E9E' }]} />
                     <Text style={[styles.legendText, { color: colors.onSurface }]}>
                       Otros
                     </Text>
-                    <Text style={[styles.legendValue, { color: colors.onSurface }]}>
-                      {formatCurrency(reportData.otherCost)} CUP
-                    </Text>
+                    <View style={styles.legendValueContainer}>
+                      <Text style={[styles.legendValue, { color: colors.onSurface }]}>
+                        {formatCurrency(reportData.otherCost)} CUP
+                      </Text>
+                      <Text style={[styles.legendPercentage, { color: colors.outline }]}>
+                        {reportData.totalCostAll > 0 ? ((reportData.otherCost / reportData.totalCostAll) * 100).toFixed(1) : '0.0'}%
+                      </Text>
+                    </View>
                   </View>
                 )}
+                <View style={[styles.legendItem, styles.legendTotalItem]}>
+                  <Text style={[styles.legendTotalLabel, { color: colors.onSurface }]}>
+                    Total de Costo
+                  </Text>
+                  <Text style={[styles.legendTotalValue, { color: colors.primary }]}>
+                    {formatCurrency(reportData.totalCostAll)} CUP
+                  </Text>
+                </View>
               </View>
             </Card>
 
@@ -606,33 +631,52 @@ const InventarioProductosContent = () => {
                 <PieChart size={200} data={reportData.valueChartData} />
               </View>
               <View style={styles.chartLegend}>
-                {reportData.top5ByValue.map((item, index) => (
-                  <View key={index} style={styles.legendItem}>
-                    <View style={[styles.legendColor, { backgroundColor: getChartColor(index) }]} />
-                    <Text style={[styles.legendText, { color: colors.onSurface }]}>
-                      {item.nombre}
-                    </Text>
-                    <View style={styles.legendValueContainer}>
-                      <Text style={[styles.legendValue, { color: colors.onSurface }]}>
-                        {formatCurrency(item.totalValorCUP)} CUP
+                {reportData.top5ByValue.map((item, index) => {
+                  const percentage = reportData.totalValueAll > 0 ? ((item.totalValorCUP / reportData.totalValueAll) * 100).toFixed(1) : '0.0';
+                  return (
+                    <View key={index} style={styles.legendItem}>
+                      <View style={[styles.legendColor, { backgroundColor: getChartColor(index) }]} />
+                      <Text style={[styles.legendText, { color: colors.onSurface }]}>
+                        {item.nombre}
                       </Text>
-                      <Text style={[styles.legendQuantity, { color: colors.outline }]}>
-                        {formatQuantity(item.totalCantidad)} unidades
-                      </Text>
+                      <View style={styles.legendValueContainer}>
+                        <Text style={[styles.legendValue, { color: colors.onSurface }]}>
+                          {formatCurrency(item.totalValorCUP)} CUP
+                        </Text>
+                        <Text style={[styles.legendQuantity, { color: colors.outline }]}>
+                          {formatQuantity(item.totalCantidad)} unidades
+                        </Text>
+                        <Text style={[styles.legendPercentage, { color: colors.outline }]}>
+                          {percentage}%
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                ))}
+                  );
+                })}
                 {reportData.otherValue > 0 && (
                   <View style={styles.legendItem}>
                     <View style={[styles.legendColor, { backgroundColor: '#9E9E9E' }]} />
                     <Text style={[styles.legendText, { color: colors.onSurface }]}>
                       Otros
                     </Text>
-                    <Text style={[styles.legendValue, { color: colors.onSurface }]}>
-                      {formatCurrency(reportData.otherValue)} CUP
-                    </Text>
+                    <View style={styles.legendValueContainer}>
+                      <Text style={[styles.legendValue, { color: colors.onSurface }]}>
+                        {formatCurrency(reportData.otherValue)} CUP
+                      </Text>
+                      <Text style={[styles.legendPercentage, { color: colors.outline }]}>
+                        {reportData.totalValueAll > 0 ? ((reportData.otherValue / reportData.totalValueAll) * 100).toFixed(1) : '0.0'}%
+                      </Text>
+                    </View>
                   </View>
                 )}
+                <View style={[styles.legendItem, styles.legendTotalItem]}>
+                  <Text style={[styles.legendTotalLabel, { color: colors.onSurface }]}>
+                    Total de Venta
+                  </Text>
+                  <Text style={[styles.legendTotalValue, { color: colors.primary }]}>
+                    {formatCurrency(reportData.totalValueAll)} CUP
+                  </Text>
+                </View>
               </View>
             </Card>
           </>
@@ -909,6 +953,30 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(11),
     fontFamily: 'Inter',
     marginTop: 2,
+  },
+  legendPercentage: {
+    fontSize: responsive.responsiveFontSize(11),
+    fontFamily: 'Inter',
+    marginTop: 2,
+  },
+  legendTotalItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: responsive.responsivePadding(12),
+    borderTopWidth: 2,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+    marginTop: responsive.responsiveMargin(8),
+  },
+  legendTotalLabel: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+    fontWeight: '600',
+  },
+  legendTotalValue: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontFamily: 'Inter',
+    fontWeight: '700',
   },
   loadingModalOverlay: {
     flex: 1,

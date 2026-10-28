@@ -24,7 +24,7 @@ const ServiciosContent = () => {
   const navigation = useNavigation();
   const { colors, isDark, toggleTheme } = useTheme();
   const responsive = useResponsive();
-  const { token, user, permissions } = useAuth();
+  const { token, user, permissions, productoAccessLevels, productoManagePermissions } = useAuth();
   const { isOfflineMode } = useOffline();
   const { toast, showToast, hideToast } = useToast();
   const { viewMode, toggleViewMode, isChangingView } = useViewMode();
@@ -70,8 +70,27 @@ const ServiciosContent = () => {
   const [hasShownOfflineToast, setHasShownOfflineToast] = useState(false);
 
   const isDarkMode = typeof isDark === 'boolean' ? isDark : isDark === 'true';
-  const isAdmin = user?.rol === 'Administrador';
-  const canEdit = isAdmin;
+  const userRole = user?.rol?.toLowerCase();
+
+  const canViewAllProductos =
+    userRole === 'administrador' ||
+    (userRole === 'dependiente' && productoAccessLevels?.dependiente === 'all_stores') ||
+    (userRole === 'almacenero' && productoAccessLevels?.almacenero === 'all_stores') ||
+    (userRole === 'económico' && productoAccessLevels?.economico === 'all_stores');
+
+  const canViewOwnStore =
+    userRole === 'administrador' ||
+    (userRole === 'dependiente' && productoAccessLevels?.dependiente !== 'none') ||
+    (userRole === 'almacenero' && productoAccessLevels?.almacenero !== 'none') ||
+    (userRole === 'económico' && productoAccessLevels?.economico !== 'none');
+
+  const canManageProductos =
+    userRole === 'administrador' ||
+    (userRole === 'dependiente' && productoManagePermissions?.dependiente) ||
+    (userRole === 'almacenero' && productoManagePermissions?.almacenero) ||
+    (userRole === 'económico' && productoManagePermissions?.economico);
+
+  const canViewAllStores = canViewAllProductos;
 
   // Initialize user's store from session data immediately
   useEffect(() => {
@@ -368,7 +387,7 @@ const ServiciosContent = () => {
       console.error('Error saving filters:', err);
     });
     
-    const mode = canEdit ? 'edit' : 'view';
+    const mode = canManageProductos ? 'edit' : 'view';
     const isOferta = servicio.componentes && servicio.componentes.length > 0;
     navigation.navigate('ServicioForm', { servicio, mode, isOferta });
   };
@@ -457,14 +476,6 @@ const ServiciosContent = () => {
   const filteredTiendas = tiendas.filter(tienda =>
     tienda.nombre.toLowerCase().includes(tiendaSearchText.toLowerCase())
   );
-
-  // Check if user can view all stores
-  const userRole = user?.rol?.toLowerCase();
-  const canViewAllStores = 
-    userRole === 'administrador' ||
-    (userRole === 'dependiente' && permissions?.dependiente) ||
-    (userRole === 'almacenero' && permissions?.almacenero) ||
-    (userRole === 'económico' && permissions?.economico);
 
   // Get price for a service based on user permissions
   const getServicePrice = (servicio) => {
@@ -810,22 +821,22 @@ const ServiciosContent = () => {
 
         {/* Add Buttons */}
         <View style={styles.addButtonsContainer}>
-          {isAdmin && !isOfflineMode && (
+          {canManageProductos && !isOfflineMode && (
             <TouchableOpacity
               style={[styles.addButton, { backgroundColor: colors.primary }]}
               onPress={handleAdd}
             >
               <Ionicons name="add-circle-outline" size={responsive.responsiveWidth(20)} color="#fff" />
-              <Text style={[styles.addButtonTextSmal, { color: '#fff' }]}>Agregar Servicio</Text>
+              <Text style={[styles.addButtonTextSmall, { color: '#fff' }]}>Agregar Servicio</Text>
             </TouchableOpacity>
           )}
-          {isAdmin && !isOfflineMode && (
+          {canManageProductos && !isOfflineMode && (
             <TouchableOpacity
               style={[styles.addButton, { backgroundColor: colors.primary }]}
               onPress={() => navigation.navigate('ServicioForm', { mode: 'add', isOferta: true })}
             >
               <Ionicons name="add-circle-outline" size={responsive.responsiveWidth(20)} color="#fff" />
-              <Text style={[styles.addButtonTextSmall, { color: '#fff' }]}>Agregar Servicio (Oferta)</Text>
+              <Text style={[styles.addButtonTextSmall, { color: '#fff' }]}>Agregar Oferta</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -903,7 +914,7 @@ const ServiciosContent = () => {
                           </>
                         )}
                       </View>
-                      {canEdit && (
+                      {canManageProductos && (
                         <View style={styles.servicioActions}>
                           <TouchableOpacity
                             style={[styles.actionButton, styles.editButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD' }]}
@@ -995,7 +1006,7 @@ const ServiciosContent = () => {
                               </Text>
                             </>
                           )}
-                          {canEdit && (
+                          {canManageProductos && (
                             <View style={[styles.tableActionsCell, { width: responsive.responsiveWidth(100) }]}>
                               <View style={styles.tableActionsRow}>
                                 <TouchableOpacity
