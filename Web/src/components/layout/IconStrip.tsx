@@ -16,7 +16,7 @@ interface IconStripProps {
 
 export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStripProps) => {
   const { colors, isDark } = useTheme();
-  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels, movimientoAccessLevels, deudaAccessLevels } = useAuth();
+  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, ventaAccessLevels, movimientoAccessLevels, deudaAccessLevels, clienteManagePermissions } = useAuth();
   const { isLoading: isNavigating, setLoading: setNavigating } = useNavigationLoading();
   const router = useRouter();
 
@@ -86,6 +86,8 @@ export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStrip
     (userRole === 'almacenero' && deudaAccessLevels?.almacenero === 'ambos') ||
     (userRole === 'económico' && deudaAccessLevels?.economico === 'ambos');
 
+  const canAccessClientes = isAdmin || clienteManagePermissions === true;
+
   let menuItems: any[] = [
     { icon: '/icon-panel.png', label: 'Panel', route: 'Home' },
     { icon: '/icon-servicios.png', label: 'Servicios y Ofertas', route: 'Servicios' },
@@ -109,6 +111,9 @@ export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStrip
   }
   if (canAccessDeudas) {
     menuItems.push({ icon: '/debt-recovery.png', label: 'Deudas', route: 'Deudas' });
+  }
+  if (canAccessClientes) {
+    menuItems.push({ icon: '/customer-search.png', label: 'Clientes', route: 'Clientes' });
   }
   if (isAdmin) {
     menuItems.push({ icon: '/icon-tiendas.png', label: 'Tiendas', route: 'Tiendas' });
