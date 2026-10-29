@@ -596,44 +596,6 @@ const CurrencyExchangeContent = () => {
     return parts.join('.');
   };
 
-  const convertToGrayscale = (base64Data) => {
-    try {
-      const matches = base64Data.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
-      if (!matches) return base64Data;
-      
-      const mimeType = matches[1];
-      const base64String = matches[2];
-      
-      const binaryString = atob(base64String);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      
-      if (mimeType !== 'image/jpeg') {
-        return base64Data;
-      }
-      
-      for (let i = 0; i < bytes.length; i += 3) {
-        if (i + 2 < bytes.length) {
-          const avg = Math.round((bytes[i] + bytes[i + 1] + bytes[i + 2]) / 3);
-          bytes[i] = avg;
-          bytes[i + 1] = avg;
-          bytes[i + 2] = avg;
-        }
-      }
-      
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      const grayBase64 = btoa(binary);
-      
-      return `data:${mimeType};base64,${grayBase64}`;
-    } catch (error) {
-      return base64Data;
-    }
-  };
 
   const handleSelectLogo = async () => {
     try {
@@ -646,14 +608,14 @@ const CurrencyExchangeContent = () => {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
+        quality: 0.5,
         base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets[0]) {
         const asset = result.assets[0];
         // Store as a base64 data URI so it works in PDF generation without any file reading
+        // Keep original image as-is (color, as cropped by user)
         if (asset.base64) {
           const ext = (asset.uri.split('.').pop() || 'jpeg').toLowerCase();
           const mime = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
@@ -4424,24 +4386,10 @@ const CurrencyExchangeContent = () => {
                 >
                   {comprobanteConfig.logo ? (
                     <View style={styles.logoPreview}>
-                      <WebView
-                        source={{
-                          html: `
-                            <html>
-                              <head>
-                                <style>
-                                  body { margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; height: 100vh; background: transparent; }
-                                  img { max-width: 100%; max-height: 100%; object-fit: contain; filter: grayscale(100%); }
-                                </style>
-                              </head>
-                              <body>
-                                <img src="${comprobanteConfig.logo}" />
-                              </body>
-                            </html>
-                          `
-                        }}
+                      <Image
+                        source={{ uri: comprobanteConfig.logo }}
                         style={{ width: '100%', height: '100%' }}
-                        scrollEnabled={false}
+                        resizeMode="contain"
                       />
                     </View>
                   ) : (
@@ -4463,24 +4411,10 @@ const CurrencyExchangeContent = () => {
                   {comprobanteConfig.logo && (
                     <View style={styles.comprobanteLogoContainer}>
                       <View style={styles.comprobanteLogo}>
-                        <WebView
-                          source={{
-                            html: `
-                              <html>
-                                <head>
-                                  <style>
-                                    body { margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; height: 100vh; background: transparent; }
-                                    img { max-width: 100%; max-height: 100%; object-fit: contain; filter: grayscale(100%); }
-                                  </style>
-                                </head>
-                                <body>
-                                  <img src="${comprobanteConfig.logo}" />
-                                </body>
-                              </html>
-                            `
-                          }}
+                        <Image
+                          source={{ uri: comprobanteConfig.logo }}
                           style={{ width: '100%', height: '100%' }}
-                          scrollEnabled={false}
+                          resizeMode="contain"
                         />
                       </View>
                     </View>

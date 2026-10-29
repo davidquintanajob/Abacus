@@ -2485,7 +2485,7 @@ const ProductosContent = () => {
                       </>
                     )}
                     <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Cantidad</Text>
-                    {canEdit && (
+                    {canManageProductos && (
                       <Text style={[styles.tableHeaderText, { color: '#fff', width: responsive.responsiveWidth(100) }]}>Acciones</Text>
                     )}
                   </View>
@@ -2494,7 +2494,7 @@ const ProductosContent = () => {
                     return (
                       <TouchableOpacity
                         key={producto.id_servicio}
-                        onPress={() => handleProductoPress(producto)}
+                        onPress={() => handleOpenProducto(producto)}
                         activeOpacity={0.7}
                       >
                         <View style={[styles.tableRow, { backgroundColor: index % 2 === 0 ? colors.surface : colors.surfaceVariant }]}>

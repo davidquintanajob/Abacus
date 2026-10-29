@@ -2665,21 +2665,10 @@ const SalesContent = () => {
                   {comprobanteConfig.logo && (
                     <View style={styles.comprobanteLogoContainer}>
                       <View style={styles.comprobanteLogo}>
-                        <WebView
-                          source={{
-                            html: `
-                              <svg viewBox="0 0 100 100" style="width: 100%; height: 100%;">
-                                <defs>
-                                  <filter id="grayscale">
-                                    <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0"/>
-                                  </filter>
-                                </defs>
-                                <image href="${comprobanteConfig.logo}" width="100" height="100" filter="url(#grayscale)" preserveAspectRatio="xMidYMid meet"/>
-                              </svg>
-                            `
-                          }}
+                        <Image
+                          source={{ uri: comprobanteConfig.logo }}
                           style={{ width: '100%', height: '100%' }}
-                          scrollEnabled={false}
+                          resizeMode="contain"
                         />
                       </View>
                     </View>
