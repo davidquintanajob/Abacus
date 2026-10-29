@@ -47,7 +47,7 @@ const OperacionFormContent = () => {
     id_cuenta: null,
     id_usuario: null,
     cantidad_operacion: defaultCantidadCup?.toString() || defaultCantidadUsd?.toString() || '',
-    tipo_operacion: defaultTipo || 'Ingreso',
+    tipo_operacion: defaultTipo || 'Retiro',
     fecha_hora: new Date().toISOString(),
     motivo: defaultMotivo || '',
     cambio_moneda: '',
