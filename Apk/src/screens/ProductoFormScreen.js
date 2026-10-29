@@ -572,8 +572,9 @@ const ProductoFormContent = () => {
           return;
         }
 
-        // Don't refresh in edit or add mode to preserve unsaved changes
-        if (isEditMode || isAddMode) {
+        // Don't refresh in add mode to preserve unsaved changes
+        // But allow refresh in edit mode to reload data after saving
+        if (isAddMode) {
           return;
         }
 
@@ -581,25 +582,25 @@ const ProductoFormContent = () => {
           try {
             setIsFetchingProducto(true);
             const completeProducto = await getProductoById(producto.id_servicio);
-            
+
             const userRole = user?.rol?.toLowerCase();
-            const canViewAllStores = 
+            const canViewAllStores =
               userRole === 'administrador' ||
               (userRole === 'dependiente' && permissions?.dependiente) ||
               (userRole === 'almacenero' && permissions?.almacenero) ||
               (userRole === 'económico' && permissions?.economico);
 
             let productoTiendaList = completeProducto.tiendas_servicio || [];
-            
+
             if (!canViewAllStores && user?.id_tienda) {
               productoTiendaList = productoTiendaList.filter(ts => ts.id_tienda === user.id_tienda);
             }
-            
+
             // Extract cost from first tienda (all tiendas should have the same cost now)
             const firstTienda = productoTiendaList[0];
             const costoCupGeneral = firstTienda?.costo_cup || null;
             const costoUsdGeneral = firstTienda?.costo_usd || null;
-            
+
             setFormData({
               nombre: completeProducto.nombre || '',
               categoria: completeProducto.categoria || '',
@@ -625,7 +626,7 @@ const ProductoFormContent = () => {
       };
 
       refreshProductoData();
-    }, [producto?.id_servicio, canViewCosts, user?.id_tienda, permissions, isOfflineMode, isEditMode, isAddMode])
+    }, [producto?.id_servicio, canViewCosts, user?.id_tienda, permissions, isOfflineMode, isAddMode])
   );
 
   // Efecto para agregar tienda pre-seleccionada cuando viene de EntradaForm
@@ -989,6 +990,9 @@ const ProductoFormContent = () => {
             entradaData: entradaData
           });
         } else {
+          // Save flag to indicate returning from form
+          // ProductosScreen already saved the state before navigating here
+          console.log('[ProductoForm] Saving productos_from_form flag before navigating back (edit)');
           await AsyncStorage.setItem('productos_from_form', 'true');
           navigation.goBack();
         }
@@ -1017,6 +1021,10 @@ const ProductoFormContent = () => {
           setCreatedProducto(actualProduct);
           setShowAddEntradaModal(true);
         } else {
+          // Save flag to indicate returning from form
+          // ProductosScreen already saved the state before navigating here
+          console.log('[ProductoForm] Saving productos_from_form flag before navigating back (create)');
+          await AsyncStorage.setItem('productos_from_form', 'true');
           navigation.goBack();
         }
       }
@@ -2935,9 +2943,13 @@ const ProductoFormContent = () => {
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalCancelButton, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
-                  onPress={() => {
+                  onPress={async () => {
                     setShowAddEntradaModal(false);
                     setCreatedProducto(null);
+                    // Save flag to indicate returning from form
+                    // ProductosScreen already saved the state before navigating here
+                    console.log('[ProductoForm] Saving productos_from_form flag before navigating back (modal)');
+                    await AsyncStorage.setItem('productos_from_form', 'true');
                     navigation.goBack();
                   }}
                 >

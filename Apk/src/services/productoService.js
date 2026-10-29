@@ -128,10 +128,30 @@ export const deleteProducto = async (id) => {
     const response = await api.delete(`/servicio/${id}`);
     return response.data;
   } catch (error) {
-    const errorMessage = error.response?.data?.errors?.[0] || 
-                        error.response?.data?.message || 
+    const errorMessage = error.response?.data?.errors?.[0] ||
+                        error.response?.data?.message ||
                         error.message ||
                         'Error al eliminar producto';
+    const err = new Error(errorMessage);
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
+  }
+};
+
+export const getSeguimientoInventario = async (idProducto, idTienda, fechaDesde, fechaHasta) => {
+  try {
+    const queryParams = new URLSearchParams();
+    queryParams.append('id_tienda', idTienda);
+    queryParams.append('fecha_desde', fechaDesde);
+    queryParams.append('fecha_hasta', fechaHasta);
+
+    const response = await api.get(`/producto/${idProducto}/seguimiento-inventario?${queryParams}`);
+    return response.data;
+  } catch (error) {
+    const errorMessage = error.response?.data?.errors?.[0] ||
+                        error.response?.data?.message ||
+                        error.message ||
+                        'Error al obtener seguimiento de inventario';
     const err = new Error(errorMessage);
     err.code = error.response?.status ?? error.code ?? null;
     throw err;

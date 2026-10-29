@@ -14,9 +14,7 @@ import { useOffline } from '../context/OfflineContext';
 import { Toast } from '../components/common/Toast';
 import { useToast } from '../hooks/useToast';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { getEntradas } from '../services/entradaService';
-import { getSalidas } from '../services/salidaService';
-import { getProductos } from '../services/productoService';
+import { getSeguimientoInventario, getProductos } from '../services/productoService';
 import { getTiendas } from '../services/tiendaService';
 
 const InformeSeguimientoProductoContent = () => {
@@ -33,8 +31,8 @@ const InformeSeguimientoProductoContent = () => {
   const [startDate, setStartDate] = useState(new Date());
   const [endDate, setEndDate] = useState(new Date());
   const [isLoading, setIsLoading] = useState(false);
-  const [stockMovements, setStockMovements] = useState([]);
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [seguimientoData, setSeguimientoData] = useState(null);
+  const [expandedGroups, setExpandedGroups] = useState({});
   const [filters, setFilters] = useState({
     producto: '',
     tienda: ''
@@ -118,146 +116,38 @@ const InformeSeguimientoProductoContent = () => {
       return;
     }
 
+    if (!filters.tienda) {
+      showToast({ type: 'warning', message: 'Debe seleccionar una tienda' });
+      return;
+    }
+
     setIsLoading(true);
     try {
+      const selectedProducto = productos.find(p => p.nombre === filters.producto);
+      const selectedTienda = tiendas.find(t => t.nombre === filters.tienda);
+
+      if (!selectedProducto) {
+        showToast({ type: 'error', message: 'Producto no encontrado' });
+        return;
+      }
+
+      if (!selectedTienda) {
+        showToast({ type: 'error', message: 'Tienda no encontrada' });
+        return;
+      }
+
       const fechaDesde = formatLocalDate(startDate);
       const fechaHasta = formatLocalDate(endDate);
 
-      // Build filters for API calls
-      const entradaFilters = {
-        fecha_desde: fechaDesde,
-        fecha_hasta: fechaHasta
-      };
-      const salidaFilters = {
-        fecha_desde: fechaDesde,
-        fecha_hasta: fechaHasta
-      };
+      const data = await getSeguimientoInventario(
+        selectedProducto.id_servicio,
+        selectedTienda.id_tienda,
+        fechaDesde,
+        fechaHasta
+      );
 
-      // Add optional filters
-      if (filters.producto) {
-        const selectedProducto = productos.find(p => p.nombre === filters.producto);
-        if (selectedProducto) {
-          // Find the servicio_tienda for this product and tienda
-          if (filters.tienda) {
-            const selectedTienda = tiendas.find(t => t.nombre === filters.tienda);
-            if (selectedTienda) {
-              const servicioTienda = selectedProducto.tiendas_servicio?.find(
-                ts => ts.id_tienda === selectedTienda.id_tienda
-              );
-              if (servicioTienda) {
-                entradaFilters.id_servicio_tienda = servicioTienda.id_servicio_tienda;
-                salidaFilters.id_servicio_tienda = servicioTienda.id_servicio_tienda;
-              }
-            }
-          } else {
-            // If only product selected, get all servicio_tiendas for this product
-            const servicioTiendas = selectedProducto.tiendas_servicio?.map(ts => ts.id_servicio_tienda) || [];
-            if (servicioTiendas.length > 0) {
-              // We'll filter by multiple ids if API supports it, otherwise fetch all and filter client-side
-            }
-          }
-        }
-      } else if (filters.tienda) {
-        // If only tienda selected, we need to get all servicio_tiendas for this tienda
-        const selectedTienda = tiendas.find(t => t.nombre === filters.tienda);
-        if (selectedTienda) {
-          // This would require a different API approach, for now fetch all and filter
-        }
-      }
-
-      // Fetch entradas and salidas
-      const [entradasResult, salidasResult] = await Promise.all([
-        getEntradas(entradaFilters, 1, 10000),
-        getSalidas(salidaFilters, 1, 10000)
-      ]);
-
-      // Combine and process movements
-      const allMovements = [];
-
-      // Add entradas (stock increases)
-      if (entradasResult.data) {
-        entradasResult.data.forEach((entrada) => {
-          // Filter by product if specified
-          if (filters.producto) {
-            const selectedProducto = productos.find(p => p.nombre === filters.producto);
-            if (!selectedProducto) return;
-            
-            const servicioTienda = selectedProducto.tiendas_servicio?.find(
-              ts => ts.id_servicio_tienda === entrada.id_servicio_tienda
-            );
-            if (!servicioTienda) return;
-          }
-
-          // Filter by tienda if specified
-          if (filters.tienda) {
-            const selectedTienda = tiendas.find(t => t.nombre === filters.tienda);
-            if (!selectedTienda) return;
-            
-            const entradaTienda = entrada.servicioTienda?.tienda;
-            if (!entradaTienda || entradaTienda.id_tienda !== selectedTienda.id_tienda) return;
-          }
-
-          allMovements.push({
-            id: `entrada-${entrada.id_entrada}`,
-            type: 'entrada',
-            fecha: entrada.fecha,
-            cantidad: entrada.cantidad_entrada,
-            producto: entrada.servicioTienda?.servicio?.nombre || 'N/A',
-            tienda: entrada.servicioTienda?.tienda?.nombre || 'N/A',
-            usuario: entrada.usuario?.nombre_natural || entrada.usuario?.nombre || 'N/A'
-          });
-        });
-      }
-
-      // Add salidas (stock decreases)
-      if (salidasResult.data) {
-        salidasResult.data.forEach((salida) => {
-          // Filter by product if specified
-          if (filters.producto) {
-            const selectedProducto = productos.find(p => p.nombre === filters.producto);
-            if (!selectedProducto) return;
-            
-            const servicioTienda = selectedProducto.tiendas_servicio?.find(
-              ts => ts.id_servicio_tienda === salida.id_servicio_tienda
-            );
-            if (!servicioTienda) return;
-          }
-
-          // Filter by tienda if specified
-          if (filters.tienda) {
-            const selectedTienda = tiendas.find(t => t.nombre === filters.tienda);
-            if (!selectedTienda) return;
-            
-            const salidaTienda = salida.servicioTienda?.tienda;
-            if (!salidaTienda || salidaTienda.id_tienda !== selectedTienda.id_tienda) return;
-          }
-
-          allMovements.push({
-            id: `salida-${salida.id_salida}`,
-            type: 'salida',
-            fecha: salida.fecha,
-            cantidad: -salida.cantidad_total, // Negative for salidas
-            producto: salida.servicioTienda?.servicio?.nombre || 'N/A',
-            tienda: salida.servicioTienda?.tienda?.nombre || 'N/A',
-            usuario: salida.usuario?.nombre_natural || salida.usuario?.nombre || 'N/A'
-          });
-        });
-      }
-
-      // Sort by date ascending (oldest first for timeline)
-      allMovements.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
-
-      // Calculate running balance
-      let runningBalance = 0;
-      const movementsWithBalance = allMovements.map(movement => {
-        runningBalance += movement.cantidad;
-        return {
-          ...movement,
-          balance: runningBalance
-        };
-      });
-
-      setStockMovements(movementsWithBalance);
+      setSeguimientoData(data);
+      setExpandedGroups({});
     } catch (error) {
       console.error('Error generating report:', error);
       showToast({ type: 'error', message: error.message || 'Error al generar el informe' });
@@ -276,6 +166,166 @@ const InformeSeguimientoProductoContent = () => {
 
   const handleProfilePress = () => {
     navigation.navigate('UserProfile');
+  };
+
+  const getGroupColor = (tipo) => {
+    switch (tipo) {
+      case 'entrada':
+        return { color: '#4CAF50', bgColor: '#E8F5E9' };
+      case 'salida':
+        return { color: '#F44336', bgColor: '#FFEBEE' };
+      case 'venta':
+        return { color: '#FF9800', bgColor: '#FFF3E0' };
+      case 'movimiento':
+        return { color: '#2196F3', bgColor: '#E3F2FD' };
+      default:
+        return { color: '#757575', bgColor: '#F5F5F5' };
+    }
+  };
+
+  const getGroupIcon = (tipo) => {
+    switch (tipo) {
+      case 'entrada':
+        return 'arrow-down-circle-outline';
+      case 'salida':
+        return 'arrow-up-circle-outline';
+      case 'venta':
+        return 'cart-outline';
+      case 'movimiento':
+        return 'swap-horizontal-outline';
+      default:
+        return 'help-circle-outline';
+    }
+  };
+
+  const formatGroupType = (tipo, subtipo) => {
+    if (tipo === 'movimiento' && subtipo) {
+      return `Movimiento (${subtipo})`;
+    }
+    return tipo.charAt(0).toUpperCase() + tipo.slice(1);
+  };
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return dateString;
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${day}/${month}/${year} ${hours}:${minutes}`;
+    } catch (e) {
+      return dateString || 'N/A';
+    }
+  };
+
+  const renderDetalle = (detalle, groupType, colors, responsive) => {
+    switch (groupType) {
+      case 'entrada':
+        return (
+          <View style={styles.detalleContent}>
+            <View style={styles.detalleRow}>
+              <Text style={[styles.detalleLabel, { color: colors.outline }]}>Fecha:</Text>
+              <Text style={[styles.detalleValue, { color: colors.onSurface }]}>{formatDateTime(detalle.fecha)}</Text>
+            </View>
+            {detalle.codigo_lote && (
+              <View style={styles.detalleRow}>
+                <Text style={[styles.detalleLabel, { color: colors.outline }]}>Código Lote:</Text>
+                <Text style={[styles.detalleValue, { color: colors.onSurface }]}>{detalle.codigo_lote}</Text>
+              </View>
+            )}
+            {detalle.proveedor && (
+              <View style={styles.detalleRow}>
+                <Text style={[styles.detalleLabel, { color: colors.outline }]}>Proveedor:</Text>
+                <Text style={[styles.detalleValue, { color: colors.onSurface }]}>{detalle.proveedor}</Text>
+              </View>
+            )}
+            {detalle.fecha_vencimiento && (
+              <View style={styles.detalleRow}>
+                <Text style={[styles.detalleLabel, { color: colors.outline }]}>Vencimiento:</Text>
+                <Text style={[styles.detalleValue, { color: colors.onSurface }]}>{formatDate(detalle.fecha_vencimiento)}</Text>
+              </View>
+            )}
+            <View style={styles.detalleRow}>
+              <Text style={[styles.detalleLabel, { color: colors.outline }]}>Cantidad:</Text>
+              <Text style={[styles.detalleValue, { color: colors.primary, fontWeight: '600' }]}>{formatQuantity(detalle.cantidad)}</Text>
+            </View>
+          </View>
+        );
+      case 'salida':
+        return (
+          <View style={styles.detalleContent}>
+            <View style={styles.detalleRow}>
+              <Text style={[styles.detalleLabel, { color: colors.outline }]}>Fecha:</Text>
+              <Text style={[styles.detalleValue, { color: colors.onSurface }]}>{formatDateTime(detalle.fecha)}</Text>
+            </View>
+            {detalle.codigo_lote && (
+              <View style={styles.detalleRow}>
+                <Text style={[styles.detalleLabel, { color: colors.outline }]}>Código Lote:</Text>
+                <Text style={[styles.detalleValue, { color: colors.onSurface }]}>{detalle.codigo_lote}</Text>
+              </View>
+            )}
+            {detalle.motivo && (
+              <View style={styles.detalleRow}>
+                <Text style={[styles.detalleLabel, { color: colors.outline }]}>Motivo:</Text>
+                <Text style={[styles.detalleValue, { color: colors.onSurface }]}>{detalle.motivo}</Text>
+              </View>
+            )}
+            {detalle.tipo_salida && (
+              <View style={styles.detalleRow}>
+                <Text style={[styles.detalleLabel, { color: colors.outline }]}>Tipo Salida:</Text>
+                <Text style={[styles.detalleValue, { color: colors.onSurface }]}>{detalle.tipo_salida}</Text>
+              </View>
+            )}
+            <View style={styles.detalleRow}>
+              <Text style={[styles.detalleLabel, { color: colors.outline }]}>Cantidad:</Text>
+              <Text style={[styles.detalleValue, { color: colors.primary, fontWeight: '600' }]}>{formatQuantity(detalle.cantidad)}</Text>
+            </View>
+          </View>
+        );
+      case 'venta':
+        return (
+          <View style={styles.detalleContent}>
+            <View style={styles.detalleRow}>
+              <Text style={[styles.detalleLabel, { color: colors.outline }]}>Fecha:</Text>
+              <Text style={[styles.detalleValue, { color: colors.onSurface }]}>{formatDateTime(detalle.fecha)}</Text>
+            </View>
+            <View style={styles.detalleRow}>
+              <Text style={[styles.detalleLabel, { color: colors.outline }]}>Cantidad:</Text>
+              <Text style={[styles.detalleValue, { color: colors.primary, fontWeight: '600' }]}>{formatQuantity(detalle.cantidad)}</Text>
+            </View>
+          </View>
+        );
+      case 'movimiento':
+        return (
+          <View style={styles.detalleContent}>
+            <View style={styles.detalleRow}>
+              <Text style={[styles.detalleLabel, { color: colors.outline }]}>Fecha:</Text>
+              <Text style={[styles.detalleValue, { color: colors.onSurface }]}>{formatDateTime(detalle.fecha)}</Text>
+            </View>
+            {detalle.tienda_origen && (
+              <View style={styles.detalleRow}>
+                <Text style={[styles.detalleLabel, { color: colors.outline }]}>Origen:</Text>
+                <Text style={[styles.detalleValue, { color: colors.onSurface }]}>{detalle.tienda_origen}</Text>
+              </View>
+            )}
+            {detalle.tienda_destino && (
+              <View style={styles.detalleRow}>
+                <Text style={[styles.detalleLabel, { color: colors.outline }]}>Destino:</Text>
+                <Text style={[styles.detalleValue, { color: colors.onSurface }]}>{detalle.tienda_destino}</Text>
+              </View>
+            )}
+            <View style={styles.detalleRow}>
+              <Text style={[styles.detalleLabel, { color: colors.outline }]}>Cantidad:</Text>
+              <Text style={[styles.detalleValue, { color: colors.primary, fontWeight: '600' }]}>{formatQuantity(detalle.cantidad)}</Text>
+            </View>
+          </View>
+        );
+      default:
+        return null;
+    }
   };
 
   const styles = createStyles(responsive);
@@ -332,16 +382,6 @@ const InformeSeguimientoProductoContent = () => {
         <Card style={[styles.filterCard, { backgroundColor: colors.surface }]}>
           <View style={styles.filterHeader}>
             <Text style={[styles.filterTitle, { color: colors.onSurface }]}>Filtros</Text>
-            <TouchableOpacity 
-              style={[styles.expandButton, { backgroundColor: isDarkMode ? colors.primaryContainer : '#E3F2FD', borderColor: colors.primary }]}
-              onPress={() => setShowAdvancedFilters(!showAdvancedFilters)}
-            >
-              <Ionicons 
-                name={showAdvancedFilters ? "chevron-up" : "chevron-down"} 
-                size={responsive.responsiveWidth(24)} 
-                color={isDarkMode ? colors.primary : '#1976D2'} 
-              />
-            </TouchableOpacity>
           </View>
 
           <View style={styles.filterRow}>
@@ -440,77 +480,73 @@ const InformeSeguimientoProductoContent = () => {
             )}
           </View>
 
-          {/* Advanced Filters */}
-          {showAdvancedFilters && (
-            <View style={styles.advancedFiltersContainer}>
-              <View style={styles.filterGroup}>
-                <Text style={[styles.label, { color: colors.outline }]}>Tienda</Text>
-                <View style={styles.inputContainer}>
-                  <TextInput
-                    style={[styles.input, styles.inputWithDropdown, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                    placeholderTextColor={colors.outline}
-                    placeholder="Seleccionar tienda..."
-                    value={filters.tienda}
-                    onChangeText={(text) => {
-                      setFilters(prev => ({ ...prev, tienda: text }));
-                      setTiendaSearchText(text);
-                    }}
-                    onFocus={() => setShowTiendaDropdown(true)}
-                  />
-                  <TouchableOpacity
-                    style={styles.dropdownIcon}
-                    onPress={() => setShowTiendaDropdown(!showTiendaDropdown)}
-                  >
-                    <Ionicons name={showTiendaDropdown ? "chevron-up" : "chevron-down"} size={20} color={colors.outline} />
-                  </TouchableOpacity>
-                </View>
-                {showTiendaDropdown && (
-                  <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                    <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
-                      {isLoadingTiendas ? (
-                        <View style={styles.dropdownLoadingContainer}>
-                          <ActivityIndicator size="small" color={colors.primary} />
-                          <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando tiendas...</Text>
-                        </View>
-                      ) : (
-                        <>
+          {/* Tienda field (mandatory, outside collapsible) */}
+          <View style={styles.filterGroup}>
+            <Text style={[styles.label, { color: colors.outline }]}>Tienda *</Text>
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={[styles.input, styles.inputWithDropdown, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                placeholderTextColor={colors.outline}
+                placeholder="Seleccionar tienda (obligatorio)..."
+                value={filters.tienda}
+                onChangeText={(text) => {
+                  setFilters(prev => ({ ...prev, tienda: text }));
+                  setTiendaSearchText(text);
+                }}
+                onFocus={() => setShowTiendaDropdown(true)}
+              />
+              <TouchableOpacity
+                style={styles.dropdownIcon}
+                onPress={() => setShowTiendaDropdown(!showTiendaDropdown)}
+              >
+                <Ionicons name={showTiendaDropdown ? "chevron-up" : "chevron-down"} size={20} color={colors.outline} />
+              </TouchableOpacity>
+            </View>
+            {showTiendaDropdown && (
+              <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                  {isLoadingTiendas ? (
+                    <View style={styles.dropdownLoadingContainer}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                      <Text style={[styles.dropdownLoadingText, { color: colors.outline }]}>Cargando tiendas...</Text>
+                    </View>
+                  ) : (
+                    <>
+                      <TouchableOpacity
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          setFilters(prev => ({ ...prev, tienda: '' }));
+                          setShowTiendaDropdown(false);
+                          setTiendaSearchText('');
+                        }}
+                      >
+                        <Text style={[styles.dropdownItemText, { color: colors.outline }]}>Seleccionar tienda...</Text>
+                      </TouchableOpacity>
+                      {tiendas.filter(t => t.nombre?.toLowerCase().includes(tiendaSearchText.toLowerCase())).length > 0 ? (
+                        tiendas.filter(t => t.nombre?.toLowerCase().includes(tiendaSearchText.toLowerCase())).map((tienda, index, arr) => (
                           <TouchableOpacity
-                            style={styles.dropdownItem}
+                            key={tienda.id_tienda}
+                            style={[styles.dropdownItem, index === arr.length - 1 && styles.dropdownItemLast]}
                             onPress={() => {
-                              setFilters(prev => ({ ...prev, tienda: '' }));
+                              setFilters(prev => ({ ...prev, tienda: tienda.nombre }));
                               setShowTiendaDropdown(false);
                               setTiendaSearchText('');
                             }}
                           >
-                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todas</Text>
+                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
                           </TouchableOpacity>
-                          {tiendas.filter(t => t.nombre?.toLowerCase().includes(tiendaSearchText.toLowerCase())).length > 0 ? (
-                            tiendas.filter(t => t.nombre?.toLowerCase().includes(tiendaSearchText.toLowerCase())).map((tienda, index, arr) => (
-                              <TouchableOpacity
-                                key={tienda.id_tienda}
-                                style={[styles.dropdownItem, index === arr.length - 1 && styles.dropdownItemLast]}
-                                onPress={() => {
-                                  setFilters(prev => ({ ...prev, tienda: tienda.nombre }));
-                                  setShowTiendaDropdown(false);
-                                  setTiendaSearchText('');
-                                }}
-                              >
-                                <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{tienda.nombre}</Text>
-                              </TouchableOpacity>
-                            ))
-                          ) : (
-                            <View style={styles.dropdownItem}>
-                              <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
-                            </View>
-                          )}
-                        </>
+                        ))
+                      ) : (
+                        <View style={styles.dropdownItem}>
+                          <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron tiendas</Text>
+                        </View>
                       )}
-                    </ScrollView>
-                  </View>
-                )}
+                    </>
+                  )}
+                </ScrollView>
               </View>
-            </View>
-          )}
+            )}
+          </View>
 
           <TouchableOpacity
             style={[styles.generateButton, { backgroundColor: colors.primary }]}
@@ -555,64 +591,93 @@ const InformeSeguimientoProductoContent = () => {
         )}
 
         {/* Results */}
-        {stockMovements.length > 0 && (
+        {seguimientoData && (
           <View style={styles.resultsContainer}>
+            {/* Header Info */}
+            <Card style={[styles.infoCard, { backgroundColor: colors.surface }]}>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: colors.outline }]}>Producto:</Text>
+                <Text style={[styles.infoValue, { color: colors.onSurface }]}>{seguimientoData.producto?.nombre}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: colors.outline }]}>Tienda:</Text>
+                <Text style={[styles.infoValue, { color: colors.onSurface }]}>{seguimientoData.tienda?.nombre}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: colors.outline }]}>Stock Actual:</Text>
+                <Text style={[styles.infoValue, { color: colors.primary, fontWeight: '600' }]}>{formatQuantity(seguimientoData.stock_actual)}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: colors.outline }]}>Total Grupos:</Text>
+                <Text style={[styles.infoValue, { color: colors.onSurface }]}>{seguimientoData.total_grupos}</Text>
+              </View>
+            </Card>
+
             <Text style={[styles.resultsTitle, { color: colors.onSurface }]}>
-              Movimientos ({stockMovements.length})
+              Seguimiento ({seguimientoData.seguimiento?.length || 0} grupos)
             </Text>
-            
-            {stockMovements.map((movement) => (
-              <Card key={movement.id} style={[styles.movementCard, { backgroundColor: colors.surface }]}>
-                <View style={styles.movementHeader}>
-                  <View style={[styles.movementIconContainer, { backgroundColor: movement.type === 'entrada' ? '#E8F5E9' : '#FFEBEE' }]}>
-                    <Ionicons 
-                      name={movement.type === 'entrada' ? 'arrow-down-outline' : 'arrow-up-outline'} 
-                      size={24} 
-                      color={movement.type === 'entrada' ? '#4CAF50' : '#F44336'} 
+
+            {seguimientoData.seguimiento?.map((grupo, index) => {
+              const isExpanded = expandedGroups[index];
+              const groupType = grupo.tipo;
+              const groupColor = getGroupColor(groupType);
+
+              return (
+                <Card key={index} style={[styles.groupCard, { backgroundColor: colors.surface }]}>
+                  <TouchableOpacity
+                    style={styles.groupHeader}
+                    onPress={() => setExpandedGroups(prev => ({ ...prev, [index]: !prev[index] }))}
+                  >
+                    <View style={[styles.groupIconContainer, { backgroundColor: groupColor.bgColor }]}>
+                      <Ionicons name={getGroupIcon(groupType)} size={24} color={groupColor.color} />
+                    </View>
+
+                    <View style={styles.groupInfo}>
+                      <Text style={[styles.groupType, { color: colors.onSurface }]}>
+                        {formatGroupType(groupType, grupo.subtipo)}
+                      </Text>
+                      <Text style={[styles.groupDate, { color: colors.outline }]}>
+                        {formatDate(grupo.fecha_inicio)} - {formatDate(grupo.fecha_fin)}
+                      </Text>
+                      <Text style={[styles.groupQuantity, { color: colors.outline }]}>
+                        {grupo.cantidad_registros} registros
+                      </Text>
+                    </View>
+
+                    <View style={styles.groupAmountContainer}>
+                      <Text style={[styles.groupAmount, { color: groupColor.color }]}>
+                        {grupo.efecto_numerico > 0 ? '+' : ''}{formatQuantity(grupo.efecto_numerico)}
+                      </Text>
+                    </View>
+
+                    <Ionicons
+                      name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={20}
+                      color={colors.outline}
+                      style={styles.chevronIcon}
                     />
-                  </View>
-                  
-                  <View style={styles.movementInfo}>
-                    <Text style={[styles.movementType, { color: colors.onSurface }]}>
-                      {movement.type === 'entrada' ? 'Entrada' : 'Salida'}
-                    </Text>
-                    <Text style={[styles.movementDate, { color: colors.outline }]}>
-                      {formatDate(movement.fecha)}
-                    </Text>
-                    <Text style={[styles.movementProduct, { color: colors.outline }]}>
-                      {movement.producto}
-                    </Text>
-                    <Text style={[styles.movementTienda, { color: colors.outline }]}>
-                      {movement.tienda}
-                    </Text>
-                  </View>
+                  </TouchableOpacity>
 
-                  <View style={styles.movementAmountContainer}>
-                    <Text style={[styles.movementAmount, { color: movement.type === 'entrada' ? '#4CAF50' : '#F44336' }]}>
-                      {movement.type === 'entrada' ? '+' : ''}{formatQuantity(movement.cantidad)}
-                    </Text>
-                    <Text style={[styles.movementBalance, { color: colors.primary }]}>
-                      Stock: {formatQuantity(movement.balance)}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.movementDetails}>
-                  <View style={styles.detailRow}>
-                    <Text style={[styles.detailLabel, { color: colors.outline }]}>Usuario:</Text>
-                    <Text style={[styles.detailValue, { color: colors.onSurface }]}>{movement.usuario}</Text>
-                  </View>
-                </View>
-              </Card>
-            ))}
+                  {isExpanded && (
+                    <View style={styles.groupDetails}>
+                      {grupo.detalles?.map((detalle, detIndex) => (
+                        <View key={detIndex} style={styles.detailItem}>
+                          {renderDetalle(detalle, groupType, colors, responsive)}
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </Card>
+              );
+            })}
           </View>
         )}
 
-        {stockMovements.length === 0 && !isLoading && (
+        {!seguimientoData && !isLoading && (
           <View style={[styles.emptyState, { backgroundColor: colors.surface }]}>
             <Ionicons name="cube-outline" size={60} color={colors.outline} />
             <Text style={[styles.emptyStateText, { color: colors.outline }]}>
-              No hay movimientos para el rango de fechas seleccionado
+              Seleccione un producto y tienda para generar el informe
             </Text>
           </View>
         )}
@@ -856,17 +921,124 @@ const createStyles = (responsive) => StyleSheet.create({
   },
   detailRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: responsive.responsiveMargin(8),
+    marginTop: responsive.responsiveMargin(8),
   },
   detailLabel: {
     fontSize: responsive.responsiveFontSize(12),
     fontFamily: 'Inter',
+    marginRight: responsive.responsiveMargin(8),
   },
   detailValue: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+    flex: 1,
+  },
+  infoCard: {
+    borderRadius: 12,
+    padding: responsive.responsivePadding(16),
+    marginBottom: responsive.responsiveMargin(16),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  infoLabel: {
     fontSize: responsive.responsiveFontSize(14),
     fontFamily: 'Inter',
-    fontWeight: '500',
+    width: responsive.responsiveWidth(120),
+    color: '#757575',
+  },
+  infoValue: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+    flex: 1,
+  },
+  groupCard: {
+    borderRadius: 12,
+    marginBottom: responsive.responsiveMargin(12),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  groupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: responsive.responsivePadding(16),
+  },
+  groupIconContainer: {
+    width: responsive.responsiveWidth(48),
+    height: responsive.responsiveHeight(48),
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: responsive.responsiveMargin(12),
+  },
+  groupInfo: {
+    flex: 1,
+  },
+  groupType: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '600',
+    fontFamily: 'Hanken Grotesk',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  groupDate: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+  },
+  groupQuantity: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(2),
+  },
+  groupAmountContainer: {
+    alignItems: 'flex-end',
+    marginRight: responsive.responsiveMargin(12),
+  },
+  groupAmount: {
+    fontSize: responsive.responsiveFontSize(16),
+    fontWeight: '700',
+    fontFamily: 'Hanken Grotesk',
+  },
+  chevronIcon: {
+    marginLeft: responsive.responsiveMargin(8),
+  },
+  groupDetails: {
+    paddingHorizontal: responsive.responsivePadding(16),
+    paddingBottom: responsive.responsivePadding(16),
+    paddingTop: 0,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  detailItem: {
+    paddingVertical: responsive.responsivePadding(8),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  detalleContent: {
+    paddingVertical: responsive.responsivePadding(8),
+  },
+  detalleRow: {
+    flexDirection: 'row',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  detalleLabel: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+    marginRight: responsive.responsiveMargin(8),
+    width: responsive.responsiveWidth(100),
+  },
+  detalleValue: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+    flex: 1,
   },
 });
 

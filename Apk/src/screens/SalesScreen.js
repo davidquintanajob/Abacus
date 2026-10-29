@@ -320,7 +320,7 @@ const SalesContent = () => {
       if (searchText.length > 0) {
         try {
           setIsSearching(true);
-          const filters = { nombre: searchText, fetchProducto: true, conStock: true };
+          const filters = { nombre: searchText, fetchProducto: true, conStock: true, esvendible: 'true' };
           if (selectedTienda) {
             filters.id_tienda = selectedTienda.id_tienda;
           }

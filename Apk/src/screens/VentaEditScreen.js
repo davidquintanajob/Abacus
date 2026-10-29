@@ -191,7 +191,7 @@ const VentaEditContent = () => {
       }
 
       // Use getServicios with codigo filter to search both services and products
-      const filters = { codigo: code, fetchProducto: true };
+      const filters = { codigo: code, fetchProducto: true, esvendible: 'true' };
       
       const data = await getServicios(filters, 1, 10);
       
@@ -377,7 +377,7 @@ const VentaEditContent = () => {
       if (searchText.length > 0) {
         try {
           setIsSearching(true);
-          const filters = { nombre: searchText, fetchProducto: true, conStock: true };
+          const filters = { nombre: searchText, fetchProducto: true, conStock: true, esvendible: 'true' };
           if (selectedTienda) {
             filters.id_tienda = selectedTienda.id_tienda;
           }
@@ -742,7 +742,7 @@ const VentaEditContent = () => {
         return;
       }
       setIsSearchingServicios(true);
-      const data = await getServicios({ nombre: searchTerm }, 1, 20);
+      const data = await getServicios({ nombre: searchTerm, esvendible: 'true' }, 1, 20);
       setServicioSearchResults(data.data || []);
     } catch (err) {
       setServicioSearchResults([]);

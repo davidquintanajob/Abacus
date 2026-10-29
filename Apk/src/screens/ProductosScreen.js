@@ -173,22 +173,36 @@ const ProductosContent = () => {
       try {
         const fromForm = await AsyncStorage.getItem('productos_from_form');
         const savedState = await AsyncStorage.getItem('productos_state');
-        
+
+        console.log('[ProductosScreen] restoreState - fromForm:', fromForm, 'savedState:', savedState, 'isInitialized:', isInitialized);
+
         if (fromForm === 'true' && savedState && !isInitialized) {
           // Viniendo de ProductoFormScreen, usar filtros guardados
           const parsedState = JSON.parse(savedState);
-          setFilters(parsedState.filters);
-          setPagination(prev => ({ ...prev, currentPage: parsedState.pagination.currentPage }));
+          console.log('[ProductosScreen] Restoring from form with filters:', parsedState.filters);
+
+          if (parsedState.filters.reload) {
+            // If reload flag is set, keep current filters and just trigger reload
+            console.log('[ProductosScreen] Reload flag detected, keeping current filters');
+            setPagination(prev => ({ ...prev, currentPage: 1 }));
+          } else {
+            // Otherwise restore the saved filters
+            setFilters(parsedState.filters);
+            setPagination(prev => ({ ...prev, currentPage: parsedState.pagination.currentPage }));
+          }
+
           setUserTiendaReady(true);
           setIsInitialized(true);
           // Clear the saved state after restoring to avoid issues
           await AsyncStorage.removeItem('productos_state');
           await AsyncStorage.removeItem('productos_from_form');
+          // The initial fetch will be triggered by the useEffect when userTiendaReady becomes true
         } else if (!isInitialized && user?.id_tienda) {
           // No viene de ProductoFormScreen, limpiar AsyncStorage y usar filtros por defecto
+          console.log('[ProductosScreen] Setting default filters for user tienda:', user.id_tienda);
           await AsyncStorage.removeItem('productos_state');
           await AsyncStorage.removeItem('productos_from_form');
-          
+
           const userTienda = {
             id_tienda: user.id_tienda,
             nombre: user.tienda?.nombre || `Tienda ${user.id_tienda}`
@@ -200,10 +214,12 @@ const ProductosContent = () => {
           setIsInitialized(true);
         } else if (!isInitialized) {
           // No hay usuario, solo inicializar
+          console.log('[ProductosScreen] No user, just initializing');
           setUserTiendaReady(true);
           setIsInitialized(true);
         }
       } catch (error) {
+        console.error('[ProductosScreen] Error in restoreState:', error);
         await AsyncStorage.removeItem('productos_state');
         await AsyncStorage.removeItem('productos_from_form');
         setUserTiendaReady(true);
@@ -219,7 +235,9 @@ const ProductosContent = () => {
 
   // Single API call when all data is ready
   useEffect(() => {
+    console.log('[ProductosScreen] Initial fetch check - userTiendaReady:', userTiendaReady, 'hasDoneInitialFetch:', hasDoneInitialFetch.current);
     if (userTiendaReady && !hasDoneInitialFetch.current) {
+      console.log('[ProductosScreen] Triggering initial fetchProductos with filters:', filters);
       fetchProductos();
       hasDoneInitialFetch.current = true;
     }
@@ -231,6 +249,44 @@ const ProductosContent = () => {
       fetchProductos();
     }
   }, [pagination.currentPage]);
+
+  // Check for state restoration when screen regains focus (e.g., after returning from ProductoForm)
+  useFocusEffect(
+    React.useCallback(() => {
+      const checkForStateRestore = async () => {
+        try {
+          const fromForm = await AsyncStorage.getItem('productos_from_form');
+          const savedState = await AsyncStorage.getItem('productos_state');
+
+          console.log('[ProductosScreen] useFocusEffect - fromForm:', fromForm, 'savedState:', savedState);
+
+          if (fromForm === 'true') {
+            if (savedState) {
+              const parsedState = JSON.parse(savedState);
+              console.log('[ProductosScreen] useFocusEffect - Restoring from form with filters:', parsedState.filters);
+
+              // Always use saved filters if they exist
+              setFilters(parsedState.filters);
+              setPagination(prev => ({ ...prev, currentPage: parsedState.pagination.currentPage }));
+              fetchProductos(null, parsedState.filters); // Pass saved filters directly
+            } else {
+              // No saved state, just reload with current filters
+              console.log('[ProductosScreen] useFocusEffect - No saved state, reloading with current filters');
+              setPagination(prev => ({ ...prev, currentPage: 1 }));
+              fetchProductos(null, filters); // Pass current filters directly
+            }
+
+            // Clear the flag after restoring
+            await AsyncStorage.removeItem('productos_from_form');
+          }
+        } catch (error) {
+          console.error('[ProductosScreen] useFocusEffect - Error:', error);
+        }
+      };
+
+      checkForStateRestore();
+    }, [])
+  );
 
   const loadApiBaseUrl = async () => {
     const baseUrl = await getApiBaseUrl();
@@ -287,7 +343,7 @@ const ProductosContent = () => {
       const canViewAllStores = canViewAllProductos;
 
       let allTiendas = [];
-      
+
       if (isOfflineMode) {
         // En modo offline, cargar tiendas de AsyncStorage
         allTiendas = await storageService.getTiendas();
@@ -296,18 +352,23 @@ const ProductosContent = () => {
         const data = await getTiendas({}, 1, 1000);
         allTiendas = data.data || [];
       }
-      
+
+      console.log('[ProductosScreen] loadTiendas - allTiendas count:', allTiendas.length, 'canViewAllStores:', canViewAllStores, 'user.id_tienda:', user?.id_tienda);
+
       // Always default to user's store if they have one
       if (user?.id_tienda) {
         // If user can view all stores, show all stores in dropdown
         // If user cannot view all stores, show only their store
         if (canViewAllStores) {
+          console.log('[ProductosScreen] Setting all tiendas in dropdown');
           setTiendas(allTiendas);
         } else {
           const userTienda = allTiendas.find(t => t.id_tienda === user.id_tienda);
+          console.log('[ProductosScreen] Setting only user tienda in dropdown:', userTienda);
           setTiendas(userTienda ? [userTienda] : []);
         }
       } else {
+        console.log('[ProductosScreen] No user tienda, setting all tiendas');
         setTiendas(allTiendas);
       }
       setHasLoadedAllTiendas(true);
@@ -325,8 +386,11 @@ const ProductosContent = () => {
       setIsLoading(true);
       setError(null);
 
-      // Use override filters if provided, otherwise use current state
       const currentFilters = overrideFilters || filters;
+      const fetchPage = pagination.currentPage;
+      const fetchLimit = pagination.limit;
+
+      console.log('[ProductosScreen] fetchProductos called with filters:', currentFilters, 'page:', fetchPage, 'limit:', fetchLimit);
 
       // Modo offline: usar datos de AsyncStorage
       if (isOfflineMode) {
@@ -439,6 +503,7 @@ const ProductosContent = () => {
   };
 
   const handleSearch = () => {
+    console.log('[ProductosScreen] handleSearch called with filters:', filters);
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
     fetchProductos();
