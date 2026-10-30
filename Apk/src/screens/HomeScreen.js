@@ -37,6 +37,7 @@ const HomeContent = () => {
   const [loadingStockAlerts, setLoadingStockAlerts] = useState(false);
   const [currentDate, setCurrentDate] = useState('');
   const [alertModalVisible, setAlertModalVisible] = useState(false);
+  const [stockAlertModalVisible, setStockAlertModalVisible] = useState(false);
   const [summaryData, setSummaryData] = useState({
     cantidad_productos: 0,
     total_ventas_cup: 0,
@@ -788,13 +789,7 @@ const HomeContent = () => {
             {stockAlertProducts.length > 3 && (
               <TouchableOpacity
                 style={[styles.seeMoreButton, { backgroundColor: `${colors.primary}15` }]}
-                onPress={() => {
-                  showToast({ 
-                    type: 'info', 
-                    message: `Hay ${stockAlertProducts.length} productos en alerta de stock`,
-                    duration: 3000
-                  });
-                }}
+                onPress={() => setStockAlertModalVisible(true)}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.seeMoreText, { color: colors.primary }]}>
@@ -1059,6 +1054,86 @@ const HomeContent = () => {
                     </View>
                   </Card>
                 ))}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de todas las alertas de stock */}
+      <Modal
+        visible={stockAlertModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setStockAlertModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                Todas las Alertas de Stock
+              </Text>
+              <TouchableOpacity
+                onPress={() => setStockAlertModalVisible(false)}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={responsive.responsiveWidth(24)} color={colors.outline} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.modalScroll}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.modalScrollContent}
+            >
+              <View style={styles.modalList}>
+                {stockAlertProducts.map((producto, index) => {
+                  // Filter tiendas that are in alert
+                  const tiendasEnAlerta = producto.tiendas_servicio?.filter(ts => {
+                    const cantidad = parseFloat(ts.cantidad);
+                    const cantidadAlerta = parseFloat(ts.cantidad_alerta);
+                    const isInAlert = ts.cantidad !== null &&
+                      ts.cantidad_alerta !== null &&
+                      !isNaN(cantidad) &&
+                      !isNaN(cantidadAlerta) &&
+                      cantidad > 0 &&
+                      cantidad <= cantidadAlerta;
+
+                    return isInAlert;
+                  }) || [];
+
+                  // Only show product if it has tiendas in alert
+                  if (tiendasEnAlerta.length === 0) return null;
+
+                  return (
+                    <Card
+                      key={index}
+                      style={[
+                        styles.modalStockAlertItem,
+                        {
+                          backgroundColor: colors.surface,
+                          borderLeftWidth: 4,
+                          borderLeftColor: '#F59E0B'
+                        }
+                      ]}
+                    >
+                      <View style={styles.stockAlertContent}>
+                        <View style={styles.stockAlertIconContainer}>
+                          <Ionicons name="warning" size={responsive.responsiveWidth(20)} color="#F59E0B" />
+                        </View>
+                        <View style={styles.stockAlertTextContainer}>
+                          <Text style={[styles.stockAlertProductName, { color: colors.onSurface }]}>
+                            {producto.nombre || 'Producto desconocido'}
+                          </Text>
+                          {tiendasEnAlerta.map((ts, idx) => (
+                            <Text key={idx} style={[styles.stockAlertInfo, { color: colors.outline }]}>
+                              {ts.tienda?.nombre || 'Tienda desconocida'}: {ts.cantidad !== null && ts.cantidad !== undefined ? parseFloat(ts.cantidad).toFixed(2) : '0'}
+                            </Text>
+                          ))}
+                        </View>
+                      </View>
+                    </Card>
+                  );
+                })}
               </View>
             </ScrollView>
           </View>
@@ -1536,5 +1611,23 @@ const createStyles = (responsive) => StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 2,
+  },
+  modalStockAlertItem: {
+    borderRadius: 14,
+    padding: responsive.responsivePadding(12),
+    flexDirection: 'column',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  stockAlertTextContainer: {
+    flex: 1,
+  },
+  stockAlertInfo: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+    marginTop: responsive.responsiveMargin(2),
   },
 });

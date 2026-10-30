@@ -79,16 +79,16 @@ const InformeGeneralContent = () => {
       setLoadingProgress(20);
       setLoadingMessage('Consultando ventas...');
 
-      // Fetch ventas with date filter (use high limit to get all records)
-      const ventasData = await getVentas({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta }, undefined, 1000000);
+      // Fetch ventas with date filter (no limit/page for getAll behavior)
+      const ventasData = await getVentas({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta });
       const ventas = ventasData.data || [];
       const ventasSummary = ventasData.summary || {};
 
       setLoadingProgress(50);
       setLoadingMessage('Consultando salidas...');
 
-      // Fetch salidas with date filter (use high limit to get all records)
-      const salidasData = await getSalidas({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta }, undefined, 1000000);
+      // Fetch salidas with date filter (no limit/page for getAll behavior)
+      const salidasData = await getSalidas({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta });
       const salidas = salidasData.data || [];
 
       setLoadingProgress(70);
@@ -110,10 +110,7 @@ const InformeGeneralContent = () => {
 
       const productosGanancia = new Map();
 
-      console.log('[Informe] Ingresos desde backend summary - CUP:', ingresosVentasCUP, 'USD:', ingresosVentasUSD);
-
       for (const listaVenta of ventas) {
-        console.log('[Informe] Procesando listaVenta ID:', listaVenta.id_lista_venta);
 
         // Income from ListaVenta (amount collected) - for cost distribution
         const efectivoCUP = parseFloat(listaVenta.cantidad_cobrada_efectivo_cup || 0);

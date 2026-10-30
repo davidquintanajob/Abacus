@@ -91,22 +91,9 @@ const InformeSalidasContent = () => {
       setLoadingProgress(20);
       setLoadingMessage('Consultando salidas...');
 
-      let allSalidas = [];
-      let page = 1;
-      const limit = 10000;
-      let hasMore = true;
-
-      while (hasMore) {
-        const salidasData = await getSalidas({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta }, page, limit);
-        const salidas = salidasData.data || [];
-        allSalidas = [...allSalidas, ...salidas];
-
-        hasMore = salidas.length === limit && (salidasData.pagination?.currentPage < salidasData.pagination?.totalPages);
-        page++;
-
-        setLoadingProgress(20 + (page * 15));
-        setLoadingMessage(`Consultando salidas... (${allSalidas.length} registros)`);
-      }
+      // Fetch salidas with date filter (no limit/page for getAll behavior)
+      const salidasData = await getSalidas({ fecha_desde: fechaDesde, fecha_hasta: fechaHasta });
+      const allSalidas = salidasData.data || [];
 
       setLoadingProgress(80);
       setLoadingMessage('Calculando datos...');

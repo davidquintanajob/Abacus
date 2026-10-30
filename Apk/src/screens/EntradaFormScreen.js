@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useResponsive } from '../hooks/useResponsive';
 import { useAuth } from '../context/AuthContext';
 import { useOffline } from '../context/OfflineContext';
-import { createEntrada, updateEntrada, getEntradaById, getEntradas, createEntradasBulk } from '../services/entradaService';
+import { createEntrada, updateEntrada, getEntradaById, getEntradas, createEntradasBulk, createEntradaConFabricacion, updateEntradaConFabricacion } from '../services/entradaService';
 import { getProductos, getProductoById, updateProducto } from '../services/productoService';
 import { getTiendas } from '../services/tiendaService';
 import { getCuentas, createOperacion } from '../services/cuentaService';
@@ -69,6 +69,15 @@ const EntradaFormContent = () => {
   const [multipleShowDatePicker, setMultipleShowDatePicker] = useState({});
   // Tracks if user has manually modified costos (to prevent auto-fill from overwriting)
   const [hasManuallyModifiedCostos, setHasManuallyModifiedCostos] = useState(false);
+  
+  // Estado para modo fabricación
+  const [isFabricacionMode, setIsFabricacionMode] = useState(false);
+  const [fabricaciones, setFabricaciones] = useState([]);
+  const [fabricacionProductoSearchResults, setFabricacionProductoSearchResults] = useState({});
+  const [fabricacionShowProductoDropdown, setFabricacionShowProductoDropdown] = useState({});
+  const [fabricacionIsSearchingProductos, setFabricacionIsSearchingProductos] = useState({});
+  const [fabricacionJustSelectedProducto, setFabricacionJustSelectedProducto] = useState({});
+  const [fabricacionCostoInputTexts, setFabricacionCostoInputTexts] = useState({});
   
   // Estado para el modal de costos sugeridos
   const [showCostSuggestionModal, setShowCostSuggestionModal] = useState(false);
@@ -252,6 +261,38 @@ const EntradaFormContent = () => {
             } catch (err) {
               // Error al obtener producto completo, usar producto inicial
             }
+          }
+          
+          // Check if entrada has fabricaciones
+          const hasFabricaciones = completeEntrada.fabricaciones && completeEntrada.fabricaciones.length > 0;
+          
+          // If it has fabricaciones, activate fabricación mode and load them
+          if (hasFabricaciones) {
+            setIsFabricacionMode(true);
+            setIsMultipleMode(false);
+            
+            // Load fabricaciones
+            const fabricacionesData = await Promise.all(
+              completeEntrada.fabricaciones.map(async (fabricacion) => {
+                try {
+                  const insumoProducto = await getProductoById(fabricacion.servicioTienda.servicio.id_servicio);
+                  return {
+                    id: fabricacion.id_fabricacion,
+                    producto: insumoProducto,
+                    cantidad_insumo: fabricacion.cantidad_insumo.toString(),
+                    costo_insumo_cup: fabricacion.costo_insumo_cup.toString(),
+                    costo_insumo_usd: fabricacion.costo_insumo_usd.toString(),
+                    productoSearchText: insumoProducto.nombre,
+                    showProductoDropdown: false,
+                  };
+                } catch (err) {
+                  console.error('[fetchCompleteEntrada] Error loading fabricacion:', err);
+                  return null;
+                }
+              })
+            );
+            
+            setFabricaciones(fabricacionesData.filter(f => f !== null));
           }
           
           setFormData({
@@ -525,6 +566,77 @@ const EntradaFormContent = () => {
       }
       
       checkAndShowCostSuggestionMultiple();
+      setIsSaving(false);
+      return;
+    }
+    
+    // Validaciones para modo fabricación
+    if (isFabricacionMode) {
+      // Validar producto final
+      if (!formData.producto) {
+        showToast({ type: 'warning', message: 'Debe seleccionar el producto final' });
+        setIsSaving(false);
+        return;
+      }
+      if (!formData.tienda) {
+        showToast({ type: 'warning', message: 'Debe seleccionar una tienda' });
+        setIsSaving(false);
+        return;
+      }
+      if (!formData.cantidad_entrada || parseFloat(formData.cantidad_entrada) <= 0) {
+        showToast({ type: 'warning', message: 'La cantidad producida debe ser mayor que 0' });
+        setIsSaving(false);
+        return;
+      }
+      if (formData.costo_usd !== '' && parseFloat(formData.costo_usd) < 0) {
+        showToast({ type: 'warning', message: 'El costo USD debe ser mayor o igual a 0' });
+        setIsSaving(false);
+        return;
+      }
+      if (formData.costo_cup !== '' && parseFloat(formData.costo_cup) < 0) {
+        showToast({ type: 'warning', message: 'El costo CUP debe ser mayor o igual a 0' });
+        setIsSaving(false);
+        return;
+      }
+      
+      // Validar fecha de vencimiento si el producto es vencible
+      if (formData.producto.producto?.isVencible && !formData.fecha_vencimiento) {
+        showToast({ type: 'warning', message: 'El producto final requiere fecha de vencimiento' });
+        setIsSaving(false);
+        return;
+      }
+      
+      // Validar insumos
+      const validFabricaciones = fabricaciones.filter(f => f.producto !== null);
+      
+      if (validFabricaciones.length === 0) {
+        showToast({ type: 'warning', message: 'Debe agregar al menos un insumo' });
+        setIsSaving(false);
+        return;
+      }
+      
+      // Validar cada insumo
+      for (let i = 0; i < validFabricaciones.length; i++) {
+        const fabricacion = validFabricaciones[i];
+        if (!fabricacion.cantidad_insumo || parseFloat(fabricacion.cantidad_insumo) <= 0) {
+          showToast({ type: 'warning', message: `La cantidad del insumo ${i + 1} debe ser mayor que 0` });
+          setIsSaving(false);
+          return;
+        }
+        if (fabricacion.costo_insumo_usd !== '' && parseFloat(fabricacion.costo_insumo_usd) < 0) {
+          showToast({ type: 'warning', message: `El costo USD del insumo ${i + 1} debe ser mayor o igual a 0` });
+          setIsSaving(false);
+          return;
+        }
+        if (fabricacion.costo_insumo_cup !== '' && parseFloat(fabricacion.costo_insumo_cup) < 0) {
+          showToast({ type: 'warning', message: `El costo CUP del insumo ${i + 1} debe ser mayor o igual a 0` });
+          setIsSaving(false);
+          return;
+        }
+      }
+      
+      // Ejecutar guardado de fabricación
+      executeSaveFabricacion();
       setIsSaving(false);
       return;
     }
@@ -1204,6 +1316,243 @@ const EntradaFormContent = () => {
     }
   };
 
+  const executeSaveFabricacion = async () => {
+    // Helper function to safely convert to number with 5 decimal places
+    const toFixed5 = (value) => {
+      if (value === null || value === undefined || value === '') return 0;
+      const num = typeof value === 'number' ? value : parseFloat(value);
+      return isNaN(num) ? 0 : parseFloat(num.toFixed(5));
+    };
+
+    try {
+      setIsSaving(true);
+
+      // Verificar si el producto final existe en la tienda seleccionada
+      const productoTienda = formData.producto.tiendas_servicio?.find(
+        ts => ts.id_tienda === formData.tienda.id_tienda
+      );
+
+      let id_servicio_tienda = productoTienda?.id_servicio_tienda;
+
+      // Si el producto no existe en la tienda, primero actualizar el producto
+      if (!productoTienda) {
+        const productoActualizado = await getProductoById(formData.producto.id_servicio);
+        const nuevoProductoTienda = {
+          id_tienda: formData.tienda.id_tienda,
+          precio_cup: toFixed5(formData.precio_cup || 0),
+          precio_usd: toFixed5(formData.precio_usd || 0),
+          costo_cup: toFixed5(formData.costo_cup),
+          costo_usd: toFixed5(formData.costo_usd),
+        };
+
+        const productoTiendaList = [
+          ...(productoActualizado.tiendas_servicio || []).map(ts => ({
+            id_tienda: ts.id_tienda,
+            precio_cup: ts.precio_cup,
+            precio_usd: ts.precio_usd,
+            costo_cup: ts.costo_cup,
+            costo_usd: ts.costo_usd,
+            cantidad_alerta: ts.cantidad_alerta,
+          })),
+          nuevoProductoTienda
+        ];
+        
+        await updateProducto(formData.producto.id_servicio, {
+          productoTiendaList: productoTiendaList,
+        });
+
+        // Obtener el producto actualizado para obtener el nuevo id_servicio_tienda
+        const productoActualizado2 = await getProductoById(formData.producto.id_servicio);
+        const nuevoProductoTiendaCreado = productoActualizado2.tiendas_servicio?.find(
+          ts => ts.id_tienda === formData.tienda.id_tienda
+        );
+        id_servicio_tienda = nuevoProductoTiendaCreado?.id_servicio_tienda;
+
+        if (!id_servicio_tienda) {
+          throw new Error('Error al crear relación producto-tienda');
+        }
+      }
+
+      // Preparar datos de la entrada
+      const entradaData = {
+        id_servicio_tienda,
+        cantidad_entrada: parseFloat(formData.cantidad_entrada),
+        costo_usd: toFixed5(formData.costo_usd),
+        costo_cup: toFixed5(formData.costo_cup),
+        fecha_vencimiento: formData.fecha_vencimiento || null,
+        nombre_proveedor: formData.nombre_proveedor || null,
+        fecha: formData.fecha,
+        id_usuario: user.id_usuario,
+      };
+
+      // Preparar datos de las fabricaciones (insumos)
+      const validFabricaciones = fabricaciones.filter(f => f.producto !== null);
+      const fabricacionesData = [];
+
+      // Calcular costo total de los insumos
+      let costoTotalInsumosCup = 0;
+      let costoTotalInsumosUsd = 0;
+
+      for (const fabricacion of validFabricaciones) {
+        // Verificar si el insumo existe en la tienda
+        const insumoTienda = fabricacion.producto?.tiendas_servicio?.find(
+          ts => ts.id_tienda === formData.tienda.id_tienda
+        );
+
+        let id_servicio_tienda_insumo = insumoTienda?.id_servicio_tienda;
+
+        // Si no existe relación, crearla
+        if (!insumoTienda) {
+          const productoActualizado = await getProductoById(fabricacion.producto.id_servicio);
+          const nuevoProductoTienda = {
+            id_tienda: formData.tienda.id_tienda,
+            precio_cup: toFixed5(0),
+            precio_usd: toFixed5(0),
+            costo_cup: toFixed5(fabricacion.costo_insumo_cup),
+            costo_usd: toFixed5(fabricacion.costo_insumo_usd),
+          };
+
+          const productoTiendaList = [
+            ...(productoActualizado.tiendas_servicio || []).map(ts => ({
+              id_tienda: ts.id_tienda,
+              precio_cup: ts.precio_cup,
+              precio_usd: ts.precio_usd,
+              costo_cup: ts.costo_cup,
+              costo_usd: ts.costo_usd,
+              cantidad_alerta: ts.cantidad_alerta,
+            })),
+            nuevoProductoTienda
+          ];
+          
+          await updateProducto(fabricacion.producto.id_servicio, {
+            productoTiendaList: productoTiendaList,
+          });
+
+          const productoActualizado2 = await getProductoById(fabricacion.producto.id_servicio);
+          const nuevoProductoTiendaCreado = productoActualizado2.tiendas_servicio?.find(
+            ts => ts.id_tienda === formData.tienda.id_tienda
+          );
+          id_servicio_tienda_insumo = nuevoProductoTiendaCreado?.id_servicio_tienda;
+
+          if (!id_servicio_tienda_insumo) {
+            throw new Error('Error al crear relación producto-tienda para insumo');
+          }
+        }
+
+        fabricacionesData.push({
+          id_servicio_tienda: id_servicio_tienda_insumo,
+          cantidad_insumo: parseFloat(fabricacion.cantidad_insumo),
+          costo_insumo_cup: toFixed5(fabricacion.costo_insumo_cup),
+          costo_insumo_usd: toFixed5(fabricacion.costo_insumo_usd),
+        });
+
+        // Acumular costo total de insumos
+        costoTotalInsumosCup += parseFloat(fabricacion.cantidad_insumo) * parseFloat(fabricacion.costo_insumo_cup);
+        costoTotalInsumosUsd += parseFloat(fabricacion.cantidad_insumo) * parseFloat(fabricacion.costo_insumo_usd);
+      }
+
+      // Calcular costo por unidad del producto final basado en los insumos
+      const cantidadProducida = parseFloat(formData.cantidad_entrada) || 1;
+      const costoPorUnidadCup = cantidadProducida > 0 ? costoTotalInsumosCup / cantidadProducida : 0;
+      const costoPorUnidadUsd = cantidadProducida > 0 ? costoTotalInsumosUsd / cantidadProducida : 0;
+
+      // Actualizar entradaData con el costo calculado de los insumos
+      entradaData.costo_cup = toFixed5(costoPorUnidadCup);
+      entradaData.costo_usd = toFixed5(costoPorUnidadUsd);
+
+      // Crear entrada con fabricaciones
+      await createEntradaConFabricacion(entradaData, fabricacionesData);
+      showToast({ type: 'success', message: 'Entrada de fabricación creada correctamente' });
+
+      // Wait a moment to ensure backend completes the transaction
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // If coming from modal, navigate to ProductosScreen instead of going back
+      if (fromModal) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Productos', params: { refresh: true } }],
+        });
+      } else {
+        navigation.goBack();
+      }
+    } catch (err) {
+      console.error('[executeSaveFabricacion] Error:', err);
+      // Extract error message from nested error objects
+      let errorMessage = 'Error al crear entrada de fabricación';
+      if (err.message) {
+        errorMessage = err.message;
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      } else if (err.toString) {
+        errorMessage = err.toString();
+      }
+
+      // Clean up error message if it has [Error: ...] format
+      if (errorMessage.startsWith('[Error: ') && errorMessage.endsWith(']')) {
+        errorMessage = errorMessage.substring(8, errorMessage.length - 1);
+      }
+
+      showToast({ type: 'error', message: errorMessage });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const getFabricacionFinancialInfo = () => {
+    if (fabricaciones.length === 0) {
+      return null;
+    }
+
+    let costoTotalCup = 0;
+    let costoTotalUsd = 0;
+
+    fabricaciones.forEach(fabricacion => {
+      const cantidad = parseFloat(fabricacion.cantidad_insumo) || 0;
+      const costoCup = parseFloat(fabricacion.costo_insumo_cup) || 0;
+      const costoUsd = parseFloat(fabricacion.costo_insumo_usd) || 0;
+
+      costoTotalCup += costoCup * cantidad;
+      costoTotalUsd += costoUsd * cantidad;
+    });
+
+    // Get selling price of the final product
+    let precioVentaCup = 0;
+    let precioVentaUsd = 0;
+
+    if (formData.producto && formData.tienda) {
+      const servicioTienda = formData.producto.tiendas_servicio?.find(
+        ts => ts.id_tienda === formData.tienda.id_tienda
+      );
+      precioVentaCup = parseFloat(servicioTienda?.precio_cup) || 0;
+      precioVentaUsd = parseFloat(servicioTienda?.precio_usd) || 0;
+    }
+
+    // Calculate total selling price of all units produced
+    const cantidadProducida = parseFloat(formData.cantidad_entrada) || 0;
+    const precioVentaTotalCup = precioVentaCup * cantidadProducida;
+    const precioVentaTotalUsd = precioVentaUsd * cantidadProducida;
+
+    // Calculate expected total profit (total selling price - total insumos cost)
+    const gananciaCup = precioVentaTotalCup - costoTotalCup;
+    const gananciaUsd = precioVentaTotalUsd - costoTotalUsd;
+
+    // Calculate profit percentage based on total selling price
+    const porcentajeGananciaCup = precioVentaTotalCup > 0 ? (gananciaCup / precioVentaTotalCup) * 100 : 0;
+    const porcentajeGananciaUsd = precioVentaTotalUsd > 0 ? (gananciaUsd / precioVentaTotalUsd) * 100 : 0;
+
+    return {
+      costoTotalCup: !isNaN(costoTotalCup) ? costoTotalCup : 0,
+      costoTotalUsd: !isNaN(costoTotalUsd) ? costoTotalUsd : 0,
+      precioCup: !isNaN(precioVentaCup) ? precioVentaCup : 0,
+      precioUsd: !isNaN(precioVentaUsd) ? precioVentaUsd : 0,
+      gananciaCup: !isNaN(gananciaCup) ? gananciaCup : 0,
+      gananciaUsd: !isNaN(gananciaUsd) ? gananciaUsd : 0,
+      porcentajeGananciaCup: !isNaN(porcentajeGananciaCup) ? porcentajeGananciaCup : 0,
+      porcentajeGananciaUsd: !isNaN(porcentajeGananciaUsd) ? porcentajeGananciaUsd : 0
+    };
+  };
+
   const handleDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
     if (selectedDate) {
@@ -1351,6 +1700,11 @@ const EntradaFormContent = () => {
       return;
     }
 
+    // Si estamos en modo edición y ya se cargaron costos de la entrada, no sobrescribir
+    if (isEditMode && (formData.costo_cup !== '' || formData.costo_usd !== '')) {
+      return;
+    }
+
     const servicioTienda = formData.producto.tiendas_servicio?.find(
       ts => ts.id_tienda === formData.tienda.id_tienda
     );
@@ -1363,7 +1717,7 @@ const EntradaFormContent = () => {
         costo_usd: servicioTienda.costo_usd?.toString() || '',
       }));
     }
-  }, [formData.producto, formData.tienda, hasManuallyModifiedCostos]);
+  }, [formData.producto, formData.tienda, hasManuallyModifiedCostos, isEditMode]);
 
   // Efecto para autorellenar costos en modo múltiple cuando cambia la tienda
   useEffect(() => {
@@ -1590,32 +1944,114 @@ const EntradaFormContent = () => {
     // Mark as manually modified when user changes costos
     updateMultipleEntrada(id, 'hasManuallyModifiedCostos', true);
     
-    let updatedCostoCup = entrada.costo_cup;
-    let updatedCostoUsd = entrada.costo_usd;
+    updateMultipleEntrada(id, field, value === '' ? '' : parseFloat(value));
+  };
+
+  // Funciones para modo fabricación
+  const addNewFabricacion = () => {
+    const newFabricacion = {
+      id: Date.now(), // ID temporal
+      producto: null,
+      cantidad_insumo: '',
+      costo_insumo_cup: '',
+      costo_insumo_usd: '',
+      productoSearchText: '',
+    };
+    setFabricaciones(prev => [...prev, newFabricacion]);
+  };
+
+  const removeFabricacion = (id) => {
+    setFabricaciones(prev => prev.filter(f => f.id !== id));
+  };
+
+  const updateFabricacion = (id, field, value) => {
+    setFabricaciones(prev => prev.map(f => {
+      if (f.id === id) {
+        return { ...f, [field]: value };
+      }
+      return f;
+    }));
+  };
+
+  const handleProductoSelectFabricacion = (id, producto) => {
+    let costoCup = '';
+    let costoUsd = '';
     
-    // First, update the field being edited with the user's typed value
-    if (field === 'costo_cup') {
-      updatedCostoCup = value === '' ? '' : parseFloat(value);
-    } else if (field === 'costo_usd') {
-      updatedCostoUsd = value === '' ? '' : parseFloat(value);
+    if (formData.tienda) {
+      const tiendaServicio = producto.tiendas_servicio?.find(
+        ts => ts.id_tienda === formData.tienda.id_tienda
+      );
+      costoCup = tiendaServicio?.costo_cup?.toString() || '';
+      costoUsd = tiendaServicio?.costo_usd?.toString() || '';
+    } else {
+      const firstTiendaServicio = producto.tiendas_servicio?.[0];
+      costoCup = firstTiendaServicio?.costo_cup?.toString() || '';
+      costoUsd = firstTiendaServicio?.costo_usd?.toString() || '';
     }
     
-    // Then, calculate the exchange rate conversion
-    if (exchangeRate) {
-      if (field === 'costo_cup' && value !== '') {
-        const cupValue = parseFloat(value) || 0;
-        updatedCostoUsd = parseFloat((cupValue / exchangeRate).toFixed(5));
+    updateFabricacion(id, 'producto', producto);
+    updateFabricacion(id, 'costo_insumo_cup', costoCup);
+    updateFabricacion(id, 'costo_insumo_usd', costoUsd);
+    updateFabricacion(id, 'productoSearchText', producto.nombre.trimEnd());
+    
+    setFabricacionShowProductoDropdown(prev => ({ ...prev, [id]: false }));
+    setFabricacionProductoSearchResults(prev => ({ ...prev, [id]: [] }));
+    setFabricacionJustSelectedProducto(prev => ({ ...prev, [id]: true }));
+    
+    Keyboard.dismiss();
+  };
+
+  const searchProductosFabricacion = async (id, searchTerm) => {
+    try {
+      if (isOfflineMode || !searchTerm || searchTerm.length < 2) {
+        setFabricacionProductoSearchResults(prev => ({ ...prev, [id]: [] }));
+        return;
+      }
+      setFabricacionIsSearchingProductos(prev => ({ ...prev, [id]: true }));
+      const data = await getProductos({ nombre: searchTerm, skipCantidadMin: true, skipEsvendible: true }, 1, 20);
+      setFabricacionProductoSearchResults(prev => ({ ...prev, [id]: data.data || [] }));
+    } catch (err) {
+      setFabricacionProductoSearchResults(prev => ({ ...prev, [id]: [] }));
+    } finally {
+      setFabricacionIsSearchingProductos(prev => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const handleCostoChangeFabricacion = (id, field, value) => {
+    updateFabricacion(id, field, value === '' ? '' : parseFloat(value));
+  };
+
+  // Efecto para manejar el dropdown de búsqueda de productos en modo fabricación
+  useEffect(() => {
+    const timeouts = {};
+    
+    fabricaciones.forEach(fabricacion => {
+      if (timeouts[fabricacion.id]) {
+        clearTimeout(timeouts[fabricacion.id]);
       }
       
-      if (field === 'costo_usd' && value !== '') {
-        const usdValue = parseFloat(value) || 0;
-        updatedCostoCup = parseFloat((usdValue * exchangeRate).toFixed(5));
-      }
-    }
+      timeouts[fabricacion.id] = setTimeout(() => {
+        if (fabricacionJustSelectedProducto[fabricacion.id]) {
+          return;
+        }
+        
+        const isMatchingSelectedProduct = fabricacion.producto && 
+          fabricacion.productoSearchText === fabricacion.producto.nombre;
+        
+        if (fabricacion.productoSearchText && fabricacion.productoSearchText.length >= 2 && !isMatchingSelectedProduct) {
+          searchProductosFabricacion(fabricacion.id, fabricacion.productoSearchText);
+          setFabricacionShowProductoDropdown(prev => ({ ...prev, [fabricacion.id]: true }));
+        } else {
+          setFabricacionProductoSearchResults(prev => ({ ...prev, [fabricacion.id]: [] }));
+          setFabricacionShowProductoDropdown(prev => ({ ...prev, [fabricacion.id]: false }));
+        }
+      }, 500);
+    });
     
-    updateMultipleEntrada(id, 'costo_cup', updatedCostoCup);
-    updateMultipleEntrada(id, 'costo_usd', updatedCostoUsd);
-  };
+    return () => {
+      Object.values(timeouts).forEach(timeout => clearTimeout(timeout));
+    };
+  }, [fabricaciones.map(f => f.productoSearchText).join(','), fabricaciones.map(f => f.producto?.nombre).join(','), fabricacionJustSelectedProducto]);
 
   const handleDateChangeMultiple = (id, event, selectedDate) => {
     setMultipleShowDatePicker(prev => ({ ...prev, [id]: false }));
@@ -1859,15 +2295,17 @@ const EntradaFormContent = () => {
                   <Text style={[styles.modeSwitchTitle, { color: colors.onSurface }]}>Entradas</Text>
                   <View style={[styles.modeSwitch, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
                     <TouchableOpacity
-                      style={[styles.modeSwitchButton, !isMultipleMode && styles.modeSwitchButtonActive, !isMultipleMode && { backgroundColor: colors.primary }]}
+                      style={[styles.modeSwitchButton, !isMultipleMode && !isFabricacionMode && styles.modeSwitchButtonActive, !isMultipleMode && !isFabricacionMode && { backgroundColor: colors.primary }]}
                       onPress={() => {
-                        if (isMultipleMode) {
+                        if (isMultipleMode || isFabricacionMode) {
                           setIsMultipleMode(false);
+                          setIsFabricacionMode(false);
                           setMultipleEntradas([]);
+                          setFabricaciones([]);
                         }
                       }}
                     >
-                      <Text style={[styles.modeSwitchButtonText, !isMultipleMode && { color: '#fff' }, { color: !isMultipleMode ? '#fff' : colors.outline }]}>
+                      <Text style={[styles.modeSwitchButtonText, !isMultipleMode && !isFabricacionMode && { color: '#fff' }, { color: !isMultipleMode && !isFabricacionMode ? '#fff' : colors.outline }]}>
                         Simples
                       </Text>
                     </TouchableOpacity>
@@ -1876,6 +2314,8 @@ const EntradaFormContent = () => {
                       onPress={() => {
                         if (!isMultipleMode) {
                           setIsMultipleMode(true);
+                          setIsFabricacionMode(false);
+                          setFabricaciones([]);
                           addNewEntrada();
                         }
                       }}
@@ -1884,12 +2324,27 @@ const EntradaFormContent = () => {
                         Múltiples
                       </Text>
                     </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.modeSwitchButton, isFabricacionMode && styles.modeSwitchButtonActive, isFabricacionMode && { backgroundColor: colors.primary }]}
+                      onPress={() => {
+                        if (!isFabricacionMode) {
+                          setIsFabricacionMode(true);
+                          setIsMultipleMode(false);
+                          setMultipleEntradas([]);
+                          addNewFabricacion();
+                        }
+                      }}
+                    >
+                      <Text style={[styles.modeSwitchButtonText, isFabricacionMode && { color: '#fff' }, { color: isFabricacionMode ? '#fff' : colors.outline }]}>
+                        Fabricación
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
               )}
 
-              {/* Formulario individual (solo visible cuando NO está en modo múltiple) */}
-              {!isMultipleMode && (
+              {/* Formulario individual (solo visible cuando NO está en modo múltiple ni fabricación) */}
+              {!isMultipleMode && !isFabricacionMode && (
                 <>
                   {/* Producto Selection */}
                   <View style={styles.formGroup}>
@@ -2245,7 +2700,7 @@ const EntradaFormContent = () => {
               )}
 
               {/* Campos comunes (tienda, fecha, proveedor) - siempre visibles */}
-              {isMultipleMode && (
+              {(isMultipleMode || isFabricacionMode) && (
                 <>
                   {/* Tienda Selection (común para todas las entradas) */}
                   <View style={styles.formGroup}>
@@ -2341,6 +2796,356 @@ const EntradaFormContent = () => {
                   editable={!isReadOnly}
                 />
               </View>
+
+              {/* Formulario de fabricación */}
+              {isFabricacionMode && (
+                <>
+                  {/* Producto Final y Cantidad Producida en la misma fila */}
+                  <View style={[styles.formRow, { alignItems: 'flex-start' }]}>
+                    <View style={[styles.formColumn, { flex: 0.7, marginRight: responsive.responsiveMargin(8) }]}>
+                      <Text style={[styles.label, { color: colors.outline }]}>Producto Final *</Text>
+                      <View style={styles.relativeContainer}>
+                        <TextInput
+                          ref={productoInputRef}
+                          style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                          placeholderTextColor={colors.outline}
+                          placeholder="Buscar producto final..."
+                          value={productoSearchText}
+                          onChangeText={(text) => {
+                            setProductoSearchText(text);
+                            setJustSelectedProducto(false);
+                          }}
+                          editable={!isReadOnly}
+                          onBlur={() => {
+                            setShowProductoDropdown(false);
+                          }}
+                        />
+                        {showProductoDropdown && !isReadOnly && (
+                          <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                            {isSearchingProductos ? (
+                              <View style={styles.dropdownItem}>
+                                <ActivityIndicator size="small" color={colors.primary} />
+                              </View>
+                            ) : productoSearchResults.length > 0 ? (
+                              productoSearchResults.map((producto, index) => (
+                                <TouchableOpacity
+                                  key={producto.id_servicio}
+                                  style={[styles.dropdownItem, index === productoSearchResults.length - 1 && styles.dropdownItemLast]}
+                                  onPress={() => handleProductoSelect(producto)}
+                                >
+                                  <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{producto.nombre}</Text>
+                                </TouchableOpacity>
+                              ))
+                            ) : (
+                              <View style={styles.dropdownItem}>
+                                <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron productos</Text>
+                              </View>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    </View>
+
+                    <View style={[styles.formColumn, { flex: 0.3 }]}>
+                      <Text style={[styles.label, { color: colors.outline }]}>Cant.Prod *</Text>
+                      <TextInput
+                        style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                        placeholderTextColor={colors.outline}
+                        placeholder="Cantidad"
+                        value={formData.cantidad_entrada}
+                        onChangeText={(text) => setFormData(prev => ({ ...prev, cantidad_entrada: text.replace(/-/g, '') }))}
+                        keyboardType="decimal-pad"
+                        editable={!isReadOnly}
+                      />
+                    </View>
+                  </View>
+
+                  {/* Costos de Producción */}
+                  {canManageEntradas && (
+                    <View style={styles.formRow}>
+                      <View style={[styles.formColumn, styles.formGroup]}>
+                        <Text style={[styles.label, { color: colors.outline }]}>Costo CUP *</Text>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                          placeholderTextColor={colors.outline}
+                          placeholder="Costo CUP"
+                          value={costoInputTexts.costo_cup !== undefined ? costoInputTexts.costo_cup : (formData.costo_cup !== null && formData.costo_cup !== '' ? parseFloat(formData.costo_cup).toFixed(2) : '')}
+                          onFocus={() => setCostoInputTexts(prev => ({ ...prev, costo_cup: formData.costo_cup !== null && formData.costo_cup !== '' ? String(parseFloat(formData.costo_cup)) : '' }))}
+                          onChangeText={(text) => {
+                            setCostoInputTexts(prev => ({ ...prev, costo_cup: text }));
+                            handleCostoChange('costo_cup', text);
+                          }}
+                          onBlur={() => {
+                            if (costoInputTexts.costo_cup !== undefined) {
+                              handleCostoChange('costo_cup', costoInputTexts.costo_cup);
+                            }
+                            setCostoInputTexts(prev => {
+                              const updated = { ...prev };
+                              delete updated.costo_cup;
+                              return updated;
+                            });
+                          }}
+                          keyboardType="decimal-pad"
+                          editable={!isReadOnly}
+                        />
+                      </View>
+
+                      <View style={[styles.formColumn, styles.formGroup]}>
+                        <Text style={[styles.label, { color: colors.outline }]}>Costo USD *</Text>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                          placeholderTextColor={colors.outline}
+                          placeholder="Costo USD"
+                          value={costoInputTexts.costo_usd !== undefined ? costoInputTexts.costo_usd : (formData.costo_usd !== null && formData.costo_usd !== '' ? parseFloat(formData.costo_usd).toFixed(2) : '')}
+                          onFocus={() => setCostoInputTexts(prev => ({ ...prev, costo_usd: formData.costo_usd !== null && formData.costo_usd !== '' ? String(parseFloat(formData.costo_usd)) : '' }))}
+                          onChangeText={(text) => {
+                            setCostoInputTexts(prev => ({ ...prev, costo_usd: text }));
+                            handleCostoChange('costo_usd', text);
+                          }}
+                          onBlur={() => {
+                            if (costoInputTexts.costo_usd !== undefined) {
+                              handleCostoChange('costo_usd', costoInputTexts.costo_usd);
+                            }
+                            setCostoInputTexts(prev => {
+                              const updated = { ...prev };
+                              delete updated.costo_usd;
+                              return updated;
+                            });
+                          }}
+                          keyboardType="decimal-pad"
+                          editable={!isReadOnly}
+                        />
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Fecha de Vencimiento (si el producto es vencible) */}
+                  {formData.producto?.producto?.isVencible && (
+                    <View style={styles.formGroup}>
+                      <Text style={[styles.label, { color: colors.outline }]}>Fecha de Vencimiento *</Text>
+                      <TouchableOpacity
+                        style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                        onPress={() => !isReadOnly && setShowDatePicker(true)}
+                        disabled={isReadOnly}
+                      >
+                        <Text style={[styles.inputText, { color: formData.fecha_vencimiento ? colors.onSurface : colors.outline }]}>
+                          {formData.fecha_vencimiento ? formatDateForDisplay(formData.fecha_vencimiento) : 'Seleccionar...'}
+                        </Text>
+                      </TouchableOpacity>
+                      {showDatePicker && (
+                        <DateTimePicker
+                          value={formData.fecha_vencimiento ? new Date(formData.fecha_vencimiento) : new Date()}
+                          mode="date"
+                          display="default"
+                          onChange={handleDateChange}
+                        />
+                      )}
+                    </View>
+                  )}
+
+                  {/* Lista de Insumos */}
+                  <View style={styles.formGroup}>
+                    <Text style={[styles.label, { color: colors.onSurface, fontWeight: '600' }]}>Insumos de Fabricación</Text>
+                  </View>
+
+                  {fabricaciones.map((fabricacion, index) => (
+                    <View key={fabricacion.id} style={[styles.multipleEntradaCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <View style={styles.multipleEntradaHeader}>
+                        <Text style={[styles.multipleEntradaTitle, { color: colors.onSurface }]}>
+                          Insumo {index + 1}
+                        </Text>
+                        {fabricaciones.length > 1 && (
+                          <TouchableOpacity
+                            onPress={() => removeFabricacion(fabricacion.id)}
+                            style={styles.removeButton}
+                          >
+                            <Ionicons name="close-circle" size={responsive.responsiveWidth(24)} color="#F44336" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+
+                      {/* Producto Insumo */}
+                      <View style={styles.formGroup}>
+                        <Text style={[styles.label, { color: colors.outline }]}>Producto Insumo *</Text>
+                        <View style={styles.relativeContainer}>
+                          <TextInput
+                            style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                            placeholderTextColor={colors.outline}
+                            placeholder="Buscar insumo..."
+                            value={fabricacion.productoSearchText}
+                            onChangeText={(text) => {
+                              updateFabricacion(fabricacion.id, 'productoSearchText', text);
+                              setFabricacionJustSelectedProducto(prev => ({ ...prev, [fabricacion.id]: false }));
+                            }}
+                            editable={!isReadOnly}
+                            onBlur={() => {
+                              setFabricacionShowProductoDropdown(prev => ({ ...prev, [fabricacion.id]: false }));
+                            }}
+                          />
+                          {fabricacionShowProductoDropdown[fabricacion.id] && !isReadOnly && (
+                            <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                              {fabricacionIsSearchingProductos[fabricacion.id] ? (
+                                <View style={styles.dropdownItem}>
+                                  <ActivityIndicator size="small" color={colors.primary} />
+                                </View>
+                              ) : (fabricacionProductoSearchResults[fabricacion.id] || []).length > 0 ? (
+                                (fabricacionProductoSearchResults[fabricacion.id] || []).map((producto, index) => (
+                                  <TouchableOpacity
+                                    key={producto.id_servicio}
+                                    style={[styles.dropdownItem, index === (fabricacionProductoSearchResults[fabricacion.id] || []).length - 1 && styles.dropdownItemLast]}
+                                    onPress={() => handleProductoSelectFabricacion(fabricacion.id, producto)}
+                                  >
+                                    <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{producto.nombre}</Text>
+                                  </TouchableOpacity>
+                                ))
+                              ) : (
+                                <View style={styles.dropdownItem}>
+                                  <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron productos</Text>
+                                </View>
+                              )}
+                            </View>
+                          )}
+                        </View>
+                      </View>
+
+                      {/* Cantidad de Insumo */}
+                      <View style={styles.formGroup}>
+                        <Text style={[styles.label, { color: colors.outline }]}>Cantidad de Insumo *</Text>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                          placeholderTextColor={colors.outline}
+                          placeholder="Cantidad"
+                          value={fabricacion.cantidad_insumo}
+                          onChangeText={(text) => updateFabricacion(fabricacion.id, 'cantidad_insumo', text.replace(/-/g, ''))}
+                          keyboardType="decimal-pad"
+                          editable={!isReadOnly}
+                        />
+                      </View>
+
+                      {/* Costos de Insumo */}
+                      {canManageEntradas && (
+                        <View style={styles.formRow}>
+                          <View style={[styles.formColumn, styles.formGroup]}>
+                            <Text style={[styles.label, { color: colors.outline }]}>Costo Insumo CUP *</Text>
+                            <TextInput
+                              style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                              placeholderTextColor={colors.outline}
+                              placeholder="Costo CUP"
+                              value={
+                                fabricacionCostoInputTexts[fabricacion.id]?.costo_insumo_cup !== undefined
+                                  ? fabricacionCostoInputTexts[fabricacion.id].costo_insumo_cup
+                                  : (fabricacion.costo_insumo_cup !== null && fabricacion.costo_insumo_cup !== '' ? parseFloat(fabricacion.costo_insumo_cup).toFixed(2) : '')
+                              }
+                              onFocus={() => setFabricacionCostoInputTexts(prev => ({
+                                ...prev,
+                                [fabricacion.id]: {
+                                  ...prev[fabricacion.id],
+                                  costo_insumo_cup: fabricacion.costo_insumo_cup !== null && fabricacion.costo_insumo_cup !== '' ? String(parseFloat(fabricacion.costo_insumo_cup)) : ''
+                                }
+                              }))}
+                              onChangeText={(text) => {
+                                setFabricacionCostoInputTexts(prev => ({
+                                  ...prev,
+                                  [fabricacion.id]: {
+                                    ...prev[fabricacion.id],
+                                    costo_insumo_cup: text
+                                  }
+                                }));
+                                handleCostoChangeFabricacion(fabricacion.id, 'costo_insumo_cup', text);
+                              }}
+                              onBlur={() => {
+                                if (fabricacionCostoInputTexts[fabricacion.id]?.costo_insumo_cup !== undefined) {
+                                  handleCostoChangeFabricacion(fabricacion.id, 'costo_insumo_cup', fabricacionCostoInputTexts[fabricacion.id].costo_insumo_cup);
+                                }
+                                setFabricacionCostoInputTexts(prev => {
+                                  const updated = { ...prev };
+                                  if (updated[fabricacion.id]) {
+                                    delete updated[fabricacion.id].costo_insumo_cup;
+                                  }
+                                  return updated;
+                                });
+                              }}
+                              keyboardType="decimal-pad"
+                              editable={!isReadOnly}
+                            />
+                          </View>
+
+                          <View style={[styles.formColumn, styles.formGroup]}>
+                            <Text style={[styles.label, { color: colors.outline }]}>Costo Insumo USD *</Text>
+                            <TextInput
+                              style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                              placeholderTextColor={colors.outline}
+                              placeholder="Costo USD"
+                              value={
+                                fabricacionCostoInputTexts[fabricacion.id]?.costo_insumo_usd !== undefined
+                                  ? fabricacionCostoInputTexts[fabricacion.id].costo_insumo_usd
+                                  : (fabricacion.costo_insumo_usd !== null && fabricacion.costo_insumo_usd !== '' ? parseFloat(fabricacion.costo_insumo_usd).toFixed(2) : '')
+                              }
+                              onFocus={() => setFabricacionCostoInputTexts(prev => ({
+                                ...prev,
+                                [fabricacion.id]: {
+                                  ...prev[fabricacion.id],
+                                  costo_insumo_usd: fabricacion.costo_insumo_usd !== null && fabricacion.costo_insumo_usd !== '' ? String(parseFloat(fabricacion.costo_insumo_usd)) : ''
+                                }
+                              }))}
+                              onChangeText={(text) => {
+                                setFabricacionCostoInputTexts(prev => ({
+                                  ...prev,
+                                  [fabricacion.id]: {
+                                    ...prev[fabricacion.id],
+                                    costo_insumo_usd: text
+                                  }
+                                }));
+                                handleCostoChangeFabricacion(fabricacion.id, 'costo_insumo_usd', text);
+                              }}
+                              onBlur={() => {
+                                if (fabricacionCostoInputTexts[fabricacion.id]?.costo_insumo_usd !== undefined) {
+                                  handleCostoChangeFabricacion(fabricacion.id, 'costo_insumo_usd', fabricacionCostoInputTexts[fabricacion.id].costo_insumo_usd);
+                                }
+                                setFabricacionCostoInputTexts(prev => {
+                                  const updated = { ...prev };
+                                  if (updated[fabricacion.id]) {
+                                    delete updated[fabricacion.id].costo_insumo_usd;
+                                  }
+                                  return updated;
+                                });
+                              }}
+                              keyboardType="decimal-pad"
+                              editable={!isReadOnly}
+                            />
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  ))}
+
+                  {/* Botón para agregar otro insumo */}
+                  {!isReadOnly && (
+                    <TouchableOpacity
+                      style={[
+                        styles.addProductButton,
+                        { backgroundColor: colors.primaryContainer, borderColor: colors.primary }
+                      ]}
+                      onPress={addNewFabricacion}
+                    >
+                      <Ionicons name="add-circle" size={responsive.responsiveWidth(20)} color={!isDark ? '#FFFFFF' : colors.primary} />
+                      <Text style={[styles.addProductButtonText, { color: !isDark ? '#FFFFFF' : colors.primary }]}>
+                        Agregar Insumo
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Info de cantidad de insumos */}
+                  {fabricaciones.length > 0 && (
+                    <View style={[styles.productCountInfo, { backgroundColor: colors.primaryContainer }]}>
+                      <Ionicons name="information-circle" size={responsive.responsiveWidth(18)} color={!isDark ? '#FFFFFF' : colors.primary} />
+                      <Text style={[styles.productCountInfoText, { color: !isDark ? '#FFFFFF' : colors.primary }]}>
+                        {fabricaciones.length} insumo{fabricaciones.length !== 1 ? 's' : ''} agregado{fabricaciones.length !== 1 ? 's' : ''}
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )}
 
               {/* Lista de entradas múltiples */}
               {isMultipleMode && multipleEntradas.map((entrada, index) => (
@@ -2612,6 +3417,73 @@ const EntradaFormContent = () => {
                 </View>
               )}
 
+              {/* Financial Information Section (Fabricación Mode) */}
+              {isFabricacionMode && getFabricacionFinancialInfo() && canManageEntradas && (
+                <View style={[styles.financialInfoSection, { backgroundColor: isDarkMode ? 'rgba(30, 41, 59, 0.8)' : 'rgba(248, 250, 252, 0.8)', borderColor: isDarkMode ? 'rgba(148, 163, 184, 0.3)' : 'rgba(203, 213, 225, 0.5)' }]}>
+                  <View style={styles.financialInfoHeader}>
+                    <Ionicons name="trending-up-outline" size={responsive.responsiveWidth(20)} color={colors.primary} />
+                    <Text style={[styles.financialInfoTitle, { color: colors.onSurface }]}>
+                      Información Financiera
+                    </Text>
+                  </View>
+                  
+                  <View style={[styles.financialInfoDivider, { backgroundColor: colors.outlineVariant }]} />
+                  
+                  {canManageEntradas && (
+                    <>
+                      <View style={styles.financialInfoRow}>
+                        <View style={styles.financialInfoColumn}>
+                          <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Costo Total Insumos CUP</Text>
+                          <Text style={[styles.financialInfoValue, { color: colors.primary }]}>
+                            ${getFabricacionFinancialInfo().costoTotalCup.toFixed(2)}
+                          </Text>
+                        </View>
+                        <View style={styles.financialInfoColumn}>
+                          <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Costo Total Insumos USD</Text>
+                          <Text style={[styles.financialInfoValue, { color: colors.primary }]}>
+                            ${getFabricacionFinancialInfo().costoTotalUsd.toFixed(2)}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={[styles.financialInfoDivider, { backgroundColor: colors.outlineVariant }]} />
+                    </>
+                  )}
+
+                  <View style={styles.financialInfoRow}>
+                    <View style={styles.financialInfoColumn}>
+                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Ganancia Esperada CUP</Text>
+                      <View style={[styles.profitBadge, { backgroundColor: getFabricacionFinancialInfo().gananciaCup >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: getFabricacionFinancialInfo().gananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                        <Text style={[styles.financialInfoValue, { color: getFabricacionFinancialInfo().gananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                          ${getFabricacionFinancialInfo().gananciaCup.toFixed(2)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.financialInfoColumn}>
+                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Ganancia Esperada USD</Text>
+                      <View style={[styles.profitBadge, { backgroundColor: getFabricacionFinancialInfo().gananciaUsd >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: getFabricacionFinancialInfo().gananciaUsd >= 0 ? '#4CAF50' : '#F44336' }]}>
+                        <Text style={[styles.financialInfoValue, { color: getFabricacionFinancialInfo().gananciaUsd >= 0 ? '#4CAF50' : '#F44336' }]}>
+                          ${getFabricacionFinancialInfo().gananciaUsd.toFixed(2)}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={[styles.financialInfoDivider, { backgroundColor: colors.outlineVariant }]} />
+
+                  <View style={styles.financialInfoRow}>
+                    <View style={styles.financialInfoColumn}>
+                      <Text style={[styles.financialInfoLabel, { color: colors.outline }]}>Margen Ganancia</Text>
+                      <View style={[styles.profitBadge, { backgroundColor: getFabricacionFinancialInfo().porcentajeGananciaCup >= 0 ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'), borderColor: getFabricacionFinancialInfo().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                        <Text style={[styles.financialInfoValue, { color: getFabricacionFinancialInfo().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }]}>
+                          {getFabricacionFinancialInfo().porcentajeGananciaCup.toFixed(2)}%
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )}
+
               {/* Financial Information Section (Multiple Mode) */}
               {isMultipleMode && getMultipleFinancialInfo() && canManageEntradas && (
                 <View style={[styles.financialInfoSection, { backgroundColor: isDarkMode ? 'rgba(30, 41, 59, 0.8)' : 'rgba(248, 250, 252, 0.8)', borderColor: isDarkMode ? 'rgba(148, 163, 184, 0.3)' : 'rgba(203, 213, 225, 0.5)' }]}>
@@ -2689,8 +3561,8 @@ const EntradaFormContent = () => {
                 </View>
               )}
 
-              {/* Financial Information Section (View Mode, Edit Mode, and Add Mode) */}
-              {(isViewMode || isEditMode || isAddMode) && getFinancialInfo() && canManageEntradas && (
+              {/* Financial Information Section (View Mode, Edit Mode, and Add Mode) - NOT for fabricación mode */}
+              {(isViewMode || isEditMode || isAddMode) && !isFabricacionMode && getFinancialInfo() && canManageEntradas && (
                 <View style={[styles.financialInfoSection, { backgroundColor: isDarkMode ? 'rgba(30, 41, 59, 0.8)' : 'rgba(248, 250, 252, 0.8)', borderColor: isDarkMode ? 'rgba(148, 163, 184, 0.3)' : 'rgba(203, 213, 225, 0.5)' }]}>
                   <View style={styles.financialInfoHeader}>
                     <Ionicons name="trending-up-outline" size={responsive.responsiveWidth(20)} color={colors.primary} />
@@ -3059,7 +3931,7 @@ const EntradaFormContent = () => {
           <View style={[styles.processingModalContent, { backgroundColor: colors.surface }]}>
             <ActivityIndicator size="large" color={colors.primary} />
             <Text style={[styles.processingModalText, { color: colors.onSurface }]}>
-              {isMultipleMode ? 'Procesando entradas múltiples...' : 'Procesando entrada...'}
+              {isMultipleMode ? 'Procesando entradas múltiples...' : isFabricacionMode ? 'Procesando entrada de fabricación...' : 'Procesando entrada...'}
             </Text>
             <Text style={[styles.processingModalSubtext, { color: colors.outline }]}>
               Por favor espere, esto puede tomar unos segundos

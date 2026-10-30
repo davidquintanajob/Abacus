@@ -107,3 +107,39 @@ export const createEntradasBulk = async (entradasData) => {
     throw err;
   }
 };
+
+export const createEntradaConFabricacion = async (entradaData, fabricacionesData) => {
+  try {
+    const response = await api.post('/entrada/fabricacion', {
+      ...entradaData,
+      fabricaciones: fabricacionesData,
+    });
+    return response.data;
+  } catch (error) {
+    const errorMessage = error.response?.data?.errors?.[0] ||
+                        error.response?.data?.message ||
+                        error.message ||
+                        'Error al crear entrada con fabricación';
+    const err = new Error(errorMessage);
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
+  }
+};
+
+export const updateEntradaConFabricacion = async (id, entradaData, fabricacionesData) => {
+  try {
+    const response = await api.put(`/entrada/fabricacion/${id}`, {
+      ...entradaData,
+      fabricaciones: fabricacionesData,
+    });
+    return response.data;
+  } catch (error) {
+    const errorMessage = error.response?.data?.errors?.[0] || 
+                        error.response?.data?.message || 
+                        error.message ||
+                        'Error al actualizar entrada con fabricación';
+    const err = new Error(errorMessage);
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
+  }
+};

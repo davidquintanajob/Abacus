@@ -1296,6 +1296,27 @@ const EntradasContent = () => {
                       <Text style={[styles.entradaFecha, { color: colors.outline }]}>
                         Fecha: {new Date(entrada.fecha).toLocaleDateString()}
                       </Text>
+                      {/* Mostrar insumos si es una entrada de fabricación */}
+                      {entrada.fabricaciones && entrada.fabricaciones.length > 0 && (
+                        <View style={styles.insumosContainer}>
+                          <Text style={[styles.insumosTitle, { color: colors.primary }]}>
+                            Insumos utilizados:
+                          </Text>
+                          {entrada.fabricaciones.map((fabricacion, idx) => (
+                            <View key={idx} style={styles.insumoItem}>
+                              <Text style={[styles.insumoNombre, { color: colors.onSurface }]}>
+                                {fabricacion.servicioTienda?.servicio?.nombre || 'N/A'}
+                              </Text>
+                              <Text style={[styles.insumoCantidad, { color: colors.outline }]}>
+                                {fabricacion.cantidad_insumo} unidades
+                              </Text>
+                              <Text style={[styles.insumoCantidadActual, { color: fabricacion.servicioTienda?.cantidad > 0 ? '#4CAF50' : '#F44336' }]}>
+                                Stock actual: {fabricacion.servicioTienda?.cantidad || 0}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
                     </View>
                     {canEditOrDeleteEntrada(entrada) && (
                       <View style={styles.entradaActions}>
@@ -1958,6 +1979,41 @@ const createStyles = (responsive) => StyleSheet.create({
   entradaFecha: {
     fontSize: responsive.fontSizes.bodySmall,
     fontFamily: 'Inter',
+  },
+  insumosContainer: {
+    marginTop: responsive.responsiveMargin(8),
+    paddingTop: responsive.responsiveMargin(8),
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.1)',
+  },
+  insumosTitle: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(4),
+  },
+  insumoItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: responsive.responsiveMargin(2),
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  insumoNombre: {
+    fontSize: responsive.responsiveFontSize(11),
+    fontFamily: 'Inter',
+    flex: 1,
+  },
+  insumoCantidad: {
+    fontSize: responsive.responsiveFontSize(10),
+    fontFamily: 'Inter',
+    marginRight: responsive.responsiveMargin(8),
+  },
+  insumoCantidadActual: {
+    fontSize: responsive.responsiveFontSize(10),
+    fontFamily: 'Inter',
+    fontWeight: '600',
   },
   entradaActions: {
     flexDirection: 'row',

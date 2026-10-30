@@ -82,7 +82,7 @@ const InventarioProductosContent = () => {
     }
 
     try {
-      const result = await getProductos({ nombre: searchText, skipEsvendible: true }, 1, 20);
+      const result = await getProductos({ nombre: searchText, skipEsvendible: true });
       const nombres = [...new Set(result.data?.map(p => p.nombre) || [])];
       setNombreSuggestions(nombres);
     } catch (error) {
@@ -94,16 +94,17 @@ const InventarioProductosContent = () => {
   // Load categories from system
   const loadSystemCategories = async () => {
     try {
-      const result = await getProductos({ skipEsvendible: true }, 1, 1000);
+      const result = await getProductos({ skipEsvendible: true });
       const categorias = [...new Set(result.data?.map(p => p.categoria?.trim()).filter(c => c) || [])];
       setCustomCategories(categorias);
     } catch (error) {
-      console.error('Error loading system categories:', error);
+      console.error('Error loading categories:', error);
     }
   };
 
   useEffect(() => {
-    loadSystemCategories();
+    // Don't auto-load categories on mount to avoid unnecessary API calls
+    // loadSystemCategories();
   }, []);
 
   useEffect(() => {
@@ -160,19 +161,12 @@ const InventarioProductosContent = () => {
     try {
       setLoadingProgress(30);
 
-      console.log('InventarioProductosScreen - Filters:', filters);
-      console.log('InventarioProductosScreen - cantidad_min:', filters.cantidad_min);
-
       // Fetch all products with filters (skip esvendible parameter)
       const filtersWithSkip = { ...filters, skipEsvendible: true };
-      console.log('InventarioProductosScreen - FiltersWithSkip:', filtersWithSkip);
-      
-      const productosData = await getProductos(filtersWithSkip, 1, 100000);
-      console.log('InventarioProductosScreen - ProductosData:', productosData);
-      console.log('InventarioProductosScreen - Productos count:', productosData.data?.length);
-      
+
+      const productosData = await getProductos(filtersWithSkip);
+
       let productos = productosData.data || [];
-      console.log('InventarioProductosScreen - Productos array:', productos);
 
       setLoadingProgress(60);
       setLoadingMessage('Calculando datos...');
@@ -182,14 +176,11 @@ const InventarioProductosContent = () => {
 
       productos.forEach(producto => {
         const tiendasServicio = producto.tiendas_servicio || [];
-        console.log(`InventarioProductosScreen - Producto ${producto.nombre} has ${tiendasServicio.length} tiendas_servicio`);
-        
+
         tiendasServicio.forEach(ts => {
           const cantidad = parseFloat(ts.cantidad) || 0;
           const costoCup = parseFloat(ts.costo_cup) || 0;
           const precioCup = parseFloat(ts.precio_cup) || 0;
-
-          console.log(`InventarioProductosScreen - TiendaServicio cantidad: ${cantidad}, cantidad_min: ${filters.cantidad_min}`);
 
           if (cantidad >= filters.cantidad_min) {
             if (!productStats[producto.id_servicio]) {
