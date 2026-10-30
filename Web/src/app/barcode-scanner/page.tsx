@@ -41,6 +41,8 @@ export default function BarcodeScannerPage() {
   const [scanCount, setScanCount] = useState(0);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [carouselIndex2, setCarouselIndex2] = useState(0);
+  const [gunScannerInput, setGunScannerInput] = useState('');
+  const gunScannerInputRef = useRef<HTMLInputElement>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -115,6 +117,56 @@ export default function BarcodeScannerPage() {
       stopCamera();
     };
   }, [isManualMode]);
+
+  // Handle gun scanner input
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // If the gun scanner input is focused and Enter is pressed
+      if (e.key === 'Enter' && gunScannerInput.trim()) {
+        e.preventDefault();
+        handleGunScannerCode(gunScannerInput.trim());
+        setGunScannerInput('');
+      }
+    };
+
+    // Keep the gun scanner input focused when not in manual mode
+    const focusInterval = setInterval(() => {
+      if (!isManualMode && gunScannerInputRef.current && document.activeElement !== gunScannerInputRef.current) {
+        gunScannerInputRef.current.focus();
+      }
+    }, 100);
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      clearInterval(focusInterval);
+    };
+  }, [gunScannerInput, isManualMode]);
+
+  const handleGunScannerCode = (code: string) => {
+    if (!/^\d+$/.test(code)) {
+      showToast({ type: 'error', message: 'El código debe contener solo números' });
+      return;
+    }
+
+    const codeExists = scannedCodes.some(
+      codigo => codigo.codigo_barras_ean.trim().toLowerCase() === code.trim().toLowerCase()
+    );
+    
+    if (codeExists) {
+      showToast({ type: 'warning', message: 'Este código ya está escaneado' });
+      return;
+    }
+
+    const newCode = {
+      codigo_barras_ean: code.trim(),
+      nota: null
+    };
+
+    setScannedCodes(prev => [...prev, newCode]);
+    showToast({ type: 'success', message: 'Código escaneado correctamente' });
+  };
 
   const startCamera = async () => {
     try {
@@ -351,6 +403,16 @@ export default function BarcodeScannerPage() {
         duration={toast.duration}
         onHide={hideToast}
         toastKey={toast.key}
+      />
+
+      {/* Hidden input for gun scanner */}
+      <input
+        ref={gunScannerInputRef}
+        type="text"
+        value={gunScannerInput}
+        onChange={(e) => setGunScannerInput(e.target.value)}
+        style={{ position: 'absolute', opacity: 0, top: -1000, left: -1000 }}
+        tabIndex={-1}
       />
 
       {/* Main Container with same width as form pages */}

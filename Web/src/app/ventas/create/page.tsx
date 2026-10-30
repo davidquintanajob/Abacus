@@ -66,19 +66,15 @@ const VentasCreatePage = () => {
   const [editingItemPrices, setEditingItemPrices] = useState({ cup: '', usd: '' });
   
   // Scanner state
-  const [showCamera, setShowCamera] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('scannerEnabled');
-      return saved !== null ? saved === 'true' : true;
-    }
-    return true;
-  });
+  const [showCamera, setShowCamera] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const [lastScannedCode, setLastScannedCode] = useState<string | null>(null);
   const [lastScannedTimestamp, setLastScannedTimestamp] = useState<number | null>(null);
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const gunScannerInputRef = useRef<HTMLInputElement>(null);
+  const [gunScannerInput, setGunScannerInput] = useState('');
   
   // Deuda mode
   const [isDeudaMode, setIsDeudaMode] = useState(false);
@@ -184,15 +180,16 @@ const VentasCreatePage = () => {
       const stopScanner = async () => {
         if (html5QrCodeRef.current) {
           try {
-            // Check if scanner is running before stopping
-            const isRunning = html5QrCodeRef.current.isScanning;
-            if (isRunning) {
-              await html5QrCodeRef.current.stop();
-            }
+            // Try to stop without first checking isScanning to avoid race conditions
+            await html5QrCodeRef.current.stop().catch(() => {
+              // Ignore errors if already stopped or stopping
+            });
             await html5QrCodeRef.current.clear();
             html5QrCodeRef.current = null;
           } catch (error) {
             console.error('Error stopping scanner:', error);
+            // Continue cleanup even if stop fails
+            html5QrCodeRef.current = null;
           }
         }
         setIsScanning(false);
@@ -204,20 +201,66 @@ const VentasCreatePage = () => {
       const cleanup = async () => {
         if (html5QrCodeRef.current) {
           try {
-            // Check if scanner is running before stopping
-            const isRunning = html5QrCodeRef.current.isScanning;
-            if (isRunning) {
-              await html5QrCodeRef.current.stop();
-            }
+            await html5QrCodeRef.current.stop().catch(() => {
+              // Ignore errors if already stopped or stopping
+            });
             await html5QrCodeRef.current.clear();
           } catch (error) {
             console.error('Error cleaning up scanner:', error);
           }
+          html5QrCodeRef.current = null;
         }
       };
       cleanup();
     };
   }, [showCamera]);
+
+  // Handle gun scanner input
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && gunScannerInput.trim()) {
+        e.preventDefault();
+        handleGunScannerCode(gunScannerInput.trim());
+        setGunScannerInput('');
+      }
+    };
+
+    const focusInterval = setInterval(() => {
+      if (gunScannerInputRef.current && document.activeElement !== gunScannerInputRef.current) {
+        gunScannerInputRef.current.focus();
+      }
+    }, 100);
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      clearInterval(focusInterval);
+    };
+  }, [gunScannerInput]);
+
+  const handleGunScannerCode = async (code: string) => {
+    if (!selectedTienda) {
+      showToast({ type: 'warning', message: 'Selecciona una tienda primero' });
+      return;
+    }
+
+    try {
+      const filters: any = { codigo: code, fetchProducto: true };
+      filters.id_tienda = selectedTienda.id_tienda;
+
+      const products = await getServicios(filters, 1, 10);
+      
+      if (products.data && products.data.length > 0) {
+        handleAddProduct(products.data[0]);
+      } else {
+        showToast({ type: 'error', message: 'Producto no encontrado con este código de barras' });
+      }
+    } catch (error) {
+      console.error('Error searching product by code:', error);
+      showToast({ type: 'error', message: 'Error al buscar producto' });
+    }
+  };
 
   // Permissions
   const canViewAllStores = 
@@ -446,11 +489,21 @@ const VentasCreatePage = () => {
 
   const handleAddProduct = (product: any) => {
     const itemExists = saleItems.some(
-      (item) => item.codigo_barras_ean?.trim().toLowerCase() === product.codigos?.[0]?.codigo_barras_ean?.trim().toLowerCase()
+      (item) => item.id_servicio === product.id_servicio
     );
 
     if (itemExists) {
-      showToast({ type: 'warning', message: 'Este producto ya está en la lista' });
+      // Find the existing item and increase its quantity
+      const existingIndex = saleItems.findIndex(
+        (item) => item.id_servicio === product.id_servicio
+      );
+      if (existingIndex !== -1) {
+        const newItems = [...saleItems];
+        newItems[existingIndex].cantidad += 1;
+        setSaleItems(newItems);
+        playBeep();
+        showToast({ type: 'success', message: 'Cantidad aumentada' });
+      }
       return;
     }
 
@@ -838,6 +891,16 @@ const VentasCreatePage = () => {
 
   return (
     <div style={{ backgroundColor: colors.background, minHeight: '100vh' }}>
+      {/* Hidden input for gun scanner */}
+      <input
+        ref={gunScannerInputRef}
+        type="text"
+        value={gunScannerInput}
+        onChange={(e) => setGunScannerInput(e.target.value)}
+        style={{ position: 'absolute', opacity: 0, top: -1000, left: -1000 }}
+        tabIndex={-1}
+      />
+
       <Header 
         showBackButton={true}
         onBackPress={() => router.push('/ventas')}

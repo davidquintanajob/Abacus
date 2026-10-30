@@ -80,6 +80,8 @@ const VentasEditPage = () => {
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const gunScannerInputRef = useRef<HTMLInputElement>(null);
+  const [gunScannerInput, setGunScannerInput] = useState('');
   const [isPreferenceLoaded, setIsPreferenceLoaded] = useState(false);
   
   // Deuda mode
@@ -125,17 +127,22 @@ const VentasEditPage = () => {
         setSelectedTienda(ventaTienda);
         
         // Set sale items
-        const items = venta.ventas?.map((v: any) => ({
-          id_servicio_tienda: v.id_servicio_tienda,
-          id_servicio: v.servicio?.id_servicio,
-          nombre: v.servicio?.nombre,
-          imagen: v.servicio?.producto?.imagen,
-          cantidad: v.cantidad,
-          precio_cup: v.precio_cobrado_cup,
-          precio_usd: v.precio_cobrado_usd,
-          precio_original_cup: v.precio_cobrado_cup,
-          precio_original_usd: v.precio_cobrado_usd,
-        })) || [];
+        const items = venta.ventas?.map((v: any) => {
+          const servicio = v.servicio || v.servicioTienda?.servicio;
+          
+          return {
+            id_servicio_tienda: v.id_servicio_tienda,
+            id_servicio: servicio?.id_servicio || v.id_servicio,
+            nombre: servicio?.nombre || 'Sin nombre',
+            imagen: servicio?.producto?.imagen || v.imagen || null,
+            cantidad: v.cantidad,
+            precio_cup: v.precio_cobrado_cup,
+            precio_usd: v.precio_cobrado_usd,
+            precio_original_cup: v.precio_cobrado_cup,
+            precio_original_usd: v.precio_cobrado_usd,
+          };
+        }) || [];
+        console.log('Sale items loaded:', items);
         setSaleItems(items);
         
         // Set payment amounts
@@ -476,6 +483,53 @@ const VentasEditPage = () => {
     return () => clearTimeout(debounceTimer);
   }, [searchText, selectedTienda]);
 
+  // Handle gun scanner input
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && gunScannerInput.trim()) {
+        e.preventDefault();
+        handleGunScannerCode(gunScannerInput.trim());
+        setGunScannerInput('');
+      }
+    };
+
+    const focusInterval = setInterval(() => {
+      if (gunScannerInputRef.current && document.activeElement !== gunScannerInputRef.current) {
+        gunScannerInputRef.current.focus();
+      }
+    }, 100);
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      clearInterval(focusInterval);
+    };
+  }, [gunScannerInput]);
+
+  const handleGunScannerCode = async (code: string) => {
+    if (!selectedTienda) {
+      showToast({ type: 'warning', message: 'Selecciona una tienda primero' });
+      return;
+    }
+
+    try {
+      const filters: any = { codigo: code, fetchProducto: true };
+      filters.id_tienda = selectedTienda.id_tienda;
+
+      const products = await getServicios(filters, 1, 10);
+      
+      if (products.data && products.data.length > 0) {
+        handleAddProduct(products.data[0]);
+      } else {
+        showToast({ type: 'error', message: 'Producto no encontrado con este código de barras' });
+      }
+    } catch (error) {
+      console.error('Error searching product by code:', error);
+      showToast({ type: 'error', message: 'Error al buscar producto' });
+    }
+  };
+
   // Calculations
   const totalProducts = saleItems.length;
   const totalCUP = saleItems.reduce((sum, item) => sum + (item.precio_cup * item.cantidad), 0);
@@ -544,6 +598,7 @@ const VentasEditPage = () => {
       updatedItems[existingIndex].cantidad += 1;
       setSaleItems(updatedItems);
       playBeep();
+      showToast({ type: 'success', message: 'Cantidad aumentada' });
     } else {
       const servicioTienda = product.tiendas_servicio?.find(
         (st: any) => st.id_tienda === selectedTienda?.id_tienda
@@ -752,6 +807,16 @@ const VentasEditPage = () => {
 
   return (
     <div style={{ backgroundColor: colors.background, minHeight: '100vh' }}>
+      {/* Hidden input for gun scanner */}
+      <input
+        ref={gunScannerInputRef}
+        type="text"
+        value={gunScannerInput}
+        onChange={(e) => setGunScannerInput(e.target.value)}
+        style={{ position: 'absolute', opacity: 0, top: -1000, left: -1000 }}
+        tabIndex={-1}
+      />
+
       <Header 
         showBackButton={true}
         onBackPress={() => router.push('/ventas')}
