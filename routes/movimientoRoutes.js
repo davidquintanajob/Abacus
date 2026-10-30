@@ -117,6 +117,11 @@ const authenticate = require("../helpers/authenticate");
  *         name: id_servicio
  *         schema:
  *           type: integer
+ *       - in: query
+ *         name: nombre_producto
+ *         schema:
+ *           type: string
+ *         description: Buscar listas que incluyan movimientos asociados a un servicio cuyo nombre coincida
  *     responses:
  *       200:
  *         description: Lista de movimientos con paginación

@@ -502,6 +502,20 @@ const filterSalidas = async (filters, limit, offset) => {
     }
   }
 
+  if (filters.nombre_producto) {
+    const servicioTiendaInclude = include.find(
+      (item) => item.model === ServicioTienda && item.as === "servicioTienda"
+    );
+    const servicioInclude = servicioTiendaInclude.include.find(
+      (item) => item.model === Servicio && item.as === "servicio"
+    );
+    servicioTiendaInclude.required = true;
+    servicioInclude.required = true;
+    servicioInclude.where = {
+      nombre: { [Op.iLike]: `%${filters.nombre_producto}%` },
+    };
+  }
+
   const paginationOptions = limit === undefined ? {} : { limit, offset };
   const { rows, count } = await Salida.findAndCountAll({
     where,

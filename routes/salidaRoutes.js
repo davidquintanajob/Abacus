@@ -64,6 +64,11 @@ const authenticate = require("../helpers/authenticate");
  *         schema:
  *           type: string
  *         description: Buscar por descripción (coincidencia parcial)
+ *       - in: query
+ *         name: nombre_producto
+ *         schema:
+ *           type: string
+ *         description: Buscar por nombre del servicio asociado a la salida (coincidencia parcial)
  *     responses:
  *       200:
  *         description: Lista de salidas con paginación

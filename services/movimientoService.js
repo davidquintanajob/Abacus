@@ -579,6 +579,28 @@ const filterMovimientos = async (filters, limit, offset) => {
   }
   if (filters.id_servicio) movimientoWhere.id_servicio = filters.id_servicio;
 
+  if (filters.nombre_producto) {
+    const movimientosCoincidentes = await Movimiento.findAll({
+      attributes: ["id_movimiento_lista"],
+      where: movimientoWhere,
+      include: [{
+        model: Servicio,
+        as: "servicio",
+        attributes: [],
+        required: true,
+        where: { nombre: { [Op.iLike]: `%${filters.nombre_producto}%` } },
+      }],
+      raw: true,
+    });
+    const idsMovimientoLista = [...new Set(
+      movimientosCoincidentes.map((movimiento) => movimiento.id_movimiento_lista)
+    )];
+    if (idsMovimientoLista.length === 0) {
+      return { rows: [], count: 0 };
+    }
+    where.id_movimiento_lista = { [Op.in]: idsMovimientoLista };
+  }
+
   const include = [
     { model: Usuario, as: "usuario" },
     {

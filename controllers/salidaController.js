@@ -159,7 +159,8 @@ const filterSalidas = async (req, res) => {
       fecha_desde,
       fecha_hasta,
       tipo_salida,
-      descripcion
+      descripcion,
+      nombre_producto,
     } = req.query;
 
     const hasLimit = limit !== undefined;
@@ -201,6 +202,9 @@ const filterSalidas = async (req, res) => {
     }
     if (tipo_salida) filters.tipo_salida = tipo_salida.trim();
     if (descripcion) filters.descripcion = descripcion.trim();
+    if (nombre_producto && nombre_producto.trim()) {
+      filters.nombre_producto = nombre_producto.trim();
+    }
 
     const offset = limitNum === undefined ? undefined : (pageNum - 1) * limitNum;
     const { rows, count } = await salidaService.filterSalidas(filters, limitNum, offset);
