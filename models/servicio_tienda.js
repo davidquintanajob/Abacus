@@ -77,6 +77,16 @@ ServicioTienda.associate = function(models) {
     foreignKey: "id_servicio_tienda",
     as: "entradas",
   });
+  ServicioTienda.hasMany(models.Fabricacion, {
+    foreignKey: "id_servicio_tienda",
+    as: "fabricaciones",
+  });
+  ServicioTienda.belongsToMany(models.Entrada, {
+    through: models.Fabricacion,
+    foreignKey: "id_servicio_tienda",
+    otherKey: "id_entrada",
+    as: "entradasFabricacion",
+  });
   ServicioTienda.hasMany(models.Salida, {
     foreignKey: "id_servicio_tienda",
     as: "salidas",

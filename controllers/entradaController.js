@@ -12,6 +12,60 @@ const handleError = (res, error) => {
   res.status(status).json({ errors });
 };
 
+const validateFabricaciones = (fabricaciones, permitirVacio = false) => {
+  if (!Array.isArray(fabricaciones) || (!permitirVacio && fabricaciones.length === 0)) {
+    throwError(
+      permitirVacio
+        ? "El campo 'fabricaciones' debe ser un arreglo."
+        : "El campo 'fabricaciones' debe ser un arreglo no vacío.",
+      400
+    );
+  }
+
+  const errors = [];
+  const normalized = fabricaciones.map((fabricacion, index) => {
+    if (!fabricacion || typeof fabricacion !== "object" || Array.isArray(fabricacion)) {
+      errors.push(`Fabricación ${index + 1}: El objeto es inválido.`);
+      return null;
+    }
+
+    const {
+      id_servicio_tienda,
+      cantidad_insumo,
+      costo_insumo_cup,
+      costo_insumo_usd,
+    } = fabricacion;
+
+    if (!Number.isInteger(Number(id_servicio_tienda)) || Number(id_servicio_tienda) <= 0) {
+      errors.push(`Fabricación ${index + 1}: El id_servicio_tienda debe ser un entero positivo.`);
+    }
+    if (cantidad_insumo === undefined || cantidad_insumo === null ||
+      !Number.isFinite(Number(cantidad_insumo)) || Number(cantidad_insumo) <= 0) {
+      errors.push(`Fabricación ${index + 1}: La cantidad_insumo debe ser mayor que cero.`);
+    }
+    if (costo_insumo_cup === undefined || costo_insumo_cup === null ||
+      !Number.isFinite(Number(costo_insumo_cup)) || Number(costo_insumo_cup) < 0) {
+      errors.push(`Fabricación ${index + 1}: El costo_insumo_cup es obligatorio y no puede ser negativo.`);
+    }
+    if (costo_insumo_usd === undefined || costo_insumo_usd === null ||
+      !Number.isFinite(Number(costo_insumo_usd)) || Number(costo_insumo_usd) < 0) {
+      errors.push(`Fabricación ${index + 1}: El costo_insumo_usd es obligatorio y no puede ser negativo.`);
+    }
+
+    return {
+      id_servicio_tienda: Number(id_servicio_tienda),
+      cantidad_insumo: Number(cantidad_insumo),
+      costo_insumo_cup: Number(costo_insumo_cup),
+      costo_insumo_usd: Number(costo_insumo_usd),
+    };
+  });
+
+  if (errors.length > 0) {
+    throwError("Datos inválidos en las fabricaciones", 400, errors);
+  }
+  return normalized;
+};
+
 const createEntrada = async (req, res) => {
   try {
     const { id_servicio_tienda, cantidad_entrada, costo_usd, costo_cup, fecha_vencimiento, nombre_proveedor, id_usuario, fecha } = req.body;
@@ -51,6 +105,63 @@ const createEntrada = async (req, res) => {
     };
 
     const newEntrada = await entradaService.createEntrada(entradaData);
+    res.status(201).json({
+      message: "Entrada creada exitosamente",
+      data: newEntrada,
+    });
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
+const createEntradaWithFabricaciones = async (req, res) => {
+  try {
+    const {
+      id_servicio_tienda,
+      cantidad_entrada,
+      costo_usd,
+      costo_cup,
+      fecha_vencimiento,
+      nombre_proveedor,
+      id_usuario,
+      fecha,
+      fabricaciones,
+    } = req.body;
+    const usuarioId = id_usuario || req.user.id_usuario;
+
+    const errors = [];
+    if (!id_servicio_tienda) errors.push("El campo id_servicio_tienda es obligatorio.");
+    if (!cantidad_entrada && cantidad_entrada !== 0) errors.push("La cantidad de entrada es obligatoria.");
+    if (cantidad_entrada !== undefined && (isNaN(cantidad_entrada) || cantidad_entrada <= 0)) {
+      errors.push("La cantidad de entrada debe ser un número mayor que cero.");
+    }
+    if (costo_usd === undefined || costo_usd === null) errors.push("El costo en USD es obligatorio.");
+    if (isNaN(costo_usd) || costo_usd < 0) errors.push("El costo en USD no puede ser negativo.");
+    if (costo_cup === undefined || costo_cup === null) errors.push("El costo en CUP es obligatorio.");
+    if (isNaN(costo_cup) || costo_cup < 0) errors.push("El costo en CUP no puede ser negativo.");
+    if (id_usuario !== undefined && (isNaN(id_usuario) || id_usuario <= 0)) {
+      errors.push("El ID de usuario debe ser un número entero positivo.");
+    }
+    if (fecha !== undefined && isNaN(new Date(fecha).getTime())) {
+      errors.push("La fecha proporcionada no es válida.");
+    }
+    if (errors.length > 0) {
+      throwError("Datos inválidos", 400, errors);
+    }
+
+    const fabricacionesData = validateFabricaciones(fabricaciones);
+    const entradaData = {
+      id_servicio_tienda,
+      cantidad_entrada,
+      costo_usd,
+      costo_cup,
+      fecha_vencimiento: fecha_vencimiento || null,
+      nombre_proveedor: nombre_proveedor || null,
+      id_usuario: usuarioId,
+      fecha: fecha || null,
+    };
+
+    const newEntrada = await entradaService.createEntradaWithFabricaciones(entradaData, fabricacionesData);
     res.status(201).json({
       message: "Entrada creada exitosamente",
       data: newEntrada,
@@ -229,6 +340,70 @@ const updateEntrada = async (req, res) => {
   }
 };
 
+const updateEntradaWithFabricaciones = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      id_servicio_tienda,
+      cantidad_entrada,
+      costo_usd,
+      costo_cup,
+      fecha_vencimiento,
+      nombre_proveedor,
+      id_usuario,
+      fecha,
+      fabricaciones,
+    } = req.body;
+
+    if (Object.keys(req.body).length === 0) {
+      throwError("Se debe proporcionar al menos un campo para actualizar", 400);
+    }
+
+    const errors = [];
+    if (id_servicio_tienda !== undefined &&
+      (!Number.isInteger(Number(id_servicio_tienda)) || Number(id_servicio_tienda) <= 0)) {
+      errors.push("El ID de servicio-tienda debe ser un número entero positivo.");
+    }
+    if (cantidad_entrada !== undefined && (isNaN(cantidad_entrada) || cantidad_entrada <= 0)) {
+      errors.push("La cantidad de entrada debe ser un número mayor que cero.");
+    }
+    if (costo_usd !== undefined && (isNaN(costo_usd) || costo_usd < 0)) {
+      errors.push("El costo en USD no puede ser negativo.");
+    }
+    if (costo_cup !== undefined && (isNaN(costo_cup) || costo_cup < 0)) {
+      errors.push("El costo en CUP no puede ser negativo.");
+    }
+    if (id_usuario !== undefined && (isNaN(id_usuario) || id_usuario <= 0)) {
+      errors.push("El ID de usuario debe ser un número entero positivo.");
+    }
+    if (fecha !== undefined && isNaN(new Date(fecha).getTime())) {
+      errors.push("La fecha proporcionada no es válida.");
+    }
+    if (errors.length > 0) {
+      throwError("Datos inválidos", 400, errors);
+    }
+
+    const fabricacionesData = validateFabricaciones(fabricaciones, true);
+    const updateData = {};
+    if (id_servicio_tienda !== undefined) updateData.id_servicio_tienda = id_servicio_tienda;
+    if (cantidad_entrada !== undefined) updateData.cantidad_entrada = cantidad_entrada;
+    if (costo_usd !== undefined) updateData.costo_usd = costo_usd;
+    if (costo_cup !== undefined) updateData.costo_cup = costo_cup;
+    if (fecha_vencimiento !== undefined) updateData.fecha_vencimiento = fecha_vencimiento || null;
+    if (nombre_proveedor !== undefined) updateData.nombre_proveedor = nombre_proveedor || null;
+    if (id_usuario !== undefined) updateData.id_usuario = id_usuario;
+    if (fecha !== undefined) updateData.fecha = fecha;
+
+    const updated = await entradaService.updateEntrada(id, updateData, fabricacionesData);
+    res.status(200).json({
+      message: "Entrada actualizada correctamente",
+      data: updated,
+    });
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
 const deleteEntrada = async (req, res) => {
   try {
     const { id } = req.params;
@@ -363,9 +538,11 @@ const filterEntradas = async (req, res) => {
 
 module.exports = {
   createEntrada,
+  createEntradaWithFabricaciones,
   createEntradasBulk,
   getEntradaById,
   updateEntrada,
+  updateEntradaWithFabricaciones,
   deleteEntrada,
   filterEntradas,
 };

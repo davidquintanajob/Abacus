@@ -114,6 +114,16 @@ Entrada.associate = function (models) {
     foreignKey: "id_servicio_tienda",
     as: "servicioTienda",
   });
+  Entrada.hasMany(models.Fabricacion, {
+    foreignKey: "id_entrada",
+    as: "fabricaciones",
+  });
+  Entrada.belongsToMany(models.ServicioTienda, {
+    through: models.Fabricacion,
+    foreignKey: "id_entrada",
+    otherKey: "id_servicio_tienda",
+    as: "insumosFabricacion",
+  });
   Entrada.belongsToMany(models.Salida, {
     through: models.SalidaEntrada,
     foreignKey: "id_entrada",

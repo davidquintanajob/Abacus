@@ -93,7 +93,7 @@ const authenticate = require("../helpers/authenticate");
  *         description: Fecha de vencimiento máxima (YYYY-MM-DD) – solo entradas con fecha <=
  *     responses:
  *       200:
- *         description: Lista de entradas con paginación
+ *          description: Lista paginada de entradas con su lista fabricaciones
  *       400:
  *         description: Parámetros inválidos
  *       500:
@@ -118,7 +118,7 @@ router.get("/entrada/filter", authenticate(), entradaController.filterEntradas);
  *         description: ID de la entrada
  *     responses:
  *       200:
- *         description: Entrada encontrada
+ *          description: Entrada encontrada con su lista fabricaciones
  *       404:
  *         description: Entrada no encontrada
  */
@@ -172,7 +172,7 @@ router.get("/entrada/:id", authenticate(), entradaController.getEntradaById);
  *                 description: Fecha y hora de la entrada. Si no se envía, se usa la fecha actual.
  *     responses:
  *       201:
- *         description: Entrada creada exitosamente
+ *          description: Entrada creada exitosamente con su lista fabricaciones
  *       400:
  *         description: Datos inválidos (incluye validaciones de negocio)
  *       404:
@@ -181,6 +181,69 @@ router.get("/entrada/:id", authenticate(), entradaController.getEntradaById);
  *         description: Error interno del servidor
  */
 router.post("/entrada", authenticate(), entradaController.createEntrada);
+
+/**
+ * @swagger
+ * /entrada/fabricacion:
+ *   post:
+ *     summary: Crear una entrada con sus insumos de fabricación
+ *     tags: [Entradas]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [id_servicio_tienda, cantidad_entrada, costo_usd, costo_cup, fabricaciones]
+ *             properties:
+ *               id_servicio_tienda:
+ *                 type: integer
+ *               cantidad_entrada:
+ *                 type: number
+ *               costo_usd:
+ *                 type: number
+ *               costo_cup:
+ *                 type: number
+ *               fecha_vencimiento:
+ *                 type: string
+ *                 format: date
+ *               nombre_proveedor:
+ *                 type: string
+ *               id_usuario:
+ *                 type: integer
+ *               fecha:
+ *                 type: string
+ *                 format: date-time
+ *               fabricaciones:
+ *                 type: array
+ *                 minItems: 1
+ *                 items:
+ *                   type: object
+ *                   required: [id_servicio_tienda, cantidad_insumo, costo_insumo_cup, costo_insumo_usd]
+ *                   properties:
+ *                     id_servicio_tienda:
+ *                       type: integer
+ *                     cantidad_insumo:
+ *                       type: number
+ *                     costo_insumo_cup:
+ *                       type: number
+ *                     costo_insumo_usd:
+ *                       type: number
+ *     responses:
+ *       201:
+ *         description: Entrada y fabricaciones creadas; el inventario de insumos fue actualizado
+ *       400:
+ *         description: Datos inválidos o cantidad de insumos superior al inventario disponible
+ *       404:
+ *         description: Servicio-tienda no encontrado
+ */
+router.post(
+  "/entrada/fabricacion",
+  authenticate(),
+  entradaController.createEntradaWithFabricaciones
+);
 
 /**
  * @swagger
@@ -232,7 +295,7 @@ router.post("/entrada", authenticate(), entradaController.createEntrada);
  *                       description: Si no se envía, se usa la fecha actual (aplica a todas)
  *     responses:
  *       201:
- *         description: Entradas creadas exitosamente
+ *          description: Entradas creadas exitosamente con sus listas fabricaciones
  *       400:
  *         description: Datos inválidos
  *       500:
@@ -296,13 +359,82 @@ router.post("/entrada/bulk", authenticate(), entradaController.createEntradasBul
  *               - Si el nuevo producto es vencible, la fecha_vencimiento es obligatoria.
  *     responses:
  *       200:
- *         description: Entrada actualizada correctamente
+ *          description: Entrada actualizada correctamente con su lista fabricaciones
  *       400:
  *         description: Datos inválidos
  *       404:
  *         description: Entrada no encontrada
  */
 router.put("/entrada/:id", authenticate(), entradaController.updateEntrada);
+
+/**
+ * @swagger
+ * /entrada/fabricacion/{id}:
+ *   put:
+ *     summary: Actualizar una entrada y reemplazar sus insumos de fabricación
+ *     tags: [Entradas]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [fabricaciones]
+ *             properties:
+ *               id_servicio_tienda:
+ *                 type: integer
+ *               cantidad_entrada:
+ *                 type: number
+ *               costo_usd:
+ *                 type: number
+ *               costo_cup:
+ *                 type: number
+ *               fecha_vencimiento:
+ *                 type: string
+ *                 format: date
+ *               nombre_proveedor:
+ *                 type: string
+ *               id_usuario:
+ *                 type: integer
+ *               fecha:
+ *                 type: string
+ *                 format: date-time
+ *               fabricaciones:
+ *                 type: array
+ *                 description: Lista completa de fabricaciones; enviar [] para eliminar todas
+ *                 items:
+ *                   type: object
+ *                   required: [id_servicio_tienda, cantidad_insumo, costo_insumo_cup, costo_insumo_usd]
+ *                   properties:
+ *                     id_servicio_tienda:
+ *                       type: integer
+ *                     cantidad_insumo:
+ *                       type: number
+ *                     costo_insumo_cup:
+ *                       type: number
+ *                     costo_insumo_usd:
+ *                       type: number
+ *     responses:
+ *       200:
+ *         description: Entrada y fabricaciones actualizadas; inventarios ajustados
+ *       400:
+ *         description: Datos inválidos o el ajuste dejaría inventario negativo
+ *       404:
+ *         description: Entrada o servicio-tienda no encontrado
+ */
+router.put(
+  "/entrada/fabricacion/:id",
+  authenticate(),
+  entradaController.updateEntradaWithFabricaciones
+);
 
 /**
  * @swagger

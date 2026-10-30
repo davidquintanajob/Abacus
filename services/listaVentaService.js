@@ -592,12 +592,29 @@ const filterListaVentas = async (filters, limit, offset) => {
       ventasInclude,
       operacionesInclude,
     ],
-    order: [["fecha_hora", "DESC"]],
+    order: [
+      ["fecha_hora", "DESC"],
+      ["id_lista_venta", "DESC"],
+    ],
     distinct: true,
   };
-  const paginationOptions = limit === undefined ? {} : { limit, offset };
-  const { rows, count } = await ListaVenta.findAndCountAll({ ...queryOptions, ...paginationOptions });
-  const allRows = await ListaVenta.findAll(queryOptions);
+  let rows;
+  let count;
+  let allRows;
+  if (limit === undefined) {
+    rows = await ListaVenta.findAll(queryOptions);
+    count = rows.length;
+    allRows = rows;
+  } else {
+    const result = await ListaVenta.findAndCountAll({
+      ...queryOptions,
+      limit,
+      offset,
+    });
+    rows = result.rows;
+    count = result.count;
+    allRows = await ListaVenta.findAll(queryOptions);
+  }
   const summary = {
     total_efectivo_cup: 0,
     total_efectivo_usd: 0,

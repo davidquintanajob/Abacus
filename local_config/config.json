@@ -1,5 +1,5 @@
 {
-  "cupToUsdRate": 800,
+  "cupToUsdRate": 810,
   "permissions": {
     "dependiente": false,
     "almacenero": false,
@@ -17,7 +17,7 @@
     "economico": "none"
   },
   "entradaManagePermissions": {
-    "dependiente": false,
+    "dependiente": true,
     "almacenero": true,
     "economico": false
   },
@@ -64,7 +64,18 @@
           "updatedAt": "2026-09-14T21:31:15.347Z"
         }
       ],
-      "efectivo_usd": [],
+      "efectivo_usd": [
+        {
+          "id_cuenta": 4,
+          "nombre": "Efectivo Usd",
+          "tipo_cuenta": "Efectivo USD",
+          "num_cuenta": null,
+          "nota": null,
+          "fondo": "0",
+          "createdAt": "2026-09-21T19:11:13.873Z",
+          "updatedAt": "2026-10-11T14:36:15.434Z"
+        }
+      ],
       "transferencia_cup": [
         {
           "id_cuenta": 2,
@@ -159,8 +170,9 @@
     "economico": false
   },
   "customCategories": [
+    "Ali",
     "Bebida",
-    "Test"
+    "Panel"
   ],
   "priceChangePermissions": {
     "dependiente": false,

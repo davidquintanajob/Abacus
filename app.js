@@ -377,6 +377,7 @@ const startApp = async () => {
     const { Oferta } = require("./models/oferta");
     const { Codigo } = require("./models/codigo");
     const { Entrada } = require("./models/entrada");
+    const { Fabricacion } = require("./models/fabricacion");
     const { Salida } = require("./models/salida.js");
     const { SalidaEntrada } = require("./models/salida_entrada.js");
     const { Cuenta } = require("./models/cuenta");
@@ -403,6 +404,7 @@ const startApp = async () => {
       Oferta,
       Codigo,
       Entrada,
+      Fabricacion,
       Salida,
       SalidaEntrada,
       Cuenta,
