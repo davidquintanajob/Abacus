@@ -83,12 +83,13 @@ const MovimientosContent = () => {
   
   const today = getCubaDate();
   const sevenDaysAgo = getCubaDateDaysAgo(6); // 6 days ago + today = 7 days total
-  const [filters, setFilters] = useState({ 
-    tipo_movimiento: '', 
-    estado: '', 
-    fecha_desde: sevenDaysAgo, 
-    fecha_hasta: today, 
-    id_tienda_origen: '', 
+  const [filters, setFilters] = useState({
+    nombre_producto: '',
+    tipo_movimiento: '',
+    estado: '',
+    fecha_desde: sevenDaysAgo,
+    fecha_hasta: today,
+    id_tienda_origen: '',
     id_tienda_destino: '',
     id_usuario: ''
   });
@@ -346,12 +347,13 @@ const MovimientosContent = () => {
   };
 
   const handleClearFilters = () => {
-    const clearedFilters = { 
-      tipo_movimiento: '', 
-      estado: '', 
-      fecha_desde: '', 
-      fecha_hasta: '', 
-      id_tienda_origen: '', 
+    const clearedFilters = {
+      nombre_producto: '',
+      tipo_movimiento: '',
+      estado: '',
+      fecha_desde: '',
+      fecha_hasta: '',
+      id_tienda_origen: '',
       id_tienda_destino: '',
       id_usuario: ''
     };
@@ -748,6 +750,23 @@ const MovimientosContent = () => {
                 color={isDarkMode ? colors.primary : '#1976D2'} 
               />
             </TouchableOpacity>
+          </View>
+
+          <View style={styles.filterGroup}>
+            <Text style={[styles.label, { color: colors.outline }]}>Nombre del Producto</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+              placeholderTextColor={colors.outline}
+              placeholder="Buscar por nombre..."
+              value={filters.nombre_producto}
+              onChangeText={(text) => {
+                setFilters(prev => ({ ...prev, nombre_producto: text }));
+              }}
+              onSubmitEditing={() => {
+                setPagination(prev => ({ ...prev, currentPage: 1 }));
+                fetchMovimientos();
+              }}
+            />
           </View>
 
           <View style={styles.filterGroup}>

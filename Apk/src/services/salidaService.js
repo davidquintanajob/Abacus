@@ -20,6 +20,7 @@ export const getSalidas = async (filters = {}, page = undefined, limit = undefin
     if (filters.id_tienda) queryParams.append('id_tienda', filters.id_tienda);
     if (filters.tipo_salida) queryParams.append('tipo_salida', filters.tipo_salida);
     if (filters.descripcion) queryParams.append('descripcion', filters.descripcion);
+    if (filters.nombre_producto) queryParams.append('nombre_producto', filters.nombre_producto);
 
     const response = await api.get(`/salida/filter?${queryParams}`);
     return response.data;

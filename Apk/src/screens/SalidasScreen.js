@@ -65,7 +65,7 @@ const SalidasContent = () => {
   }, [user?.id_tienda]);
 
   // Filter states
-  const [filters, setFilters] = useState({ tipo_salida: '', descripcion: '', fecha_desde: '', fecha_hasta: '', id_tienda: '', id_usuario: '' });
+  const [filters, setFilters] = useState({ nombre_producto: '', tipo_salida: '', descripcion: '', fecha_desde: '', fecha_hasta: '', id_tienda: '', id_usuario: '' });
   const [tiendas, setTiendas] = useState([]);
   const [users, setUsers] = useState([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -371,11 +371,12 @@ const SalidasContent = () => {
       (userRole === 'almacenero' && salidaAccessLevels?.almacenero === 'all_stores') ||
       (userRole === 'económico' && salidaAccessLevels?.economico === 'all_stores');
 
-    const clearedFilters = { 
-      tipo_salida: '', 
-      descripcion: '', 
-      fecha_desde: '', 
-      fecha_hasta: '', 
+    const clearedFilters = {
+      nombre_producto: '',
+      tipo_salida: '',
+      descripcion: '',
+      fecha_desde: '',
+      fecha_hasta: '',
       id_tienda: (!canViewAllSalidas && user?.id_tienda) ? user.id_tienda.toString() : '',
       id_usuario: ''
     };
@@ -793,73 +794,20 @@ const SalidasContent = () => {
           </View>
 
           <View style={styles.filterGroup}>
-            <Text style={[styles.label, { color: colors.outline }]}>Tipo de Salida</Text>
-            <View style={styles.relativeContainer}>
-              <TouchableOpacity
-                style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
-                onPress={() => setShowTipoSalidaDropdown(!showTipoSalidaDropdown)}
-              >
-                <Text style={[styles.dropdownText, { color: filters.tipo_salida ? colors.onSurface : colors.outline }]}>
-                  {filters.tipo_salida || 'Todos los tipos'}
-                </Text>
-                <Ionicons 
-                  name={showTipoSalidaDropdown ? "chevron-up" : "chevron-down"} 
-                  size={responsive.responsiveWidth(20)} 
-                  color={colors.outline} 
-                />
-              </TouchableOpacity>
-              
-              {showTipoSalidaDropdown && (
-                <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                  <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                    <Ionicons 
-                      name="search-outline" 
-                      size={responsive.responsiveWidth(18)} 
-                      color={colors.outline} 
-                      style={styles.searchIcon}
-                    />
-                    <TextInput
-                      style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
-                      placeholderTextColor={colors.outline}
-                      placeholder="Buscar tipo..."
-                      value={tipoSalidaSearchText}
-                      onChangeText={setTipoSalidaSearchText}
-                    />
-                  </View>
-                  <TouchableOpacity
-                    style={styles.dropdownItem}
-                    onPress={() => {
-                      const updatedFilters = { ...filters, tipo_salida: '' };
-                      setFilters(updatedFilters);
-                      setShowTipoSalidaDropdown(false);
-                      setTipoSalidaSearchText('');
-                      setPagination(prev => ({ ...prev, currentPage: 1 }));
-                      fetchSalidas(null, updatedFilters);
-                    }}
-                  >
-                    <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todos los tipos</Text>
-                  </TouchableOpacity>
-                  {[...predefinedSalidaTypes, ...customSalidaTypes]
-                    .filter(type => type.toLowerCase().includes(tipoSalidaSearchText.toLowerCase()))
-                    .map((type, index) => (
-                      <TouchableOpacity
-                        key={type}
-                        style={[styles.dropdownItem, index === ([...predefinedSalidaTypes, ...customSalidaTypes].filter(t => t.toLowerCase().includes(tipoSalidaSearchText.toLowerCase())).length - 1) && styles.dropdownItemLast]}
-                        onPress={() => {
-                          const updatedFilters = { ...filters, tipo_salida: type };
-                          setFilters(updatedFilters);
-                          setShowTipoSalidaDropdown(false);
-                          setTipoSalidaSearchText('');
-                          setPagination(prev => ({ ...prev, currentPage: 1 }));
-                          fetchSalidas(null, updatedFilters);
-                        }}
-                      >
-                        <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{type}</Text>
-                      </TouchableOpacity>
-                    ))}
-                </View>
-              )}
-            </View>
+            <Text style={[styles.label, { color: colors.outline }]}>Nombre del Producto</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+              placeholderTextColor={colors.outline}
+              placeholder="Buscar por nombre..."
+              value={filters.nombre_producto}
+              onChangeText={(text) => {
+                setFilters(prev => ({ ...prev, nombre_producto: text }));
+              }}
+              onSubmitEditing={() => {
+                setPagination(prev => ({ ...prev, currentPage: 1 }));
+                fetchSalidas();
+              }}
+            />
           </View>
 
           <View style={styles.filterGroup}>
@@ -1043,6 +991,76 @@ const SalidasContent = () => {
                     )}
                   </View>
                 )}
+              </View>
+
+              <View style={styles.filterGroup}>
+                <Text style={[styles.label, { color: colors.outline }]}>Tipo de Salida</Text>
+                <View style={styles.relativeContainer}>
+                  <TouchableOpacity
+                    style={[styles.dropdown, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}
+                    onPress={() => setShowTipoSalidaDropdown(!showTipoSalidaDropdown)}
+                  >
+                    <Text style={[styles.dropdownText, { color: filters.tipo_salida ? colors.onSurface : colors.outline }]}>
+                      {filters.tipo_salida || 'Todos los tipos'}
+                    </Text>
+                    <Ionicons
+                      name={showTipoSalidaDropdown ? "chevron-up" : "chevron-down"}
+                      size={responsive.responsiveWidth(20)}
+                      color={colors.outline}
+                    />
+                  </TouchableOpacity>
+
+                  {showTipoSalidaDropdown && (
+                    <View style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                      <View style={[styles.dropdownSearchInput, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                        <Ionicons
+                          name="search-outline"
+                          size={responsive.responsiveWidth(18)}
+                          color={colors.outline}
+                          style={styles.searchIcon}
+                        />
+                        <TextInput
+                          style={[styles.dropdownSearchInputText, { color: colors.onSurface }]}
+                          placeholderTextColor={colors.outline}
+                          placeholder="Buscar tipo..."
+                          value={tipoSalidaSearchText}
+                          onChangeText={setTipoSalidaSearchText}
+                        />
+                      </View>
+                      <TouchableOpacity
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          const updatedFilters = { ...filters, tipo_salida: '' };
+                          setFilters(updatedFilters);
+                          setShowTipoSalidaDropdown(false);
+                          setTipoSalidaSearchText('');
+                          setPagination(prev => ({ ...prev, currentPage: 1 }));
+                          fetchSalidas(null, updatedFilters);
+                        }}
+                      >
+                        <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>Todos los tipos</Text>
+                      </TouchableOpacity>
+                      {[...predefinedSalidaTypes, ...customSalidaTypes]
+                        .filter(type => type.toLowerCase().includes(tipoSalidaSearchText.toLowerCase()))
+                        .map((type, index) => (
+                          <TouchableOpacity
+                            key={type}
+                            style={[styles.dropdownItem, index === ([...predefinedSalidaTypes, ...customSalidaTypes].filter(t => t.toLowerCase().includes(tipoSalidaSearchText.toLowerCase())).length - 1) && styles.dropdownItemLast]}
+                            onPress={() => {
+                              const updatedFilters = { ...filters, tipo_salida: type };
+                              setFilters(updatedFilters);
+                              setShowTipoSalidaDropdown(false);
+                              setTipoSalidaSearchText('');
+                              setPagination(prev => ({ ...prev, currentPage: 1 }));
+                              fetchSalidas(null, updatedFilters);
+                            }}
+                          >
+                            <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{type}</Text>
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+                  )}
+                </View>
               </View>
 
               <View style={styles.filterGroup}>

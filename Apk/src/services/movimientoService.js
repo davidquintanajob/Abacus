@@ -16,6 +16,7 @@ export const getMovimientos = async (filters = {}, page = 1, limit = 10) => {
     if (filters.fecha_hasta) queryParams.append('fecha_hasta', filters.fecha_hasta);
     if (filters.id_servicio_tienda_origen) queryParams.append('id_servicio_tienda_origen', filters.id_servicio_tienda_origen);
     if (filters.id_servicio_tienda_destino) queryParams.append('id_servicio_tienda_destino', filters.id_servicio_tienda_destino);
+    if (filters.nombre_producto) queryParams.append('nombre_producto', filters.nombre_producto);
 
     const response = await api.get(`/movimiento/filter?${queryParams}`);
     return response.data;
