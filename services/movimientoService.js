@@ -1,6 +1,7 @@
 const { Movimiento } = require("../models/movimiento");
 const { MovimientoLista } = require("../models/movimiento_lista");
 const { MovimientoEntrada } = require("../models/movimiento_entrada");
+const { FabricacionMovimiento } = require("../models/fabricacion_movimiento");
 const { MovimientoMovimiento } = require("../models/movimiento_movimiento");
 const { Entrada } = require("../models/entrada");
 const { ServicioTienda } = require("../models/servicio_tienda");
@@ -335,6 +336,13 @@ const revertirMovimientoCompleto = async (id_movimiento_lista, transaction) => {
     transaction,
   });
   if (!lista) return;
+  const movimientoUsadoEnFabricacion = await FabricacionMovimiento.findOne({
+    where: { id_movimiento: { [Op.in]: lista.movimientos.map((movimiento) => movimiento.id_movimiento) } },
+    transaction,
+  });
+  if (movimientoUsadoEnFabricacion) {
+    throwError("No se puede modificar o eliminar este movimiento porque contiene insumos utilizados en una fabricación.", 400);
+  }
 
   if (lista.estado) {
     for (const mov of lista.movimientos) {

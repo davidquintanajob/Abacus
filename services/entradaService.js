@@ -1,10 +1,14 @@
 const { Entrada } = require("../models/entrada");
 const { ServicioTienda } = require("../models/servicio_tienda");
 const { Fabricacion } = require("../models/fabricacion");
+const { FabricacionEntrada } = require("../models/fabricacion_entrada");
+const { FabricacionMovimiento } = require("../models/fabricacion_movimiento");
 const { Servicio } = require("../models/servicio");
 const { Producto } = require("../models/producto");
 const { Usuario } = require("../models/usuario");
 const { Tienda } = require("../models/tienda");
+const { Movimiento } = require("../models/movimiento");
+const { MovimientoLista } = require("../models/movimiento_lista");
 const { Op, Sequelize } = require("sequelize");
 const { throwError } = require("../helpers/errorLauncher");
 
@@ -30,6 +34,8 @@ const getEntradaIncludes = () => [
           { model: Servicio, as: "servicio", include: [{ model: Producto, as: "producto" }] },
         ],
       },
+      { model: FabricacionEntrada, as: "entradasInsumo", include: [{ model: Entrada, as: "entrada" }] },
+      { model: FabricacionMovimiento, as: "movimientosInsumo", include: [{ model: Movimiento, as: "movimiento" }] },
     ],
   },
 ];
@@ -69,6 +75,131 @@ const validateFabricacionesDisponibles = async (
         400
       );
     }
+  }
+};
+
+const getEntradasInsumoDisponibles = async (idServicioTienda, isVencible, transaction, entradaExcluirId) => {
+  const where = {
+    id_servicio_tienda: idServicioTienda,
+    cantidad_restante: { [Op.gt]: 0 },
+  };
+  if (entradaExcluirId) where.id_entrada = { [Op.ne]: entradaExcluirId };
+
+  const order = isVencible
+    ? [
+      [Sequelize.literal('CASE WHEN "fecha_vencimiento" IS NULL THEN 1 ELSE 0 END'), "ASC"],
+      ["fecha_vencimiento", "ASC NULLS LAST"],
+      ["fecha", "ASC"],
+    ]
+    : [["fecha", "ASC"]];
+
+  return Entrada.findAll({
+    where,
+    order,
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+  });
+};
+
+const descontarInsumosFabricacion = async (fabricacion, servicioTienda, transaction, entradaExcluirId) => {
+  const isVencible = servicioTienda.servicio.producto.isVencible;
+  const entradas = await getEntradasInsumoDisponibles(
+    fabricacion.id_servicio_tienda,
+    isVencible,
+    transaction,
+    entradaExcluirId
+  );
+  let pendiente = Number(fabricacion.cantidad_insumo);
+
+  for (const entrada of entradas) {
+    if (pendiente <= 0) break;
+    const disponible = Number(entrada.cantidad_restante);
+    const cantidadUsada = Math.min(disponible, pendiente);
+    await entrada.update({ cantidad_restante: disponible - cantidadUsada }, { transaction });
+    await FabricacionEntrada.create({
+      id_fabricacion: fabricacion.id_fabricacion,
+      id_entrada: entrada.id_entrada,
+      cantidad: cantidadUsada,
+    }, { transaction });
+    pendiente -= cantidadUsada;
+  }
+
+  if (pendiente > 0) {
+    const movimientos = await Movimiento.findAll({
+      where: {
+        id_tienda_destino: servicioTienda.id_tienda,
+        id_servicio: servicioTienda.id_servicio,
+        cantidad_restante: { [Op.gt]: 0 },
+      },
+      include: [{
+        model: MovimientoLista,
+        as: "movimientoLista",
+        required: true,
+        where: { estado: true },
+      }],
+      order: [
+        [{ model: MovimientoLista, as: "movimientoLista" }, "fecha_hora", "ASC"],
+        ["id_movimiento", "ASC"],
+      ],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    for (const movimiento of movimientos) {
+      if (pendiente <= 0) break;
+      const disponible = Number(movimiento.cantidad_restante);
+      const cantidadUsada = Math.min(disponible, pendiente);
+      await movimiento.update({ cantidad_restante: disponible - cantidadUsada }, { transaction });
+      await FabricacionMovimiento.create({
+        id_fabricacion: fabricacion.id_fabricacion,
+        id_movimiento: movimiento.id_movimiento,
+        cantidad: cantidadUsada,
+      }, { transaction });
+      pendiente -= cantidadUsada;
+    }
+  }
+
+  if (pendiente > 0) {
+    throwError("No hay suficientes entradas y movimientos disponibles para cubrir los insumos de la fabricación.", 400);
+  }
+};
+
+const revertirInsumosFabricacion = async (fabricaciones, transaction) => {
+  const ids = fabricaciones.map((fabricacion) => fabricacion.id_fabricacion);
+  if (ids.length === 0) return;
+
+  const entradasFabricacion = await FabricacionEntrada.findAll({
+    where: { id_fabricacion: { [Op.in]: ids } },
+    transaction,
+  });
+  for (const asignacion of entradasFabricacion) {
+    const entrada = await Entrada.findByPk(asignacion.id_entrada, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (!entrada) {
+      throwError(`No se encontró la entrada ${asignacion.id_entrada} para devolver el insumo de fabricación.`, 409);
+    }
+    await entrada.update({
+      cantidad_restante: Number(entrada.cantidad_restante) + Number(asignacion.cantidad),
+    }, { transaction });
+  }
+
+  const movimientosFabricacion = await FabricacionMovimiento.findAll({
+    where: { id_fabricacion: { [Op.in]: ids } },
+    transaction,
+  });
+  for (const asignacion of movimientosFabricacion) {
+    const movimiento = await Movimiento.findByPk(asignacion.id_movimiento, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    if (!movimiento) {
+      throwError(`No se encontró el movimiento ${asignacion.id_movimiento} para devolver el insumo de fabricación.`, 409);
+    }
+    await movimiento.update({
+      cantidad_restante: Number(movimiento.cantidad_restante) + Number(asignacion.cantidad),
+    }, { transaction });
   }
 };
 
@@ -317,13 +448,19 @@ const createEntradaWithFabricaciones = async (entradaData, fabricacionesData) =>
       [...cantidadesFabricacion].map(([id, cantidad]) => [id, -cantidad])
     );
     await applyInventoryDeltas(deltas, servicioTiendasBloqueados, transaction);
-    await Fabricacion.bulkCreate(
-      normalizadas.map((fabricacion) => ({
-        ...fabricacion,
+    for (const fabricacionData of normalizadas) {
+      const fabricacion = await Fabricacion.create({
+        ...fabricacionData,
         id_entrada: nuevaEntrada.id_entrada,
-      })),
-      { transaction }
-    );
+      }, { transaction });
+      const { st } = await validateServicioTiendaProducto(fabricacion.id_servicio_tienda, transaction);
+      await descontarInsumosFabricacion(
+        fabricacion,
+        st,
+        transaction,
+        nuevaEntrada.id_entrada
+      );
+    }
 
     await transaction.commit();
     return await getEntradaWithRelations(nuevaEntrada.id_entrada);
@@ -532,18 +669,18 @@ const updateEntrada = async (id, updateData, fabricacionesData) => {
       );
 
       await applyInventoryDeltas(deltas, contextoFabricaciones.servicioTiendasBloqueados, transaction);
+      await revertirInsumosFabricacion(fabricacionesAnteriores, transaction);
       await Fabricacion.destroy({
         where: { id_entrada: entrada.id_entrada },
         transaction,
       });
-      if (contextoFabricaciones.normalizadas.length > 0) {
-        await Fabricacion.bulkCreate(
-          contextoFabricaciones.normalizadas.map((fabricacion) => ({
-            ...fabricacion,
-            id_entrada: entrada.id_entrada,
-          })),
-          { transaction }
-        );
+      for (const fabricacionData of contextoFabricaciones.normalizadas) {
+        const fabricacion = await Fabricacion.create({
+          ...fabricacionData,
+          id_entrada: entrada.id_entrada,
+        }, { transaction });
+        const { st } = await validateServicioTiendaProducto(fabricacion.id_servicio_tienda, transaction);
+        await descontarInsumosFabricacion(fabricacion, st, transaction, entrada.id_entrada);
       }
     } else {
       if (isChangingServicioTienda) {
@@ -577,6 +714,23 @@ const deleteEntrada = async (id) => {
     });
     if (!entrada) throwError("Entrada no encontrada.", 404);
 
+    const cantidadEntrada = Number(entrada.cantidad_entrada);
+    const cantidadRestante = Number(entrada.cantidad_restante);
+    if (cantidadEntrada !== cantidadRestante) {
+      throwError(
+        `No se puede eliminar esta entrada porque ya se realizaron operaciones con ella. Cantidad original: ${cantidadEntrada}; cantidad restante: ${cantidadRestante}.`,
+        400
+      );
+    }
+
+    const asignacionFabricacion = await FabricacionEntrada.findOne({
+      where: { id_entrada: entrada.id_entrada },
+      transaction,
+    });
+    if (asignacionFabricacion) {
+      throwError("No se puede eliminar esta entrada porque contiene insumos utilizados en una fabricación.", 400);
+    }
+
     const fabricaciones = await Fabricacion.findAll({
       where: { id_entrada: entrada.id_entrada },
       transaction,
@@ -585,6 +739,7 @@ const deleteEntrada = async (id) => {
       [entrada.id_servicio_tienda, ...fabricaciones.map((fabricacion) => fabricacion.id_servicio_tienda)],
       transaction
     );
+    await revertirInsumosFabricacion(fabricaciones, transaction);
     for (const [idServicioTienda, cantidad] of aggregateFabricaciones(fabricaciones)) {
       await updateCantidadServicioTienda(idServicioTienda, cantidad, transaction);
     }
@@ -659,18 +814,29 @@ const filterEntradas = async (filters, limit, offset) => {
   }
 
   if (filters.nombre_servicio) {
+    servicioTiendaInclude.required = true;
     servicioTiendaInclude.include[1].where = {
       nombre: { [Op.iLike]: `%${filters.nombre_servicio}%` },
     };
   }
 
+  const countServicioTiendaInclude = {
+    ...servicioTiendaInclude,
+    include: servicioTiendaInclude.include.map((relation) => ({ ...relation })),
+  };
+  const count = await Entrada.count({
+    where,
+    include: [countServicioTiendaInclude],
+    distinct: true,
+    col: "id_entrada",
+  });
+
   const paginationOptions = limit === undefined ? {} : { limit, offset };
-  const { rows, count } = await Entrada.findAndCountAll({
+  const rows = await Entrada.findAll({
     where,
     include,
     order: [["fecha", "DESC"]],
     ...paginationOptions,
-    distinct: true,
   });
 
   return { rows, count };

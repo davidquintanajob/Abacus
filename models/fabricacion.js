@@ -69,6 +69,14 @@ Fabricacion.associate = function (models) {
     foreignKey: "id_servicio_tienda",
     as: "servicioTienda",
   });
+  Fabricacion.hasMany(models.FabricacionEntrada, {
+    foreignKey: "id_fabricacion",
+    as: "entradasInsumo",
+  });
+  Fabricacion.hasMany(models.FabricacionMovimiento, {
+    foreignKey: "id_fabricacion",
+    as: "movimientosInsumo",
+  });
 };
 
 module.exports = { Fabricacion };
