@@ -1531,28 +1531,38 @@ const SalesContent = () => {
         const totalCUPRounded = roundTo5Decimals(totalCUP);
         const totalUSDRounded = roundTo5Decimals(totalUSD);
 
-        // Calculate price adjustment if there's an initial payment
-        let adjustmentPerItemCUP = 0;
-        let adjustmentPerItemUSD = 0;
-        if (deudaPagoInicial.activo && deudaPagoInicial.cantidad_pagada) {
-          const pagoInicial = parseFloat(deudaPagoInicial.cantidad_pagada || 0);
-          if (deudaMonedaCUP) {
-            const differenceCUP = pagoInicial - totalCUPRounded;
-            const numberOfItems = saleItems.length;
-            adjustmentPerItemCUP = numberOfItems > 0 ? roundTo5Decimals(differenceCUP / numberOfItems) : 0;
-          } else {
-            const differenceUSD = pagoInicial - totalUSDRounded;
-            const numberOfItems = saleItems.length;
-            adjustmentPerItemUSD = numberOfItems > 0 ? roundTo5Decimals(differenceUSD / numberOfItems) : 0;
-          }
-        }
+        // Calculate price adjustment based on percentage of each product in the total
+        // First, calculate the percentage each product represents of the original total
+        const ventasDeuda = saleItems.map(item => {
+          const itemTotalCUP = item.precio_cup * item.cantidad;
+          const itemTotalUSD = item.precio_usd * item.cantidad;
+          const percentageCUP = totalCUPRounded > 0 ? itemTotalCUP / totalCUPRounded : 0;
+          const percentageUSD = totalUSDRounded > 0 ? itemTotalUSD / totalUSDRounded : 0;
 
-        const ventasDeuda = saleItems.map(item => ({
-          id_servicio_tienda: item.id_servicio_tienda,
-          cantidad: item.cantidad,
-          precio_cobrado_cup: roundTo5Decimals(item.precio_cup + adjustmentPerItemCUP),
-          precio_cobrado_usd: roundTo5Decimals(item.precio_usd + adjustmentPerItemUSD),
-        }));
+          // If there's an initial payment, apply the same percentage to the new total paid
+          let newItemTotalCUP = itemTotalCUP;
+          let newItemTotalUSD = itemTotalUSD;
+
+          if (deudaPagoInicial.activo && deudaPagoInicial.cantidad_pagada) {
+            const pagoInicial = parseFloat(deudaPagoInicial.cantidad_pagada || 0);
+            if (deudaMonedaCUP) {
+              newItemTotalCUP = pagoInicial * percentageCUP;
+            } else {
+              newItemTotalUSD = pagoInicial * percentageUSD;
+            }
+          }
+
+          // Calculate the new individual price (total / quantity)
+          const newPrecioCup = item.cantidad > 0 ? newItemTotalCUP / item.cantidad : item.precio_cup;
+          const newPrecioUsd = item.cantidad > 0 ? newItemTotalUSD / item.cantidad : item.precio_usd;
+
+          return {
+            id_servicio_tienda: item.id_servicio_tienda,
+            cantidad: item.cantidad,
+            precio_cobrado_cup: roundTo5Decimals(newPrecioCup),
+            precio_cobrado_usd: roundTo5Decimals(newPrecioUsd),
+          };
+        });
 
         const ventaDeudaData = {
           fecha_hora: new Date().toISOString(),
@@ -1593,7 +1603,15 @@ const SalesContent = () => {
         });
 
         showToast({ type: 'success', message: 'Venta registrada como deuda correctamente' });
-        setComprobanteSaleItems([...saleItems]);
+
+        // Save sale items for comprobante with adjusted prices
+        const comprobanteItems = saleItems.map((item, index) => ({
+          ...item,
+          precio_cup: ventasDeuda[index].precio_cobrado_cup,
+          precio_usd: ventasDeuda[index].precio_cobrado_usd,
+        }));
+        setComprobanteSaleItems(comprobanteItems);
+
         setShowComprobanteModal(true);
 
         // Reset
@@ -1628,20 +1646,29 @@ const SalesContent = () => {
       const totalPaidCUP = efectivoCupRounded + transferenciaCupRounded + (efectivoUsdRounded + transferenciaUsdRounded) * cambio;
       const totalPaidUSD = efectivoUsdRounded + transferenciaUsdRounded + (efectivoCupRounded + transferenciaCupRounded) / cambio;
 
-      // Calculate price adjustment based on difference between paid and original total
-      const differenceCUP = totalPaidCUP - totalCurrentCUPRounded;
-      const differenceUSD = totalPaidUSD - totalCurrentUSDRounded;
-      const numberOfItems = saleItems.length;
-      const adjustmentPerItemCUP = numberOfItems > 0 ? roundTo5Decimals(differenceCUP / numberOfItems) : 0;
-      const adjustmentPerItemUSD = numberOfItems > 0 ? roundTo5Decimals(differenceUSD / numberOfItems) : 0;
+      // Calculate price adjustment based on percentage of each product in the total
+      // First, calculate the percentage each product represents of the original total
+      const ventas = saleItems.map(item => {
+        const itemTotalCUP = item.precio_cup * item.cantidad;
+        const itemTotalUSD = item.precio_usd * item.cantidad;
+        const percentageCUP = totalCurrentCUPRounded > 0 ? itemTotalCUP / totalCurrentCUPRounded : 0;
+        const percentageUSD = totalCurrentUSDRounded > 0 ? itemTotalUSD / totalCurrentUSDRounded : 0;
 
-      // Apply adjustment to each product's price
-      const ventas = saleItems.map(item => ({
-        id_servicio_tienda: item.id_servicio_tienda,
-        cantidad: item.cantidad,
-        precio_cobrado_cup: roundTo5Decimals(item.precio_cup + adjustmentPerItemCUP),
-        precio_cobrado_usd: roundTo5Decimals(item.precio_usd + adjustmentPerItemUSD),
-      }));
+        // Apply the same percentage to the new total paid
+        const newItemTotalCUP = totalPaidCUP * percentageCUP;
+        const newItemTotalUSD = totalPaidUSD * percentageUSD;
+
+        // Calculate the new individual price (total / quantity)
+        const newPrecioCup = item.cantidad > 0 ? newItemTotalCUP / item.cantidad : item.precio_cup;
+        const newPrecioUsd = item.cantidad > 0 ? newItemTotalUSD / item.cantidad : item.precio_usd;
+
+        return {
+          id_servicio_tienda: item.id_servicio_tienda,
+          cantidad: item.cantidad,
+          precio_cobrado_cup: roundTo5Decimals(newPrecioCup),
+          precio_cobrado_usd: roundTo5Decimals(newPrecioUsd),
+        };
+      });
 
       const ventaData = {
         fecha_hora: new Date().toISOString(),
@@ -1660,12 +1687,17 @@ const SalesContent = () => {
       };
 
       const result = await createVenta(ventaData);
-      
+
       showToast({ type: 'success', message: 'Venta realizada correctamente' });
-      
-      // Save sale items for comprobante before resetting
-      setComprobanteSaleItems([...saleItems]);
-      
+
+      // Save sale items for comprobante with adjusted prices
+      const comprobanteItems = saleItems.map((item, index) => ({
+        ...item,
+        precio_cup: ventas[index].precio_cobrado_cup,
+        precio_usd: ventas[index].precio_cobrado_usd,
+      }));
+      setComprobanteSaleItems(comprobanteItems);
+
       // Show comprobante option
       setShowComprobanteModal(true);
       
