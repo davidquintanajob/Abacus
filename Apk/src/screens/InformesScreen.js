@@ -70,7 +70,7 @@ const InformesContent = () => {
       icon: 'trending-up-outline',
       color: '#FF9800',
       route: 'InformeCuentas',
-      available: false,
+      available: true,
     },
   ];
 
