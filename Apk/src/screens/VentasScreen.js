@@ -830,51 +830,54 @@ const VentasContent = () => {
           <style>
             body {
               font-family: Arial, sans-serif;
-              font-size: 12px;
-              padding: 20px;
+              font-size: 9px;
+              padding: 5px;
               max-width: 300px;
               margin: 0 auto;
             }
             .header {
               text-align: center;
-              margin-bottom: 20px;
+              margin-bottom: 8px;
             }
             .business-name {
               font-weight: bold;
-              font-size: 16px;
+              font-size: 11px;
               margin-bottom: 5px;
             }
             .text {
-              margin: 5px 0;
+              margin: 2px 0;
+              font-size: 8px;
             }
             .text-centered {
               text-align: center;
             }
             .table {
               width: 100%;
-              margin: 15px 0;
+              margin: 5px 0;
             }
             .table-row {
               display: flex;
               justify-content: space-between;
-              padding: 5px 0;
+              padding: 2px 0;
+              font-size: 8px;
             }
             .table-column {
               flex: 1;
+              font-size: 8px;
             }
             .table-column-bold {
               font-weight: bold;
             }
             .line {
               border-top: 1px solid #000;
-              margin: 10px 0;
+              margin: 5px 0;
             }
           </style>
         </head>
         <body>
           <div class="header">
             ${logoBase64 ? `
-              <svg width="100" height="100" viewBox="0 0 100 100" style="margin: 0 auto 10px;">
+              <svg width="40" height="40" viewBox="0 0 100 100" style="margin: 0 auto 5px;">
                 <defs>
                   <filter id="grayscale">
                     <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0.33 0.33 0.33 0 0 0 0 0 1 0"/>
@@ -889,14 +892,14 @@ const VentasContent = () => {
           </div>
           <div class="table">
             <div class="table-row">
-              <div class="table-column table-column-bold">Servicio/Producto</div>
+              <div class="table-column table-column-bold">Prod</div>
               <div class="table-column table-column-bold">Cant</div>
               <div class="table-column table-column-bold">Total</div>
             </div>
             <div class="line"></div>
             ${comprobanteSaleItems.map(item => `
               <div class="table-row">
-                <div class="table-column">${item.nombre}</div>
+                <div class="table-column">${item.nombre.substring(0, 15)}${item.nombre.length > 15 ? '...' : ''}</div>
                 <div class="table-column">${item.cantidad}</div>
                 <div class="table-column">$${formatComprobanteNumber(item.cantidad * item.precio_cup)}</div>
               </div>
@@ -907,7 +910,7 @@ const VentasContent = () => {
               <div class="table-column table-column-bold">$${formatComprobanteNumber(totalCUP)}</div>
             </div>
             <div class="line"></div>
-            <div class="text-centered text">¡Gracias por su compra!</div>
+            <div class="text-centered text">¡Gracias!</div>
           </div>
         </body>
         </html>

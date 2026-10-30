@@ -1380,10 +1380,22 @@ const SalesContent = () => {
         return true;
       };
 
-      if (!validateDecimalLimit(efectivoCup, 'efectivo CUP')) return;
-      if (!validateDecimalLimit(efectivoUsd, 'efectivo USD')) return;
-      if (!validateDecimalLimit(transferenciaCup, 'transferencia CUP')) return;
-      if (!validateDecimalLimit(transferenciaUsd, 'transferencia USD')) return;
+      if (!validateDecimalLimit(efectivoCup, 'efectivo CUP')) {
+        setIsSubmitting(false);
+        return;
+      }
+      if (!validateDecimalLimit(efectivoUsd, 'efectivo USD')) {
+        setIsSubmitting(false);
+        return;
+      }
+      if (!validateDecimalLimit(transferenciaCup, 'transferencia CUP')) {
+        setIsSubmitting(false);
+        return;
+      }
+      if (!validateDecimalLimit(transferenciaUsd, 'transferencia USD')) {
+        setIsSubmitting(false);
+        return;
+      }
 
       // Validate that account funds won't exceed database limit after adding sale amount
       const validateAccountFundLimit = async (cuenta, amount, fieldName) => {
@@ -1415,7 +1427,10 @@ const SalesContent = () => {
         validateAccountFundLimit(selectedCuentas.transferencia_usd, transferenciaUsd, 'transferencia USD'),
       ]);
 
-      if (!fundValidations.every(v => v)) return;
+      if (!fundValidations.every(v => v)) {
+        setIsSubmitting(false);
+        return;
+      }
 
       // Calculate total original prices from servicio_tienda (for backend calculations)
       const totalOriginalCUP = saleItems.reduce((sum, item) => sum + ((item.precio_original_cup || item.precio_cup) * item.cantidad), 0);
@@ -1444,10 +1459,11 @@ const SalesContent = () => {
       
       // If the amount paid differs significantly from the current charged amount, require a note
       if (amountDifference > tolerance && (!ventaNota || ventaNota.trim() === '')) {
-        showToast({ 
-          type: 'warning', 
-          message: 'Debes agregar una nota explicando por qué se está cobrando un valor diferente al total' 
+        showToast({
+          type: 'warning',
+          message: 'Debes agregar una nota explicando por qué se está cobrando un valor diferente al total'
         });
+        setIsSubmitting(false);
         return;
       }
       
@@ -1512,12 +1528,30 @@ const SalesContent = () => {
         const cambio = parseFloat(config.cupToUsdRate || 1);
         const totalCUP = saleItems.reduce((s, i) => s + i.precio_cup * i.cantidad, 0);
         const totalUSD = saleItems.reduce((s, i) => s + i.precio_usd * i.cantidad, 0);
+        const totalCUPRounded = roundTo5Decimals(totalCUP);
+        const totalUSDRounded = roundTo5Decimals(totalUSD);
+
+        // Calculate price adjustment if there's an initial payment
+        let adjustmentPerItemCUP = 0;
+        let adjustmentPerItemUSD = 0;
+        if (deudaPagoInicial.activo && deudaPagoInicial.cantidad_pagada) {
+          const pagoInicial = parseFloat(deudaPagoInicial.cantidad_pagada || 0);
+          if (deudaMonedaCUP) {
+            const differenceCUP = pagoInicial - totalCUPRounded;
+            const numberOfItems = saleItems.length;
+            adjustmentPerItemCUP = numberOfItems > 0 ? roundTo5Decimals(differenceCUP / numberOfItems) : 0;
+          } else {
+            const differenceUSD = pagoInicial - totalUSDRounded;
+            const numberOfItems = saleItems.length;
+            adjustmentPerItemUSD = numberOfItems > 0 ? roundTo5Decimals(differenceUSD / numberOfItems) : 0;
+          }
+        }
 
         const ventasDeuda = saleItems.map(item => ({
           id_servicio_tienda: item.id_servicio_tienda,
           cantidad: item.cantidad,
-          precio_cobrado_cup: item.precio_cup,
-          precio_cobrado_usd: item.precio_usd,
+          precio_cobrado_cup: roundTo5Decimals(item.precio_cup + adjustmentPerItemCUP),
+          precio_cobrado_usd: roundTo5Decimals(item.precio_usd + adjustmentPerItemUSD),
         }));
 
         const ventaDeudaData = {
@@ -1594,12 +1628,19 @@ const SalesContent = () => {
       const totalPaidCUP = efectivoCupRounded + transferenciaCupRounded + (efectivoUsdRounded + transferenciaUsdRounded) * cambio;
       const totalPaidUSD = efectivoUsdRounded + transferenciaUsdRounded + (efectivoCupRounded + transferenciaCupRounded) / cambio;
 
-      // Use the prices as defined by the user (no automatic adjustment)
+      // Calculate price adjustment based on difference between paid and original total
+      const differenceCUP = totalPaidCUP - totalCurrentCUPRounded;
+      const differenceUSD = totalPaidUSD - totalCurrentUSDRounded;
+      const numberOfItems = saleItems.length;
+      const adjustmentPerItemCUP = numberOfItems > 0 ? roundTo5Decimals(differenceCUP / numberOfItems) : 0;
+      const adjustmentPerItemUSD = numberOfItems > 0 ? roundTo5Decimals(differenceUSD / numberOfItems) : 0;
+
+      // Apply adjustment to each product's price
       const ventas = saleItems.map(item => ({
         id_servicio_tienda: item.id_servicio_tienda,
         cantidad: item.cantidad,
-        precio_cobrado_cup: item.precio_cup,
-        precio_cobrado_usd: item.precio_usd,
+        precio_cobrado_cup: roundTo5Decimals(item.precio_cup + adjustmentPerItemCUP),
+        precio_cobrado_usd: roundTo5Decimals(item.precio_usd + adjustmentPerItemUSD),
       }));
 
       const ventaData = {
@@ -1710,60 +1751,62 @@ const SalesContent = () => {
           <style>
             body {
               font-family: Arial, sans-serif;
-              padding: 20px;
+              padding: 5px;
               margin: 0;
               background-color: #fff;
+              font-size: 9px;
             }
             .header {
               text-align: center;
-              margin-bottom: 15px;
+              margin-bottom: 8px;
             }
             .logo {
-              max-width: 100px;
-              max-height: 100px;
-              margin-bottom: 10px;
+              max-width: 40px;
+              max-height: 40px;
+              margin-bottom: 5px;
             }
             .logo-svg {
-              max-width: 100px;
-              max-height: 100px;
-              margin-bottom: 10px;
+              max-width: 40px;
+              max-height: 40px;
+              margin-bottom: 5px;
             }
             .business-name {
-              font-size: 18px;
+              font-size: 11px;
               font-weight: bold;
-              margin-bottom: 10px;
+              margin-bottom: 5px;
             }
             .text {
-              font-size: 12px;
-              margin-bottom: 5px;
+              font-size: 8px;
+              margin-bottom: 2px;
             }
             .text-centered {
               text-align: center;
-              margin-top: 10px;
+              margin-top: 5px;
             }
             .table-header {
               display: flex;
               justify-content: space-between;
               font-weight: bold;
-              font-size: 12px;
-              margin-bottom: 5px;
+              font-size: 8px;
+              margin-bottom: 3px;
             }
             .table-column {
               flex: 1;
               text-align: left;
+              font-size: 8px;
             }
             .table-column-bold {
               font-weight: bold;
             }
             .line {
               border-top: 1px solid #000;
-              margin: 10px 0;
+              margin: 5px 0;
             }
             .table-row {
               display: flex;
               justify-content: space-between;
-              font-size: 12px;
-              margin-bottom: 5px;
+              font-size: 8px;
+              margin-bottom: 2px;
             }
           </style>
         </head>
@@ -1784,14 +1827,14 @@ const SalesContent = () => {
             <div class="text">${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
           </div>
           <div class="table-header">
-            <div class="table-column table-column-bold">Servicio/Producto</div>
+            <div class="table-column table-column-bold">Prod</div>
             <div class="table-column table-column-bold">Cant</div>
             <div class="table-column table-column-bold">Total</div>
           </div>
           <div class="line"></div>
           ${comprobanteSaleItems.map(item => `
             <div class="table-row">
-              <div class="table-column">${item.nombre}</div>
+              <div class="table-column">${item.nombre.substring(0, 15)}${item.nombre.length > 15 ? '...' : ''}</div>
               <div class="table-column">${item.cantidad}</div>
               <div class="table-column">$${formatComprobanteNumber(item.cantidad * item.precio_cup)}</div>
             </div>
@@ -1802,7 +1845,7 @@ const SalesContent = () => {
             <div class="table-column table-column-bold">$${formatComprobanteNumber(totalCUP)}</div>
           </div>
           <div class="line"></div>
-          <div class="text-centered text">¡Gracias por su compra!</div>
+          <div class="text-centered text">¡Gracias!</div>
         </body>
         </html>
       `;

@@ -4380,27 +4380,39 @@ const CurrencyExchangeContent = () => {
 
               <View style={styles.formGroup}>
                 <Text style={[styles.label, { color: colors.outline }]}>Logo (opcional)</Text>
-                <TouchableOpacity
-                  style={[styles.uploadButton, { borderColor: colors.outlineVariant }]}
-                  onPress={handleSelectLogo}
-                >
-                  {comprobanteConfig.logo ? (
-                    <View style={styles.logoPreview}>
-                      <Image
-                        source={{ uri: comprobanteConfig.logo }}
-                        style={{ width: '100%', height: '100%' }}
-                        resizeMode="contain"
-                      />
-                    </View>
-                  ) : (
-                    <View style={styles.uploadPlaceholder}>
-                      <Ionicons name="image" size={responsive.responsiveWidth(32)} color={colors.outline} />
-                      <Text style={[styles.uploadText, { color: colors.outline }]}>
-                        Toca para seleccionar logo
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
+                <View style={styles.logoUploadContainer}>
+                  <View style={styles.logoButtonWrapper}>
+                    <TouchableOpacity
+                      style={[styles.uploadButton, { borderColor: colors.outlineVariant }]}
+                      onPress={handleSelectLogo}
+                    >
+                      {comprobanteConfig.logo ? (
+                        <View style={styles.logoPreview}>
+                          <Image
+                            source={{ uri: comprobanteConfig.logo }}
+                            style={{ width: '100%', height: '100%' }}
+                            resizeMode="contain"
+                          />
+                        </View>
+                      ) : (
+                        <View style={styles.uploadPlaceholder}>
+                          <Ionicons name="image" size={responsive.responsiveWidth(32)} color={colors.outline} />
+                          <Text style={[styles.uploadText, { color: colors.outline }]}>
+                            Toca para seleccionar logo
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                    {comprobanteConfig.logo && (
+                      <TouchableOpacity
+                        style={[styles.removeLogoButton, { backgroundColor: colors.error }]}
+                        onPress={() => setComprobanteConfig(prev => ({ ...prev, logo: null }))}
+                      >
+                        <Ionicons name="close" size={responsive.responsiveWidth(16)} color="#fff" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
               </View>
 
               <View style={styles.previewSection}>
@@ -5027,6 +5039,23 @@ const createStyles = (responsive) => StyleSheet.create({
     width: responsive.responsiveWidth(100),
     height: responsive.responsiveHeight(100),
     resizeMode: 'contain',
+  },
+  logoUploadContainer: {
+    alignItems: 'center',
+  },
+  logoButtonWrapper: {
+    position: 'relative',
+  },
+  removeLogoButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    width: responsive.responsiveWidth(28),
+    height: responsive.responsiveHeight(28),
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
   previewSection: {
     marginTop: responsive.responsiveMargin(24),
