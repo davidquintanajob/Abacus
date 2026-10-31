@@ -87,6 +87,13 @@ const EntradaFormContent = () => {
   const [multipleSuggestedCosts, setMultipleSuggestedCosts] = useState([]);
   const [multipleCurrentCosts, setMultipleCurrentCosts] = useState([]);
 
+  // Estado para el modal de costos de fabricación
+  const [showFabricacionCostModal, setShowFabricacionCostModal] = useState(false);
+  const [fabricacionCostOption, setFabricacionCostOption] = useState(null);
+  const [fabricacionManualCostCup, setFabricacionManualCostCup] = useState('');
+  const [fabricacionManualCostUsd, setFabricacionManualCostUsd] = useState('');
+  const [modifyProductPrice, setModifyProductPrice] = useState(false);
+
   const [formData, setFormData] = useState({
     id_servicio_tienda: null,
     cantidad_entrada: '',
@@ -276,6 +283,19 @@ const EntradaFormContent = () => {
               completeEntrada.fabricaciones.map(async (fabricacion) => {
                 try {
                   const insumoProducto = await getProductoById(fabricacion.servicioTienda.servicio.id_servicio);
+                  
+                  // Calcular stock actual del insumo en la tienda
+                  let stockActual = 0;
+                  if (tienda) {
+                    const tiendaServicio = insumoProducto.tiendas_servicio?.find(
+                      ts => ts.id_tienda === tienda.id_tienda
+                    );
+                    stockActual = parseFloat(tiendaServicio?.cantidad || 0);
+                  } else {
+                    const firstTiendaServicio = insumoProducto.tiendas_servicio?.[0];
+                    stockActual = parseFloat(firstTiendaServicio?.cantidad || 0);
+                  }
+
                   return {
                     id: fabricacion.id_fabricacion,
                     producto: insumoProducto,
@@ -284,6 +304,7 @@ const EntradaFormContent = () => {
                     costo_insumo_usd: fabricacion.costo_insumo_usd.toString(),
                     productoSearchText: insumoProducto.nombre,
                     showProductoDropdown: false,
+                    stock_actual: stockActual,
                   };
                 } catch (err) {
                   console.error('[fetchCompleteEntrada] Error loading fabricacion:', err);
@@ -634,9 +655,9 @@ const EntradaFormContent = () => {
           return;
         }
       }
-      
-      // Ejecutar guardado de fabricación
-      executeSaveFabricacion();
+
+      // Mostrar modal de costos de fabricación antes de guardar
+      setShowFabricacionCostModal(true);
       setIsSaving(false);
       return;
     }
@@ -1453,16 +1474,87 @@ const EntradaFormContent = () => {
 
       // Calcular costo por unidad del producto final basado en los insumos
       const cantidadProducida = parseFloat(formData.cantidad_entrada) || 1;
-      const costoPorUnidadCup = cantidadProducida > 0 ? costoTotalInsumosCup / cantidadProducida : 0;
-      const costoPorUnidadUsd = cantidadProducida > 0 ? costoTotalInsumosUsd / cantidadProducida : 0;
+      const costoPorUnidadCupSumatoria = cantidadProducida > 0 ? costoTotalInsumosCup / cantidadProducida : 0;
+      const costoPorUnidadUsdSumatoria = cantidadProducida > 0 ? costoTotalInsumosUsd / cantidadProducida : 0;
 
-      // Actualizar entradaData con el costo calculado de los insumos
+      let costoPorUnidadCup = costoPorUnidadCupSumatoria;
+      let costoPorUnidadUsd = costoPorUnidadUsdSumatoria;
+
+      // Determinar el costo según la opción seleccionada
+      if (fabricacionCostOption === 'actual') {
+        // Usar el costo actual del producto en la tienda
+        const productoTiendaCosto = formData.producto.tiendas_servicio?.find(
+          ts => ts.id_tienda === formData.tienda.id_tienda
+        );
+        costoPorUnidadCup = productoTiendaCosto?.costo_cup || 0;
+        costoPorUnidadUsd = productoTiendaCosto?.costo_usd || 0;
+      } else if (fabricacionCostOption === 'manual') {
+        // Usar los costos manuales ingresados
+        costoPorUnidadCup = parseFloat(fabricacionManualCostCup) || 0;
+        costoPorUnidadUsd = parseFloat(fabricacionManualCostUsd) || 0;
+      } else if (fabricacionCostOption === 'formula' && config.applyWeightedAverageCost) {
+        // Aplicar fórmula de costo promedio ponderado
+        // Obtener todas las entradas del producto en esta tienda
+        const entradasResponse = await getEntradas({
+          id_servicio_tienda: id_servicio_tienda,
+          skipCantidadMin: true
+        }, 1, 10000);
+        const entradas = entradasResponse.data || [];
+        
+        let totalCantidad = 0;
+        let totalCostoCup = 0;
+        let totalCostoUsd = 0;
+
+        for (const entrada of entradas) {
+          const cantidad = parseFloat(entrada.cantidad_entrada) || 0;
+          const costoCup = parseFloat(entrada.costo_cup) || 0;
+          const costoUsd = parseFloat(entrada.costo_usd) || 0;
+          
+          totalCantidad += cantidad;
+          totalCostoCup += cantidad * costoCup;
+          totalCostoUsd += cantidad * costoUsd;
+        }
+
+        // Incluir la nueva entrada en el cálculo
+        totalCantidad += cantidadProducida;
+        totalCostoCup += cantidadProducida * costoPorUnidadCupSumatoria;
+        totalCostoUsd += cantidadProducida * costoPorUnidadUsdSumatoria;
+
+        costoPorUnidadCup = totalCantidad > 0 ? totalCostoCup / totalCantidad : 0;
+        costoPorUnidadUsd = totalCantidad > 0 ? totalCostoUsd / totalCantidad : 0;
+      }
+      // Si es 'sumatoria', ya tenemos los valores calculados
+
+      // Actualizar entradaData con el costo seleccionado
       entradaData.costo_cup = toFixed5(costoPorUnidadCup);
       entradaData.costo_usd = toFixed5(costoPorUnidadUsd);
 
       // Crear entrada con fabricaciones
       await createEntradaConFabricacion(entradaData, fabricacionesData);
       showToast({ type: 'success', message: 'Entrada de fabricación creada correctamente' });
+
+      // Si el usuario desea modificar el precio del producto en todo el sistema
+      if (modifyProductPrice) {
+        try {
+          const productoActualizado = await getProductoById(formData.producto.id_servicio);
+          const productoTiendaList = (productoActualizado.tiendas_servicio || []).map(ts => ({
+            id_tienda: ts.id_tienda,
+            precio_cup: ts.precio_cup,
+            precio_usd: ts.precio_usd,
+            costo_cup: toFixed5(costoPorUnidadCup),
+            costo_usd: toFixed5(costoPorUnidadUsd),
+            cantidad_alerta: ts.cantidad_alerta,
+          }));
+
+          await updateProducto(formData.producto.id_servicio, {
+            productoTiendaList: productoTiendaList,
+          });
+          showToast({ type: 'success', message: 'Precio de costo del producto actualizado en todo el sistema' });
+        } catch (error) {
+          console.error('[executeSaveFabricacion] Error updating product cost:', error);
+          showToast({ type: 'warning', message: 'Entrada creada pero no se pudo actualizar el precio del producto' });
+        }
+      }
 
       // Wait a moment to ensure backend completes the transaction
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -1974,30 +2066,41 @@ const EntradaFormContent = () => {
   };
 
   const handleProductoSelectFabricacion = (id, producto) => {
+    // Prevenir seleccionar el mismo producto dos veces
+    const isDuplicate = fabricaciones.some(f => f.id !== id && f.producto?.id_servicio === producto.id_servicio);
+    if (isDuplicate) {
+      showToast({ type: 'warning', message: 'Este producto ya está seleccionado como insumo' });
+      return;
+    }
+
     let costoCup = '';
     let costoUsd = '';
-    
+    let stockActual = 0;
+
     if (formData.tienda) {
       const tiendaServicio = producto.tiendas_servicio?.find(
         ts => ts.id_tienda === formData.tienda.id_tienda
       );
       costoCup = tiendaServicio?.costo_cup?.toString() || '';
       costoUsd = tiendaServicio?.costo_usd?.toString() || '';
+      stockActual = parseFloat(tiendaServicio?.cantidad || 0);
     } else {
       const firstTiendaServicio = producto.tiendas_servicio?.[0];
       costoCup = firstTiendaServicio?.costo_cup?.toString() || '';
       costoUsd = firstTiendaServicio?.costo_usd?.toString() || '';
+      stockActual = parseFloat(firstTiendaServicio?.cantidad || 0);
     }
-    
+
     updateFabricacion(id, 'producto', producto);
     updateFabricacion(id, 'costo_insumo_cup', costoCup);
     updateFabricacion(id, 'costo_insumo_usd', costoUsd);
     updateFabricacion(id, 'productoSearchText', producto.nombre.trimEnd());
-    
+    updateFabricacion(id, 'stock_actual', stockActual);
+
     setFabricacionShowProductoDropdown(prev => ({ ...prev, [id]: false }));
     setFabricacionProductoSearchResults(prev => ({ ...prev, [id]: [] }));
     setFabricacionJustSelectedProducto(prev => ({ ...prev, [id]: true }));
-    
+
     Keyboard.dismiss();
   };
 
@@ -2784,18 +2887,20 @@ const EntradaFormContent = () => {
                 </>
               )}
 
-              {/* Proveedor */}
-              <View style={styles.formGroup}>
-                <Text style={[styles.label, { color: colors.outline }]}>Nombre del Proveedor</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                  placeholderTextColor={colors.outline}
-                  placeholder="Proveedor (opcional)"
-                  value={formData.nombre_proveedor}
-                  onChangeText={(text) => setFormData(prev => ({ ...prev, nombre_proveedor: text }))}
-                  editable={!isReadOnly}
-                />
-              </View>
+              {/* Proveedor - No mostrar en modo fabricación */}
+              {!isFabricacionMode && (
+                <View style={styles.formGroup}>
+                  <Text style={[styles.label, { color: colors.outline }]}>Nombre del Proveedor</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.background, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                    placeholderTextColor={colors.outline}
+                    placeholder="Proveedor (opcional)"
+                    value={formData.nombre_proveedor}
+                    onChangeText={(text) => setFormData(prev => ({ ...prev, nombre_proveedor: text }))}
+                    editable={!isReadOnly}
+                  />
+                </View>
+              )}
 
               {/* Formulario de fabricación */}
               {isFabricacionMode && (
@@ -2860,8 +2965,8 @@ const EntradaFormContent = () => {
                     </View>
                   </View>
 
-                  {/* Costos de Producción */}
-                  {canManageEntradas && (
+                  {/* Costos de Producción - No mostrar en modo fabricación */}
+                  {canManageEntradas && !isFabricacionMode && (
                     <View style={styles.formRow}>
                       <View style={[styles.formColumn, styles.formGroup]}>
                         <Text style={[styles.label, { color: colors.outline }]}>Costo CUP *</Text>
@@ -2945,7 +3050,6 @@ const EntradaFormContent = () => {
 
                   {/* Lista de Insumos */}
                   <View style={styles.formGroup}>
-                    <Text style={[styles.label, { color: colors.onSurface, fontWeight: '600' }]}>Insumos de Fabricación</Text>
                   </View>
 
                   {fabricaciones.map((fabricacion, index) => (
@@ -2964,158 +3068,93 @@ const EntradaFormContent = () => {
                         )}
                       </View>
 
-                      {/* Producto Insumo */}
-                      <View style={styles.formGroup}>
-                        <Text style={[styles.label, { color: colors.outline }]}>Producto Insumo *</Text>
-                        <View style={styles.relativeContainer}>
+                      {/* Producto Insumo y Cantidad en la misma fila */}
+                      <View style={[styles.formRow, { alignItems: 'flex-start' }]}>
+                        <View style={[styles.formColumn, { flex: 0.7, marginRight: responsive.responsiveMargin(8) }]}>
+                          <Text style={[styles.label, { color: colors.outline }]}>Producto Insumo *</Text>
+                          <View style={styles.relativeContainer}>
+                            <TextInput
+                              style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                              placeholderTextColor={colors.outline}
+                              placeholder="Buscar insumo..."
+                              value={fabricacion.productoSearchText}
+                              onChangeText={(text) => {
+                                updateFabricacion(fabricacion.id, 'productoSearchText', text);
+                                setFabricacionJustSelectedProducto(prev => ({ ...prev, [fabricacion.id]: false }));
+                              }}
+                              editable={!isReadOnly}
+                              onBlur={() => {
+                                setFabricacionShowProductoDropdown(prev => ({ ...prev, [fabricacion.id]: false }));
+                              }}
+                            />
+                            {fabricacionShowProductoDropdown[fabricacion.id] && !isReadOnly && (
+                              <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
+                                {fabricacionIsSearchingProductos[fabricacion.id] ? (
+                                  <View style={styles.dropdownItem}>
+                                    <ActivityIndicator size="small" color={colors.primary} />
+                                  </View>
+                                ) : (fabricacionProductoSearchResults[fabricacion.id] || []).length > 0 ? (
+                                  (fabricacionProductoSearchResults[fabricacion.id] || []).map((producto, index) => (
+                                    <TouchableOpacity
+                                      key={producto.id_servicio}
+                                      style={[styles.dropdownItem, index === (fabricacionProductoSearchResults[fabricacion.id] || []).length - 1 && styles.dropdownItemLast]}
+                                      onPress={() => handleProductoSelectFabricacion(fabricacion.id, producto)}
+                                    >
+                                      <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{producto.nombre}</Text>
+                                    </TouchableOpacity>
+                                  ))
+                                ) : (
+                                  <View style={styles.dropdownItem}>
+                                    <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron productos</Text>
+                                  </View>
+                                )}
+                              </View>
+                            )}
+                          </View>
+                        </View>
+
+                        <View style={[styles.formColumn, { flex: 0.3 }]}>
+                          <Text style={[styles.label, { color: colors.outline }]}>Cantidad *</Text>
                           <TextInput
                             style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
                             placeholderTextColor={colors.outline}
-                            placeholder="Buscar insumo..."
-                            value={fabricacion.productoSearchText}
+                            placeholder="Cantidad"
+                            value={fabricacion.cantidad_insumo}
                             onChangeText={(text) => {
-                              updateFabricacion(fabricacion.id, 'productoSearchText', text);
-                              setFabricacionJustSelectedProducto(prev => ({ ...prev, [fabricacion.id]: false }));
+                              const cantidad = parseFloat(text) || 0;
+                              const stockActual = fabricacion.stock_actual || 0;
+                              if (cantidad > stockActual) {
+                                showToast({ type: 'warning', message: `La cantidad no puede exceder el stock disponible (${stockActual})` });
+                                return;
+                              }
+                              updateFabricacion(fabricacion.id, 'cantidad_insumo', text.replace(/-/g, ''));
+                              // Auto-crear nueva card si hay producto y cantidad
+                              if (fabricacion.producto && cantidad > 0) {
+                                const lastFabricacion = fabricaciones[fabricaciones.length - 1];
+                                if (lastFabricacion.id === fabricacion.id) {
+                                  addNewFabricacion();
+                                }
+                              }
                             }}
+                            keyboardType="decimal-pad"
                             editable={!isReadOnly}
-                            onBlur={() => {
-                              setFabricacionShowProductoDropdown(prev => ({ ...prev, [fabricacion.id]: false }));
-                            }}
                           />
-                          {fabricacionShowProductoDropdown[fabricacion.id] && !isReadOnly && (
-                            <View style={[styles.searchDropdown, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}>
-                              {fabricacionIsSearchingProductos[fabricacion.id] ? (
-                                <View style={styles.dropdownItem}>
-                                  <ActivityIndicator size="small" color={colors.primary} />
-                                </View>
-                              ) : (fabricacionProductoSearchResults[fabricacion.id] || []).length > 0 ? (
-                                (fabricacionProductoSearchResults[fabricacion.id] || []).map((producto, index) => (
-                                  <TouchableOpacity
-                                    key={producto.id_servicio}
-                                    style={[styles.dropdownItem, index === (fabricacionProductoSearchResults[fabricacion.id] || []).length - 1 && styles.dropdownItemLast]}
-                                    onPress={() => handleProductoSelectFabricacion(fabricacion.id, producto)}
-                                  >
-                                    <Text style={[styles.dropdownItemText, { color: colors.onSurface }]}>{producto.nombre}</Text>
-                                  </TouchableOpacity>
-                                ))
-                              ) : (
-                                <View style={styles.dropdownItem}>
-                                  <Text style={[styles.dropdownItemText, { color: colors.outline }]}>No se encontraron productos</Text>
-                                </View>
-                              )}
-                            </View>
-                          )}
                         </View>
                       </View>
 
-                      {/* Cantidad de Insumo */}
-                      <View style={styles.formGroup}>
-                        <Text style={[styles.label, { color: colors.outline }]}>Cantidad de Insumo *</Text>
-                        <TextInput
-                          style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                          placeholderTextColor={colors.outline}
-                          placeholder="Cantidad"
-                          value={fabricacion.cantidad_insumo}
-                          onChangeText={(text) => updateFabricacion(fabricacion.id, 'cantidad_insumo', text.replace(/-/g, ''))}
-                          keyboardType="decimal-pad"
-                          editable={!isReadOnly}
-                        />
-                      </View>
-
-                      {/* Costos de Insumo */}
-                      {canManageEntradas && (
-                        <View style={styles.formRow}>
-                          <View style={[styles.formColumn, styles.formGroup]}>
-                            <Text style={[styles.label, { color: colors.outline }]}>Costo Insumo CUP *</Text>
-                            <TextInput
-                              style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                              placeholderTextColor={colors.outline}
-                              placeholder="Costo CUP"
-                              value={
-                                fabricacionCostoInputTexts[fabricacion.id]?.costo_insumo_cup !== undefined
-                                  ? fabricacionCostoInputTexts[fabricacion.id].costo_insumo_cup
-                                  : (fabricacion.costo_insumo_cup !== null && fabricacion.costo_insumo_cup !== '' ? parseFloat(fabricacion.costo_insumo_cup).toFixed(2) : '')
-                              }
-                              onFocus={() => setFabricacionCostoInputTexts(prev => ({
-                                ...prev,
-                                [fabricacion.id]: {
-                                  ...prev[fabricacion.id],
-                                  costo_insumo_cup: fabricacion.costo_insumo_cup !== null && fabricacion.costo_insumo_cup !== '' ? String(parseFloat(fabricacion.costo_insumo_cup)) : ''
-                                }
-                              }))}
-                              onChangeText={(text) => {
-                                setFabricacionCostoInputTexts(prev => ({
-                                  ...prev,
-                                  [fabricacion.id]: {
-                                    ...prev[fabricacion.id],
-                                    costo_insumo_cup: text
-                                  }
-                                }));
-                                handleCostoChangeFabricacion(fabricacion.id, 'costo_insumo_cup', text);
-                              }}
-                              onBlur={() => {
-                                if (fabricacionCostoInputTexts[fabricacion.id]?.costo_insumo_cup !== undefined) {
-                                  handleCostoChangeFabricacion(fabricacion.id, 'costo_insumo_cup', fabricacionCostoInputTexts[fabricacion.id].costo_insumo_cup);
-                                }
-                                setFabricacionCostoInputTexts(prev => {
-                                  const updated = { ...prev };
-                                  if (updated[fabricacion.id]) {
-                                    delete updated[fabricacion.id].costo_insumo_cup;
-                                  }
-                                  return updated;
-                                });
-                              }}
-                              keyboardType="decimal-pad"
-                              editable={!isReadOnly}
-                            />
-                          </View>
-
-                          <View style={[styles.formColumn, styles.formGroup]}>
-                            <Text style={[styles.label, { color: colors.outline }]}>Costo Insumo USD *</Text>
-                            <TextInput
-                              style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                              placeholderTextColor={colors.outline}
-                              placeholder="Costo USD"
-                              value={
-                                fabricacionCostoInputTexts[fabricacion.id]?.costo_insumo_usd !== undefined
-                                  ? fabricacionCostoInputTexts[fabricacion.id].costo_insumo_usd
-                                  : (fabricacion.costo_insumo_usd !== null && fabricacion.costo_insumo_usd !== '' ? parseFloat(fabricacion.costo_insumo_usd).toFixed(2) : '')
-                              }
-                              onFocus={() => setFabricacionCostoInputTexts(prev => ({
-                                ...prev,
-                                [fabricacion.id]: {
-                                  ...prev[fabricacion.id],
-                                  costo_insumo_usd: fabricacion.costo_insumo_usd !== null && fabricacion.costo_insumo_usd !== '' ? String(parseFloat(fabricacion.costo_insumo_usd)) : ''
-                                }
-                              }))}
-                              onChangeText={(text) => {
-                                setFabricacionCostoInputTexts(prev => ({
-                                  ...prev,
-                                  [fabricacion.id]: {
-                                    ...prev[fabricacion.id],
-                                    costo_insumo_usd: text
-                                  }
-                                }));
-                                handleCostoChangeFabricacion(fabricacion.id, 'costo_insumo_usd', text);
-                              }}
-                              onBlur={() => {
-                                if (fabricacionCostoInputTexts[fabricacion.id]?.costo_insumo_usd !== undefined) {
-                                  handleCostoChangeFabricacion(fabricacion.id, 'costo_insumo_usd', fabricacionCostoInputTexts[fabricacion.id].costo_insumo_usd);
-                                }
-                                setFabricacionCostoInputTexts(prev => {
-                                  const updated = { ...prev };
-                                  if (updated[fabricacion.id]) {
-                                    delete updated[fabricacion.id].costo_insumo_usd;
-                                  }
-                                  return updated;
-                                });
-                              }}
-                              keyboardType="decimal-pad"
-                              editable={!isReadOnly}
-                            />
-                          </View>
+                      {/* Stock info */}
+                      {fabricacion.producto && (
+                        <View style={[styles.stockInfoContainer, { backgroundColor: colors.primaryContainer }]}>
+                          <Text style={[styles.stockInfoText, { color: !isDark ? '#FFFFFF' : colors.primary }]}>
+                            Stock actual: {fabricacion.stock_actual || 0}
+                          </Text>
+                          <Text style={[styles.stockInfoText, { color: !isDark ? '#FFFFFF' : colors.primary }]}>
+                            Stock restante: {(fabricacion.stock_actual || 0) - (parseFloat(fabricacion.cantidad_insumo) || 0)}
+                          </Text>
                         </View>
                       )}
+
+                      {/* Costos de Insumo - Solo lectura - Eliminados por solicitud */}
                     </View>
                   ))}
 
@@ -3140,7 +3179,7 @@ const EntradaFormContent = () => {
                     <View style={[styles.productCountInfo, { backgroundColor: colors.primaryContainer }]}>
                       <Ionicons name="information-circle" size={responsive.responsiveWidth(18)} color={!isDark ? '#FFFFFF' : colors.primary} />
                       <Text style={[styles.productCountInfoText, { color: !isDark ? '#FFFFFF' : colors.primary }]}>
-                        {fabricaciones.length} insumo{fabricaciones.length !== 1 ? 's' : ''} agregado{fabricaciones.length !== 1 ? 's' : ''}
+                        {fabricaciones.filter(f => f.producto !== null).length} insumo{fabricaciones.filter(f => f.producto !== null).length !== 1 ? 's' : ''} agregado{fabricaciones.filter(f => f.producto !== null).length !== 1 ? 's' : ''}
                       </Text>
                     </View>
                   )}
@@ -3920,6 +3959,299 @@ const EntradaFormContent = () => {
         </View>
       </Modal>
 
+      {/* Modal de Costos de Fabricación */}
+      <Modal
+        visible={showFabricacionCostModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowFabricacionCostModal(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.5)' }]}>
+          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.outlineVariant }]}>
+              <Text style={[styles.modalTitle, { color: colors.onSurface }]}>
+                Costo de Fabricación
+              </Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setShowFabricacionCostModal(false)}
+              >
+                <Ionicons name="close" size={24} color={colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalList} contentContainerStyle={styles.modalListContent}>
+              <Text style={[styles.infoText, { color: colors.outline, marginBottom: responsive.responsiveMargin(16) }]}>
+                ¿Desea modificar el precio de costo del producto en todo el sistema?
+              </Text>
+
+              <View style={styles.modalButtonContainer}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonSecondary, { backgroundColor: modifyProductPrice ? colors.surface : colors.primary, borderColor: modifyProductPrice ? colors.outlineVariant : colors.primary, flex: 1 }]}
+                  onPress={() => setModifyProductPrice(false)}
+                >
+                  <Text style={[styles.modalButtonText, { color: modifyProductPrice ? colors.onSurface : '#fff' }]}>
+                    No
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonPrimary, { backgroundColor: modifyProductPrice ? colors.primary : colors.surface, borderColor: modifyProductPrice ? colors.primary : colors.outlineVariant, flex: 1 }]}
+                  onPress={() => setModifyProductPrice(true)}
+                >
+                  <Text style={[styles.modalButtonText, { color: modifyProductPrice ? '#fff' : colors.onSurface }]}>
+                    Sí
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {modifyProductPrice !== null && (
+                <>
+                  <Text style={[styles.infoText, { color: colors.outline, marginTop: responsive.responsiveMargin(20), marginBottom: responsive.responsiveMargin(16) }]}>
+                    ¿Qué costo desea usar para esta entrada?
+                  </Text>
+
+                  <TouchableOpacity
+                    style={[styles.costOptionButton, { backgroundColor: colors.background, borderColor: fabricacionCostOption === 'sumatoria' ? colors.primary : colors.outlineVariant }]}
+                    onPress={() => setFabricacionCostOption('sumatoria')}
+                  >
+                    <View style={styles.costOptionRadio}>
+                      <View style={[styles.costOptionRadioDot, fabricacionCostOption === 'sumatoria' && styles.costOptionRadioDotActive]} />
+                    </View>
+                    <Text style={[styles.costOptionText, { color: colors.onSurface }]}>
+                      Nuevo precio basado en sumatoria de insumos
+                    </Text>
+                  </TouchableOpacity>
+
+                  {fabricacionCostOption === 'sumatoria' && (
+                    <View style={[styles.costPreviewCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <Text style={[styles.costPreviewTitle, { color: colors.onSurface }]}>
+                        Costo calculado (sumatoria de insumos)
+                      </Text>
+                      <View style={styles.costPreviewRow}>
+                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo CUP:</Text>
+                        <Text style={[styles.costPreviewValue, { color: colors.onSurface }]}>
+                          ${(() => {
+                            const validFabricaciones = fabricaciones.filter(f => f.producto !== null);
+                            let costoTotalCup = 0;
+                            validFabricaciones.forEach(f => {
+                              costoTotalCup += (parseFloat(f.cantidad_insumo) || 0) * (parseFloat(f.costo_insumo_cup) || 0);
+                            });
+                            const cantidadProducida = parseFloat(formData.cantidad_entrada) || 1;
+                            const costoPorUnidad = cantidadProducida > 0 ? costoTotalCup / cantidadProducida : 0;
+                            return costoPorUnidad.toFixed(2);
+                          })()}
+                        </Text>
+                      </View>
+                      <View style={styles.costPreviewRow}>
+                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo USD:</Text>
+                        <Text style={[styles.costPreviewValue, { color: colors.onSurface }]}>
+                          ${(() => {
+                            const validFabricaciones = fabricaciones.filter(f => f.producto !== null);
+                            let costoTotalUsd = 0;
+                            validFabricaciones.forEach(f => {
+                              costoTotalUsd += (parseFloat(f.cantidad_insumo) || 0) * (parseFloat(f.costo_insumo_usd) || 0);
+                            });
+                            const cantidadProducida = parseFloat(formData.cantidad_entrada) || 1;
+                            const costoPorUnidad = cantidadProducida > 0 ? costoTotalUsd / cantidadProducida : 0;
+                            return costoPorUnidad.toFixed(2);
+                          })()}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    style={[styles.costOptionButton, { backgroundColor: colors.background, borderColor: fabricacionCostOption === 'actual' ? colors.primary : colors.outlineVariant }]}
+                    onPress={() => setFabricacionCostOption('actual')}
+                  >
+                    <View style={styles.costOptionRadio}>
+                      <View style={[styles.costOptionRadioDot, fabricacionCostOption === 'actual' && styles.costOptionRadioDotActive]} />
+                    </View>
+                    <Text style={[styles.costOptionText, { color: colors.onSurface }]}>
+                      Mantener precio actual del producto
+                    </Text>
+                  </TouchableOpacity>
+
+                  {fabricacionCostOption === 'actual' && (
+                    <View style={[styles.costPreviewCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <Text style={[styles.costPreviewTitle, { color: colors.onSurface }]}>
+                        Costo actual del producto
+                      </Text>
+                      <View style={styles.costPreviewRow}>
+                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo CUP:</Text>
+                        <Text style={[styles.costPreviewValue, { color: colors.onSurface }]}>
+                          ${(() => {
+                            const productoTiendaCosto = formData.producto?.tiendas_servicio?.find(
+                              ts => ts.id_tienda === formData.tienda?.id_tienda
+                            );
+                            const costo = parseFloat(productoTiendaCosto?.costo_cup) || 0;
+                            return costo.toFixed(2);
+                          })()}
+                        </Text>
+                      </View>
+                      <View style={styles.costPreviewRow}>
+                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo USD:</Text>
+                        <Text style={[styles.costPreviewValue, { color: colors.onSurface }]}>
+                          ${(() => {
+                            const productoTiendaCosto = formData.producto?.tiendas_servicio?.find(
+                              ts => ts.id_tienda === formData.tienda?.id_tienda
+                            );
+                            const costo = parseFloat(productoTiendaCosto?.costo_usd) || 0;
+                            return costo.toFixed(2);
+                          })()}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {config.applyWeightedAverageCost && (
+                    <TouchableOpacity
+                      style={[styles.costOptionButton, { backgroundColor: colors.background, borderColor: fabricacionCostOption === 'formula' ? colors.primary : colors.outlineVariant }]}
+                      onPress={() => setFabricacionCostOption('formula')}
+                    >
+                      <View style={styles.costOptionRadio}>
+                        <View style={[styles.costOptionRadioDot, fabricacionCostOption === 'formula' && styles.costOptionRadioDotActive]} />
+                      </View>
+                      <Text style={[styles.costOptionText, { color: colors.onSurface }]}>
+                        Aplicar fórmula de costo promedio ponderado
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {fabricacionCostOption === 'formula' && (
+                    <View style={[styles.costPreviewCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <Text style={[styles.costPreviewTitle, { color: colors.onSurface }]}>
+                        Costo calculado (fórmula de costo promedio ponderado)
+                      </Text>
+                      <View style={styles.costPreviewRow}>
+                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo CUP:</Text>
+                        <Text style={[styles.costPreviewValue, { color: colors.onSurface }]}>
+                          ${(() => {
+                            // Calcular costo de insumos (sumatoria)
+                            const validFabricaciones = fabricaciones.filter(f => f.producto !== null);
+                            let costoTotalInsumosCup = 0;
+                            validFabricaciones.forEach(f => {
+                              costoTotalInsumosCup += (parseFloat(f.cantidad_insumo) || 0) * (parseFloat(f.costo_insumo_cup) || 0);
+                            });
+                            const cantidadProducida = parseFloat(formData.cantidad_entrada) || 1;
+                            const costoPorUnidadCupSumatoria = cantidadProducida > 0 ? costoTotalInsumosCup / cantidadProducida : 0;
+
+                            // Calcular costo promedio ponderado (simulado)
+                            // Nota: En modo preview no podemos obtener las entradas reales del backend
+                            // Así que mostramos el costo de sumatoria como referencia
+                            return costoPorUnidadCupSumatoria.toFixed(2);
+                          })()}
+                        </Text>
+                      </View>
+                      <View style={styles.costPreviewRow}>
+                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo USD:</Text>
+                        <Text style={[styles.costPreviewValue, { color: colors.onSurface }]}>
+                          ${(() => {
+                            // Calcular costo de insumos (sumatoria)
+                            const validFabricaciones = fabricaciones.filter(f => f.producto !== null);
+                            let costoTotalInsumosUsd = 0;
+                            validFabricaciones.forEach(f => {
+                              costoTotalInsumosUsd += (parseFloat(f.cantidad_insumo) || 0) * (parseFloat(f.costo_insumo_usd) || 0);
+                            });
+                            const cantidadProducida = parseFloat(formData.cantidad_entrada) || 1;
+                            const costoPorUnidadUsdSumatoria = cantidadProducida > 0 ? costoTotalInsumosUsd / cantidadProducida : 0;
+
+                            // Calcular costo promedio ponderado (simulado)
+                            // Nota: En modo preview no podemos obtener las entradas reales del backend
+                            // Así que mostramos el costo de sumatoria como referencia
+                            return costoPorUnidadUsdSumatoria.toFixed(2);
+                          })()}
+                        </Text>
+                      </View>
+                      <Text style={[styles.costPreviewNote, { color: colors.outline, marginTop: responsive.responsiveMargin(8), fontSize: responsive.responsiveFontSize(12) }]}>
+                        * El costo final se calculará al guardar usando todas las entradas del producto
+                      </Text>
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    style={[styles.costOptionButton, { backgroundColor: colors.background, borderColor: fabricacionCostOption === 'manual' ? colors.primary : colors.outlineVariant }]}
+                    onPress={() => setFabricacionCostOption('manual')}
+                  >
+                    <View style={styles.costOptionRadio}>
+                      <View style={[styles.costOptionRadioDot, fabricacionCostOption === 'manual' && styles.costOptionRadioDotActive]} />
+                    </View>
+                    <Text style={[styles.costOptionText, { color: colors.onSurface }]}>
+                      Colocar manualmente el precio
+                    </Text>
+                  </TouchableOpacity>
+
+                  {fabricacionCostOption === 'manual' && (
+                    <View style={styles.manualCostContainer}>
+                      <View style={styles.formRow}>
+                        <View style={[styles.formColumn, styles.formGroup, { flex: 1, marginRight: responsive.responsiveMargin(8) }]}>
+                          <Text style={[styles.label, { color: colors.outline }]}>Costo CUP *</Text>
+                          <TextInput
+                            style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                            placeholderTextColor={colors.outline}
+                            placeholder="Costo CUP"
+                            value={fabricacionManualCostCup}
+                            onChangeText={setFabricacionManualCostCup}
+                            keyboardType="decimal-pad"
+                          />
+                        </View>
+                        <View style={[styles.formColumn, styles.formGroup, { flex: 1 }]}>
+                          <Text style={[styles.label, { color: colors.outline }]}>Costo USD *</Text>
+                          <TextInput
+                            style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
+                            placeholderTextColor={colors.outline}
+                            placeholder="Costo USD"
+                            value={fabricacionManualCostUsd}
+                            onChangeText={setFabricacionManualCostUsd}
+                            keyboardType="decimal-pad"
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  )}
+                </>
+              )}
+            </ScrollView>
+
+            <View style={styles.modalButtonContainer}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonSecondary, { backgroundColor: colors.surface, borderColor: colors.outlineVariant }]}
+                onPress={() => {
+                  setShowFabricacionCostModal(false);
+                  setModifyProductPrice(false);
+                  setFabricacionCostOption(null);
+                  setFabricacionManualCostCup('');
+                  setFabricacionManualCostUsd('');
+                }}
+              >
+                <Text style={[styles.modalButtonText, { color: colors.onSurface }]}>
+                  Cancelar
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonPrimary, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  if (!fabricacionCostOption) {
+                    showToast({ type: 'warning', message: 'Debe seleccionar una opción de costo' });
+                    return;
+                  }
+                  if (fabricacionCostOption === 'manual' && (!fabricacionManualCostCup || !fabricacionManualCostUsd)) {
+                    showToast({ type: 'warning', message: 'Debe ingresar ambos costos manuales' });
+                    return;
+                  }
+                  setShowFabricacionCostModal(false);
+                  executeSaveFabricacion();
+                }}
+              >
+                <Text style={[styles.modalButtonText, { color: '#fff' }]}>
+                  Guardar
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Modal de Procesamiento */}
       <Modal
         visible={isSaving}
@@ -4401,6 +4733,90 @@ const createStyles = (responsive) => StyleSheet.create({
     fontSize: responsive.responsiveFontSize(14),
     fontWeight: '500',
     fontFamily: 'Inter',
+  },
+  stockInfoContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: responsive.responsivePadding(8),
+    borderRadius: 8,
+    marginTop: responsive.responsiveMargin(8),
+  },
+  stockInfoText: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontWeight: '500',
+    fontFamily: 'Inter',
+  },
+  costOptionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: responsive.responsivePadding(12),
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  costOptionRadio: {
+    width: responsive.responsiveWidth(20),
+    height: responsive.responsiveWidth(20),
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#999',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: responsive.responsiveMargin(12),
+  },
+  costOptionRadioDot: {
+    width: responsive.responsiveWidth(10),
+    height: responsive.responsiveWidth(10),
+    borderRadius: 5,
+  },
+  costOptionRadioDotActive: {
+    backgroundColor: '#002440',
+  },
+  costOptionText: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+    flex: 1,
+  },
+  manualCostContainer: {
+    marginTop: responsive.responsiveMargin(16),
+    padding: responsive.responsivePadding(16),
+    borderRadius: 8,
+    backgroundColor: '#f8f9ff',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  costPreviewCard: {
+    marginTop: responsive.responsiveMargin(16),
+    padding: responsive.responsivePadding(16),
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  costPreviewTitle: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginBottom: responsive.responsiveMargin(12),
+  },
+  costPreviewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: responsive.responsiveMargin(8),
+  },
+  costPreviewLabel: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontFamily: 'Inter',
+  },
+  costPreviewValue: {
+    fontSize: responsive.responsiveFontSize(14),
+    fontWeight: '600',
+    fontFamily: 'Inter',
+  },
+  costPreviewNote: {
+    fontSize: responsive.responsiveFontSize(12),
+    fontFamily: 'Inter',
+    fontStyle: 'italic',
   },
   costComparisonCard: {
     borderRadius: 12,
