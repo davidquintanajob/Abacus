@@ -212,6 +212,37 @@ const SalesContent = () => {
     saleItemsRef.current = saleItems;
   }, [saleItems]);
 
+  // Handler for back button press (shared between hardware back and header back button)
+  const handleBackPress = () => {
+    // If there are products in the sale, require double press
+    if (saleItemsRef.current.length > 0) {
+      if (backPressedCount.current === 0) {
+        // First press - show toast
+        backPressedCount.current = 1;
+        showToast({ type: 'warning', message: 'Presiona nuevamente para salir (perderás los productos de la venta)' });
+        
+        // Reset count after 2 seconds
+        if (backPressedTimer.current) {
+          clearTimeout(backPressedTimer.current);
+        }
+        backPressedTimer.current = setTimeout(() => {
+          backPressedCount.current = 0;
+        }, 2000);
+        
+        return true; // Prevent exit
+      } else {
+        // Second press - allow exit
+        backPressedCount.current = 0;
+        if (backPressedTimer.current) {
+          clearTimeout(backPressedTimer.current);
+        }
+        return false; // Allow exit
+      }
+    }
+    // No products - allow normal exit
+    return false;
+  };
+
   useEffect(() => {
     barcodeEngineRef.current = new BarcodeEngine('SALES');
     barcodeEngineRef.current.startSession();
@@ -222,33 +253,7 @@ const SalesContent = () => {
 
     // Handler for back button press
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      // If there are products in the sale, require double press
-      if (saleItemsRef.current.length > 0) {
-        if (backPressedCount.current === 0) {
-          // First press - show toast
-          backPressedCount.current = 1;
-          showToast({ type: 'warning', message: 'Presiona nuevamente para salir (perderás los productos de la venta)' });
-          
-          // Reset count after 2 seconds
-          if (backPressedTimer.current) {
-            clearTimeout(backPressedTimer.current);
-          }
-          backPressedTimer.current = setTimeout(() => {
-            backPressedCount.current = 0;
-          }, 2000);
-          
-          return true; // Prevent default back behavior
-        } else {
-          // Second press - allow exit
-          backPressedCount.current = 0;
-          if (backPressedTimer.current) {
-            clearTimeout(backPressedTimer.current);
-          }
-          return false; // Allow default back behavior
-        }
-      }
-      // No products - allow normal exit
-      return false;
+      return handleBackPress();
     });
 
     // Restore sale state when screen comes into focus
@@ -1945,14 +1950,18 @@ const SalesContent = () => {
       
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.outlineVariant }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => {
+          if (!handleBackPress()) {
+            navigation.goBack();
+          }
+        }} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.primary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.primary }]}>Nueva Venta</Text>
         <TouchableOpacity onPress={() => setShowCamera(!showCamera)} style={styles.cameraToggle}>
           <Ionicons name="barcode" size={24} color={colors.primary} />
           <Text style={[styles.cameraToggleText, { color: colors.primary }]}>
-            {showCamera ? "Escáner activo" : "Escáner desactivado"}
+            {showCamera ? 'Escáner activo' : 'Escáner desactivado'}
           </Text>
         </TouchableOpacity>
       </View>

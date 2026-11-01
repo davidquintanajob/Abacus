@@ -346,8 +346,8 @@ const ProductoFormContent = () => {
   const isAlmacenero = userRole === 'almacenero';
   
   const canEditProduct = isAdmin;
-  const canEditCodes = isAdmin;
-  const canViewCosts = !isDependiente && !isAlmacenero;
+  const canEditCodes = isAdmin || isEditMode;
+  const canViewCosts = !isDependiente && !isAlmacenero || isEditMode;
 
   useEffect(() => {
     fetchTiendas();
@@ -572,9 +572,9 @@ const ProductoFormContent = () => {
           return;
         }
 
-        // Don't refresh in add mode to preserve unsaved changes
-        // But allow refresh in edit mode to reload data after saving
-        if (isAddMode) {
+        // Don't refresh in add mode or edit mode to preserve unsaved changes
+        // Only refresh in view mode
+        if (isAddMode || isEditMode) {
           return;
         }
 
@@ -626,7 +626,7 @@ const ProductoFormContent = () => {
       };
 
       refreshProductoData();
-    }, [producto?.id_servicio, canViewCosts, user?.id_tienda, permissions, isOfflineMode, isAddMode])
+    }, [producto?.id_servicio, canViewCosts, user?.id_tienda, permissions, isOfflineMode, isAddMode, isEditMode])
   );
 
   // Efecto para agregar tienda pre-seleccionada cuando viene de EntradaForm
@@ -1552,16 +1552,14 @@ const ProductoFormContent = () => {
                   (userRole === 'almacenero' && entradaManagePermissions?.almacenero) ||
                   (userRole === 'económico' && entradaManagePermissions?.economico);
 
+                if (!canManageEntradas) return null;
+
                 return (
                   <TouchableOpacity
                     style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#1B5E20' : '#E8F5E9' }]}
                     onPress={() => {
                       if (isOfflineMode) {
                         showToast({ type: 'warning', message: 'No disponible en modo offline' });
-                        return;
-                      }
-                      if (!canManageEntradas) {
-                        showToast({ type: 'error', message: 'No tienes permisos para gestionar entradas' });
                         return;
                       }
                       navigation.navigate('EntradaForm', { mode: 'add', productoPreSeleccionado: producto });
@@ -1583,16 +1581,14 @@ const ProductoFormContent = () => {
                   (userRole === 'almacenero' && movimientoManagePermissions?.almacenero) ||
                   (userRole === 'económico' && movimientoManagePermissions?.economico);
 
+                if (!canManageMovimientos) return null;
+
                 return (
                   <TouchableOpacity
                     style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#0D47A1' : '#E3F2FD' }]}
                     onPress={() => {
                       if (isOfflineMode) {
                         showToast({ type: 'warning', message: 'No disponible en modo offline' });
-                        return;
-                      }
-                      if (!canManageMovimientos) {
-                        showToast({ type: 'error', message: 'No tienes permisos para gestionar movimientos' });
                         return;
                       }
                       if (!producto) {
@@ -1628,16 +1624,14 @@ const ProductoFormContent = () => {
                   (userRole === 'almacenero' && salidaManagePermissions?.almacenero) ||
                   (userRole === 'económico' && salidaManagePermissions?.economico);
 
+                if (!canManageSalidas) return null;
+
                 return (
                   <TouchableOpacity
                     style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#B71C1C' : '#FFEBEE' }]}
                     onPress={() => {
                       if (isOfflineMode) {
                         showToast({ type: 'warning', message: 'No disponible en modo offline' });
-                        return;
-                      }
-                      if (!canManageSalidas) {
-                        showToast({ type: 'error', message: 'No tienes permisos para gestionar salidas' });
                         return;
                       }
                       navigation.navigate('SalidaForm', { mode: 'add', productoPreSeleccionado: producto });
@@ -1659,14 +1653,12 @@ const ProductoFormContent = () => {
                   (userRole === 'almacenero' && ventaManagePermissions?.almacenero) ||
                   (userRole === 'económico' && ventaManagePermissions?.economico);
 
+                if (!canManageVentas) return null;
+
                 return (
                   <TouchableOpacity
                     style={[styles.iconActionButton, { backgroundColor: isDarkMode ? '#F57C00' : '#FFF3E0' }]}
                     onPress={() => {
-                      if (!canManageVentas) {
-                        showToast({ type: 'error', message: 'No tienes permisos para gestionar ventas' });
-                        return;
-                      }
                       handleQuickSale();
                     }}
                   >
@@ -2847,61 +2839,69 @@ const ProductoFormContent = () => {
 
                 return (
                   <>
-                    <View style={styles.infoItem}>
-                      <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#1B5E20' : '#E8F5E9' }]}>
-                        <Image
-                          source={require('../../assets/package-add.png')}
-                          style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
-                          resizeMode="contain"
-                        />
+                    {canManageEntradas && (
+                      <View style={styles.infoItem}>
+                        <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#1B5E20' : '#E8F5E9' }]}>
+                          <Image
+                            source={require('../../assets/package-add.png')}
+                            style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
+                            resizeMode="contain"
+                          />
+                        </View>
+                        <View style={styles.infoItemText}>
+                          <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Agregar Entrada</Text>
+                          <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra la entrada de stock al inventario del producto.</Text>
+                        </View>
                       </View>
-                      <View style={styles.infoItemText}>
-                        <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Agregar Entrada</Text>
-                        <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra la entrada de stock al inventario del producto.</Text>
-                      </View>
-                    </View>
+                    )}
 
-                    <View style={styles.infoItem}>
-                      <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#0D47A1' : '#E3F2FD' }]}>
-                        <Image
-                          source={require('../../assets/moving.png')}
-                          style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
-                          resizeMode="contain"
-                        />
+                    {canManageMovimientos && (
+                      <View style={styles.infoItem}>
+                        <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#0D47A1' : '#E3F2FD' }]}>
+                          <Image
+                            source={require('../../assets/moving.png')}
+                            style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
+                            resizeMode="contain"
+                          />
+                        </View>
+                        <View style={styles.infoItemText}>
+                          <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Movimiento</Text>
+                          <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Realiza transferencias de stock entre tiendas o almacenes.</Text>
+                        </View>
                       </View>
-                      <View style={styles.infoItemText}>
-                        <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Movimiento</Text>
-                        <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Realiza transferencias de stock entre tiendas o almacenes.</Text>
-                      </View>
-                    </View>
+                    )}
 
-                    <View style={styles.infoItem}>
-                      <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#B71C1C' : '#FFEBEE' }]}>
-                        <Image
-                          source={require('../../assets/box.png')}
-                          style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
-                          resizeMode="contain"
-                        />
+                    {canManageSalidas && (
+                      <View style={styles.infoItem}>
+                        <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#B71C1C' : '#FFEBEE' }]}>
+                          <Image
+                            source={require('../../assets/box.png')}
+                            style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
+                            resizeMode="contain"
+                          />
+                        </View>
+                        <View style={styles.infoItemText}>
+                          <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Hacer Salida</Text>
+                          <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra la salida de stock del inventario del producto.</Text>
+                        </View>
                       </View>
-                      <View style={styles.infoItemText}>
-                        <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Hacer Salida</Text>
-                        <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra la salida de stock del inventario del producto.</Text>
-                      </View>
-                    </View>
+                    )}
 
-                    <View style={styles.infoItem}>
-                      <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#F57C00' : '#FFF3E0' }]}>
-                        <Image
-                          source={require('../../assets/sales.png')}
-                          style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
-                          resizeMode="contain"
-                        />
+                    {canManageVentas && (
+                      <View style={styles.infoItem}>
+                        <View style={[styles.infoItemIcon, { backgroundColor: isDarkMode ? '#F57C00' : '#FFF3E0' }]}>
+                          <Image
+                            source={require('../../assets/sales.png')}
+                            style={{ width: responsive.responsiveWidth(20), height: responsive.responsiveWidth(20), tintColor: isDarkMode ? '#FFFFFF' : '#000000' }}
+                            resizeMode="contain"
+                          />
+                        </View>
+                        <View style={styles.infoItemText}>
+                          <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Vender</Text>
+                          <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra una venta del producto reduciendo el stock disponible.</Text>
+                        </View>
                       </View>
-                      <View style={styles.infoItemText}>
-                        <Text style={[styles.infoItemTitle, { color: colors.onSurface }]}>Vender</Text>
-                        <Text style={[styles.infoItemDescription, { color: colors.outline }]}>Registra una venta del producto reduciendo el stock disponible.</Text>
-                      </View>
-                    </View>
+                    )}
                   </>
                 );
               })()}
