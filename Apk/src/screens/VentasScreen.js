@@ -32,6 +32,8 @@ import * as XLSX from 'xlsx';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
+import * as MediaLibrary from 'expo-media-library';
+import * as IntentLauncher from 'expo-intent-launcher';
 
 const VentasContent = () => {
   const navigation = useNavigation();
@@ -1200,14 +1202,14 @@ const VentasContent = () => {
 
       // Generate file
       const excelBase64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
-      
-      // Save file
+
+      // Save file to cache directory first (for sharing)
       const date = new Date();
       const formattedDate = `${date.getDate().toString().padStart(2, '0')}_${(date.getMonth() + 1).toString().padStart(2, '0')}_${date.getFullYear()}`;
       const fileName = `Ventas_${formattedDate}.xlsx`;
-      const downloadDir = FileSystem.documentDirectory;
-      const fileUri = `${downloadDir}${fileName}`;
-      
+      const cacheDir = FileSystem.cacheDirectory;
+      const fileUri = `${cacheDir}${fileName}`;
+
       await FileSystem.writeAsStringAsync(fileUri, excelBase64, {
         encoding: FileSystem.EncodingType.Base64,
       });
@@ -1241,8 +1243,26 @@ const VentasContent = () => {
           },
           {
             text: 'Guardar',
-            onPress: () => {
-              showToast({ type: 'success', message: `Archivo guardado en: ${fileUri}` });
+            onPress: async () => {
+              try {
+                // Request media library permissions
+                const { status } = await MediaLibrary.requestPermissionsAsync();
+
+                if (status !== 'granted') {
+                  Alert.alert('Permiso requerido', 'Se requiere permiso para guardar archivos en el dispositivo');
+                  return;
+                }
+
+                // Get Downloads album
+                const album = await MediaLibrary.getAlbumAsync('Download');
+
+                // Save to Downloads folder using MediaLibrary with album ID
+                const asset = await MediaLibrary.createAssetAsync(fileUri, album?.id);
+
+                showToast({ type: 'success', message: 'Archivo guardado en la carpeta Descargas' });
+              } catch (error) {
+                showToast({ type: 'error', message: 'Error al guardar el archivo: ' + error.message });
+              }
             },
           },
         ]
