@@ -344,10 +344,10 @@ const ProductoFormContent = () => {
   const isEconomico = userRole === 'económico';
   const isDependiente = userRole === 'dependiente';
   const isAlmacenero = userRole === 'almacenero';
-  
+
   const canEditProduct = isAdmin;
-  const canEditCodes = isAdmin || isEditMode;
-  const canViewCosts = !isDependiente && !isAlmacenero || isEditMode;
+  const canEditCodes = isAdmin || isEditMode || productoManagePermissions?.dependiente || productoManagePermissions?.almacenero || productoManagePermissions?.economico;
+  const canViewCosts = !isDependiente && !isAlmacenero || isEditMode || productoManagePermissions?.dependiente || productoManagePermissions?.almacenero || productoManagePermissions?.economico;
 
   useEffect(() => {
     fetchTiendas();

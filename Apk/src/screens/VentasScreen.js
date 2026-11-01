@@ -59,6 +59,7 @@ const VentasContent = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [showComprobanteModal, setShowComprobanteModal] = useState(false);
   const [comprobanteSaleItems, setComprobanteSaleItems] = useState([]);
+  const [comprobanteUsuario, setComprobanteUsuario] = useState(null);
   const [comprobanteConfig, setComprobanteConfig] = useState({
     logo: null,
     nombreNegocio: '',
@@ -807,7 +808,11 @@ const VentasContent = () => {
       precio_usd: v.precio_cobrado_usd || 0,
     })) || [];
 
+    // Get the original user who created the sale
+    const originalUsuario = venta.operaciones?.[0]?.usuario || venta.usuario;
+
     setComprobanteSaleItems(saleItems);
+    setComprobanteUsuario(originalUsuario);
     setShowComprobanteModal(true);
   };
 
@@ -887,7 +892,7 @@ const VentasContent = () => {
               </svg>
             ` : ''}
             ${comprobanteConfig.nombreNegocio ? `<div class="business-name">${comprobanteConfig.nombreNegocio}</div>` : ''}
-            <div class="text">DEPENDIENTE: ${user?.nombre_natural || 'N/A'}</div>
+            <div class="text">DEPENDIENTE: ${comprobanteUsuario?.nombre_natural || user?.nombre_natural || 'N/A'}</div>
             <div class="text">${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
           </div>
           <div class="table">
@@ -2727,7 +2732,7 @@ const VentasContent = () => {
                   <Text style={styles.comprobanteNegocioName}>
                     {comprobanteConfig.nombreNegocio || 'Nombre del Negocio'}
                   </Text>
-                  <Text style={[styles.comprobanteText, styles.comprobanteTextCentered]}>DEPENDIENTE: {user?.nombre_natural || 'N/A'}</Text>
+                  <Text style={[styles.comprobanteText, styles.comprobanteTextCentered]}>DEPENDIENTE: {comprobanteUsuario?.nombre_natural || user?.nombre_natural || 'N/A'}</Text>
                   <Text style={[styles.comprobanteText, styles.comprobanteTextCentered]}>
                     {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                   </Text>

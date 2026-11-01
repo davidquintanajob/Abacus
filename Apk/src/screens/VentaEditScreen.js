@@ -360,6 +360,9 @@ const VentaEditContent = () => {
 
   }, []);
 
+  // Flag to track if ventaItems has been loaded from API
+  const [ventaItemsLoaded, setVentaItemsLoaded] = useState(false);
+
   useEffect(() => {
     if (venta?.id_lista_venta) {
       fetchVentaData();
@@ -367,6 +370,21 @@ const VentaEditContent = () => {
     // Load tiendas for selector
     loadTiendas();
   }, [venta?.id_lista_venta]);
+
+  // Sync ventaItems with saleItems when saleItems changes (after initial load)
+  useEffect(() => {
+    if (ventaItemsLoaded && saleItems.length > 0) {
+      const updatedVentaItems = saleItems.map(item => ({
+        id: item.id_venta || Date.now() + Math.random(),
+        id_servicio_tienda: item.id_servicio_tienda,
+        servicio: null, // Will be loaded if needed
+        cantidad: item.cantidad?.toString() || '',
+        precio_cobrado_cup: item.precio_cup?.toString() || '',
+        precio_cobrado_usd: item.precio_usd?.toString() || '',
+      }));
+      setVentaItems(updatedVentaItems);
+    }
+  }, [saleItems, ventaItemsLoaded]);
 
   useEffect(() => {
     if (searchDebounceRef.current) {
@@ -635,6 +653,7 @@ const VentaEditContent = () => {
       showToast({ type: 'error', message: 'Error al cargar datos de la venta' });
     } finally {
       setIsFetchingVenta(false);
+      setVentaItemsLoaded(true);
     }
   };
 

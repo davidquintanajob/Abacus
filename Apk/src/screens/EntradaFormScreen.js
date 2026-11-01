@@ -3163,9 +3163,24 @@ const EntradaFormContent = () => {
                     <TouchableOpacity
                       style={[
                         styles.addProductButton,
-                        { backgroundColor: colors.primaryContainer, borderColor: colors.primary }
+                        {
+                          backgroundColor: colors.primaryContainer,
+                          borderColor: colors.primary,
+                          opacity: (() => {
+                            const lastFabricacion = fabricaciones[fabricaciones.length - 1];
+                            const hasProduct = lastFabricacion?.producto !== null;
+                            const hasQuantity = lastFabricacion?.cantidad_insumo && parseFloat(lastFabricacion.cantidad_insumo) > 0;
+                            return (hasProduct || hasQuantity) ? 1 : 0.5;
+                          })()
+                        }
                       ]}
                       onPress={addNewFabricacion}
+                      disabled={(() => {
+                        const lastFabricacion = fabricaciones[fabricaciones.length - 1];
+                        const hasProduct = lastFabricacion?.producto !== null;
+                        const hasQuantity = lastFabricacion?.cantidad_insumo && parseFloat(lastFabricacion.cantidad_insumo) > 0;
+                        return !(hasProduct || hasQuantity);
+                      })()}
                     >
                       <Ionicons name="add-circle" size={responsive.responsiveWidth(20)} color={!isDark ? '#FFFFFF' : colors.primary} />
                       <Text style={[styles.addProductButtonText, { color: !isDark ? '#FFFFFF' : colors.primary }]}>
@@ -3988,7 +4003,10 @@ const EntradaFormContent = () => {
               <View style={styles.modalButtonContainer}>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonSecondary, { backgroundColor: modifyProductPrice ? colors.surface : colors.primary, borderColor: modifyProductPrice ? colors.outlineVariant : colors.primary, flex: 1 }]}
-                  onPress={() => setModifyProductPrice(false)}
+                  onPress={() => {
+                    setModifyProductPrice(false);
+                    setFabricacionCostOption(null);
+                  }}
                 >
                   <Text style={[styles.modalButtonText, { color: modifyProductPrice ? colors.onSurface : '#fff' }]}>
                     No
@@ -3996,7 +4014,10 @@ const EntradaFormContent = () => {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonPrimary, { backgroundColor: modifyProductPrice ? colors.primary : colors.surface, borderColor: modifyProductPrice ? colors.primary : colors.outlineVariant, flex: 1 }]}
-                  onPress={() => setModifyProductPrice(true)}
+                  onPress={() => {
+                    setModifyProductPrice(true);
+                    setFabricacionCostOption('formula'); // Default to formula
+                  }}
                 >
                   <Text style={[styles.modalButtonText, { color: modifyProductPrice ? '#fff' : colors.onSurface }]}>
                     Sí
@@ -4004,119 +4025,24 @@ const EntradaFormContent = () => {
                 </TouchableOpacity>
               </View>
 
-              {modifyProductPrice !== null && (
+              {modifyProductPrice && (
                 <>
                   <Text style={[styles.infoText, { color: colors.outline, marginTop: responsive.responsiveMargin(20), marginBottom: responsive.responsiveMargin(16) }]}>
-                    ¿Qué costo desea usar para esta entrada?
+                    ¿Desea actualizar el costo del producto "{formData.producto?.nombre || 'Producto'}"?
                   </Text>
 
+                  {/* Opción 1: Aplicar fórmula de costo promedio ponderado */}
                   <TouchableOpacity
-                    style={[styles.costOptionButton, { backgroundColor: colors.background, borderColor: fabricacionCostOption === 'sumatoria' ? colors.primary : colors.outlineVariant }]}
-                    onPress={() => setFabricacionCostOption('sumatoria')}
+                    style={[styles.costOptionButton, { backgroundColor: colors.background, borderColor: fabricacionCostOption === 'formula' ? colors.primary : colors.outlineVariant }]}
+                    onPress={() => setFabricacionCostOption('formula')}
                   >
                     <View style={styles.costOptionRadio}>
-                      <View style={[styles.costOptionRadioDot, fabricacionCostOption === 'sumatoria' && styles.costOptionRadioDotActive]} />
+                      <View style={[styles.costOptionRadioDot, fabricacionCostOption === 'formula' && styles.costOptionRadioDotActive]} />
                     </View>
                     <Text style={[styles.costOptionText, { color: colors.onSurface }]}>
-                      Nuevo precio basado en sumatoria de insumos
+                      Aplicar fórmula de costo promedio ponderado
                     </Text>
                   </TouchableOpacity>
-
-                  {fabricacionCostOption === 'sumatoria' && (
-                    <View style={[styles.costPreviewCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                      <Text style={[styles.costPreviewTitle, { color: colors.onSurface }]}>
-                        Costo calculado (sumatoria de insumos)
-                      </Text>
-                      <View style={styles.costPreviewRow}>
-                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo CUP:</Text>
-                        <Text style={[styles.costPreviewValue, { color: colors.onSurface }]}>
-                          ${(() => {
-                            const validFabricaciones = fabricaciones.filter(f => f.producto !== null);
-                            let costoTotalCup = 0;
-                            validFabricaciones.forEach(f => {
-                              costoTotalCup += (parseFloat(f.cantidad_insumo) || 0) * (parseFloat(f.costo_insumo_cup) || 0);
-                            });
-                            const cantidadProducida = parseFloat(formData.cantidad_entrada) || 1;
-                            const costoPorUnidad = cantidadProducida > 0 ? costoTotalCup / cantidadProducida : 0;
-                            return costoPorUnidad.toFixed(2);
-                          })()}
-                        </Text>
-                      </View>
-                      <View style={styles.costPreviewRow}>
-                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo USD:</Text>
-                        <Text style={[styles.costPreviewValue, { color: colors.onSurface }]}>
-                          ${(() => {
-                            const validFabricaciones = fabricaciones.filter(f => f.producto !== null);
-                            let costoTotalUsd = 0;
-                            validFabricaciones.forEach(f => {
-                              costoTotalUsd += (parseFloat(f.cantidad_insumo) || 0) * (parseFloat(f.costo_insumo_usd) || 0);
-                            });
-                            const cantidadProducida = parseFloat(formData.cantidad_entrada) || 1;
-                            const costoPorUnidad = cantidadProducida > 0 ? costoTotalUsd / cantidadProducida : 0;
-                            return costoPorUnidad.toFixed(2);
-                          })()}
-                        </Text>
-                      </View>
-                    </View>
-                  )}
-
-                  <TouchableOpacity
-                    style={[styles.costOptionButton, { backgroundColor: colors.background, borderColor: fabricacionCostOption === 'actual' ? colors.primary : colors.outlineVariant }]}
-                    onPress={() => setFabricacionCostOption('actual')}
-                  >
-                    <View style={styles.costOptionRadio}>
-                      <View style={[styles.costOptionRadioDot, fabricacionCostOption === 'actual' && styles.costOptionRadioDotActive]} />
-                    </View>
-                    <Text style={[styles.costOptionText, { color: colors.onSurface }]}>
-                      Mantener precio actual del producto
-                    </Text>
-                  </TouchableOpacity>
-
-                  {fabricacionCostOption === 'actual' && (
-                    <View style={[styles.costPreviewCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
-                      <Text style={[styles.costPreviewTitle, { color: colors.onSurface }]}>
-                        Costo actual del producto
-                      </Text>
-                      <View style={styles.costPreviewRow}>
-                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo CUP:</Text>
-                        <Text style={[styles.costPreviewValue, { color: colors.onSurface }]}>
-                          ${(() => {
-                            const productoTiendaCosto = formData.producto?.tiendas_servicio?.find(
-                              ts => ts.id_tienda === formData.tienda?.id_tienda
-                            );
-                            const costo = parseFloat(productoTiendaCosto?.costo_cup) || 0;
-                            return costo.toFixed(2);
-                          })()}
-                        </Text>
-                      </View>
-                      <View style={styles.costPreviewRow}>
-                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo USD:</Text>
-                        <Text style={[styles.costPreviewValue, { color: colors.onSurface }]}>
-                          ${(() => {
-                            const productoTiendaCosto = formData.producto?.tiendas_servicio?.find(
-                              ts => ts.id_tienda === formData.tienda?.id_tienda
-                            );
-                            const costo = parseFloat(productoTiendaCosto?.costo_usd) || 0;
-                            return costo.toFixed(2);
-                          })()}
-                        </Text>
-                      </View>
-                    </View>
-                  )}
-
-                  {config.applyWeightedAverageCost && (
-                    <TouchableOpacity
-                      style={[styles.costOptionButton, { backgroundColor: colors.background, borderColor: fabricacionCostOption === 'formula' ? colors.primary : colors.outlineVariant }]}
-                      onPress={() => setFabricacionCostOption('formula')}
-                    >
-                      <View style={styles.costOptionRadio}>
-                        <View style={[styles.costOptionRadioDot, fabricacionCostOption === 'formula' && styles.costOptionRadioDotActive]} />
-                      </View>
-                      <Text style={[styles.costOptionText, { color: colors.onSurface }]}>
-                        Aplicar fórmula de costo promedio ponderado
-                      </Text>
-                    </TouchableOpacity>
-                  )}
 
                   {fabricacionCostOption === 'formula' && (
                     <View style={[styles.costPreviewCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
@@ -4124,7 +4050,20 @@ const EntradaFormContent = () => {
                         Costo calculado (fórmula de costo promedio ponderado)
                       </Text>
                       <View style={styles.costPreviewRow}>
-                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo CUP:</Text>
+                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo CUP (viejo):</Text>
+                        <Text style={[styles.costPreviewValue, { color: colors.outline }]}>
+                          ${(() => {
+                            const productoTiendaCosto = formData.producto?.tiendas_servicio?.find(
+                              ts => ts.id_tienda === formData.tienda?.id_tienda
+                            );
+                            const costo = parseFloat(productoTiendaCosto?.costo_cup) || 0;
+                            console.log('[Fabricación Modal - Formula] Costo CUP viejo:', costo);
+                            return costo.toFixed(2);
+                          })()}
+                        </Text>
+                      </View>
+                      <View style={styles.costPreviewRow}>
+                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo CUP (nuevo):</Text>
                         <Text style={[styles.costPreviewValue, { color: colors.onSurface }]}>
                           ${(() => {
                             // Calcular costo de insumos (sumatoria)
@@ -4136,6 +4075,11 @@ const EntradaFormContent = () => {
                             const cantidadProducida = parseFloat(formData.cantidad_entrada) || 1;
                             const costoPorUnidadCupSumatoria = cantidadProducida > 0 ? costoTotalInsumosCup / cantidadProducida : 0;
 
+                            console.log('[Fabricación Modal - Formula] Costo total insumos CUP:', costoTotalInsumosCup);
+                            console.log('[Fabricación Modal - Formula] Cantidad producida:', cantidadProducida);
+                            console.log('[Fabricación Modal - Formula] Costo por unidad CUP (sumatoria):', costoPorUnidadCupSumatoria);
+                            console.log('[Fabricación Modal - Formula] Costo CUP nuevo (preview):', costoPorUnidadCupSumatoria);
+
                             // Calcular costo promedio ponderado (simulado)
                             // Nota: En modo preview no podemos obtener las entradas reales del backend
                             // Así que mostramos el costo de sumatoria como referencia
@@ -4144,7 +4088,20 @@ const EntradaFormContent = () => {
                         </Text>
                       </View>
                       <View style={styles.costPreviewRow}>
-                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo USD:</Text>
+                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo USD (viejo):</Text>
+                        <Text style={[styles.costPreviewValue, { color: colors.outline }]}>
+                          ${(() => {
+                            const productoTiendaCosto = formData.producto?.tiendas_servicio?.find(
+                              ts => ts.id_tienda === formData.tienda?.id_tienda
+                            );
+                            const costo = parseFloat(productoTiendaCosto?.costo_usd) || 0;
+                            console.log('[Fabricación Modal - Formula] Costo USD viejo:', costo);
+                            return costo.toFixed(2);
+                          })()}
+                        </Text>
+                      </View>
+                      <View style={styles.costPreviewRow}>
+                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo USD (nuevo):</Text>
                         <Text style={[styles.costPreviewValue, { color: colors.onSurface }]}>
                           ${(() => {
                             // Calcular costo de insumos (sumatoria)
@@ -4155,6 +4112,10 @@ const EntradaFormContent = () => {
                             });
                             const cantidadProducida = parseFloat(formData.cantidad_entrada) || 1;
                             const costoPorUnidadUsdSumatoria = cantidadProducida > 0 ? costoTotalInsumosUsd / cantidadProducida : 0;
+
+                            console.log('[Fabricación Modal - Formula] Costo total insumos USD:', costoTotalInsumosUsd);
+                            console.log('[Fabricación Modal - Formula] Costo por unidad USD (sumatoria):', costoPorUnidadUsdSumatoria);
+                            console.log('[Fabricación Modal - Formula] Costo USD nuevo (preview):', costoPorUnidadUsdSumatoria);
 
                             // Calcular costo promedio ponderado (simulado)
                             // Nota: En modo preview no podemos obtener las entradas reales del backend
@@ -4169,43 +4130,90 @@ const EntradaFormContent = () => {
                     </View>
                   )}
 
+                  {/* Opción 2: Asignar costo de esta entrada directamente */}
                   <TouchableOpacity
-                    style={[styles.costOptionButton, { backgroundColor: colors.background, borderColor: fabricacionCostOption === 'manual' ? colors.primary : colors.outlineVariant }]}
-                    onPress={() => setFabricacionCostOption('manual')}
+                    style={[styles.costOptionButton, { backgroundColor: colors.background, borderColor: fabricacionCostOption === 'sumatoria' ? colors.primary : colors.outlineVariant }]}
+                    onPress={() => setFabricacionCostOption('sumatoria')}
                   >
                     <View style={styles.costOptionRadio}>
-                      <View style={[styles.costOptionRadioDot, fabricacionCostOption === 'manual' && styles.costOptionRadioDotActive]} />
+                      <View style={[styles.costOptionRadioDot, fabricacionCostOption === 'sumatoria' && styles.costOptionRadioDotActive]} />
                     </View>
                     <Text style={[styles.costOptionText, { color: colors.onSurface }]}>
-                      Colocar manualmente el precio
+                      Asignar costo de esta entrada directamente al producto
                     </Text>
                   </TouchableOpacity>
 
-                  {fabricacionCostOption === 'manual' && (
-                    <View style={styles.manualCostContainer}>
-                      <View style={styles.formRow}>
-                        <View style={[styles.formColumn, styles.formGroup, { flex: 1, marginRight: responsive.responsiveMargin(8) }]}>
-                          <Text style={[styles.label, { color: colors.outline }]}>Costo CUP *</Text>
-                          <TextInput
-                            style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                            placeholderTextColor={colors.outline}
-                            placeholder="Costo CUP"
-                            value={fabricacionManualCostCup}
-                            onChangeText={setFabricacionManualCostCup}
-                            keyboardType="decimal-pad"
-                          />
-                        </View>
-                        <View style={[styles.formColumn, styles.formGroup, { flex: 1 }]}>
-                          <Text style={[styles.label, { color: colors.outline }]}>Costo USD *</Text>
-                          <TextInput
-                            style={[styles.input, { backgroundColor: colors.surface, color: colors.onSurface, borderColor: colors.outlineVariant }]}
-                            placeholderTextColor={colors.outline}
-                            placeholder="Costo USD"
-                            value={fabricacionManualCostUsd}
-                            onChangeText={setFabricacionManualCostUsd}
-                            keyboardType="decimal-pad"
-                          />
-                        </View>
+                  {fabricacionCostOption === 'sumatoria' && (
+                    <View style={[styles.costPreviewCard, { backgroundColor: colors.background, borderColor: colors.outlineVariant }]}>
+                      <Text style={[styles.costPreviewTitle, { color: colors.onSurface }]}>
+                        Costo calculado (sumatoria de insumos)
+                      </Text>
+                      <View style={styles.costPreviewRow}>
+                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo CUP (viejo):</Text>
+                        <Text style={[styles.costPreviewValue, { color: colors.outline }]}>
+                          ${(() => {
+                            const productoTiendaCosto = formData.producto?.tiendas_servicio?.find(
+                              ts => ts.id_tienda === formData.tienda?.id_tienda
+                            );
+                            const costo = parseFloat(productoTiendaCosto?.costo_cup) || 0;
+                            console.log('[Fabricación Modal - Sumatoria] Costo CUP viejo:', costo);
+                            return costo.toFixed(2);
+                          })()}
+                        </Text>
+                      </View>
+                      <View style={styles.costPreviewRow}>
+                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo CUP (nuevo):</Text>
+                        <Text style={[styles.costPreviewValue, { color: colors.onSurface }]}>
+                          ${(() => {
+                            const validFabricaciones = fabricaciones.filter(f => f.producto !== null);
+                            let costoTotalCup = 0;
+                            validFabricaciones.forEach(f => {
+                              costoTotalCup += (parseFloat(f.cantidad_insumo) || 0) * (parseFloat(f.costo_insumo_cup) || 0);
+                            });
+                            const cantidadProducida = parseFloat(formData.cantidad_entrada) || 1;
+                            const costoPorUnidad = cantidadProducida > 0 ? costoTotalCup / cantidadProducida : 0;
+
+                            console.log('[Fabricación Modal - Sumatoria] Costo total insumos CUP:', costoTotalCup);
+                            console.log('[Fabricación Modal - Sumatoria] Cantidad producida:', cantidadProducida);
+                            console.log('[Fabricación Modal - Sumatoria] Costo por unidad CUP:', costoPorUnidad);
+                            console.log('[Fabricación Modal - Sumatoria] Costo CUP nuevo:', costoPorUnidad);
+
+                            return costoPorUnidad.toFixed(2);
+                          })()}
+                        </Text>
+                      </View>
+                      <View style={styles.costPreviewRow}>
+                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo USD (viejo):</Text>
+                        <Text style={[styles.costPreviewValue, { color: colors.outline }]}>
+                          ${(() => {
+                            const productoTiendaCosto = formData.producto?.tiendas_servicio?.find(
+                              ts => ts.id_tienda === formData.tienda?.id_tienda
+                            );
+                            const costo = parseFloat(productoTiendaCosto?.costo_usd) || 0;
+                            console.log('[Fabricación Modal - Sumatoria] Costo USD viejo:', costo);
+                            return costo.toFixed(2);
+                          })()}
+                        </Text>
+                      </View>
+                      <View style={styles.costPreviewRow}>
+                        <Text style={[styles.costPreviewLabel, { color: colors.outline }]}>Costo USD (nuevo):</Text>
+                        <Text style={[styles.costPreviewValue, { color: colors.onSurface }]}>
+                          ${(() => {
+                            const validFabricaciones = fabricaciones.filter(f => f.producto !== null);
+                            let costoTotalUsd = 0;
+                            validFabricaciones.forEach(f => {
+                              costoTotalUsd += (parseFloat(f.cantidad_insumo) || 0) * (parseFloat(f.costo_insumo_usd) || 0);
+                            });
+                            const cantidadProducida = parseFloat(formData.cantidad_entrada) || 1;
+                            const costoPorUnidad = cantidadProducida > 0 ? costoTotalUsd / cantidadProducida : 0;
+
+                            console.log('[Fabricación Modal - Sumatoria] Costo total insumos USD:', costoTotalUsd);
+                            console.log('[Fabricación Modal - Sumatoria] Costo por unidad USD:', costoPorUnidad);
+                            console.log('[Fabricación Modal - Sumatoria] Costo USD nuevo:', costoPorUnidad);
+
+                            return costoPorUnidad.toFixed(2);
+                          })()}
+                        </Text>
                       </View>
                     </View>
                   )}
@@ -4231,12 +4239,8 @@ const EntradaFormContent = () => {
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonPrimary, { backgroundColor: colors.primary }]}
                 onPress={() => {
-                  if (!fabricacionCostOption) {
+                  if (modifyProductPrice && !fabricacionCostOption) {
                     showToast({ type: 'warning', message: 'Debe seleccionar una opción de costo' });
-                    return;
-                  }
-                  if (fabricacionCostOption === 'manual' && (!fabricacionManualCostCup || !fabricacionManualCostUsd)) {
-                    showToast({ type: 'warning', message: 'Debe ingresar ambos costos manuales' });
                     return;
                   }
                   setShowFabricacionCostModal(false);
