@@ -4,12 +4,17 @@ interface ApiError extends Error {
   code?: number | string | null;
 }
 
-export const getVentas = async (filters: any = {}, page: number = 1, limit: number = 10) => {
+export const getVentas = async (filters: any = {}, page: number | undefined = undefined, limit: number | undefined = undefined) => {
   try {
-    const queryParams = new URLSearchParams({
-      limit: limit.toString(),
-      page: page.toString(),
-    });
+    const queryParams = new URLSearchParams();
+
+    // Only add limit and page if they are provided
+    if (limit !== undefined) {
+      queryParams.append('limit', limit.toString());
+    }
+    if (page !== undefined) {
+      queryParams.append('page', page.toString());
+    }
 
     // Add filters
     if (filters.nota) queryParams.append('nota', filters.nota);

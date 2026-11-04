@@ -35,6 +35,7 @@ export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStrip
       'Salidas': '/salidas',
       'Operaciones': '/operaciones',
       'Ventas': '/ventas',
+      'Informes': '/informes',
       'Movimientos': '/movimientos',
       'Deudas': '/deudas',
       'Tiendas': '/tiendas',
@@ -105,6 +106,9 @@ export const IconStrip = ({ onHover, onLeave, currentRoute = 'Home' }: IconStrip
   }
   if (canAccessVentas) {
     menuItems.push({ icon: '/icon-ventas.png', label: 'Ventas', route: 'Ventas' });
+  }
+  if (isAdmin) {
+    menuItems.push({ icon: '/report (1).png', label: 'Informes', route: 'Informes' });
   }
   if (canAccessMovimientos) {
     menuItems.push({ icon: '/moving.png', label: 'Movimientos', route: 'Movimientos' });

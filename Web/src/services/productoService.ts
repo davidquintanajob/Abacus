@@ -111,3 +111,23 @@ export const deleteProducto = async (id: string | number) => {
     throw err;
   }
 };
+
+export const getSeguimientoInventario = async (idProducto: string | number, idTienda: string | number, fechaDesde: string, fechaHasta: string) => {
+  try {
+    const queryParams = new URLSearchParams();
+    queryParams.append('id_tienda', idTienda.toString());
+    queryParams.append('fecha_desde', fechaDesde);
+    queryParams.append('fecha_hasta', fechaHasta);
+
+    const response = await api.get(`/producto/${idProducto}/seguimiento-inventario?${queryParams}`);
+    return response.data;
+  } catch (error: any) {
+    const errorMessage = error.response?.data?.errors?.[0] ||
+                        error.response?.data?.message ||
+                        error.message ||
+                        'Error al obtener seguimiento de inventario';
+    const err = new Error(errorMessage) as ApiError;
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
+  }
+};
