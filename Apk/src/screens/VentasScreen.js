@@ -1244,23 +1244,34 @@ const VentasContent = () => {
           {
             text: 'Guardar',
             onPress: async () => {
+              console.log('[Export] Usuario seleccionó guardar en Downloads');
               try {
                 // Request media library permissions
+                console.log('[Export] Solicitando permisos de MediaLibrary...');
                 const { status } = await MediaLibrary.requestPermissionsAsync();
+                console.log('[Export] Status de permisos:', status);
 
                 if (status !== 'granted') {
+                  console.log('[Export] Permisos no otorgados');
                   Alert.alert('Permiso requerido', 'Se requiere permiso para guardar archivos en el dispositivo');
                   return;
                 }
 
                 // Get Downloads album
+                console.log('[Export] Buscando album de Downloads...');
                 const album = await MediaLibrary.getAlbumAsync('Download');
+                console.log('[Export] Album encontrado:', album);
 
                 // Save to Downloads folder using MediaLibrary with album ID
+                console.log('[Export] Creando asset en MediaLibrary con album ID:', album?.id);
                 const asset = await MediaLibrary.createAssetAsync(fileUri, album?.id);
+                console.log('[Export] Asset creado:', asset);
 
                 showToast({ type: 'success', message: 'Archivo guardado en la carpeta Descargas' });
               } catch (error) {
+                console.log('[Export] Error al guardar en Downloads:', error);
+                console.log('[Export] Error message:', error.message);
+                console.log('[Export] Error code:', error.code);
                 showToast({ type: 'error', message: 'Error al guardar el archivo: ' + error.message });
               }
             },

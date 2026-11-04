@@ -1,10 +1,13 @@
 import api from './api';
 
-export const getProductos = async (filters = {}, page = 1, limit = 10) => {
+export const getProductos = async (filters = {}, page = 1, limit = 10, skipPagination = false) => {
   try {
     // Build query params manually to avoid double encoding with URLSearchParams
     const params = new Map();
-    params.set('limit', limit.toString());
+    
+    // If skipPagination is true, use a very large limit to emulate getAll
+    const effectiveLimit = skipPagination ? 999999 : limit;
+    params.set('limit', effectiveLimit.toString());
     params.set('page', page.toString());
 
     // Add filters with proper encoding

@@ -161,10 +161,10 @@ const InventarioProductosContent = () => {
     try {
       setLoadingProgress(30);
 
-      // Fetch all products with filters (skip esvendible parameter)
+      // Fetch all products with filters (skip esvendible parameter and pagination)
       const filtersWithSkip = { ...filters, skipEsvendible: true };
 
-      const productosData = await getProductos(filtersWithSkip);
+      const productosData = await getProductos(filtersWithSkip, 1, 10, true);
 
       let productos = productosData.data || [];
 

@@ -1494,31 +1494,21 @@ const EntradaFormContent = () => {
         costoPorUnidadUsd = parseFloat(fabricacionManualCostUsd) || 0;
       } else if (fabricacionCostOption === 'formula' && config.applyWeightedAverageCost) {
         // Aplicar fórmula de costo promedio ponderado
-        // Obtener todas las entradas del producto en esta tienda
-        const entradasResponse = await getEntradas({
-          id_servicio_tienda: id_servicio_tienda,
-          skipCantidadMin: true
-        }, 1, 10000);
-        const entradas = entradasResponse.data || [];
-        
-        let totalCantidad = 0;
-        let totalCostoCup = 0;
-        let totalCostoUsd = 0;
+        // Obtener el costo actual del producto en la tienda
+        const productoTiendaCosto = formData.producto.tiendas_servicio?.find(
+          ts => ts.id_tienda === formData.tienda.id_tienda
+        );
+        const costoActualCup = productoTiendaCosto?.costo_cup || 0;
+        const costoActualUsd = productoTiendaCosto?.costo_usd || 0;
 
-        for (const entrada of entradas) {
-          const cantidad = parseFloat(entrada.cantidad_entrada) || 0;
-          const costoCup = parseFloat(entrada.costo_cup) || 0;
-          const costoUsd = parseFloat(entrada.costo_usd) || 0;
-          
-          totalCantidad += cantidad;
-          totalCostoCup += cantidad * costoCup;
-          totalCostoUsd += cantidad * costoUsd;
-        }
+        // Obtener la cantidad actual del producto en la tienda
+        const cantidadActual = productoTiendaCosto?.cantidad || 0;
 
-        // Incluir la nueva entrada en el cálculo
-        totalCantidad += cantidadProducida;
-        totalCostoCup += cantidadProducida * costoPorUnidadCupSumatoria;
-        totalCostoUsd += cantidadProducida * costoPorUnidadUsdSumatoria;
+        // Calcular costo promedio ponderado
+        // Fórmula: (cantidad_actual * costo_actual + cantidad_nueva * costo_nuevo) / (cantidad_actual + cantidad_nueva)
+        const totalCantidad = cantidadActual + cantidadProducida;
+        const totalCostoCup = (cantidadActual * costoActualCup) + (cantidadProducida * costoPorUnidadCupSumatoria);
+        const totalCostoUsd = (cantidadActual * costoActualUsd) + (cantidadProducida * costoPorUnidadUsdSumatoria);
 
         costoPorUnidadCup = totalCantidad > 0 ? totalCostoCup / totalCantidad : 0;
         costoPorUnidadUsd = totalCantidad > 0 ? totalCostoUsd / totalCantidad : 0;
