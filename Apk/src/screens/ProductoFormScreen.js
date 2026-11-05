@@ -706,8 +706,8 @@ const ProductoFormContent = () => {
     const gananciaCup = precioCup - costoCup;
     const gananciaUsd = precioUsd - costoUsd;
 
-    const porcentajeGananciaCup = precioCup > 0 ? (gananciaCup / precioCup) * 100 : 0;
-    const porcentajeGananciaUsd = precioUsd > 0 ? (gananciaUsd / precioUsd) * 100 : 0;
+    const porcentajeGananciaCup = costoCup > 0 ? (gananciaCup / costoCup) * 100 : 0;
+    const porcentajeGananciaUsd = costoUsd > 0 ? (gananciaUsd / costoUsd) * 100 : 0;
 
     return {
       gananciaCup: !isNaN(gananciaCup) ? gananciaCup : 0,
@@ -734,8 +734,8 @@ const ProductoFormContent = () => {
     const gananciaCup = precioCup - costoCup;
     const gananciaUsd = precioUsd - costoUsd;
 
-    const porcentajeGananciaCup = precioCup > 0 ? (gananciaCup / precioCup) * 100 : 0;
-    const porcentajeGananciaUsd = precioUsd > 0 ? (gananciaUsd / precioUsd) * 100 : 0;
+    const porcentajeGananciaCup = costoCup > 0 ? (gananciaCup / costoCup) * 100 : 0;
+    const porcentajeGananciaUsd = costoUsd > 0 ? (gananciaUsd / costoUsd) * 100 : 0;
 
     return {
       gananciaCup: !isNaN(gananciaCup) ? gananciaCup : 0,
