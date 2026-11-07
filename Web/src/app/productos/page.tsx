@@ -11,7 +11,7 @@ import { useNavigationLoading } from '../../context/NavigationLoadingContext';
 import { Header } from '../../components/layout/Header';
 import { SidebarNavigation } from '../../components/layout/SidebarNavigation';
 import { Toast } from '../../components/common/Toast';
-import { getProductos, deleteProducto } from '../../services/productoService';
+import { getProductos, deleteProducto, getProductoByCodigo } from '../../services/productoService';
 import { getTiendas } from '../../services/tiendaService';
 import { useResponsive } from '../../hooks/useResponsive';
 import * as XLSX from 'xlsx';
@@ -80,6 +80,10 @@ export default function ProductosPage() {
   const [showFieldSelectionModal, setShowFieldSelectionModal] = useState(false);
   const [exportType, setExportType] = useState<'inventory_excel' | 'inventory_pdf' | 'qr' | 'barcode' | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  const scannerBufferRef = useRef('');
+  const scannerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [selectedFields, setSelectedFields] = useState({
     nombre: true,
     codigo_qr_barra: false,
@@ -140,6 +144,72 @@ export default function ProductosPage() {
     }
   }, [pagination.currentPage]);
 
+  // Global scanner detection
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only detect if it's a number or Enter key
+      if (!/^[0-9]$/.test(e.key) && e.key !== 'Enter') return;
+
+      // Clear previous timeout
+      if (scannerTimeoutRef.current) {
+        clearTimeout(scannerTimeoutRef.current);
+      }
+
+      // If Enter key is pressed and we have buffer content, process it
+      if (e.key === 'Enter' && scannerBufferRef.current) {
+        e.preventDefault();
+        const newFilters = {
+          nombre: '',
+          codigo: scannerBufferRef.current,
+          categoria: '',
+          esvendible: '',
+          id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : '',
+          cantidad_min: '0.01',
+          cantidad_max: ''
+        };
+        setFilters(newFilters);
+        scannerBufferRef.current = '';
+        handleSearch(newFilters);
+        return;
+      }
+
+      // Add character to buffer
+      scannerBufferRef.current += e.key;
+
+      // Set timeout to clear buffer if no more characters come within 100ms
+      const timeout = setTimeout(() => {
+        // If buffer has enough characters (typical barcode length is 8-13), process it
+        if (scannerBufferRef.current.length >= 8) {
+          const newFilters = {
+            nombre: '',
+            codigo: scannerBufferRef.current,
+            categoria: '',
+            esvendible: '',
+            id_tienda: (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : '',
+            cantidad_min: '0.01',
+            cantidad_max: ''
+          };
+          setFilters(newFilters);
+          scannerBufferRef.current = '';
+          handleSearch(newFilters);
+        } else {
+          // Clear buffer if it's too short (likely manual typing)
+          scannerBufferRef.current = '';
+        }
+      }, 100);
+
+      scannerTimeoutRef.current = timeout;
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (scannerTimeoutRef.current) {
+        clearTimeout(scannerTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const fetchTiendas = async () => {
     try {
@@ -163,18 +233,58 @@ export default function ProductosPage() {
     }
   };
 
-  const fetchProductos = async (overrideIdTienda = null) => {
+  const fetchProductos = async (overrideIdTienda = null, overrideFilters: any = null) => {
     try {
       setIsLoading(true);
       setError(null);
 
-      const apiFilters = { ...filters };
+      const apiFilters = overrideFilters ? { ...overrideFilters } : { ...filters };
       if (overrideIdTienda !== null) {
         apiFilters.id_tienda = overrideIdTienda;
       }
 
-      const data = await getProductos(apiFilters, pagination.currentPage, pagination.limit);
-      let productos = data.data || [];
+      // Check if we're only filtering by codigo (exact match needed for barcode scanner)
+      // Also allow id_tienda if user has store restrictions
+      const userTiendaId = (!canViewAllStores && user?.id_tienda) ? user.id_tienda.toString() : '';
+      const isOnlyCodigoFilter = 
+        apiFilters.codigo && 
+        !apiFilters.nombre && 
+        !apiFilters.categoria && 
+        apiFilters.esvendible === '' &&
+        (apiFilters.id_tienda === '' || apiFilters.id_tienda === userTiendaId) &&
+        apiFilters.cantidad_min === '0.01' &&
+        !apiFilters.cantidad_max;
+
+      let productos;
+      let paginationData;
+
+      if (isOnlyCodigoFilter) {
+        // Use exact match for barcode scanning
+        try {
+          const producto = await getProductoByCodigo(apiFilters.codigo);
+          productos = [producto];
+          paginationData = {
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+            limit: 10
+          };
+        } catch (err) {
+          // Product not found, return empty list
+          productos = [];
+          paginationData = {
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 0,
+            limit: 10
+          };
+        }
+      } else {
+        // Use regular filter for other cases
+        const data = await getProductos(apiFilters, pagination.currentPage, pagination.limit);
+        productos = data.data || [];
+        paginationData = data.pagination || pagination;
+      }
 
       // Apply store visibility permissions
       if (!canViewAllStores && user?.id_tienda) {
@@ -184,7 +294,7 @@ export default function ProductosPage() {
       }
 
       setProductos(productos);
-      setPagination(data.pagination || pagination);
+      setPagination(paginationData);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -193,10 +303,10 @@ export default function ProductosPage() {
     }
   };
 
-  const handleSearch = () => {
+  const handleSearch = (overrideFilters: any = null) => {
     setPagination(prev => ({ ...prev, currentPage: 1 }));
     setIsSearching(true);
-    fetchProductos(null);
+    fetchProductos(null, overrideFilters);
   };
 
   const handleClearFilters = () => {
@@ -1154,6 +1264,7 @@ export default function ProductosPage() {
                       placeholder="Buscar por nombre..."
                       value={filters.nombre}
                       onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     />
                   </div>
 
@@ -1165,33 +1276,20 @@ export default function ProductosPage() {
                     >
                       Código
                     </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        className="flex-1 rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
-                        style={{ 
-                          backgroundColor: colors.background, 
-                          color: colors.onSurface, 
-                          borderColor: colors.outlineVariant,
-                          fontFamily: 'Inter, sans-serif'
-                        }}
-                        placeholder="Código..."
-                        value={filters.codigo}
-                        onChange={(e) => setFilters(prev => ({ ...prev, codigo: e.target.value }))}
-                      />
-                      <button
-                        className="w-10 h-10 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
-                        style={{ 
-                          backgroundColor: colors.surface,
-                          borderColor: colors.primary
-                        }}
-                        onClick={() => {
-                          showToast({ type: 'warning', message: 'Escáner de código de barras próximamente disponible en web' });
-                        }}
-                      >
-                        <Search size={18} style={{ color: colors.primary }} />
-                      </button>
-                    </div>
+                    <input
+                      type="text"
+                      className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                      style={{ 
+                        backgroundColor: colors.background, 
+                        color: colors.onSurface, 
+                        borderColor: colors.outlineVariant,
+                        fontFamily: 'Inter, sans-serif'
+                      }}
+                      placeholder="Código..."
+                      value={filters.codigo}
+                      onChange={(e) => setFilters(prev => ({ ...prev, codigo: e.target.value }))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                    />
                   </div>
 
                   {/* Categoría */}
@@ -1214,6 +1312,7 @@ export default function ProductosPage() {
                       placeholder="Categoría..."
                       value={filters.categoria}
                       onChange={(e) => setFilters(prev => ({ ...prev, categoria: e.target.value }))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     />
                   </div>
 
@@ -1541,6 +1640,7 @@ export default function ProductosPage() {
                     placeholder="Buscar por nombre..."
                     value={filters.nombre}
                     onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   />
                 </div>
 
@@ -1685,6 +1785,7 @@ export default function ProductosPage() {
                           placeholder="Buscar por código de barras..."
                           value={filters.codigo}
                           onChange={(e) => setFilters(prev => ({ ...prev, codigo: e.target.value }))}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                         />
                         <button
                           className="w-12 h-12 rounded-lg flex items-center justify-center border-2 transition-colors hover:opacity-80"
@@ -1721,6 +1822,7 @@ export default function ProductosPage() {
                         placeholder="Buscar por categoría..."
                         value={filters.categoria}
                         onChange={(e) => setFilters(prev => ({ ...prev, categoria: e.target.value }))}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                       />
                     </div>
 
@@ -1921,7 +2023,17 @@ export default function ProductosPage() {
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-3">
                           {/* Product Image */}
-                          <div className="w-12 h-12 rounded-full flex-shrink-0 overflow-hidden" style={{ backgroundColor: colors.surfaceVariant }}>
+                          <div 
+                            className="w-12 h-12 rounded-full flex-shrink-0 overflow-hidden cursor-pointer"
+                            style={{ backgroundColor: colors.surfaceVariant }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (fullImageUrl) {
+                                setSelectedImageUri(fullImageUrl);
+                                setShowImageModal(true);
+                              }
+                            }}
+                          >
                             {fullImageUrl ? (
                               <img 
                                 src={fullImageUrl} 
@@ -2440,6 +2552,32 @@ export default function ProductosPage() {
             >
               Generar Exportación
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Image Preview Modal */}
+      {showImageModal && selectedImageUri && (
+        <div 
+          className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowImageModal(false)}
+        >
+          <div 
+            className="relative w-full max-w-4xl max-h-[90vh] flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center transition-colors hover:opacity-80 z-10"
+              style={{ backgroundColor: 'rgba(255, 255, 255, 0.2)' }}
+              onClick={() => setShowImageModal(false)}
+            >
+              <X size={24} color="#fff" />
+            </button>
+            <img
+              src={selectedImageUri}
+              alt="Product Image"
+              className="max-w-full max-h-[90vh] object-contain"
+            />
           </div>
         </div>
       )}

@@ -75,7 +75,7 @@ export default function ProductoFormPage() {
     unidad_medida: '',
     imagen: null as string | null,
     codigoList: [] as Array<{ codigo_barras_ean: string; nota: string | null }>,
-    productoTiendaList: [] as Array<{ id_tienda: number; precio_cup: number | null; precio_usd: number | null; costo_cup: number | null; costo_usd: number | null }>,
+    productoTiendaList: [] as Array<{ id_tienda: number; precio_cup: number | null; precio_usd: number | null; costo_cup: number | null; costo_usd: number | null; cantidad_alerta: number | null }>,
     precio_cup_general: null as number | null,
     precio_usd_general: null as number | null,
     costo_cup_general: null as number | null,
@@ -111,9 +111,35 @@ export default function ProductoFormPage() {
   
   const getFormattedValue = (value: number | null | string, fieldName: string): string => {
     if (focusedField === fieldName) {
-      return formatTo5Decimals(value);
+      // When focused, show raw value without formatting
+      if (value === null || value === undefined || value === '') return '';
+      return String(value);
     }
     return formatTo2Decimals(value);
+  };
+
+  const calculateTiendaProfitMargin = (tiendaProducto: any) => {
+    const precioCup = typeof tiendaProducto.precio_cup === 'number' ? tiendaProducto.precio_cup : (isNaN(parseFloat(tiendaProducto.precio_cup)) ? 0 : parseFloat(tiendaProducto.precio_cup));
+    const precioUsd = typeof tiendaProducto.precio_usd === 'number' ? tiendaProducto.precio_usd : (isNaN(parseFloat(tiendaProducto.precio_usd)) ? 0 : parseFloat(tiendaProducto.precio_usd));
+    const costoCup = canViewCosts
+      ? (typeof tiendaProducto.costo_cup === 'number' ? tiendaProducto.costo_cup : (isNaN(parseFloat(tiendaProducto.costo_cup)) ? 0 : parseFloat(tiendaProducto.costo_cup)))
+      : 0;
+    const costoUsd = canViewCosts
+      ? (typeof tiendaProducto.costo_usd === 'number' ? tiendaProducto.costo_usd : (isNaN(parseFloat(tiendaProducto.costo_usd)) ? 0 : parseFloat(tiendaProducto.costo_usd)))
+      : 0;
+
+    const gananciaCup = precioCup - costoCup;
+    const gananciaUsd = precioUsd - costoUsd;
+
+    const porcentajeGananciaCup = costoCup > 0 ? (gananciaCup / costoCup) * 100 : 0;
+    const porcentajeGananciaUsd = costoUsd > 0 ? (gananciaUsd / costoUsd) * 100 : 0;
+
+    return {
+      gananciaCup: !isNaN(gananciaCup) ? gananciaCup : 0,
+      gananciaUsd: !isNaN(gananciaUsd) ? gananciaUsd : 0,
+      porcentajeGananciaCup: !isNaN(porcentajeGananciaCup) ? porcentajeGananciaCup : 0,
+      porcentajeGananciaUsd: !isNaN(porcentajeGananciaUsd) ? porcentajeGananciaUsd : 0
+    };
   };
 
   const handleImagePick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -666,6 +692,7 @@ export default function ProductoFormPage() {
       precio_usd: formData.precio_usd_general || 0,
       costo_cup: formData.costo_cup_general || 0,
       costo_usd: formData.costo_usd_general || 0,
+      cantidad_alerta: null,
     }));
 
     setFormData(prev => ({
@@ -685,6 +712,11 @@ export default function ProductoFormPage() {
     setFormData(prev => {
       const updatedList = prev.productoTiendaList.map((item, i) => {
         if (i === index) {
+          // Handle cantidad_alerta separately as it can be null
+          if (field === 'cantidad_alerta') {
+            const numValue = value === '' ? null : parseFloat(value);
+            return { ...item, [field]: numValue };
+          }
           const updatedItem = { ...item, [field]: parseFloat(value) || 0 };
           
           // Automatic currency conversion for tienda prices
@@ -800,6 +832,7 @@ export default function ProductoFormPage() {
         precio_usd: precioUsd !== null ? precioUsd : 0,
         costo_cup: formData.costo_cup_general || 0,
         costo_usd: formData.costo_usd_general || 0,
+        cantidad_alerta: null,
       }));
       
       // Update existing entries - only update prices that are defined
@@ -812,6 +845,7 @@ export default function ProductoFormPage() {
             ...(precioUsd !== null && { precio_usd: precioUsd }),
             costo_cup: formData.costo_cup_general || 0,
             costo_usd: formData.costo_usd_general || 0,
+            cantidad_alerta: item.cantidad_alerta ?? null,
           })),
           ...newTiendaEntries
         ]
@@ -833,6 +867,7 @@ export default function ProductoFormPage() {
         precio_usd: formData.precio_usd_general !== null ? formData.precio_usd_general : item.precio_usd,
         costo_cup: canViewCosts ? (formData.costo_cup_general !== null ? formData.costo_cup_general : item.costo_cup) : item.costo_cup,
         costo_usd: canViewCosts ? (formData.costo_usd_general !== null ? formData.costo_usd_general : item.costo_usd) : item.costo_usd,
+        cantidad_alerta: item.cantidad_alerta ?? null,
       }))
     }));
 
@@ -1469,7 +1504,7 @@ export default function ProductoFormPage() {
                       <button
                         className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:opacity-80"
                         style={{ backgroundColor: colors.primary, color: '#fff' }}
-                        onClick={() => setShowScannerModal(true)}
+                        onClick={handleOpenBarcodeScanner}
                       >
                         <Plus size={18} />
                       </button>
@@ -1742,6 +1777,51 @@ export default function ProductoFormPage() {
                                   </>
                                 )}
                               </div>
+                              {/* Cantidad Alerta */}
+                              <div className="mt-3">
+                                <label className="block text-xs font-medium mb-1 flex items-center gap-1" style={{ color: colors.outline }}>
+                                  Cantidad Alerta
+                                  <AlertTriangle size={12} style={{ color: colors.outline }} />
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  className="w-full rounded-lg px-3 py-2 border focus:outline-none focus:ring-2"
+                                  style={{ 
+                                    backgroundColor: colors.surface, 
+                                    color: colors.onSurface, 
+                                    borderColor: colors.outlineVariant
+                                  }}
+                                  value={tiendaProducto.cantidad_alerta !== null && !isNaN(parseFloat(String(tiendaProducto.cantidad_alerta)))
+                                    ? String(tiendaProducto.cantidad_alerta)
+                                    : ''}
+                                  onChange={(e) => handleTiendaProductoChange(index, 'cantidad_alerta', e.target.value)}
+                                  disabled={isReadOnly}
+                                  placeholder="Opcional"
+                                />
+                              </div>
+                              {/* Ganancia */}
+                              {canViewCosts && (
+                                <div className="flex items-center justify-between mt-3 p-3 rounded-lg" style={{ backgroundColor: colors.background, borderColor: colors.outlineVariant, borderWidth: '1px' }}>
+                                  <span className="text-xs font-medium" style={{ color: colors.outline }}>Ganancia</span>
+                                  <div className="flex items-center gap-2">
+                                    <span 
+                                      className="text-xs font-semibold"
+                                      style={{ color: calculateTiendaProfitMargin(tiendaProducto).porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }}
+                                    >
+                                      {calculateTiendaProfitMargin(tiendaProducto).porcentajeGananciaCup.toFixed(2)}%
+                                    </span>
+                                    <span className="text-xs" style={{ color: colors.outline }}>|</span>
+                                    <span className="text-xs" style={{ color: colors.onSurface }}>
+                                      {calculateTiendaProfitMargin(tiendaProducto).gananciaCup.toFixed(2)} CUP
+                                    </span>
+                                    <span className="text-xs" style={{ color: colors.outline }}>|</span>
+                                    <span className="text-xs" style={{ color: colors.onSurface }}>
+                                      {calculateTiendaProfitMargin(tiendaProducto).gananciaUsd.toFixed(2)} USD
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           );
                         })}

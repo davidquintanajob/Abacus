@@ -985,6 +985,7 @@ const VentasPage = () => {
                       setTiendaSearchText(e.target.value);
                       if (canViewAllVentas && !hasLoadedAllTiendas) fetchAllTiendas();
                     }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     onFocus={() => {
                       if (canViewAllVentas && !hasLoadedAllTiendas) fetchAllTiendas();
                       setShowTiendaDropdown(true);
@@ -1114,6 +1115,7 @@ const VentasPage = () => {
                       setUserSearchText(e.target.value);
                       if (!hasLoadedAllUsers) fetchAllUsers();
                     }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     onFocus={() => {
                       if (!hasLoadedAllUsers) fetchAllUsers();
                       setShowUserDropdown(true);
@@ -1185,6 +1187,7 @@ const VentasPage = () => {
                       setServicioSearchText(e.target.value);
                       if (!hasLoadedAllServicios) fetchAllServicios();
                     }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     onFocus={() => {
                       if (!hasLoadedAllServicios) fetchAllServicios();
                       setShowServicioDropdown(true);
@@ -1600,6 +1603,7 @@ const VentasPage = () => {
                             placeholder="Buscar tienda..."
                             value={tiendaSearchText}
                             onChange={(e) => setTiendaSearchText(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                             className="w-full bg-transparent outline-none"
                             style={{ color: colors.onSurface }}
                           />
@@ -1692,6 +1696,7 @@ const VentasPage = () => {
                                 placeholder="Buscar usuario..."
                                 value={userSearchText}
                                 onChange={(e) => setUserSearchText(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                                 className="w-full bg-transparent outline-none"
                                 style={{ color: colors.onSurface }}
                               />
@@ -1776,6 +1781,7 @@ const VentasPage = () => {
                                 placeholder="Buscar servicio..."
                                 value={servicioSearchText}
                                 onChange={(e) => setServicioSearchText(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                                 className="w-full bg-transparent outline-none"
                                 style={{ color: colors.onSurface }}
                               />

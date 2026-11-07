@@ -170,8 +170,29 @@ export default function BarcodeScannerPage() {
 
   const startCamera = async () => {
     try {
+      // First, enumerate all video devices
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      
+      // Try to find an external scanner (not integrated camera)
+      // External scanners often have names like "scanner", "barcode", or don't contain "camera"
+      const externalScanner = videoDevices.find(device => 
+        device.label.toLowerCase().includes('scanner') ||
+        device.label.toLowerCase().includes('barcode')
+      );
+      
+      // If external scanner found, use it; otherwise use environment camera
+      let videoConstraints: any = { facingMode: 'environment' };
+      
+      if (externalScanner) {
+        videoConstraints = { deviceId: { exact: externalScanner.deviceId } };
+        console.log('Using external scanner:', externalScanner.label);
+      } else {
+        console.log('No external scanner found, using environment camera');
+      }
+      
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' }, 
+        video: videoConstraints, 
         audio: false 
       });
       streamRef.current = stream;

@@ -630,6 +630,7 @@ export default function OperacionesPage() {
                           setFilters({ ...filters, nombre_cuenta: e.target.value });
                           setCuentaSearchText(e.target.value);
                         }}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                         onFocus={() => {
                           if (!hasLoadedAllCuentas) fetchAllCuentas();
                           setShowCuentaDropdown(true);
@@ -655,7 +656,7 @@ export default function OperacionesPage() {
                             <div
                               key={cuenta.id_cuenta}
                               className="px-4 py-2 cursor-pointer hover:opacity-80 border-b"
-                              style={{ borderColor: colors.outlineVariant }}
+                              style={{ borderColor: colors.outlineVariant, color: isDarkMode ? colors.onSurface : '#000' }}
                               onClick={() => {
                                 setFilters({ ...filters, nombre_cuenta: cuenta.nombre, id_cuenta: cuenta.id_cuenta });
                                 setShowCuentaDropdown(false);
@@ -692,6 +693,7 @@ export default function OperacionesPage() {
                         onChange={(e) => {
                           setTiendaSearchText(e.target.value);
                         }}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                         onFocus={() => {
                           if (!hasLoadedAllTiendas) fetchAllTiendas();
                           setShowTiendaDropdown(true);
@@ -718,7 +720,7 @@ export default function OperacionesPage() {
                             <div
                               key={tienda.id_tienda}
                               className="px-4 py-2 cursor-pointer hover:opacity-80 border-b"
-                              style={{ borderColor: colors.outlineVariant }}
+                              style={{ borderColor: colors.outlineVariant, color: isDarkMode ? colors.onSurface : '#000' }}
                               onClick={() => {
                                 setFilters({ ...filters, id_tienda: tienda.id_tienda.toString() });
                                 setTiendaSearchText(tienda.nombre);
@@ -1154,6 +1156,7 @@ export default function OperacionesPage() {
                         onChange={(e) => {
                           setTiendaSearchText(e.target.value);
                         }}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                         onFocus={() => {
                           if (!hasLoadedAllTiendas) fetchAllTiendas();
                           setShowTiendaDropdown(true);
@@ -1219,6 +1222,7 @@ export default function OperacionesPage() {
                             setFilters({ ...filters, nombre_usuario: e.target.value });
                             setUserSearchText(e.target.value);
                           }}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                           onFocus={() => {
                             if (!hasLoadedAllUsers) fetchAllUsers();
                             setShowUserDropdown(true);

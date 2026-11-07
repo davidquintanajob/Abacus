@@ -253,6 +253,7 @@ export default function TiendasPage() {
                       placeholder="Buscar por nombre..."
                       value={filters.nombre}
                       onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     />
                   </div>
 
@@ -425,6 +426,7 @@ export default function TiendasPage() {
                     placeholder="Buscar por nombre..."
                     value={filters.nombre}
                     onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   />
                 </div>
 

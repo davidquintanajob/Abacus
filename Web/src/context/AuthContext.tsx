@@ -21,7 +21,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (!isLoading && !user && typeof window !== 'undefined') {
       const currentPath = window.location.pathname;
-      if (currentPath !== '/login') {
+      if (currentPath !== '/login' && currentPath !== '/password-recovery') {
         router.push('/login');
       }
     }
@@ -34,16 +34,44 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const storedUser = localStorage.getItem('user');
         const storedConfig = localStorage.getItem('appConfig');
 
+        // Limpiar datos si el token está vacío o es null
+        if (!storedToken || storedToken === 'null' || storedToken === 'undefined') {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          localStorage.removeItem('appConfig');
+          setToken(null);
+          setUser(null);
+          setConfig(null);
+          setIsLoading(false);
+          return;
+        }
+
         if (storedToken && storedUser) {
-          setToken(storedToken);
-          setUser(JSON.parse(storedUser));
-          if (storedConfig) {
-            setConfig(JSON.parse(storedConfig));
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            setToken(storedToken);
+            setUser(parsedUser);
+            if (storedConfig) {
+              setConfig(JSON.parse(storedConfig));
+            }
+          } catch (e) {
+            // Si hay error al parsear el user, limpiar localStorage
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('appConfig');
+            setToken(null);
+            setUser(null);
+            setConfig(null);
           }
         }
       }
     } catch (error) {
-      // Error checking auth
+      // Error checking auth - limpiar localStorage por seguridad
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('appConfig');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -96,6 +124,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(null);
       setToken(null);
       setConfig(null);
+      router.push('/login');
     } catch (error) {
       // Error logging out
     }

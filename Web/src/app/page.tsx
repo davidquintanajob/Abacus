@@ -17,16 +17,24 @@ import { SvgIcon } from '../components/common/SvgIcon';
 import { darkColors } from '../lib/colors';
 import { getGeneralInformation } from '../services/informesService';
 import { useResponsive } from '../hooks/useResponsive';
+import { getProductosEnAlerta } from '../services/productoService';
 
 
 export default function HomePage() {
   const router = useRouter();
   const { colors, isDark, toggleTheme } = useTheme();
-  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels } = useAuth();
+  const { user, permissions, entradaAccessLevels, salidaAccessLevels, operacionAccessLevels, isLoading } = useAuth();
   const { isMobile, isTablet, isDesktop } = useResponsive();
   const { setLoading: setNavigating } = useNavigationLoading();
   const { toast, showToast, hideToast } = useToast();
   const sidebarNavRef = useRef<any>(null);
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push('/login');
+    }
+  }, [isLoading, user, router]);
 
   // Reset navigation loading state when page loads
   useEffect(() => {
@@ -45,6 +53,8 @@ export default function HomePage() {
   const [allExpiringProducts, setAllExpiringProducts] = useState<any[]>([]);
   const [alertModalVisible, setAlertModalVisible] = useState(false);
   const [loadingExpiring, setLoadingExpiring] = useState(false);
+  const [stockAlertProducts, setStockAlertProducts] = useState<any[]>([]);
+  const [loadingStockAlerts, setLoadingStockAlerts] = useState(false);
   const [stats, setStats] = useState({
     cantidad_productos: 0,
     total_ventas_cup: 0,
@@ -317,6 +327,46 @@ export default function HomePage() {
     fetchExpiringProducts();
   }, []);
 
+  // Consultar productos en alerta de stock
+  useEffect(() => {
+    const fetchStockAlertProducts = async () => {
+      try {
+        setLoadingStockAlerts(true);
+        
+        // Check if user can view all stores based on permissions
+        const userRole = user?.rol?.toLowerCase();
+        const canViewAllStores = 
+          userRole === 'administrador' ||
+          (userRole === 'dependiente' && permissions?.dependiente) ||
+          (userRole === 'almacenero' && permissions?.almacenero) ||
+          (userRole === 'económico' && permissions?.economico);
+        
+        // Pass id_tienda only if user cannot view all stores
+        const productosEnAlerta = await getProductosEnAlerta(canViewAllStores ? undefined : user?.id_tienda);
+        console.log('Productos en alerta de stock:', productosEnAlerta);
+        setStockAlertProducts(productosEnAlerta || []);
+        
+        // Mostrar toast con los productos en alerta
+        if (productosEnAlerta && productosEnAlerta.length > 0) {
+          const nombresProductos = productosEnAlerta.map((p: any) => p.nombre || 'Producto desconocido');
+          const message = `Productos en alerta de stock: ${nombresProductos.join(', ')}`;
+          
+          showToast({
+            type: 'warning',
+            message: message,
+            duration: 6000
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching stock alert products:', error);
+      } finally {
+        setLoadingStockAlerts(false);
+      }
+    };
+
+    fetchStockAlertProducts();
+  }, [user?.id_tienda, permissions]);
+
   // Consultar información general para el RESUMEN
   useEffect(() => {
     const fetchStats = async () => {
@@ -535,6 +585,105 @@ export default function HomePage() {
               >
                 <span style={{ fontSize: '14px', fontWeight: '600', color: colors.primary, margin: 0 }}>
                   Ver más ({allExpiringProducts.length - 3} más)
+                </span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Alertas de Stock */}
+        {stockAlertProducts.length > 0 && (
+          <div style={{ marginBottom: '24px' }}>
+            <p
+              style={{ 
+                fontSize: '12px', 
+                fontWeight: '600', 
+                marginBottom: '16px', 
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: colors.outline 
+              }}
+            >
+              ALERTAS DE STOCK
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {stockAlertProducts.slice(0, 3).map((producto: any, index: number) => {
+                // Filter tiendas that are in alert
+                const tiendasEnAlerta = producto.tiendas_servicio?.filter((ts: any) => {
+                  const cantidad = parseFloat(ts.cantidad);
+                  const cantidadAlerta = parseFloat(ts.cantidad_alerta);
+                  const isInAlert = ts.cantidad !== null && 
+                    ts.cantidad_alerta !== null && 
+                    !isNaN(cantidad) && 
+                    !isNaN(cantidadAlerta) &&
+                    cantidad > 0 &&
+                    cantidad <= cantidadAlerta;
+                  
+                  return isInAlert;
+                }) || [];
+                
+                // Only show product if it has tiendas in alert
+                if (tiendasEnAlerta.length === 0) return null;
+                
+                return (
+                  <div
+                    key={index}
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderLeftWidth: '4px',
+                      borderLeftColor: '#F59E0B',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px'
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: '12px'
+                      }}
+                    >
+                      <AlertTriangle size={20} color="#F59E0B" />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontWeight: '600', color: colors.onSurface, margin: 0, fontSize: '14px' }}>
+                        {producto.nombre || 'Producto desconocido'}
+                      </p>
+                      {tiendasEnAlerta.map((ts: any, idx: number) => (
+                        <p key={idx} style={{ fontSize: '12px', color: colors.outline, margin: '2px 0 0 0' }}>
+                          {ts.tienda?.nombre || 'Tienda desconocida'}: {ts.cantidad !== null && ts.cantidad !== undefined ? parseFloat(ts.cantidad).toFixed(2) : '0'}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {stockAlertProducts.length > 3 && (
+              <button
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  backgroundColor: `${colors.primary}15`,
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: 'pointer',
+                  marginTop: '8px',
+                  transition: 'opacity 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+              >
+                <span style={{ fontSize: '14px', fontWeight: '600', color: colors.primary, margin: 0 }}>
+                  Ver más ({stockAlertProducts.length - 3} más)
                 </span>
               </button>
             )}

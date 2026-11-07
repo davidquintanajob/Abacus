@@ -92,9 +92,29 @@ export default function ServicioFormPage() {
   
   const getFormattedValue = (value: number | null | string, fieldName: string): string => {
     if (focusedField === fieldName) {
-      return formatTo5Decimals(value);
+      // When focused, show raw value without formatting
+      if (value === null || value === undefined || value === '') return '';
+      return String(value);
     }
     return formatTo2Decimals(value);
+  };
+
+  const calculateProfitMargin = () => {
+    const precioCup = typeof formData.precio_cup_general === 'number' ? formData.precio_cup_general : parseFloat(String(formData.precio_cup_general)) || 0;
+    const precioUsd = typeof formData.precio_usd_general === 'number' ? formData.precio_usd_general : parseFloat(String(formData.precio_usd_general)) || 0;
+    const costoCup = typeof formData.costo_cup_general === 'number' ? formData.costo_cup_general : parseFloat(String(formData.costo_cup_general)) || 0;
+    const costoUsd = typeof formData.costo_usd_general === 'number' ? formData.costo_usd_general : parseFloat(String(formData.costo_usd_general)) || 0;
+
+    const gananciaCup = precioCup - costoCup;
+    const gananciaUsd = precioUsd - costoUsd;
+
+    const porcentajeGananciaCup = precioCup > 0 ? (gananciaCup / precioCup) * 100 : 0;
+    const porcentajeGananciaUsd = precioUsd > 0 ? (gananciaUsd / precioUsd) * 100 : 0;
+
+    return {
+      porcentajeGananciaCup: !isNaN(porcentajeGananciaCup) ? porcentajeGananciaCup : 0,
+      porcentajeGananciaUsd: !isNaN(porcentajeGananciaUsd) ? porcentajeGananciaUsd : 0
+    };
   };
   
   // Estados para la sección de Oferta
@@ -1208,6 +1228,30 @@ export default function ServicioFormPage() {
                   </>
                 )}
               </div>
+
+              {/* % Ganancia */}
+              {canViewCosts && (
+                <div className="flex items-center justify-between p-4 rounded-lg mt-6 mb-6" style={{ backgroundColor: colors.background, borderColor: colors.outlineVariant, borderWidth: '1px' }}>
+                  <span className="text-sm font-medium" style={{ color: colors.outline }}>% Ganancia</span>
+                  <div 
+                    className="px-3 py-1 rounded-full"
+                    style={{ 
+                      backgroundColor: calculateProfitMargin().porcentajeGananciaCup >= 0 
+                        ? (isDarkMode ? 'rgba(76, 175, 80, 0.2)' : 'rgba(76, 175, 80, 0.1)') 
+                        : (isDarkMode ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.1)'),
+                      borderColor: calculateProfitMargin().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336',
+                      borderWidth: '1px'
+                    }}
+                  >
+                    <span 
+                      className="text-sm font-semibold"
+                      style={{ color: calculateProfitMargin().porcentajeGananciaCup >= 0 ? '#4CAF50' : '#F44336' }}
+                    >
+                      {calculateProfitMargin().porcentajeGananciaCup.toFixed(2)}%
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Action Buttons */}
               {!isReadOnly && (

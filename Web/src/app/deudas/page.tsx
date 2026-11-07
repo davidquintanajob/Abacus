@@ -613,6 +613,7 @@ const DeudasPage = () => {
                     placeholder="Buscar por nombre..."
                     value={filters.nombre_cliente}
                     onChange={(e) => setFilters(prev => ({ ...prev, nombre_cliente: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none transition-colors"
                     style={{
                       backgroundColor: colors.background,
@@ -631,6 +632,7 @@ const DeudasPage = () => {
                         placeholder="Buscar por teléfono..."
                         value={filters.telefono_cliente}
                         onChange={(e) => setFilters(prev => ({ ...prev, telefono_cliente: e.target.value }))}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                         className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none transition-colors"
                         style={{
                           backgroundColor: colors.background,

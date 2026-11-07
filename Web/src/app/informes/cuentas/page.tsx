@@ -503,6 +503,7 @@ const InformeCuentasPage = () => {
                   setFilters(prev => ({ ...prev, producto: e.target.value }));
                   setProductoSearchText(e.target.value);
                 }}
+                onKeyDown={(e) => e.key === 'Enter' && handleGenerateReport()}
                 onFocus={() => setShowProductoDropdown(true)}
               />
               <button

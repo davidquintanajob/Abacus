@@ -237,6 +237,7 @@ function CuentasPage() {
                   placeholder="Buscar por nombre..."
                   value={filters.nombre}
                   onChange={(e) => setFilters({ ...filters, nombre: e.target.value })}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                 />
               </div>
 
@@ -306,6 +307,7 @@ function CuentasPage() {
                     placeholder="Buscar por número..."
                     value={filters.num_cuenta}
                     onChange={(e) => setFilters({ ...filters, num_cuenta: e.target.value })}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   />
                 </div>
               )}

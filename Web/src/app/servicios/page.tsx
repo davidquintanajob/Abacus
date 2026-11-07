@@ -278,6 +278,7 @@ export default function ServiciosPage() {
                       placeholder="Buscar por nombre..."
                       value={filters.nombre}
                       onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     />
                   </div>
 
@@ -301,6 +302,7 @@ export default function ServiciosPage() {
                       placeholder="Buscar por código..."
                       value={filters.codigo}
                       onChange={(e) => setFilters(prev => ({ ...prev, codigo: e.target.value }))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     />
                   </div>
 
@@ -324,6 +326,7 @@ export default function ServiciosPage() {
                       placeholder="Buscar por categoría..."
                       value={filters.categoria}
                       onChange={(e) => setFilters(prev => ({ ...prev, categoria: e.target.value }))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     />
                   </div>
 
@@ -549,6 +552,7 @@ export default function ServiciosPage() {
                     placeholder="Buscar por nombre..."
                     value={filters.nombre}
                     onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   />
                 </div>
 
@@ -638,6 +642,7 @@ export default function ServiciosPage() {
                         placeholder="Buscar por código..."
                         value={filters.codigo}
                         onChange={(e) => setFilters(prev => ({ ...prev, codigo: e.target.value }))}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                       />
                     </div>
 
@@ -662,6 +667,7 @@ export default function ServiciosPage() {
                         placeholder="Buscar por categoría..."
                         value={filters.categoria}
                         onChange={(e) => setFilters(prev => ({ ...prev, categoria: e.target.value }))}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                       />
                     </div>
 

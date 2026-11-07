@@ -401,6 +401,7 @@ const InformeInventarioPage = () => {
                   setFilters(prev => ({ ...prev, nombre: e.target.value }));
                   setNombreSearchText(e.target.value);
                 }}
+                onKeyDown={(e) => e.key === 'Enter' && handleGenerateReport()}
                 onFocus={() => {
                   setShowNombreDropdown(true);
                   if (customCategories.length === 0) {
@@ -500,6 +501,7 @@ const InformeInventarioPage = () => {
                       setFilters(prev => ({ ...prev, categoria: e.target.value }));
                       setCategoriaSearchText(e.target.value);
                     }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleGenerateReport()}
                     onFocus={() => {
                       setShowCategoriaDropdown(true);
                       if (customCategories.length === 0) {
@@ -588,6 +590,7 @@ const InformeInventarioPage = () => {
                     placeholder="Buscar por código de barras..."
                     value={filters.codigo}
                     onChange={(e) => setFilters(prev => ({ ...prev, codigo: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleGenerateReport()}
                   />
                 </div>
               </div>

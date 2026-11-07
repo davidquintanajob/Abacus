@@ -675,6 +675,7 @@ const ClientesPage = () => {
                     placeholder="Buscar por nombre..."
                     value={filters.nombre}
                     onChange={(e) => setFilters(prev => ({ ...prev, nombre: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none transition-colors"
                     style={{
                       backgroundColor: colors.background,
@@ -693,6 +694,7 @@ const ClientesPage = () => {
                         placeholder="Buscar por teléfono..."
                         value={filters.telefono}
                         onChange={(e) => setFilters(prev => ({ ...prev, telefono: e.target.value }))}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                         className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none transition-colors"
                         style={{
                           backgroundColor: colors.background,
@@ -709,6 +711,7 @@ const ClientesPage = () => {
                         placeholder="Buscar por dirección..."
                         value={filters.direccion}
                         onChange={(e) => setFilters(prev => ({ ...prev, direccion: e.target.value }))}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                         className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none transition-colors"
                         style={{
                           backgroundColor: colors.background,
@@ -725,6 +728,7 @@ const ClientesPage = () => {
                         placeholder="Buscar por tipo..."
                         value={filters.tipo_cliente}
                         onChange={(e) => setFilters(prev => ({ ...prev, tipo_cliente: e.target.value }))}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                         className="w-full px-4 py-3 rounded-lg border-2 focus:outline-none transition-colors"
                         style={{
                           backgroundColor: colors.background,

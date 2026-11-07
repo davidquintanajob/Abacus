@@ -307,6 +307,7 @@ export default function UsuariosPage() {
                       placeholder="Buscar por nombre..."
                       value={filters.nombre_natural}
                       onChange={(e) => setFilters(prev => ({ ...prev, nombre_natural: e.target.value }))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     />
                   </div>
 
@@ -330,6 +331,7 @@ export default function UsuariosPage() {
                       placeholder="Nombre de usuario..."
                       value={filters.nombre_usuario}
                       onChange={(e) => setFilters(prev => ({ ...prev, nombre_usuario: e.target.value }))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     />
                   </div>
 
@@ -616,6 +618,7 @@ export default function UsuariosPage() {
                     placeholder="Buscar por nombre..."
                     value={filters.nombre_natural}
                     onChange={(e) => setFilters(prev => ({ ...prev, nombre_natural: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   />
                 </div>
 

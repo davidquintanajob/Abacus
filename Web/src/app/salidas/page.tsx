@@ -586,6 +586,7 @@ export default function SalidasPage() {
                       placeholder="Tipo de salida..."
                       value={filters.tipo_salida}
                       onChange={(e) => setFilters(prev => ({ ...prev, tipo_salida: e.target.value }))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     />
                   </div>
 
@@ -717,6 +718,7 @@ export default function SalidasPage() {
                       placeholder="Descripción..."
                       value={filters.descripcion}
                       onChange={(e) => setFilters(prev => ({ ...prev, descripcion: e.target.value }))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     />
                   </div>
 
@@ -1216,6 +1218,7 @@ export default function SalidasPage() {
                       placeholder="Tipo de salida..."
                       value={filters.tipo_salida}
                       onChange={(e) => setFilters(prev => ({ ...prev, tipo_salida: e.target.value }))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     />
                   </div>
 
@@ -1433,6 +1436,7 @@ export default function SalidasPage() {
                           placeholder="Descripción..."
                           value={filters.descripcion}
                           onChange={(e) => setFilters(prev => ({ ...prev, descripcion: e.target.value }))}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                         />
                       </div>
 

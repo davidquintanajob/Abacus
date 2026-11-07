@@ -131,3 +131,21 @@ export const getSeguimientoInventario = async (idProducto: string | number, idTi
     throw err;
   }
 };
+
+export const getProductosEnAlerta = async (idTienda?: string | number) => {
+  try {
+    const queryParams = new URLSearchParams();
+    if (idTienda) queryParams.append('id_tienda', idTienda.toString());
+
+    const response = await api.get(`/producto/alerta?${queryParams}`);
+    return response.data;
+  } catch (error: any) {
+    const errorMessage = error.response?.data?.errors?.[0] ||
+                        error.response?.data?.message ||
+                        error.message ||
+                        'Error al obtener productos en alerta de stock';
+    const err = new Error(errorMessage) as ApiError;
+    err.code = error.response?.status ?? error.code ?? null;
+    throw err;
+  }
+};

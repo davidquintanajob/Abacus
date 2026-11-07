@@ -607,6 +607,7 @@ export default function EntradasPage() {
                       placeholder="Buscar por nombre..."
                       value={filters.nombre_servicio}
                       onChange={(e) => setFilters(prev => ({ ...prev, nombre_servicio: e.target.value }))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     />
                   </div>
 
@@ -843,6 +844,7 @@ export default function EntradasPage() {
                       placeholder="Código..."
                       value={filters.codigo_lote}
                       onChange={(e) => setFilters(prev => ({ ...prev, codigo_lote: e.target.value }))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                     />
                   </div>
                 </div>
@@ -1046,6 +1048,7 @@ export default function EntradasPage() {
                     placeholder="Buscar por nombre..."
                     value={filters.nombre_servicio}
                     onChange={(e) => setFilters(prev => ({ ...prev, nombre_servicio: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   />
                 </div>
 
@@ -1171,6 +1174,7 @@ export default function EntradasPage() {
                     placeholder="Buscar por código de lote..."
                     value={filters.codigo_lote}
                     onChange={(e) => setFilters(prev => ({ ...prev, codigo_lote: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   />
                 </div>
               </div>
