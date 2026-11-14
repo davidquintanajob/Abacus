@@ -40,7 +40,13 @@ const filterListaVentas = async (req, res) => {
       id_tienda,
       id_servicio,
       nombre_servicio,
+      detail,
     } = req.query;
+
+    if (detail !== undefined && detail !== "true" && detail !== "false") {
+      throwError("El parámetro 'detail' debe ser true o false.", 400);
+    }
+    const includeDetail = detail === "true";
 
     const hasLimit = limit !== undefined;
     const hasPage = page !== undefined;
@@ -116,7 +122,7 @@ const filterListaVentas = async (req, res) => {
     if (nombre_servicio) filters.nombre_servicio = nombre_servicio.trim();
 
     const offset = limitNum === undefined ? undefined : (pageNum - 1) * limitNum;
-    const result = await listaVentaService.filterListaVentas(filters, limitNum, offset);
+    const result = await listaVentaService.filterListaVentas(filters, limitNum, offset, includeDetail);
 
     res.status(200).json({
       data: result.rows,
@@ -127,6 +133,7 @@ const filterListaVentas = async (req, res) => {
         totalItems: result.count,
       },
       summary: result.summary,
+      ...(includeDetail ? { detail: result.detail } : {}),
     });
   } catch (error) {
     handleError(res, error);

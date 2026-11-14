@@ -407,7 +407,85 @@ const summaryKeyByAccountType = {
   },
 };
 
-const filterListaVentas = async (filters, limit, offset) => {
+const createEmptyFilterResult = (includeDetail) => {
+  const result = {
+    rows: [],
+    count: 0,
+    summary: {
+      total_efectivo_cup: 0,
+      total_efectivo_usd: 0,
+      total_transferencia_cup: 0,
+      total_transferencia_usd: 0,
+      total_costo_original_cup: 0,
+      total_costo_original_usd: 0,
+      operaciones: createOperacionesSummary(),
+    },
+  };
+  if (includeDetail) result.detail = [];
+  return result;
+};
+
+const buildProductProfitDetail = (allRows, filters) => {
+  const profitByProduct = new Map();
+
+  for (const lista of allRows) {
+    for (const venta of lista.ventas || []) {
+      const servicioTienda = venta.servicioTienda;
+      const servicio = servicioTienda && servicioTienda.servicio;
+      if (!servicio || !servicio.producto) continue;
+      if (filters.id_servicio !== undefined && Number(servicio.id_servicio) !== filters.id_servicio) continue;
+      if (filters.id_tienda !== undefined && Number(servicioTienda.id_tienda) !== filters.id_tienda) continue;
+      if (
+        filters.nombre_servicio &&
+        !String(servicio.nombre || "").toLocaleLowerCase().includes(filters.nombre_servicio.toLocaleLowerCase())
+      ) {
+        continue;
+      }
+
+      const cantidad = Number(venta.cantidad || 0);
+      const cambioMoneda = Number(lista.cambio_moneda || 0);
+      const precioCup = Number(venta.precio_cobrado_cup || 0);
+      const precioUsd = Number(venta.precio_cobrado_usd || 0);
+      const costoCup = Number(venta.costo_original_cup || 0);
+      const costoUsd = Number(venta.costo_original_usd || 0);
+      const gananciaCup = (precioCup + precioUsd * cambioMoneda - costoCup - costoUsd * cambioMoneda) * cantidad;
+      const idServicio = servicio.id_servicio;
+      const key = String(idServicio);
+      const existing = profitByProduct.get(key);
+
+      if (existing) {
+        existing.ganancia_cup += gananciaCup;
+      } else {
+        profitByProduct.set(key, {
+          id_servicio: idServicio,
+          nombre: servicio.nombre,
+          ganancia_cup: gananciaCup,
+        });
+      }
+    }
+  }
+
+  const products = [...profitByProduct.values()].sort((a, b) => b.ganancia_cup - a.ganancia_cup);
+  const totalGanancia = products.reduce((total, product) => total + product.ganancia_cup, 0);
+  const porcentaje = (ganancia) => totalGanancia === 0 ? 0 : (ganancia / totalGanancia) * 100;
+  const detail = products.slice(0, 10).map((product) => ({
+    ...product,
+    porcentaje_ganancia: porcentaje(product.ganancia_cup),
+  }));
+
+  if (products.length > 10) {
+    const otrosGanancia = products.slice(10).reduce((total, product) => total + product.ganancia_cup, 0);
+    detail.push({
+      nombre: "Otros",
+      ganancia_cup: otrosGanancia,
+      porcentaje_ganancia: porcentaje(otrosGanancia),
+    });
+  }
+
+  return detail;
+};
+
+const filterListaVentas = async (filters, limit, offset, includeDetail = false) => {
   const where = {};
   const andConditions = [];
 
@@ -469,19 +547,41 @@ const filterListaVentas = async (filters, limit, offset) => {
     });
     const idsListaVenta = [...new Set(ventasCoincidentes.map((venta) => venta.id_lista_venta))];
     if (idsListaVenta.length === 0) {
-      return {
-        rows: [],
-        count: 0,
-        summary: {
-          total_efectivo_cup: 0,
-          total_efectivo_usd: 0,
-          total_transferencia_cup: 0,
-          total_transferencia_usd: 0,
-          operaciones: createOperacionesSummary(),
-        },
-      };
+      return createEmptyFilterResult(includeDetail);
     }
     where.id_lista_venta = { [Op.in]: idsListaVenta };
+  }
+
+  if (filters.nombre_usuario) {
+    const operacionesCoincidentes = await Operacion.findAll({
+      attributes: ["id_lista_venta"],
+      where: { id_lista_venta: { [Op.ne]: null } },
+      include: [
+        {
+          model: Usuario,
+          as: "usuario",
+          required: true,
+          where: { nombre_usuario: { [Op.iLike]: `%${filters.nombre_usuario}%` } },
+        },
+      ],
+      raw: true,
+    });
+    const idsListaPorUsuario = [
+      ...new Set(operacionesCoincidentes.map((operacion) => operacion.id_lista_venta)),
+    ];
+    if (idsListaPorUsuario.length === 0) {
+      return createEmptyFilterResult(includeDetail);
+    }
+    if (where.id_lista_venta) {
+      const idsListaExistentes = new Set(where.id_lista_venta[Op.in]);
+      const idsCoincidentes = idsListaPorUsuario.filter((id) => idsListaExistentes.has(id));
+      if (idsCoincidentes.length === 0) {
+        return createEmptyFilterResult(includeDetail);
+      }
+      where.id_lista_venta = { [Op.in]: idsCoincidentes };
+    } else {
+      where.id_lista_venta = { [Op.in]: idsListaPorUsuario };
+    }
   }
 
   if (filters.tipo_cuenta) {
@@ -502,24 +602,17 @@ const filterListaVentas = async (filters, limit, offset) => {
       ...new Set(operacionesCoincidentes.map((operacion) => operacion.id_lista_venta)),
     ];
     if (idsListaPorTipoCuenta.length === 0) {
-      return {
-        rows: [],
-        count: 0,
-        summary: {
-          total_efectivo_cup: 0,
-          total_efectivo_usd: 0,
-          total_transferencia_cup: 0,
-          total_transferencia_usd: 0,
-          operaciones: createOperacionesSummary(),
-        },
-      };
+      return createEmptyFilterResult(includeDetail);
     }
-    const tipoCuentaCondition = { id_lista_venta: { [Op.in]: idsListaPorTipoCuenta } };
     if (where.id_lista_venta) {
-      where[Op.and] = [where.id_lista_venta, tipoCuentaCondition];
-      delete where.id_lista_venta;
+      const idsListaExistentes = new Set(where.id_lista_venta[Op.in]);
+      const idsCoincidentes = idsListaPorTipoCuenta.filter((id) => idsListaExistentes.has(id));
+      if (idsCoincidentes.length === 0) {
+        return createEmptyFilterResult(includeDetail);
+      }
+      where.id_lista_venta = { [Op.in]: idsCoincidentes };
     } else {
-      where.id_lista_venta = tipoCuentaCondition.id_lista_venta;
+      where.id_lista_venta = { [Op.in]: idsListaPorTipoCuenta };
     }
   }
 
@@ -554,17 +647,14 @@ const filterListaVentas = async (filters, limit, offset) => {
     ],
   };
 
-  const hasUserFilter = Boolean(filters.nombre_usuario);
   const operacionesInclude = {
     model: Operacion,
     as: "operaciones",
-    required: hasUserFilter,
+    required: false,
     include: [
       {
         model: Usuario,
         as: "usuario",
-        required: hasUserFilter,
-        where: hasUserFilter ? { nombre_natural: { [Op.iLike]: `%${filters.nombre_usuario}%` } } : undefined,
       },
       {
         model: Cuenta,
@@ -620,6 +710,8 @@ const filterListaVentas = async (filters, limit, offset) => {
     total_efectivo_usd: 0,
     total_transferencia_cup: 0,
     total_transferencia_usd: 0,
+    total_costo_original_cup: 0,
+    total_costo_original_usd: 0,
     operaciones: createOperacionesSummary(),
   };
   for (const lista of allRows) {
@@ -627,6 +719,11 @@ const filterListaVentas = async (filters, limit, offset) => {
     summary.total_efectivo_usd += parseFloat(lista.cantidad_cobrada_efectivo_usd || 0);
     summary.total_transferencia_cup += parseFloat(lista.cantidad_cobrada_transferencia_cup || 0);
     summary.total_transferencia_usd += parseFloat(lista.cantidad_cobrada_transferencia_usd || 0);
+    for (const venta of lista.ventas || []) {
+      const cantidad = parseFloat(venta.cantidad || 0);
+      summary.total_costo_original_cup += parseFloat(venta.costo_original_cup || 0) * cantidad;
+      summary.total_costo_original_usd += parseFloat(venta.costo_original_usd || 0) * cantidad;
+    }
     for (const operacion of lista.operaciones || []) {
       const cuenta = operacion.cuenta;
       const summaryKey = cuenta && summaryKeyByAccountType[cuenta.tipo_cuenta]?.[operacion.tipo_operacion];
@@ -635,7 +732,12 @@ const filterListaVentas = async (filters, limit, offset) => {
       }
     }
   }
-  return { rows, count, summary };
+  return {
+    rows,
+    count,
+    summary,
+    ...(includeDetail ? { detail: buildProductProfitDetail(allRows, filters) } : {}),
+  };
 };
 
 // CREATE (con descuento real de entradas)

@@ -1,5 +1,5 @@
 {
-  "cupToUsdRate": 810,
+  "cupToUsdRate": 820,
   "permissions": {
     "dependiente": false,
     "almacenero": false,
@@ -170,12 +170,23 @@
     "economico": false
   },
   "customCategories": [
-    "Ali",
-    "Bebida",
-    "Panel"
+    "Pan",
+    "Insumo",
+    "In",
+    "Alimento"
   ],
   "priceChangePermissions": {
     "dependiente": false,
+    "almacenero": false,
+    "economico": false
+  },
+  "productoAccessLevels": {
+    "dependiente": "own_store",
+    "almacenero": "none",
+    "economico": "none"
+  },
+  "productoManagePermissions": {
+    "dependiente": true,
     "almacenero": false,
     "economico": false
   }

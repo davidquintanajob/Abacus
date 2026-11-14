@@ -124,12 +124,13 @@ const filterProductos = async (req, res) => {
   try {
     const { limit, page, id_tienda, cantidad_min, cantidad_max, ...filters } = req.query;
 
-    let limitNum = parseInt(limit, 10) || 10;
-    if (isNaN(limitNum) || limitNum < 1) {
+    const getAll = limit === undefined && page === undefined;
+    const limitNum = getAll ? undefined : limit === undefined ? 10 : parseInt(limit, 10);
+    if (!getAll && (isNaN(limitNum) || limitNum < 1)) {
       throwError("El parámetro 'limit' debe ser un número entero positivo", 400);
     }
 
-    let pageNum = parseInt(page, 10) || 1;
+    const pageNum = page === undefined ? 1 : parseInt(page, 10);
     if (isNaN(pageNum) || pageNum < 1) {
       throwError("El parámetro 'page' debe ser un número entero positivo", 400);
     }
@@ -178,7 +179,7 @@ const filterProductos = async (req, res) => {
       throwError("'cantidad_min' no puede ser mayor que 'cantidad_max'", 400);
     }
 
-    const offset = (pageNum - 1) * limitNum;
+    const offset = getAll ? 0 : (pageNum - 1) * limitNum;
     const { rows: productos, count: total } = await productoService.filterProductos(
       filterCriteria,
       parsedIdTienda,
@@ -188,13 +189,14 @@ const filterProductos = async (req, res) => {
       offset
     );
 
-    const totalPages = Math.ceil(total / limitNum);
+    const responseLimit = getAll ? total : limitNum;
+    const totalPages = getAll ? (total > 0 ? 1 : 0) : Math.ceil(total / limitNum);
 
     res.status(200).json({
       data: productos,
       pagination: {
         currentPage: pageNum,
-        limit: limitNum,
+        limit: responseLimit,
         totalPages,
         totalItems: total,
       },

@@ -366,7 +366,7 @@ const getProductosEnAlerta = async (id_tienda) => {
   });
 };
 
-const filterProductos = async (filterCriteria = {}, id_tienda, cantidadMin, cantidadMax, limit = 10, offset = 0) => {
+const filterProductos = async (filterCriteria = {}, id_tienda, cantidadMin, cantidadMax, limit, offset = 0) => {
   const { codigo: codigoFilter, ...serviceFilterCriteria } = filterCriteria;
   const whereClause = {};
 
@@ -462,7 +462,9 @@ const filterProductos = async (filterCriteria = {}, id_tienda, cantidadMin, cant
     return { rows: [], count: 0 };
   }
 
-  const pagedIds = filteredIds.slice(offset, offset + limit);
+  const pagedIds = limit === undefined
+    ? filteredIds.slice(offset)
+    : filteredIds.slice(offset, offset + limit);
   const rows = pagedIds.length > 0
     ? await Servicio.findAll({
         where: { id_servicio: { [Op.in]: pagedIds } },

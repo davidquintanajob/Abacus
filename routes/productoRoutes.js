@@ -142,7 +142,7 @@ router.get(
  *         name: limit
  *         schema:
  *           type: integer
- *           default: 10
+ *         description: Si no se envían ni limit ni page, se devuelven todos los productos filtrados.
  *       - in: query
  *         name: page
  *         schema:

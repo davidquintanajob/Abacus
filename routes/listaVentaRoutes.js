@@ -131,6 +131,11 @@ const authenticate = require("../helpers/authenticate");
  *         schema:
  *           type: string
  *         description: Búsqueda parcial por nombre del servicio vendido
+ *       - in: query
+ *         name: detail
+ *         schema:
+ *           type: boolean
+ *         description: Si es true, incluye los 10 productos con mayor ganancia en CUP y agrupa el resto como Otros.
  *     responses:
  *       200:
  *         description: Lista de listas de ventas con paginación y sumatorias
@@ -165,6 +170,10 @@ const authenticate = require("../helpers/authenticate");
  *                       type: number
  *                     total_transferencia_usd:
  *                       type: number
+ *                     total_costo_original_cup:
+ *                       type: number
+ *                     total_costo_original_usd:
+ *                       type: number
  *                     operaciones:
  *                       type: object
  *                       properties:
@@ -192,6 +201,20 @@ const authenticate = require("../helpers/authenticate");
  *                           type: number
  *                         totalRetiroTransferenciaUSD:
  *                           type: number
+ *                 detail:
+ *                   type: array
+ *                   description: Se incluye solo cuando detail=true.
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id_servicio:
+ *                         type: integer
+ *                       nombre:
+ *                         type: string
+ *                       ganancia_cup:
+ *                         type: number
+ *                       porcentaje_ganancia:
+ *                         type: number
  */
 router.get("/lista-venta/filter", authenticate(), listaVentaController.filterListaVentas);
 
